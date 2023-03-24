@@ -1,12 +1,13 @@
 <!DOCTYPE html>
-<!-- saved from url=(0033)https://klutzy.github.io/mine.js/ -->
-<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<html>
+
+<head>
 <title>Minesweeper</title>
 
-
-<link href="mine.css" media="screen" rel="stylesheet" type="text/css">
-<link href="win98.css" media="screen" rel="stylesheet" type="text/css">
-<link href="mine-win98.css" media="screen" rel="stylesheet" type="text/css">
+<meta charset="utf-8">
+<link href="mine.css" media="screen" rel="stylesheet" type="text/css" />
+<link href="win98.css" media="screen" rel="stylesheet" type="text/css" />
+<link href="mine-win98.css" media="screen" rel="stylesheet" type="text/css" />
 
 </head>
 
@@ -14,8 +15,8 @@
 
 <div class="windows windows-98">
 
-<div class="window has-menu mine-window ui-resizable ui-draggable" style="bottom: auto; z-index: 1000;">
-    <div class="title-bar ui-selected">
+<div class="window has-menu mine-window">
+    <div class="title-bar">
         <div class="title-icon"></div>
         <div class="title">Minesweeper</div>
         <div class="title-button-group">
@@ -24,7 +25,7 @@
             <div class="title-button close"></div>
         </div>
     </div>
-    <ul class="menu-bar ui-menu ui-widget ui-widget-content ui-corner-all" id="ui-id-1" role="menu" tabindex="0">
+    <ul class="menu-bar">
 <li onclick="minefield.init_board(9, 9, 10)">초급</li>
 <li onclick="minefield.init_board(16, 16, 40)">중급</li>
 <li onclick="minefield.init_board(30, 16, 99)">고급</li>
@@ -38,12 +39,12 @@
     <div class="window-content">
     <div class="mine-head-area">
         <div class="mine-counter">
-            <div class="digit digit-1"></div>
-            <div class="digit digit-2"></div>
+            <div class="digit digit-0"></div>
+            <div class="digit digit-0"></div>
             <div class="digit digit-0"></div>
         </div>
         <div class="mine-reset-button" onclick="minefield.reset_board()">
-            <div class="mine-reset-button-inner" style="background-position: 0px 0px;"></div>
+            <div class="mine-reset-button-inner"></div>
         </div>
         <div class="mine-timer">
             <div class="digit digit-0"></div>
@@ -52,9 +53,9 @@
         </div>
     </div>
     <div id="mine-area" class="mine-area">
-    <table class="minetable"><tr><td id="x0y0"></td><td id="x1y0"></td><td id="x2y0"></td><td id="x3y0"></td><td id="x4y0"></td><td id="x5y0"></td><td id="x6y0"></td><td id="x7y0"></td><td id="x8y0"></td><td id="x9y0"></td><td id="x10y0"></td><td id="x11y0"></td><td id="x12y0"></td><td id="x13y0"></td><td id="x14y0"></td><td id="x15y0"></td><td id="x16y0"></td><td id="x17y0"></td><td id="x18y0"></td><td id="x19y0"></td><td id="x20y0"></td><td id="x21y0"></td><td id="x22y0"></td><td id="x23y0"></td><td id="x24y0"></td><td id="x25y0"></td><td id="x26y0"></td><td id="x27y0"></td><td id="x28y0"></td><td id="x29y0"></td></tr><tr><td id="x0y1"></td><td id="x1y1"></td><td id="x2y1"></td><td id="x3y1"></td><td id="x4y1"></td><td id="x5y1"></td><td id="x6y1"></td><td id="x7y1"></td><td id="x8y1"></td><td id="x9y1"></td><td id="x10y1"></td><td id="x11y1"></td><td id="x12y1"></td><td id="x13y1"></td><td id="x14y1"></td><td id="x15y1"></td><td id="x16y1"></td><td id="x17y1"></td><td id="x18y1"></td><td id="x19y1"></td><td id="x20y1"></td><td id="x21y1"></td><td id="x22y1"></td><td id="x23y1"></td><td id="x24y1"></td><td id="x25y1"></td><td id="x26y1"></td><td id="x27y1"></td><td id="x28y1"></td><td id="x29y1"></td></tr><tr><td id="x0y2"></td><td id="x1y2"></td><td id="x2y2"></td><td id="x3y2"></td><td id="x4y2"></td><td id="x5y2"></td><td id="x6y2"></td><td id="x7y2"></td><td id="x8y2"></td><td id="x9y2"></td><td id="x10y2"></td><td id="x11y2"></td><td id="x12y2"></td><td id="x13y2"></td><td id="x14y2"></td><td id="x15y2"></td><td id="x16y2"></td><td id="x17y2"></td><td id="x18y2"></td><td id="x19y2"></td><td id="x20y2"></td><td id="x21y2"></td><td id="x22y2"></td><td id="x23y2"></td><td id="x24y2"></td><td id="x25y2"></td><td id="x26y2"></td><td id="x27y2"></td><td id="x28y2"></td><td id="x29y2"></td></tr><tr><td id="x0y3"></td><td id="x1y3"></td><td id="x2y3"></td><td id="x3y3"></td><td id="x4y3"></td><td id="x5y3"></td><td id="x6y3"></td><td id="x7y3"></td><td id="x8y3"></td><td id="x9y3"></td><td id="x10y3"></td><td id="x11y3"></td><td id="x12y3"></td><td id="x13y3"></td><td id="x14y3"></td><td id="x15y3"></td><td id="x16y3"></td><td id="x17y3"></td><td id="x18y3"></td><td id="x19y3"></td><td id="x20y3"></td><td id="x21y3"></td><td id="x22y3"></td><td id="x23y3"></td><td id="x24y3"></td><td id="x25y3"></td><td id="x26y3"></td><td id="x27y3"></td><td id="x28y3"></td><td id="x29y3"></td></tr><tr><td id="x0y4"></td><td id="x1y4"></td><td id="x2y4"></td><td id="x3y4"></td><td id="x4y4"></td><td id="x5y4"></td><td id="x6y4"></td><td id="x7y4"></td><td id="x8y4"></td><td id="x9y4"></td><td id="x10y4"></td><td id="x11y4"></td><td id="x12y4"></td><td id="x13y4"></td><td id="x14y4"></td><td id="x15y4"></td><td id="x16y4"></td><td id="x17y4"></td><td id="x18y4"></td><td id="x19y4"></td><td id="x20y4"></td><td id="x21y4"></td><td id="x22y4"></td><td id="x23y4"></td><td id="x24y4"></td><td id="x25y4"></td><td id="x26y4"></td><td id="x27y4"></td><td id="x28y4"></td><td id="x29y4"></td></tr><tr><td id="x0y5"></td><td id="x1y5"></td><td id="x2y5"></td><td id="x3y5"></td><td id="x4y5"></td><td id="x5y5"></td><td id="x6y5"></td><td id="x7y5"></td><td id="x8y5"></td><td id="x9y5"></td><td id="x10y5"></td><td id="x11y5"></td><td id="x12y5"></td><td id="x13y5"></td><td id="x14y5"></td><td id="x15y5"></td><td id="x16y5"></td><td id="x17y5"></td><td id="x18y5"></td><td id="x19y5"></td><td id="x20y5"></td><td id="x21y5"></td><td id="x22y5"></td><td id="x23y5"></td><td id="x24y5"></td><td id="x25y5"></td><td id="x26y5"></td><td id="x27y5"></td><td id="x28y5"></td><td id="x29y5"></td></tr><tr><td id="x0y6"></td><td id="x1y6"></td><td id="x2y6"></td><td id="x3y6"></td><td id="x4y6"></td><td id="x5y6"></td><td id="x6y6"></td><td id="x7y6"></td><td id="x8y6"></td><td id="x9y6"></td><td id="x10y6"></td><td id="x11y6"></td><td id="x12y6"></td><td id="x13y6"></td><td id="x14y6"></td><td id="x15y6"></td><td id="x16y6"></td><td id="x17y6"></td><td id="x18y6"></td><td id="x19y6"></td><td id="x20y6"></td><td id="x21y6"></td><td id="x22y6"></td><td id="x23y6"></td><td id="x24y6"></td><td id="x25y6"></td><td id="x26y6"></td><td id="x27y6"></td><td id="x28y6"></td><td id="x29y6"></td></tr><tr><td id="x0y7"></td><td id="x1y7"></td><td id="x2y7"></td><td id="x3y7"></td><td id="x4y7"></td><td id="x5y7"></td><td id="x6y7"></td><td id="x7y7"></td><td id="x8y7"></td><td id="x9y7"></td><td id="x10y7"></td><td id="x11y7"></td><td id="x12y7"></td><td id="x13y7"></td><td id="x14y7"></td><td id="x15y7"></td><td id="x16y7"></td><td id="x17y7"></td><td id="x18y7"></td><td id="x19y7"></td><td id="x20y7"></td><td id="x21y7"></td><td id="x22y7"></td><td id="x23y7"></td><td id="x24y7"></td><td id="x25y7"></td><td id="x26y7"></td><td id="x27y7"></td><td id="x28y7"></td><td id="x29y7"></td></tr><tr><td id="x0y8"></td><td id="x1y8"></td><td id="x2y8"></td><td id="x3y8"></td><td id="x4y8"></td><td id="x5y8"></td><td id="x6y8"></td><td id="x7y8"></td><td id="x8y8"></td><td id="x9y8"></td><td id="x10y8"></td><td id="x11y8"></td><td id="x12y8"></td><td id="x13y8"></td><td id="x14y8"></td><td id="x15y8"></td><td id="x16y8"></td><td id="x17y8"></td><td id="x18y8"></td><td id="x19y8"></td><td id="x20y8"></td><td id="x21y8"></td><td id="x22y8"></td><td id="x23y8"></td><td id="x24y8"></td><td id="x25y8"></td><td id="x26y8"></td><td id="x27y8"></td><td id="x28y8"></td><td id="x29y8"></td></tr><tr><td id="x0y9"></td><td id="x1y9"></td><td id="x2y9"></td><td id="x3y9"></td><td id="x4y9"></td><td id="x5y9"></td><td id="x6y9"></td><td id="x7y9"></td><td id="x8y9"></td><td id="x9y9"></td><td id="x10y9"></td><td id="x11y9"></td><td id="x12y9"></td><td id="x13y9"></td><td id="x14y9"></td><td id="x15y9"></td><td id="x16y9"></td><td id="x17y9"></td><td id="x18y9"></td><td id="x19y9"></td><td id="x20y9"></td><td id="x21y9"></td><td id="x22y9"></td><td id="x23y9"></td><td id="x24y9"></td><td id="x25y9"></td><td id="x26y9"></td><td id="x27y9"></td><td id="x28y9"></td><td id="x29y9"></td></tr><tr><td id="x0y10"></td><td id="x1y10"></td><td id="x2y10"></td><td id="x3y10"></td><td id="x4y10"></td><td id="x5y10"></td><td id="x6y10"></td><td id="x7y10"></td><td id="x8y10"></td><td id="x9y10"></td><td id="x10y10"></td><td id="x11y10"></td><td id="x12y10"></td><td id="x13y10"></td><td id="x14y10"></td><td id="x15y10"></td><td id="x16y10"></td><td id="x17y10"></td><td id="x18y10"></td><td id="x19y10"></td><td id="x20y10"></td><td id="x21y10"></td><td id="x22y10"></td><td id="x23y10"></td><td id="x24y10"></td><td id="x25y10"></td><td id="x26y10"></td><td id="x27y10"></td><td id="x28y10"></td><td id="x29y10"></td></tr><tr><td id="x0y11"></td><td id="x1y11"></td><td id="x2y11"></td><td id="x3y11"></td><td id="x4y11"></td><td id="x5y11"></td><td id="x6y11"></td><td id="x7y11"></td><td id="x8y11"></td><td id="x9y11"></td><td id="x10y11"></td><td id="x11y11"></td><td id="x12y11"></td><td id="x13y11"></td><td id="x14y11"></td><td id="x15y11"></td><td id="x16y11"></td><td id="x17y11"></td><td id="x18y11"></td><td id="x19y11"></td><td id="x20y11"></td><td id="x21y11"></td><td id="x22y11"></td><td id="x23y11"></td><td id="x24y11"></td><td id="x25y11"></td><td id="x26y11"></td><td id="x27y11"></td><td id="x28y11"></td><td id="x29y11"></td></tr><tr><td id="x0y12"></td><td id="x1y12"></td><td id="x2y12"></td><td id="x3y12"></td><td id="x4y12"></td><td id="x5y12"></td><td id="x6y12"></td><td id="x7y12"></td><td id="x8y12"></td><td id="x9y12"></td><td id="x10y12"></td><td id="x11y12"></td><td id="x12y12"></td><td id="x13y12"></td><td id="x14y12"></td><td id="x15y12"></td><td id="x16y12"></td><td id="x17y12"></td><td id="x18y12"></td><td id="x19y12"></td><td id="x20y12"></td><td id="x21y12"></td><td id="x22y12"></td><td id="x23y12"></td><td id="x24y12"></td><td id="x25y12"></td><td id="x26y12"></td><td id="x27y12"></td><td id="x28y12"></td><td id="x29y12"></td></tr><tr><td id="x0y13"></td><td id="x1y13"></td><td id="x2y13"></td><td id="x3y13"></td><td id="x4y13"></td><td id="x5y13"></td><td id="x6y13"></td><td id="x7y13"></td><td id="x8y13"></td><td id="x9y13"></td><td id="x10y13"></td><td id="x11y13"></td><td id="x12y13"></td><td id="x13y13"></td><td id="x14y13"></td><td id="x15y13"></td><td id="x16y13"></td><td id="x17y13"></td><td id="x18y13"></td><td id="x19y13"></td><td id="x20y13"></td><td id="x21y13"></td><td id="x22y13"></td><td id="x23y13"></td><td id="x24y13"></td><td id="x25y13"></td><td id="x26y13"></td><td id="x27y13"></td><td id="x28y13"></td><td id="x29y13"></td></tr><tr><td id="x0y14"></td><td id="x1y14"></td><td id="x2y14"></td><td id="x3y14"></td><td id="x4y14"></td><td id="x5y14"></td><td id="x6y14"></td><td id="x7y14"></td><td id="x8y14"></td><td id="x9y14"></td><td id="x10y14"></td><td id="x11y14"></td><td id="x12y14"></td><td id="x13y14"></td><td id="x14y14"></td><td id="x15y14"></td><td id="x16y14"></td><td id="x17y14"></td><td id="x18y14"></td><td id="x19y14"></td><td id="x20y14"></td><td id="x21y14"></td><td id="x22y14"></td><td id="x23y14"></td><td id="x24y14"></td><td id="x25y14"></td><td id="x26y14"></td><td id="x27y14"></td><td id="x28y14"></td><td id="x29y14"></td></tr><tr><td id="x0y15"></td><td id="x1y15"></td><td id="x2y15"></td><td id="x3y15"></td><td id="x4y15"></td><td id="x5y15"></td><td id="x6y15"></td><td id="x7y15"></td><td id="x8y15"></td><td id="x9y15"></td><td id="x10y15"></td><td id="x11y15"></td><td id="x12y15"></td><td id="x13y15"></td><td id="x14y15"></td><td id="x15y15"></td><td id="x16y15"></td><td id="x17y15"></td><td id="x18y15"></td><td id="x19y15"></td><td id="x20y15"></td><td id="x21y15"></td><td id="x22y15"></td><td id="x23y15"></td><td id="x24y15"></td><td id="x25y15"></td><td id="x26y15"></td><td id="x27y15"></td><td id="x28y15"></td><td id="x29y15"></td></tr></table></div>
     </div>
-<div class="ui-resizable-handle ui-resizable-n" style="z-index: 90;"></div><div class="ui-resizable-handle ui-resizable-e" style="z-index: 90;"></div><div class="ui-resizable-handle ui-resizable-s" style="z-index: 90;"></div><div class="ui-resizable-handle ui-resizable-w" style="z-index: 90;"></div><div class="ui-resizable-handle ui-resizable-se ui-icon ui-icon-gripsmall-diagonal-se" style="z-index: 90;"></div><div class="ui-resizable-handle ui-resizable-sw" style="z-index: 90;"></div><div class="ui-resizable-handle ui-resizable-ne" style="z-index: 90;"></div><div class="ui-resizable-handle ui-resizable-nw" style="z-index: 90;"></div></div>
+    </div>
+</div>
 
 </div>
 
@@ -150,8 +151,7 @@ minefield.on_rclick_func = function(x, y) {
 minefield.init_board(30, 16, 120, 2);
 </script>
 
+</body>
 
+</html>
 
-
-
-</body></html>
