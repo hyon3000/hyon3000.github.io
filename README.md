@@ -1,3 +1,6 @@
+klutzy 지뢰찾기의 최신 빌드를 제공합니다
+////////////////////////////////////////
+
 See [index.html](index.html) or [Demo][] for usage.
 
 # Notes
