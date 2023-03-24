@@ -360,6 +360,7 @@
           _results1 = [];
           for (x = _j = 0, _ref1 = this.columns - 1; 0 <= _ref1 ? _j <= _ref1 : _j >= _ref1; x = 0 <= _ref1 ? ++_j : --_j) {
             mine = this.mines[x][y];
+            flag=this.flags[x][y];
             if (mine > 0) {
               if (/^flag/.exec(this.get_class(x, y))) {
                 continue;
@@ -372,7 +373,7 @@
               }
             } else {
               if (this.flags[x][y] > 0) {
-                _results1.push(this.set_class(x, y, "mine-wrong"+this.flags[x][y]));
+                _results1.push(this.set_class(x, y, "mine-wrong"+flag));
               } else if (this.near_mines[x][y] === 0) {
                 _results1.push(this.set_class(x, y, "empty"));
               } else {
