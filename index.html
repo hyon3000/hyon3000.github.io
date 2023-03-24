@@ -26,14 +26,10 @@
         </div>
     </div>
     <ul class="menu-bar">
-<li onclick="minefield.init_board(9, 9, 10)">초급</li>
-<li onclick="minefield.init_board(16, 16, 40)">중급</li>
-<li onclick="minefield.init_board(30, 16, 99)">고급</li>
-<li onclick="minefield.init_board(30, 16, 120, 2)">고오급</li>
-<li onclick="minefield.init_board(30, 16, 160, 3)">고오오급</li>
-<li onclick="minefield.init_board(30, 16, 220, 4)">고오오오급</li>
-<li onclick="minefield.init_board(30, 16, 400, 4)">고오오오오급</li>
-<li onclick="minefield.init_board(30, 16, 1500, 4)">고오오오오오급</li>
+    <li onclick="minefield.init_board(30, 16, 99)">Hard</li>
+    <li onclick="minefield.init_board(30, 16, 120, 2)">Harder</li>
+    <li><a href="https://github.com/egraether/mine3D">Hardest</a></li>
+    <li><a href="https://github.com/klutzy/mine.js">About...</a></li>
     </ul>
 
     <div class="window-content">
@@ -95,14 +91,14 @@ var minefield = new window.Minefield(mine_area, function(status) {
     if (status === -2) {
         bg_pos = "-51px 0";
     }
-    if (status === -3) {
+    if (status === 2) {
         bg_pos = "-34px 0";
     }
     smile.css({
         "background-position": bg_pos,
     });
 
-    if (status === 0) {
+    if (status === 0 || status==2) {
         timer_id = window.setInterval(update_timer, 1 * 1000);
     }
     if (status < 0 || status === 1) {

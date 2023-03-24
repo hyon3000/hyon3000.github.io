@@ -386,7 +386,7 @@
       return this.game_status = -2;
     };
     Minefield.prototype.on_down = function() {
-      return this.game_status = -3;
+      return this.game_status = 2;
     };
     Minefield.prototype.on_up = function() {
       return this.game_status = 0;
