@@ -1,4 +1,7 @@
 klutzy 지뢰찾기의 최신 빌드를 제공합니다
+
+http://hyon3000.github.io/
+
 ////////////////////////////////////////
 
 See [index.html](index.html) or [Demo][] for usage.
