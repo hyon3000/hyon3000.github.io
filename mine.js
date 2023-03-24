@@ -46,7 +46,7 @@
         this.game_status = -1;
         this.table = null;
       }
-	this.ptag = document.createElement('div');
+	this.ptag = document.createElement('p');
 	this.ptag.setAttribute('id','head_stat');
       this.table = document.createElement('table');
       this.table.setAttribute("class", "minetable");
@@ -372,7 +372,7 @@
               }
             } else {
               if (this.flags[x][y] > 0) {
-                _results1.push(this.set_class(x, y, "mine-wrong"+mine));
+                _results1.push(this.set_class(x, y, "mine-wrong"+this.flags[x][y]));
               } else if (this.near_mines[x][y] === 0) {
                 _results1.push(this.set_class(x, y, "empty"));
               } else {
