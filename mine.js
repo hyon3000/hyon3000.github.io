@@ -350,13 +350,13 @@
               }
               this.set_class(x, y, "mine-" + mine);
               if (fail_x === x && fail_y === y) {
-                _results1.push(this.set_class(x, y, "mine-exploded"));
+                _results1.push(this.set_class(x, y, "mine-exploded"+mine));
               } else {
                 _results1.push(void 0);
               }
             } else {
               if (this.flags[x][y] > 0) {
-                _results1.push(this.set_class(x, y, "mine-wrong"));
+                _results1.push(this.set_class(x, y, "mine-wrong"+mine));
               } else if (this.near_mines[x][y] === 0) {
                 _results1.push(this.set_class(x, y, "empty"));
               } else {

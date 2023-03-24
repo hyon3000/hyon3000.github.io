@@ -12,12 +12,30 @@ table.minetable {
     table.minetable td:active {
       background-image: url(mine.png);
       background-position: 0px -32px; }
-    table.minetable td.mine-wrong {
+    table.minetable td.mine-wrong1 {
       background-image: url(mine.png);
-      background-position: 0px 0px; }
-      table.minetable td.mine-wrong:active {
+      background-position: -80px -16px; }
+      table.minetable td.mine-exploded1:active {
         background-image: url(mine.png);
-        background-position: 0px 0px; }
+        background-position: -80px -16px; }
+table.minetable td.mine-wrong2 {
+      background-image: url(mine.png);
+      background-position: -96px -16px; }
+      table.minetable td.mine-exploded2:active {
+        background-image: url(mine.png);
+        background-position: -96px -16px; }
+table.minetable td.mine-wrong3 {
+      background-image: url(mine.png);
+      background-position: -112px -16px; }
+      table.minetable td.mine-exploded3:active {
+        background-image: url(mine.png);
+        background-position: -112px -16px; }
+table.minetable td.mine-wrong4 {
+      background-image: url(mine.png);
+      background-position: -128px -16px; }
+      table.minetable td.mine-exploded4:active {
+        background-image: url(mine.png);
+        background-position: -128px -16px; }
     table.minetable td.mine-1 {
       background-image: url(mine.png);
       background-position: -16px 0px; }
@@ -66,12 +84,30 @@ table.minetable {
       table.minetable td.flag-4:active {
         background-image: url(mine.png);
         background-position: -64px -16px; }
-    table.minetable td.mine-exploded {
+    table.minetable td.mine-exploded1 {
       background-image: url(mine.png);
       background-position: -80px 0px; }
-      table.minetable td.mine-exploded:active {
+      table.minetable td.mine-exploded1:active {
         background-image: url(mine.png);
         background-position: -80px 0px; }
+table.minetable td.mine-exploded2 {
+      background-image: url(mine.png);
+      background-position: -96px 0px; }
+      table.minetable td.mine-exploded2:active {
+        background-image: url(mine.png);
+        background-position: -96px 0px; }
+table.minetable td.mine-exploded3 {
+      background-image: url(mine.png);
+      background-position: -112px 0px; }
+      table.minetable td.mine-exploded3:active {
+        background-image: url(mine.png);
+        background-position: -112px 0px; }
+table.minetable td.mine-exploded4 {
+      background-image: url(mine.png);
+      background-position: -128px 0px; }
+      table.minetable td.mine-exploded4:active {
+        background-image: url(mine.png);
+        background-position: -128px 0px; }
     table.minetable td.empty {
       background-image: url(mine.png);
       background-position: 0px -32px; }
@@ -252,3 +288,21 @@ table.minetable {
       table.minetable td.near-29:active {
         background-image: url(mine.png);
         background-position: -144px -64px; }
+    table.minetable td.near-30 {
+      background-image: url(mine.png);
+      background-position: 0px -80px; }
+      table.minetable td.near-30:active {
+        background-image: url(mine.png);
+        background-position: 0px -80px; }
+    table.minetable td.near-31 {
+      background-image: url(mine.png);
+      background-position: -16px -80px; }
+      table.minetable td.near-31:active {
+        background-image: url(mine.png);
+        background-position: -16px -80px; }
+    table.minetable td.near-32 {
+      background-image: url(mine.png);
+      background-position: -32px -80px; }
+      table.minetable td.near-32:active {
+        background-image: url(mine.png);
+        background-position: -32px -80px; }
