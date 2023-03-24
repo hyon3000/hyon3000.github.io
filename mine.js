@@ -46,6 +46,8 @@
         this.game_status = -1;
         this.table = null;
       }
+	this.ptag = document.createElement('p');
+	this.ptag.setAttribute('id','head_stat');
       this.table = document.createElement('table');
       this.table.setAttribute("class", "minetable");
       this.num_flags = 0;
@@ -73,12 +75,14 @@
           td.oncontextmenu = on_rclick_to(x, y, this);
           td.onmousedown= function(self) {
             return function() {
+		  Document.getElementById("head_stat").setAttribute("class", "2");
               self.on_down();
               return false;
             };
           };
           td.onmouseup= function(self) {
             return function() {
+		  Document.getElementById("head_stat").setAttribute("class", "0");
               self.on_up();
               return false;
             };
