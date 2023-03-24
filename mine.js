@@ -71,6 +71,18 @@
             };
           };
           td.oncontextmenu = on_rclick_to(x, y, this);
+          td.onmousedown= function(self) {
+            return function() {
+              self.on_down();
+              return false;
+            };
+          };
+          td.onmouseup= function(self) {
+            return function() {
+              self.on_up();
+              return false;
+            };
+          };
           this.tds[x][y] = td;
           tr.appendChild(td);
         }
@@ -372,6 +384,12 @@
 
     Minefield.prototype.gameclear = function() {
       return this.game_status = -2;
+    };
+    Minefield.prototype.on_down = function() {
+      return this.game_status = -3;
+    };
+    Minefield.prototype.on_up = function() {
+      return this.game_status = 0;
     };
 
     Minefield.prototype.stringify = function() {
