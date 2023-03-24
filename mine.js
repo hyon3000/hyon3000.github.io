@@ -46,7 +46,7 @@
         this.game_status = -1;
         this.table = null;
       }
-	this.ptag = document.createElement('p');
+	this.ptag = document.createElement('div');
 	this.ptag.setAttribute('id','head_stat');
       this.table = document.createElement('table');
       this.table.setAttribute("class", "minetable");
