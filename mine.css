@@ -15,25 +15,25 @@ table.minetable {
     table.minetable td.mine-wrong1 {
       background-image: url(mine.png);
       background-position: -80px -16px; }
-      table.minetable td.mine-exploded1:active {
+      table.minetable td.mine-wrong1:active {
         background-image: url(mine.png);
         background-position: -80px -16px; }
 table.minetable td.mine-wrong2 {
       background-image: url(mine.png);
       background-position: -96px -16px; }
-      table.minetable td.mine-exploded2:active {
+      table.minetable td.mine-wrong2:active {
         background-image: url(mine.png);
         background-position: -96px -16px; }
 table.minetable td.mine-wrong3 {
       background-image: url(mine.png);
       background-position: -112px -16px; }
-      table.minetable td.mine-exploded3:active {
+      table.minetable td.mine-wrong3:active {
         background-image: url(mine.png);
         background-position: -112px -16px; }
 table.minetable td.mine-wrong4 {
       background-image: url(mine.png);
       background-position: -128px -16px; }
-      table.minetable td.mine-exploded4:active {
+      table.minetable td.mine-wrong4:active {
         background-image: url(mine.png);
         background-position: -128px -16px; }
     table.minetable td.mine-1 {
