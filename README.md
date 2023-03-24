@@ -2,10 +2,6 @@ klutzy 지뢰찾기의 최신 빌드를 제공합니다
 
 ㄴ약간의 버그 수정함
 
-ㄴ제가 작업한 부분은 WTFPL 라이센스임
-
- ㄴ 비어웨어 하려 했는데 원본이 MIT라 맥주는 못 받아먹을듯 ㅠㅠ
-
 http://hyon3000.github.io/
 
 ////////////////////////////////////////
@@ -24,4 +20,4 @@ See [index.html](index.html) or [Demo][] for usage.
   [puzzlet/fake-mswin](http://github.com/puzzlet/fake-mswin/) theme.
 * [egraether/mine3D](https://github.com/egraether/mine3D)
 
-[Demo]: http://klutzy.github.io/mine.js/
+[Demo]: http://hyon3000.github.io/
