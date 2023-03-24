@@ -91,6 +91,9 @@ var minefield = new window.Minefield(mine_area, function(status) {
     if (status === -2) {
         bg_pos = "-51px 0";
     }
+    if (status === -3) {
+        bg_pos = "-34px 0";
+    }
     smile.css({
         "background-position": bg_pos,
     });
