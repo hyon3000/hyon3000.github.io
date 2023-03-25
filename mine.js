@@ -98,18 +98,21 @@
     };
 
     Minefield.prototype.init_mines = function() {
-      var n, n_max, num_mine_created, x, y;
+      var n, n_max, num_mine_created, x, y,n2;
 
       this.mines = this.new_table();
       this.remaining = this.rows * this.columns;
       num_mine_created = 0;
+	n2=220;
       while (num_mine_created < this.num_mines) {
         x = Math.floor(Math.random() * this.columns);
         y = Math.floor(Math.random() * this.rows);
         if (this.mines[x][y] < this.max_mines) {
           n_max = this.max_mines - this.mines[x][y];
           n_max = Math.min(n_max, this.num_mines - num_mine_created);
-          if(this.num_mines - num_mine_created>220) n = n_max;
+          if(this.num_mines - num_mine_created>n2) {
+		n = n_max; n2-=0.5;
+          }
           else n = Math.floor(Math.random() * n_max) + 1;
           if (this.mines[x][y] === 0) {
             this.remaining -= 1;
