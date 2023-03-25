@@ -109,7 +109,7 @@
         if (this.mines[x][y] < this.max_mines) {
           n_max = this.max_mines - this.mines[x][y];
           n_max = Math.min(n_max, this.num_mines - num_mine_created);
-          if(n_max==4) n = Math.floor(Math.random() * (n_max+.5)) + 1;
+          if(n_max==4 && this.num_mines>300) n = Math.floor(Math.random() * (n_max+.5)) + 1;
           else n = Math.floor(Math.random() * n_max) + 1;
           if(n>n_max) n=n_max; 
           if (this.mines[x][y] === 0) {
