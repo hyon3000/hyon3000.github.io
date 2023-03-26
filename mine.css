@@ -114,6 +114,12 @@ table.minetable td.mine-exploded4 {
       table.minetable td.empty:active {
         background-image: url(mine.png);
         background-position: 0px -32px; }
+    table.minetable td.unk {
+      background-image: url(mine.png);
+      background-position: -144px -16px; }
+      table.minetable td.unk:active {
+        background-image: url(mine.png);
+        background-position: -144px -16px; }
     table.minetable td.near-1 {
       background-image: url(mine.png);
       background-position: -16px -32px; }
