@@ -278,8 +278,8 @@
       if (this.flags[x][y] === this.max_mines) {
         n = -this.flags[x][y];
       }
-      else if(this.tds[x][y].getAttribute("class")==="unk"){
-       n=0;console.log("1");
+      else if(this.tds[x][y].getAttribute("class")==='unk'){
+       return this.set_class(x, y, null);
       }
       this.num_flags += n;
       this.flags[x][y] += n;
@@ -290,8 +290,6 @@
       }
       if (n > 0) {
         return this.set_class(x, y, "flag-" + this.flags[x][y]);
-      } else if(n==0){console.log("2");
-        return this.set_class(x, y, null);
       } else{
         return this.set_class(x, y, "unk");
       }
