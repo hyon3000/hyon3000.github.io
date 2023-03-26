@@ -272,7 +272,7 @@
 
       td_class = this.get_class(x, y);
       if (td_class !== null && !/^flag/.exec(td_class)) {
-	if(class==='unk'){
+	if(td_class==='unk'){
        return this.set_class(x, y, null);
       }
         return;
