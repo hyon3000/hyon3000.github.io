@@ -272,14 +272,14 @@
 
       td_class = this.get_class(x, y);
       if (td_class !== null && !/^flag/.exec(td_class)) {
+	if(class==='unk'){
+       return this.set_class(x, y, null);
+      }
         return;
       }
       n = 1;
       if (this.flags[x][y] === this.max_mines) {
         n = -this.flags[x][y];
-      }
-      else if(this.tds[x][y].getAttribute("class")==='unk'){
-       return this.set_class(x, y, null);
       }
       this.num_flags += n;
       this.flags[x][y] += n;
