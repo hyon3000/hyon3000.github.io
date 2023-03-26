@@ -3,10 +3,11 @@
   var Minefield;
 
   Minefield = (function() {
-    function Minefield(window, game_status_changed_func) {
+    function Minefield(window, game_status_changed_func,game_status_changed_func2) {
       this.window = window;
       this.game_status_changed_func = game_status_changed_func != null ? game_status_changed_func : null;
-      this.game_status = -1;
+      this.game_status_changed_func2 = game_status_changed_func2 != null ? game_status_changed_func2 : null;
+      this.game_status = -1;this.game_status2 = 0;
       this.table = null;
       this.on_click_func = null;
       this.on_rclick_func = null;
@@ -31,6 +32,7 @@
     };
 
     Minefield.prototype.init_board = function(columns, rows, num_mines, max_mines) {
+	
       this.columns = columns;
       this.rows = rows;
       this.num_mines = num_mines;
@@ -39,15 +41,14 @@
     };
 
     Minefield.prototype.reset_board = function() {
-      var on_click_to, on_rclick_to, td, tr, x, y, _i, _j, _ref, _ref1;
+      var on_click_to, on_rclick_to, mousedown,mouseup,td, tr, x, y, _i, _j, _ref, _ref1;
 
       if (this.table) {
         this.window.removeChild(this.table);
         this.game_status = -1;
         this.table = null;
       }
-	this.ptag = document.createElement('p');
-	this.ptag.setAttribute('id','head_stat');
+	
       this.table = document.createElement('table');
       this.table.setAttribute("class", "minetable");
       this.num_flags = 0;
@@ -73,20 +74,20 @@
             };
           };
           td.oncontextmenu = on_rclick_to(x, y, this);
-          td.onmousedown= function(self) {
+          mousedown= function(x_, y_, self) {
             return function() {
-		  Document.getElementById("head_stat").setAttribute("class", "2");
-              self.on_down();
+              self.on_down(x_, y_);
               return false;
             };
           };
-          td.onmouseup= function(self) {
+          td.onmousedown= mousedown(x,y,this);
+          mouseup= function(x_, y_, self) {
             return function() {
-		  Document.getElementById("head_stat").setAttribute("class", "0");
-              self.on_up();
+              self.on_up(x_, y_);
               return false;
             };
           };
+          td.onmouseup= mouseup(x,y,this);
           this.tds[x][y] = td;
           tr.appendChild(td);
         }
@@ -193,7 +194,7 @@
 
     Minefield.prototype.on_click = function(x, y) {
       var old_game_status;
-
+ 
       old_game_status = this.game_status;
       if (this.game_status < 0) {
         return;
@@ -239,7 +240,11 @@
         return this.game_status_changed_func(this.game_status);
       }
     };
-
+Minefield.prototype.on_game_status_changed2 = function() {
+      if (this.game_status_changed_func2) {
+        return this.game_status_changed_func2(this.game_status2);
+      }
+    };
     Minefield.prototype.start = function(x, y) {
       var nx, ny, _i, _ref, _results;
 
@@ -269,18 +274,18 @@
 
     Minefield.prototype.flag = function(x, y) {
       var n, nx, ny, td_class, _i, _len, _ref, _ref1;
-
       td_class = this.get_class(x, y);
       if (td_class !== null && !/^flag/.exec(td_class)) {
-	if(td_class==='unk'){
-       return this.set_class(x, y, null);
-      }
         return;
+      }
+      if(td_class==="flag-0"){
+       return this.set_class(x, y, null);
       }
       n = 1;
       if (this.flags[x][y] === this.max_mines) {
         n = -this.flags[x][y];
       }
+	
       this.num_flags += n;
       this.flags[x][y] += n;
       _ref = this.near_positions(x, y);
@@ -291,14 +296,14 @@
       if (n > 0) {
         return this.set_class(x, y, "flag-" + this.flags[x][y]);
       } else{
-        return this.set_class(x, y, "unk");
+        return this.set_class(x, y, "flag-0");
       }
     };
 
     Minefield.prototype.press = function(x, y) {
       if (this.mines[x][y] > 0) {
         return -1;
-      } else if (this.get_class(x, y) !== null) {
+      } else if (this.get_class(x, y) !== null && this.get_class(x, y)!=="flag-0") {
         return 1;
       }
       this.remaining -= 1;
@@ -314,7 +319,7 @@
       var list, nx, ny, start_flags, start_mines, td_class, x, y, _i, _j, _len, _len1, _ref, _ref1, _ref2, _ref3, _ref4;
 
       td_class = this.get_class(start_x, start_y);
-      if (td_class !== null && /^flag/.exec(td_class)) {
+      if (td_class !== null && (td_class!=="flag-0" && /^flag/.exec(td_class))) {
         return 1;
       }
       if (this.press(start_x, start_y) < 0) {
@@ -328,7 +333,7 @@
         for (_i = 0, _len = _ref.length; _i < _len; _i++) {
           _ref1 = _ref[_i], nx = _ref1[0], ny = _ref1[1];
           td_class = this.get_class(nx, ny);
-          if (td_class === null) {
+          if (td_class === null|| td_class==="flag-0") {
             list.push([nx, ny]);
             if (this.press(nx, ny) < 0) {
               return -1;
@@ -343,7 +348,7 @@
           for (_j = 0, _len1 = _ref3.length; _j < _len1; _j++) {
             _ref4 = _ref3[_j], nx = _ref4[0], ny = _ref4[1];
             td_class = this.get_class(nx, ny);
-            if (td_class === null) {
+            if (td_class === null || td_class==="flag-0") {
               list.push([nx, ny]);
               if (this.press(nx, ny) < 0) {
                 return -1;
@@ -357,7 +362,18 @@
 
     Minefield.prototype.gameover = function(fail_x, fail_y) {
       var mine, x, y, _i, _ref, _results;
-
+      
+      var tmp,td;
+      tmp = (document.getElementsByClassName("minetable")[0]).getElementsByTagName("td");;
+      
+      for(y=0;y<tmp.length;y++){
+	td=tmp[y];
+      td.onclick=null;
+      td.onmouseup=null;
+      td.onmousedown=null;
+      td.oncontextmenu=null;
+      }
+      
       this.game_status = -1;
       _results = [];
       for (y = _i = 0, _ref = this.rows - 1; 0 <= _ref ? _i <= _ref : _i >= _ref; y = 0 <= _ref ? ++_i : --_i) {
@@ -369,7 +385,7 @@
             mine = this.mines[x][y];
             flag=this.flags[x][y];
             if (mine > 0) {
-              if (/^flag/.exec(this.get_class(x, y))) {
+              if (this.get_class(x, y)!=="flag-0"&&/^flag/.exec(this.get_class(x, y))) {
                 continue;
               }
               this.set_class(x, y, "mine-" + mine);
@@ -398,10 +414,15 @@
       return this.game_status = -2;
     };
     Minefield.prototype.on_down = function() {
-      return this.game_status = 2;
+	this.game_status2 = 1;
+	this.on_game_status_changed2();
+      return 1;
+      
     };
     Minefield.prototype.on_up = function() {
-      return this.game_status = 0;
+	this.game_status2 = 0;
+	this.on_game_status_changed2();
+      return 0;
     };
 
     Minefield.prototype.stringify = function() {

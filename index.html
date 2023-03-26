@@ -102,7 +102,7 @@ var minefield = new window.Minefield(mine_area, function(status) {
         "background-position": bg_pos,
     });
 
-    if (status === 0 || status==2) {
+    if (status === 0) {
         timer_id = window.setInterval(update_timer, 1 * 1000);
     }
     if (status < 0 || status === 1) {
@@ -118,7 +118,19 @@ var minefield = new window.Minefield(mine_area, function(status) {
             update_counter(0, timer_obj);
         }
     }
-});
+},
+function(status) {
+    var smile = $(".mine-reset-button .mine-reset-button-inner");
+    var bg_pos = "0 0";
+    if (status === 1) {
+        bg_pos = "-34px 0";
+    }
+    smile.css({
+        "background-position": bg_pos,
+    });
+
+}
+);
 
 update_timer = function() {
     timer_val += 1;
