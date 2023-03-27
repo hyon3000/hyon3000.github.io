@@ -13,7 +13,7 @@
 
 <body>
 
-<div class="windows windows-98">
+<div class="windows windows-98" style="height:365px;">
 
 <div class="window has-menu mine-window">
     <div class="title-bar">
@@ -60,14 +60,18 @@
 </div>
     
 <div style="margin:400px 0px 0px 0px;">
-    주문제작:가로
-<input type="text" id="x" min="1" max="30" step="1" style="width:40px;" value="30">
-세로
-<input type="text" id="y" min="1" max="16" step="1" style="width:40px;" value="16">
-최대
-<input type="text" id="m" min="1" max="4" step="1" style="width:40px;" value="1">칸 지뢰
-<input type="text" id="t" min="1" step="1" style="width:40px;" value="99">개 
-<input type="button" onclick="minefield.init_board(document.getElementById('x').value, document.getElementById('y').value, document.getElementById('t').value, document.getElementById('m').value)" value="생성">
+    <form>
+        주문제작:가로
+        <input type="text" id="x" min="1" max="30" step="1" style="width:40px;" value="30">
+        세로
+        <input type="text" id="y" min="1" max="16" step="1" style="width:40px;" value="16">
+        최대
+        <input type="text" id="m" min="1" max="4" step="1" style="width:40px;" value="1">
+        칸 지뢰
+        <input type="text" id="t" min="1" step="1" style="width:40px;" value="99">
+        개 
+        <input type="button" onclick="minefield.init_board(document.getElementById('x').value, document.getElementById('y').value, document.getElementById('t').value, document.getElementById('m').value)" value="생성">
+    </form>
 </div>
 
 <script src="vendor/jquery.min.js"></script>
