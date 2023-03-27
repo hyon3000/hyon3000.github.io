@@ -12,7 +12,39 @@
 </head>
 
 <body>
+<script>
+var execute=function(i,j,k,l=1){
+	if((i*j-1)*l<k) k=(i*j-1)*l;
+	minefield.init_board(i, j, k,l);
+	
+	$(".mine-window").css({
+		"width": 22+i*16,
+		"height": 107+j*16,
+    });
+	$(".window-content .mine-head-area ").css({
+		"width": 2+i*16,
+    });
+	$(".window-content .mine-area").css({
+		"width": i*16,
+		"height": j*16,
+    });
+	$(".inner").css({
+		"width": i*16,
+		"height": j*16,
+    });
+	$(".window-content .mine-head-area .mine-reset-button").css({
+		"left": 225-(30-i)*8,
+    });
+	$(".userctrl").css({
+		"margin-top": 117+j*16,
+    });
+	$(".windows").css({
+		"height": 112+j*16,
+    });
 
+};
+
+</script>
 <div class="windows windows-98" style="height:365px;">
 
 <div class="window has-menu mine-window">
@@ -26,14 +58,14 @@
         </div>
     </div>
     <ul class="menu-bar">
-<li onclick="minefield.init_board(9, 9, 10)">초급</li>
-<li onclick="minefield.init_board(16, 16, 40)">중급</li>
-<li onclick="minefield.init_board(30, 16, 99)">고급</li>
-<li onclick="minefield.init_board(30, 16, 120, 2)">초고급</li>
-<li onclick="minefield.init_board(30, 16, 160, 3)">😱급</li>
-<li onclick="minefield.init_board(30, 16, 220, 4)">💀급</li>
-<li onclick="minefield.init_board(30, 16, 420, 4)">☠️급</li>
-<li onclick="minefield.init_board(30, 16, 1500, 4)">☠️☠️</li>
+<li onclick="execute(9, 9, 10)">초급</li>
+<li onclick="execute(16, 16, 40)">중급</li>
+<li onclick="execute(30, 16, 99)">고급</li>
+<li onclick="execute(30, 16, 120, 2)">초고급</li>
+<li onclick="execute(30, 16, 160, 3)">😱급</li>
+<li onclick="execute(30, 16, 220, 4)">💀급</li>
+<li onclick="execute(30, 16, 420, 4)">☠️급</li>
+<li onclick="execute(30, 16, 1500, 4)">☠️☠️</li>
     </ul>
 
     <div class="window-content">
@@ -59,7 +91,7 @@
 
 </div>
     
-<div style="margin:400px 0px 0px 0px;">
+<div class="userctrl" style="margin:373px 0px 0px 0px;">
     <form>
         주문제작:가로
         <input type="text" id="x" min="1" max="30" step="1" style="width:40px;" value="30">
@@ -70,7 +102,7 @@
         칸 지뢰
         <input type="text" id="t" min="1" step="1" style="width:40px;" value="99">
         개 
-        <input type="button" onclick="minefield.init_board(document.getElementById('x').value, document.getElementById('y').value, document.getElementById('t').value, document.getElementById('m').value)" value="생성">
+        <input type="button" onclick="execute(document.getElementById('x').value, document.getElementById('y').value, document.getElementById('t').value, document.getElementById('m').value)" value="생성">
     </form>
 </div>
 
@@ -183,4 +215,3 @@ minefield.init_board(30, 16, 120, 2);
 </body>
 
 </html>
-
