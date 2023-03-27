@@ -104,7 +104,7 @@
       this.mines = this.new_table();
       this.remaining = this.rows * this.columns;
       num_mine_created = 0;
-	n2=x*y*220/480;
+	n2=this.columns*this.rows*220/480;
       while (num_mine_created < this.num_mines) {
         x = Math.floor(Math.random() * this.columns);
         y = Math.floor(Math.random() * this.rows);
