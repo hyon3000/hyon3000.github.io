@@ -57,6 +57,9 @@
       .window-content .mine-head-area .mine-counter .digit.digit-9, .window-content .mine-head-area .mine-timer .digit.digit-9 {
         background-image: url(digit.png);
         background-position: -117px 0; }
+        .window-content .mine-head-area .mine-counter .digit.digit-10, .window-content .mine-head-area .mine-timer .digit.digit-10 {
+        background-image: url(digit.png);
+        background-position: -130px 0; }
   .window-content .mine-head-area .mine-counter {
     position: absolute;
     top: 6px;

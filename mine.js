@@ -104,7 +104,7 @@
       this.mines = this.new_table();
       this.remaining = this.rows * this.columns;
       num_mine_created = 0;
-	n2=this.columns*this.rows*220/480;
+      n2=this.columns*this.rows*220/480;
       while (num_mine_created < this.num_mines) {
         x = Math.floor(Math.random() * this.columns);
         y = Math.floor(Math.random() * this.rows);
@@ -362,7 +362,6 @@ Minefield.prototype.on_game_status_changed2 = function() {
 
     Minefield.prototype.gameover = function(fail_x, fail_y) {
       var mine, x, y, _i, _ref, _results;
-      
       var tmp,td;
       tmp = (document.getElementsByClassName("minetable")[0]).getElementsByTagName("td");;
       
@@ -411,6 +410,36 @@ Minefield.prototype.on_game_status_changed2 = function() {
     };
 
     Minefield.prototype.gameclear = function() {
+	var tmp,td;
+      tmp = (document.getElementsByClassName("minetable")[0]).getElementsByTagName("td");;
+      
+      for(y=0;y<tmp.length;y++){
+	td=tmp[y];
+      td.onclick=null;
+      td.onmouseup=null;
+      td.onmousedown=null;
+      td.oncontextmenu=null;
+      }
+      var mine, x, y, _i, _ref, _results;
+      _results = [];
+      for (y = _i = 0, _ref = this.rows - 1; 0 <= _ref ? _i <= _ref : _i >= _ref; y = 0 <= _ref ? ++_i : --_i) {
+        _results.push((function() {
+          var _j, _ref1, _results1;
+
+          _results1 = [];
+          for (x = _j = 0, _ref1 = this.columns - 1; 0 <= _ref1 ? _j <= _ref1 : _j >= _ref1; x = 0 <= _ref1 ? ++_j : --_j) {
+            mine = this.mines[x][y];
+            if (mine > 0) {
+              this.set_class(x, y, "flag-" + mine);
+              
+               _results1.push(void 0);
+              
+            }
+          }
+          return _results1;
+        }).call(this));
+      }
+      this.num_flags=this.num_mines;
       return this.game_status = -2;
     };
     Minefield.prototype.on_down = function() {
