@@ -18,9 +18,13 @@ var createurl=function(a){
   return ret;
 }
 </script>
+  <p>
   <t1> 인상대학교 잔여좌석 검색서비스</t1>
+  </p>
+  <p>
   이름(최소 2글자):
   <input type="text" id="name" style="width:40px;" value="">
-  <input type="button" onclick="createurl(document.getElementById('name').value))" value="검색">
+  <input type="button" onclick="location.href=createurl(document.getElementById('name').value))" value="검색">
+  </p>
 </body>
 </html>
