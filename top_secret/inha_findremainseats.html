@@ -2,21 +2,14 @@
 <html>
 
 <head>
-<title>Minesweeper</title>
-
 <meta charset="utf-8">
-<link href="mine.css" media="screen" rel="stylesheet" type="text/css" />
-<link href="win98.css" media="screen" rel="stylesheet" type="text/css" />
-<link href="mine-win98.css" media="screen" rel="stylesheet" type="text/css" />
-
 </head>
 
 <body>
 <script>
-var createurl=function(a){
-  var ret="https://sugang.inha.ac.kr/sugang/SU_53005/Remain_Search.aspx?gb=direct&gubun=2&haksu="+a+"&objList=txtHaksu";
-  return ret;
-}
+var moveurl=function(a){
+  window.location.href='https://sugang.inha.ac.kr/sugang/SU_53005/Remain_Search.aspx?gb=direct&gubun=2&haksu='+a+'&objList=txtHaksu';
+};
 </script>
   <p>
   <t1> 인상대학교 잔여좌석 검색서비스</t1>
@@ -24,7 +17,8 @@ var createurl=function(a){
   <p>
   이름(최소 2글자):
   <input type="text" id="name" style="width:40px;" value="">
-  <input type="button" onclick="location.href=createurl(document.getElementById('name').value))" value="검색">
+  <input type="button" onclick="moveurl(document.getElementById('name').value)" value="검색">
+  <input type="button" onclick="location.href='https://google.com';" value="검색">
   </p>
 </body>
 </html>
