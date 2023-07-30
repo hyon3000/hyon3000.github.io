@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>Minesweeper</title>
+
+<meta charset="utf-8">
+<link href="mine.css" media="screen" rel="stylesheet" type="text/css" />
+<link href="win98.css" media="screen" rel="stylesheet" type="text/css" />
+<link href="mine-win98.css" media="screen" rel="stylesheet" type="text/css" />
+
+</head>
+
+<body>
+<script>
+var createurl=function(a){
+  var ret="https://sugang.inha.ac.kr/sugang/SU_53005/Remain_Search.aspx?gb=direct&gubun=2&haksu="+a+"&objList=txtHaksu";
+  return ret;
+}
+</script>
+  <t1> 인상대학교 잔여좌석 검색서비스</t1>
+  이름(최소 2글자):
+  <input type="text" id="name" style="width:40px;" value="">
+  <input type="button" onclick="createurl(document.getElementById('name').value))" value="검색">
+</body>
+</html>
