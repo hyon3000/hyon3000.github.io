@@ -126,9 +126,9 @@ Minefield.prototype.has_neighbor_mine = function(x, y) {
 			// n은 이번에 이 칸(x,y)에 넣을 지뢰 '칸수'(1~max_mines)
 if (n >= 2) {
   // 두칸~다섯칸짜리 확률표
-  var p = (n === 2 ? 0.2 :
-           n === 3 ? 0.3 :
-           n === 4 ? 0.4 :
+  var p = (n === 2 ? 0.5 :
+           n === 3 ? 0.5 :
+           n === 4 ? 0.5 :
            n === 5 ? 0.5 : 0);
 
   if (Math.random() < p) {
