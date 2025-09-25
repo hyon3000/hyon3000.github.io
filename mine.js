@@ -160,26 +160,35 @@ Minefield.prototype.has_neighbor_mine = function(x, y) {
         this.table.appendChild(tr);
       }
       this.window.appendChild(this.table);
-      this.init_mines();
-		// === 추가: 이웃 0칸 품질 검사 후, 최대 5회 재생성 ===
-var attempts = 0;
-while (attempts < 5) {
-  // 현재 판의 zero-tiles 수 (지뢰 없고 near_mines==0)
+      // 후보 5판 생성 후, 주변 지뢰 0칸 최대인 판을 채택
+var bestZero = -1;
+var bestMines = null;
+var bestNear = null;
+var bestRemaining = 0;
+
+for (var attempt = 0; attempt < 5; attempt++) {
+  this.init_mines(); // mines/near_mines/remaining/game_status 갱신
   var curZero = this.count_zero_no_neighbor();
 
-  // 이론적 최대 zero-tiles
-  var theoMax = this.theoretical_max_zero_cells();
-
-  // 기준: 이론 최대의 30% 미만이면 다시 생성
-  if (theoMax > 0 && curZero < Math.floor(theoMax * 0.2)) {
-    this.init_mines(); // 새로 생성
-    attempts++;
-    continue;
+  if (curZero > bestZero) {
+    bestZero = curZero;
+    // 깊은 복사
+    bestMines = JSON.parse(JSON.stringify(this.mines));
+    bestNear = JSON.parse(JSON.stringify(this.near_mines));
+    bestRemaining = this.remaining;
   }
-  break; // 기준 통과
 }
-// === 추가 끝 ===
-      return this.on_game_status_changed();
+
+// 베스트 스냅샷을 복원
+if (bestMines) {
+  this.mines = bestMines;
+  this.near_mines = bestNear;
+  this.remaining = bestRemaining;
+  this.game_status = 1; // 준비 상태 유지
+}
+
+return this.on_game_status_changed();
+
     };
 
     Minefield.prototype.init_mines = function() {
