@@ -165,8 +165,9 @@ var bestZero = -1;
 var bestMines = null;
 var bestNear = null;
 var bestRemaining = 0;
-
-for (var attempt = 0; attempt < 5; attempt++) {
+var retryMap = {1:1, 2:2, 3:4, 4:8, 5:12};
+var retries = retryMap[this.max_mines] || 1;
+for (var attempt = 0; attempt < retries; attempt++) {
   this.init_mines(); // mines/near_mines/remaining/game_status 갱신
   var curZero = this.count_zero_no_neighbor();
 
@@ -211,7 +212,7 @@ return this.on_game_status_changed();
 			// n은 이번에 이 칸(x,y)에 넣을 지뢰 '칸수'(1~max_mines)
 if (n >= 2) {
   // 두칸~다섯칸짜리 확률표
-  var p = (n === 2 ? 0.5 :
+  var p = (n === 2 ? 0.2 :
            n === 3 ? 0.5 :
            n === 4 ? 0.5 :
            n === 5 ? 0.5 : 0);
