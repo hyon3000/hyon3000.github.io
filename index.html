@@ -22,7 +22,7 @@ var execute=function(i,j,k,l=1){
 	if(l>5) l=5;
 	else if(l<1) l=1;
 	if((i*j-1)*l<k) k=(i*j-1)*l;
-	if(k>999) k=999;
+	if(k>99999) k=99999;
 	document.getElementById('x').value=i;
 	document.getElementById('y').value=j;
 	document.getElementById('m').value=l;
@@ -136,11 +136,11 @@ var execute=function(i,j,k,l=1){
 <div class="userctrl" style="margin:373px 0px 0px 0px;">
     <form>
         주문제작:가로
-        <input type="text" id="x" min="1" max="30" step="1" style="width:40px;" value="30">
+        <input type="text" id="x" min="1" max="1000" step="1" style="width:40px;" value="30">
         세로
-        <input type="text" id="y" min="1" max="16" step="1" style="width:40px;" value="16">
+        <input type="text" id="y" min="1" max="1000" step="1" style="width:40px;" value="16">
         1칸당 최대 지뢰 수
-        <input type="text" id="m" min="1" max="4" step="1" style="width:40px;" value="1">
+        <input type="text" id="m" min="1" max="5" step="1" style="width:40px;" value="1">
         전체 지뢰 수
         <input type="text" id="t" min="1" step="1" style="width:40px;" value="99">
         
