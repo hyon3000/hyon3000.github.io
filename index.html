@@ -197,17 +197,17 @@ var minefield = new window.Minefield(mine_area, function(status) {
         	
             var num_counter = minefield.num_mines - minefield.num_flags;
             var counter_obj = $(".mine-counter");
-            update_counter(num_counter, counter_obj);
+            update_counter_mines(num_counter, counter_obj);
 
             timer_val = 0;
             timer_id = null;
             var timer_obj = $(".mine-timer");
-            update_counter(0, timer_obj);
+            update_counter_timer(0, timer_obj);
         }
         if(status==-2){
         	var num_counter = minefield.num_mines - minefield.num_flags;
             var counter_obj = $(".mine-counter");
-            update_counter(num_counter, counter_obj);
+            update_counter_mines(num_counter, counter_obj);
         }
     }
 },
@@ -227,44 +227,76 @@ function(status) {
 update_timer = function() {
     timer_val += 1;
     var timer_obj = $(".mine-timer");
-    update_counter(timer_val, timer_obj);
+    update_counter_times(timer_val, timer_obj);
 }
 
-update_counter = function(val, counter) {
-    if (val > 999) {
-        val = 999;
+/** counter 안의 digit 자식 개수를 원하는 수로 맞춰줌 */
+function ensure_digits(counter, count) {
+  const cur = counter.children().length;
+  if (cur < count) {
+    for (let i = 0; i < count - cur; i++) {
+      counter.append('<div class="digit digit-0"></div>');
     }
-    if (val < -99) {
-        val = -99;
+  } else if (cur > count) {
+    for (let i = 0; i < cur - count; i++) {
+      $(counter.children()[0]).remove();
     }
-    if(val>=0){
-    var digits = [
-        Math.floor(val / 100),
-        Math.floor(val / 10) % 10,
-        val % 10
-    ];
+  }
+}
+
+/** 타이머 전용: 3자리 고정 (기존 동작 유지) */
+function update_counter_timer(val, counter) {
+  if (val > 999) val = 999;
+  if (val < 0) val = 0; // 타이머는 음수 안 씀
+  ensure_digits(counter, 3);
+  const digits = [
+    Math.floor(val / 100),
+    Math.floor(val / 10) % 10,
+    val % 10,
+  ];
+  for (let i = 0; i < 3; i++) {
+    const d = digits[i];
+    const child = $(counter.children()[i]);
+    child.removeClass();
+    child.addClass("digit digit-" + d);
+  }
+}
+
+/** 지뢰카운터 전용: 기본 3자리, 필요 시 n자리로 자동 확장 */
+function update_counter_mines(val, counter) {
+  // 음수 지원: 맨 앞은 digit-10(마이너스), 이후 절대값 자릿수
+  const isNeg = val < 0;
+  const absStr = Math.abs(val).toString();
+  const need = Math.max(3, isNeg ? 1 + absStr.length : absStr.length);
+  ensure_digits(counter, need);
+
+  for (let i = 0; i < need; i++) {
+    let d;
+    if (isNeg) {
+      if (i === 0) {
+        d = 10; // minus
+      } else {
+        const ch = absStr.charCodeAt(i - 1) - 48; // '0' = 48
+        d = ch;
+      }
+    } else {
+      const ch = absStr.charCodeAt(absStr.length - need + i) || 48; // 왼쪽 패딩
+      d = ch - 48;
     }
-    else{
-    	var digits = [
-            10,
-            Math.floor(-val / 10) % 10,
-            -val % 10
-        ];
-    }
-    for (var i = 0; i < 3; i++) {
-        var d = digits[i];
-        var child = $(counter.children()[i]);
-        child.removeClass();
-        child.addClass("digit digit-" + d);
-    }
-};
+    const child = $(counter.children()[i]);
+    child.removeClass();
+    child.addClass("digit digit-" + d);
+  }
+}
 minefield.on_rclick_func = function(x, y) {
     var num_counter = minefield.num_mines - minefield.num_flags;
     var counter_obj = $(".mine-counter");
-    update_counter(num_counter, counter_obj);
+    update_counter_mines(num_counter, counter_obj);
 };
 
 minefield.init_board(30, 16, 99, 1);
+update_counter_mines(minefield.num_mines - minefield.num_flags, $(".mine-counter"));
+
 </script>
 
 </body>
