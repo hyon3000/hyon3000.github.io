@@ -5,7 +5,11 @@
   top: 0;
   left: auto;
   right: auto; }
-
+.mine-counter {
+  display: flex;   /* 줄바꿈 방지 */
+  flex-direction: row;
+  white-space: nowrap;
+}
 .window-content .mine-head-area {
   margin: 4px;
   width: 482px;
