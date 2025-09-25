@@ -268,32 +268,37 @@ function update_counter_mines(val, counter) {
   const isNeg = val < 0;
   const absStr = Math.abs(val).toString();
 
-  // 숫자부(부호 제외)는 최소 3자리
-  const numericMin = 3;
-  const numericLen = Math.max(numericMin, absStr.length);
+  let need, padded;
+  if (isNeg) {
+    // 음수일 때: 부호 + 최소 2자리 (예: -01, -12, -123 ...)
+    const numericLen = Math.max(2, absStr.length);
+    need = 1 + numericLen; // 부호 포함
+    padded = absStr.padStart(numericLen, "0");
+  } else {
+    // 양수일 때: 최소 3자리
+    const numericLen = Math.max(3, absStr.length);
+    need = numericLen;
+    padded = absStr.padStart(numericLen, "0");
+  }
 
-  // 실제 필요한 digit 개수 (음수면 부호 1칸 추가)
-  const need = isNeg ? (1 + numericLen) : numericLen;
   ensure_digits(counter, need);
 
   if (isNeg) {
-    // 맨 앞: 마이너스
+    // 맨 앞: 마이너스 기호
     let child = $(counter.children()[0]);
     child.removeClass();
     child.addClass("digit digit-10");
 
-    // 숫자부: 3자리 이상 0패딩
-    const padded = absStr.padStart(numericLen, "0");
-    for (let i = 0; i < numericLen; i++) {
+    // 나머지 숫자 표시
+    for (let i = 0; i < padded.length; i++) {
       const d = padded.charCodeAt(i) - 48;
       child = $(counter.children()[i + 1]);
       child.removeClass();
       child.addClass("digit digit-" + d);
     }
   } else {
-    // 양수: 3자리 이상 0패딩
-    const padded = absStr.padStart(numericLen, "0");
-    for (let i = 0; i < numericLen; i++) {
+    // 양수 표시
+    for (let i = 0; i < padded.length; i++) {
       const d = padded.charCodeAt(i) - 48;
       const child = $(counter.children()[i]);
       child.removeClass();
@@ -301,8 +306,8 @@ function update_counter_mines(val, counter) {
     }
   }
 
-  // 한 줄 유지 & 폭 갱신 (CSS 폭에 맞춰 조정)
-  const digitWidth = 13; // px
+  // 컨테이너 폭 자동 조정
+  const digitWidth = 13; // px, 실제 CSS에 맞게 조정
   counter.css({
     width: (need * digitWidth) + "px",
     display: "flex",
