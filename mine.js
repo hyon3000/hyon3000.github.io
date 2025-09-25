@@ -12,6 +12,64 @@
       this.on_click_func = null;
       this.on_rclick_func = null;
     }
+	  Minefield.prototype.theoretical_max_zero_cells = function() {
+  var C = this.columns, R = this.rows;
+  var total = C * R;
+  if (this.num_mines <= 0) return total;
+
+  var M = Math.max(1, this.max_mines || 1);
+  var needed = Math.ceil(this.num_mines / M);
+
+  // 영향권 면적 계산 (모서리 기준, 보드 경계로 캡)
+  function influenceArea(w, h) {
+    var areaW = Math.min(C, w + 1);
+    var areaH = Math.min(R, h + 1);
+    return areaW * areaH;
+  }
+
+  // --- 전략 A: 정방형에 가까운 직사각형(엄밀 탐색) ---
+  var bestA = Infinity;
+  var hMax = Math.min(R, needed);
+  for (var h = 1; h <= hMax; h++) {
+    var w = Math.ceil(needed / h);
+    if (w > C) continue;
+    var area = influenceArea(w, h);
+    if (area < bestA) bestA = area;
+  }
+
+  // --- 전략 B: 짧은 변을 꽉 채우며 모서리에 쌓기 ---
+  var bestB = Infinity;
+  if (C <= R) {
+    // 가로가 짧음: 가로를 먼저 꽉 채우고 세로로 늘림
+    var wB = Math.min(C, needed);
+    var hB = Math.ceil(needed / wB);
+    if (hB <= R) bestB = influenceArea(wB, hB);
+  } else {
+    // 세로가 짧음: 세로를 먼저 꽉 채우고 가로로 늘림
+    var hB2 = Math.min(R, needed);
+    var wB2 = Math.ceil(needed / hB2);
+    if (wB2 <= C) bestB = influenceArea(wB2, hB2);
+  }
+
+  var best = Math.min(bestA, bestB);
+  if (!isFinite(best)) {
+    // (드물지만) 제약으로 어떤 조합도 못 찾은 경우: 보드 꽉 채운 근사
+    best = influenceArea(Math.min(C, needed), Math.ceil(needed / Math.min(C, needed)));
+  }
+
+  var zeroMax = total - best;
+  return zeroMax < 0 ? 0 : zeroMax;
+};
+// 현재 판에서 "주변 지뢰 0칸" 개수(자기 칸에 지뢰 없어야 함)
+Minefield.prototype.count_zero_no_neighbor = function() {
+  var cnt = 0;
+  for (var x = 0; x < this.columns; x++) {
+    for (var y = 0; y < this.rows; y++) {
+      if (this.mines[x][y] === 0 && this.near_mines[x][y] === 0) cnt++;
+    }
+  }
+  return cnt;
+};
 Minefield.prototype.has_neighbor_mine = function(x, y) {
   var adj = this.near_positions(x, y);
   for (var i = 0; i < adj.length; i++) {
@@ -103,6 +161,24 @@ Minefield.prototype.has_neighbor_mine = function(x, y) {
       }
       this.window.appendChild(this.table);
       this.init_mines();
+		// === 추가: 이웃 0칸 품질 검사 후, 최대 5회 재생성 ===
+var attempts = 0;
+while (attempts < 5) {
+  // 현재 판의 zero-tiles 수 (지뢰 없고 near_mines==0)
+  var curZero = this.count_zero_no_neighbor();
+
+  // 이론적 최대 zero-tiles
+  var theoMax = this.theoretical_max_zero_cells();
+
+  // 기준: 이론 최대의 30% 미만이면 다시 생성
+  if (theoMax > 0 && curZero < Math.floor(theoMax * 0.2)) {
+    this.init_mines(); // 새로 생성
+    attempts++;
+    continue;
+  }
+  break; // 기준 통과
+}
+// === 추가 끝 ===
       return this.on_game_status_changed();
     };
 
