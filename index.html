@@ -265,40 +265,37 @@ function update_counter_timer(val, counter) {
 
 /** 지뢰카운터 전용: 기본 3자리, 필요 시 n자리로 자동 확장 */
 function update_counter_mines(val, counter) {
+  // N = max(3, digits of total mines)
+  const totalMines = minefield.num_mines || 0;
+  const N = Math.max(3, String(Math.abs(totalMines)).length);
+
+  ensure_digits(counter, N);
+
   const isNeg = val < 0;
-  const absStr = Math.abs(val).toString();
-
-  let need, padded;
-  if (isNeg) {
-    // 음수일 때: 부호 + 최소 2자리 (예: -01, -12, -123 ...)
-    const numericLen = Math.max(2, absStr.length);
-    need = 1 + numericLen; // 부호 포함
-    padded = absStr.padStart(numericLen, "0");
-  } else {
-    // 양수일 때: 최소 3자리
-    const numericLen = Math.max(3, absStr.length);
-    need = numericLen;
-    padded = absStr.padStart(numericLen, "0");
-  }
-
-  ensure_digits(counter, need);
 
   if (isNeg) {
-    // 맨 앞: 마이너스 기호
+    const slots = N - 1;              // 숫자 표시 칸
+    const maxAbs = Math.pow(10, slots) - 1;
+    let absVal = Math.abs(val);
+    if (absVal > maxAbs) absVal = maxAbs; // -99..9 로 클램프
+
+    // 맨 앞: 마이너스
     let child = $(counter.children()[0]);
     child.removeClass();
     child.addClass("digit digit-10");
 
-    // 나머지 숫자 표시
-    for (let i = 0; i < padded.length; i++) {
+    // 나머지: 0패딩
+    const padded = String(absVal).padStart(slots, "0");
+    for (let i = 0; i < slots; i++) {
       const d = padded.charCodeAt(i) - 48;
       child = $(counter.children()[i + 1]);
       child.removeClass();
       child.addClass("digit digit-" + d);
     }
   } else {
-    // 양수 표시
-    for (let i = 0; i < padded.length; i++) {
+    // 양수/0: N자리 0패딩
+    const padded = String(val).padStart(N, "0");
+    for (let i = 0; i < N; i++) {
       const d = padded.charCodeAt(i) - 48;
       const child = $(counter.children()[i]);
       child.removeClass();
@@ -306,10 +303,10 @@ function update_counter_mines(val, counter) {
     }
   }
 
-  // 컨테이너 폭 자동 조정
-  const digitWidth = 13; // px, 실제 CSS에 맞게 조정
+  // 줄바꿈 방지 + 폭 맞춤
+  const digitWidth = 13; // CSS의 digit 폭(px)에 맞게 필요시 조정
   counter.css({
-    width: (need * digitWidth) + "px",
+    width: (N * digitWidth) + "px",
     display: "flex",
     whiteSpace: "nowrap",
   });
