@@ -12,6 +12,14 @@
       this.on_click_func = null;
       this.on_rclick_func = null;
     }
+Minefield.prototype.has_neighbor_mine = function(x, y) {
+  var adj = this.near_positions(x, y);
+  for (var i = 0; i < adj.length; i++) {
+    var nx = adj[i][0], ny = adj[i][1];
+    if (this.mines[nx][ny] > 0) return true;
+  }
+  return false;
+};
 
     Minefield.prototype.new_table = function() {
       var x, y, _i, _ref, _results;
@@ -115,6 +123,22 @@
 		n = n_max; n2-=0.5;
           }
           else n = Math.floor(Math.random() * n_max) + 1;
+			// n은 이번에 이 칸(x,y)에 넣을 지뢰 '칸수'(1~max_mines)
+if (n >= 2) {
+  // 두칸~다섯칸짜리 확률표
+  var p = (n === 2 ? 0.2 :
+           n === 3 ? 0.3 :
+           n === 4 ? 0.4 :
+           n === 5 ? 0.5 : 0);
+
+  if (Math.random() < p) {
+    // 이웃에 지뢰가 없으면 이 배치는 취소하고 다시 뿌리러 감(continue)
+    if (!this.has_neighbor_mine(x, y)) {
+      continue; // while 루프 처음으로 돌아가서 다른 위치/수량 시도
+    }
+  }
+}
+
           if (this.mines[x][y] === 0) {
             this.remaining -= 1;
           }
