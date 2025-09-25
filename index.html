@@ -268,30 +268,32 @@ function update_counter_mines(val, counter) {
   const isNeg = val < 0;
   const absStr = Math.abs(val).toString();
 
-  // 양수는 최소 3자리, 음수는 최소 2자리( -01 같이 표시 )
-  const minDigits = isNeg ? 2 : 3;
-  const need = Math.max(minDigits, isNeg ? 1 + absStr.length : absStr.length);
+  // 숫자부(부호 제외)는 최소 3자리
+  const numericMin = 3;
+  const numericLen = Math.max(numericMin, absStr.length);
 
+  // 실제 필요한 digit 개수 (음수면 부호 1칸 추가)
+  const need = isNeg ? (1 + numericLen) : numericLen;
   ensure_digits(counter, need);
 
   if (isNeg) {
-    // 맨 앞은 마이너스 기호
+    // 맨 앞: 마이너스
     let child = $(counter.children()[0]);
     child.removeClass();
     child.addClass("digit digit-10");
 
-    // 나머지 숫자들: 왼쪽을 0으로 패딩한 absStr
-    const padded = absStr.padStart(need - 1, "0");
-    for (let i = 0; i < need - 1; i++) {
+    // 숫자부: 3자리 이상 0패딩
+    const padded = absStr.padStart(numericLen, "0");
+    for (let i = 0; i < numericLen; i++) {
       const d = padded.charCodeAt(i) - 48;
       child = $(counter.children()[i + 1]);
       child.removeClass();
       child.addClass("digit digit-" + d);
     }
   } else {
-    // 양수는 0으로 패딩한 문자열
-    const padded = absStr.padStart(need, "0");
-    for (let i = 0; i < need; i++) {
+    // 양수: 3자리 이상 0패딩
+    const padded = absStr.padStart(numericLen, "0");
+    for (let i = 0; i < numericLen; i++) {
       const d = padded.charCodeAt(i) - 48;
       const child = $(counter.children()[i]);
       child.removeClass();
@@ -299,10 +301,15 @@ function update_counter_mines(val, counter) {
     }
   }
 
-  // 폭도 갱신
-  const digitWidth = 13; // px (CSS에 맞춰 조정)
-  counter.css("width", (need * digitWidth) + "px");
+  // 한 줄 유지 & 폭 갱신 (CSS 폭에 맞춰 조정)
+  const digitWidth = 13; // px
+  counter.css({
+    width: (need * digitWidth) + "px",
+    display: "flex",
+    whiteSpace: "nowrap",
+  });
 }
+
 
 minefield.on_rclick_func = function(x, y) {
     var num_counter = minefield.num_mines - minefield.num_flags;
