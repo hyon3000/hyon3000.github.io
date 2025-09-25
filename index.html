@@ -144,6 +144,7 @@ var execute=function(i,j,k,l=1){
         
         <input type="button" onclick="execute(document.getElementById('x').value, document.getElementById('y').value, document.getElementById('t').value, document.getElementById('m').value)" value="생성">
     </form>
+</div><div>지뢰 수가 많으면 첫 버튼 누른 뒤 시간이 오래 걸리니 기다리기 바랍니다 
 </div>
 
 <script src="vendor/jquery.min.js"></script>
@@ -266,28 +267,40 @@ function update_counter_timer(val, counter) {
 function update_counter_mines(val, counter) {
   const isNeg = val < 0;
   const absStr = Math.abs(val).toString();
-  const need = Math.max(3, isNeg ? 1 + absStr.length : absStr.length);
+
+  // 양수는 최소 3자리, 음수는 최소 2자리( -01 같이 표시 )
+  const minDigits = isNeg ? 2 : 3;
+  const need = Math.max(minDigits, isNeg ? 1 + absStr.length : absStr.length);
+
   ensure_digits(counter, need);
 
-  for (let i = 0; i < need; i++) {
-    let d;
-    if (isNeg) {
-      if (i === 0) {
-        d = 10; // minus
-      } else {
-        d = absStr.charCodeAt(i - 1) - 48;
-      }
-    } else {
-      const idx = absStr.length - need + i;
-      d = absStr.charCodeAt(idx) - 48;
-    }
-    const child = $(counter.children()[i]);
+  if (isNeg) {
+    // 맨 앞은 마이너스 기호
+    let child = $(counter.children()[0]);
     child.removeClass();
-    child.addClass("digit digit-" + d);
+    child.addClass("digit digit-10");
+
+    // 나머지 숫자들: 왼쪽을 0으로 패딩한 absStr
+    const padded = absStr.padStart(need - 1, "0");
+    for (let i = 0; i < need - 1; i++) {
+      const d = padded.charCodeAt(i) - 48;
+      child = $(counter.children()[i + 1]);
+      child.removeClass();
+      child.addClass("digit digit-" + d);
+    }
+  } else {
+    // 양수는 0으로 패딩한 문자열
+    const padded = absStr.padStart(need, "0");
+    for (let i = 0; i < need; i++) {
+      const d = padded.charCodeAt(i) - 48;
+      const child = $(counter.children()[i]);
+      child.removeClass();
+      child.addClass("digit digit-" + d);
+    }
   }
 
-  // >>> 여기 추가
-  const digitWidth = 13; // digit 하나당 폭(px), CSS 값에 맞춰 조정
+  // 폭도 갱신
+  const digitWidth = 13; // px (CSS에 맞춰 조정)
   counter.css("width", (need * digitWidth) + "px");
 }
 
