@@ -264,7 +264,6 @@ function update_counter_timer(val, counter) {
 
 /** 지뢰카운터 전용: 기본 3자리, 필요 시 n자리로 자동 확장 */
 function update_counter_mines(val, counter) {
-  // 음수 지원: 맨 앞은 digit-10(마이너스), 이후 절대값 자릿수
   const isNeg = val < 0;
   const absStr = Math.abs(val).toString();
   const need = Math.max(3, isNeg ? 1 + absStr.length : absStr.length);
@@ -276,18 +275,22 @@ function update_counter_mines(val, counter) {
       if (i === 0) {
         d = 10; // minus
       } else {
-        const ch = absStr.charCodeAt(i - 1) - 48; // '0' = 48
-        d = ch;
+        d = absStr.charCodeAt(i - 1) - 48;
       }
     } else {
-      const ch = absStr.charCodeAt(absStr.length - need + i) || 48; // 왼쪽 패딩
-      d = ch - 48;
+      const idx = absStr.length - need + i;
+      d = absStr.charCodeAt(idx) - 48;
     }
     const child = $(counter.children()[i]);
     child.removeClass();
     child.addClass("digit digit-" + d);
   }
+
+  // >>> 여기 추가
+  const digitWidth = 13; // digit 하나당 폭(px), CSS 값에 맞춰 조정
+  counter.css("width", (need * digitWidth) + "px");
 }
+
 minefield.on_rclick_func = function(x, y) {
     var num_counter = minefield.num_mines - minefield.num_flags;
     var counter_obj = $(".mine-counter");
