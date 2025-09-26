@@ -108,6 +108,8 @@ Minefield.prototype.has_neighbor_mine = function(x, y) {
 
     Minefield.prototype.reset_board = function() {
       var on_click_to, on_rclick_to, mousedown,mouseup,td, tr, x, y, _i, _j, _ref, _ref1;
+this.opened_cells = 0;     // 지금까지 실제로 연 칸 수 (안전칸 오픈할 때 증가)
+this.reloc_used   = 0;     // 구제(지뢰 옮기기) 사용 횟수
 
       if (this.table) {
         this.window.removeChild(this.table);
@@ -191,6 +193,113 @@ if (bestMines) {
 return this.on_game_status_changed();
 
     };
+// 지금 칸이 "열린" 상태인지 확인 (empty 또는 near-*)
+Minefield.prototype.is_opened = function(x, y) {
+  var c = this.get_class(x, y);
+  if (c === null) return false;
+  if (/^flag/.test(c)) return false;         // flag-*, flag-0 는 '안 연' 상태로 취급
+  if (c === "empty") return true;
+  if (/^near-/.test(c)) return true;
+  return false;
+};
+
+// 이웃 중 하나라도 '열린' 칸이 있으면 true
+Minefield.prototype.has_opened_neighbor = function(x, y) {
+  var adj = this.near_positions(x, y);
+  for (var i = 0; i < adj.length; i++) {
+    var nx = adj[i][0], ny = adj[i][1];
+    if (this.is_opened(nx, ny)) return true;
+  }
+  return false;
+};
+
+// 구제(지뢰 옮기기) 가능 횟수(허용량) 계산
+Minefield.prototype.get_reloc_allowed = function() {
+  var mm = Math.max(1, this.max_mines || 1);
+  return Math.floor((mm - 1) * (this.opened_cells / 20));
+};
+// (x,y) 칸의 지뢰를 다른 '안 열린' 칸들로 옮겨서
+// 이미 '열린' 칸들의 숫자를 바꾸지 않고 전부 재배치할 수 있으면 true(성공)
+Minefield.prototype.try_relocate_from = function(x, y) {
+  var m = this.mines[x][y];
+  if (m <= 0) return false;
+
+  // 눌린 칸 이웃에 '열린 칸'이 하나라도 있으면, 제거만으로도 숫자 변화 → 불가
+  if (this.has_opened_neighbor(x, y)) return false;
+
+  // 후보: 안 열린 칸(자기 제외). 랜덤 순서(셔플)
+  var candidates = [];
+  for (var cx = 0; cx < this.columns; cx++) {
+    for (var cy = 0; cy < this.rows; cy++) {
+      if (cx === x && cy === y) continue;
+      var cls = this.get_class(cx, cy);
+      var unopened = (cls === null) || /^flag/.test(cls) || (cls === "flag-0");
+      if (unopened) candidates.push([cx, cy]);
+    }
+  }
+  if (candidates.length === 0) return false;
+
+  // Fisher-Yates shuffle
+  for (var i = candidates.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = candidates[i]; candidates[i] = candidates[j]; candidates[j] = tmp;
+  }
+
+  // “임의 다섯 칸” 요구는 셔플로 충족(무작위 순서로 전부 시도)
+  // 실제 재배치는 임시 보드에서 검증
+  var temp = JSON.parse(JSON.stringify(this.mines));
+  var mm = this.max_mines;
+  var remainingToMove = m;
+
+  // ‘열린 칸 숫자 불변’ 조건을 빠르게 만족시키려면,
+  // 추가하려는 후보 칸의 이웃에도 열림이 없어야 함
+  // (이 조건만 만족하면 near- 값이 변할 일이 없음)
+  // 또한 후보 칸의 현재 지뢰 수 < max_mines 이어야 함.
+
+  // 원본 보드에서 0→>0 로 처음으로 바뀌는 후보(유니크) 수를 세어
+  // remaining(안전 미오픈 칸 수) 보정을 위해 나중에 사용
+  var newlyToMineUnique = {}; // key "cx,cy" : true
+
+  // 먼저 원본 temp에서 눌린 칸의 지뢰를 제거
+  temp[x][y] = 0;
+
+  // 후보들 순회하며 한 개씩 배분
+  outer:
+  for (var k = 0; k < candidates.length && remainingToMove > 0; k++) {
+    var cx = candidates[k][0], cy = candidates[k][1];
+
+    // 이 후보 칸 이웃에 '열린 칸'이 있으면 스킵
+    if (this.has_opened_neighbor(cx, cy)) continue;
+
+    // 여유 용량 체크
+    var canAdd = Math.min(remainingToMove, mm - temp[cx][cy]);
+    while (canAdd > 0 && remainingToMove > 0) {
+      // 1개씩 추가
+      temp[cx][cy] += 1;
+      remainingToMove -= 1;
+      canAdd -= 1;
+
+      // 원본 mines에서 0이던 칸이 처음 >0이 되면 표시
+      if (this.mines[cx][cy] === 0 && temp[cx][cy] === 1) {
+        newlyToMineUnique[cx + "," + cy] = true;
+      }
+    }
+  }
+
+  // 다 못 옮겼다면 실패
+  if (remainingToMove > 0) return false;
+
+  // 성공: 커밋
+  // remaining 보정:
+  // - 원래 (x,y)는 지뢰칸>0 → 0 이 되었으니 안전 미오픈 칸 +1
+  // - 새로 지뢰가 된 유니크 칸 개수만큼 안전 미오픈 칸 -1
+  var deltaRemaining = 1 - Object.keys(newlyToMineUnique).length;
+  this.mines = temp;
+  this.near_mines = this.generate_near_mines(this.mines);
+  this.remaining += deltaRemaining;
+
+  return true;
+};
 
     Minefield.prototype.init_mines = function() {
       var n, n_max, num_mine_created, x, y,n2;
@@ -409,21 +518,26 @@ Minefield.prototype.on_game_status_changed2 = function() {
         return this.set_class(x, y, "flag-0");
       }
     };
+Minefield.prototype.press = function(x, y) {
+  if (this.mines[x][y] > 0) {
+    return -1;
+  } else if (this.get_class(x, y) !== null && this.get_class(x, y) !== "flag-0") {
+    return 1;
+  }
+  this.remaining -= 1;
 
-    Minefield.prototype.press = function(x, y) {
-      if (this.mines[x][y] > 0) {
-        return -1;
-      } else if (this.get_class(x, y) !== null && this.get_class(x, y)!=="flag-0") {
-        return 1;
-      }
-      this.remaining -= 1;
-      if (this.near_mines[x][y] === 0) {
-        this.set_class(x, y, "empty");
-      } else {
-        this.set_class(x, y, "near-" + this.near_mines[x][y]);
-      }
-      return 0;
-    };
+  // ↓↓↓ 여기서 '열림'으로 간주되니 opened_cells 증가
+  this.opened_cells = (this.opened_cells || 0) + 1;
+
+  if (this.near_mines[x][y] === 0) {
+    this.set_class(x, y, "empty");
+  } else {
+    this.set_class(x, y, "near-" + this.near_mines[x][y]);
+  }
+  return 0;
+};
+
+    
 
     Minefield.prototype.expand = function(start_x, start_y) {
       var list, nx, ny, start_flags, start_mines, td_class, x, y, _i, _j, _len, _len1, _ref, _ref1, _ref2, _ref3, _ref4;
@@ -432,9 +546,33 @@ Minefield.prototype.on_game_status_changed2 = function() {
       if (td_class !== null && (td_class!=="flag-0" && /^flag/.exec(td_class))) {
         return 1;
       }
-      if (this.press(start_x, start_y) < 0) {
+		if (this.press(start_x, start_y) < 0){
+		var pr = this.press(start_x, start_y);
+if (pr < 0) {
+  // 구제 기회 확인
+  var allowed = this.get_reloc_allowed();
+  if ((this.reloc_used || 0) < allowed) {
+    // 옮기기 시도
+    if (this.try_relocate_from(start_x, start_y)) {
+      // 기회 1회 소모
+      this.reloc_used = (this.reloc_used || 0) + 1;
+
+      // 이제 이 칸은 지뢰가 아니므로 다시 열기 시도
+      pr = this.press(start_x, start_y);
+      if (pr < 0) {
+        // 논리상 여기 오면 안 되지만 안전망으로 사망 처리
         return -1;
       }
+    } else {
+      // 옮기기 실패 → 사망
+      return -1;
+    }
+  } else {
+    // 기회 없음 → 사망
+    return -1;
+  }
+}
+		}
       list = [[start_x, start_y]];
       start_mines = this.near_mines[start_x][start_y];
       start_flags = this.near_flags[start_x][start_y];
