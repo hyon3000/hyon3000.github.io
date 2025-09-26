@@ -216,11 +216,11 @@ Minefield.prototype.has_opened_neighbor = function(x, y) {
 // 구제(지뢰 옮기기) 가능 횟수(허용량) 계산
 Minefield.prototype.get_reloc_allowed = function() {
   var mm = Math.max(1, this.max_mines || 1);
-	if(mm==1) mm=500;
-	else if(mm==2) mm=200;
-	else if(mm==3) mm=100;
-	else if(mm==4) mm=50;
-	else mm=40:
+	if(mm==1) mm=10000;
+	else if(mm==2) mm=3000;
+	else if(mm==3) mm=1000;
+	else if(mm==4) mm=300;
+	else mm=200;
   return Math.floor(this.opened_cells / mm);
 };
 // (x,y) 칸의 지뢰를 다른 '안 열린' 칸들로 옮겨서
