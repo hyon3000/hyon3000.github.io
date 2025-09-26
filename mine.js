@@ -220,7 +220,7 @@ Minefield.prototype.get_reloc_allowed = function() {
 	else if(mm==2) mm=200;
 	else if(mm==3) mm=100;
 	else if(mm==4) mm=50;
-	else mm=25:
+	else mm=40:
   return Math.floor(this.opened_cells / mm);
 };
 // (x,y) 칸의 지뢰를 다른 '안 열린' 칸들로 옮겨서
