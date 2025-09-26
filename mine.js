@@ -60,6 +60,7 @@
   var zeroMax = total - best;
   return zeroMax < 0 ? 0 : zeroMax;
 };
+	  
 // 현재 판에서 "주변 지뢰 0칸" 개수(자기 칸에 지뢰 없어야 함)
 Minefield.prototype.count_zero_no_neighbor = function() {
   var cnt = 0;
@@ -120,6 +121,7 @@ this.reloc_used   = 0;     // 구제(지뢰 옮기기) 사용 횟수
       this.table = document.createElement('table');
       this.table.setAttribute("class", "minetable");
       this.num_flags = 0;
+		this.bonus_reloc  = false;
       this.flags = this.new_table();
       this.near_flags = this.new_table();
       this.tds = this.new_table();
@@ -221,7 +223,9 @@ Minefield.prototype.get_reloc_allowed = function() {
 	else if(mm==3) mm=1000;
 	else if(mm==4) mm=300;
 	else mm=200;
-  return Math.floor(this.opened_cells / mm);
+	var bonus = this.bonus_reloc ? 1 : 0;                       // 99% 보너스 1회
+
+  return Math.floor(this.opened_cells / mm)+bonus;
 };
 // (x,y) 칸의 지뢰를 다른 '안 열린' 칸들로 옮겨서
 // 이미 '열린' 칸들의 숫자를 바꾸지 않고 전부 재배치할 수 있으면 true(성공)
@@ -530,7 +534,11 @@ Minefield.prototype.press = function(x, y) {
     return 1;
   }
   this.remaining -= 1;
-
+// ★ 99% 보너스: 전체 칸의 99% 이상을 열었고 아직 보너스 미지급이면 1회 지급
+  var total = this.columns * this.rows;
+  if (!this.bonus_reloc && (this.opened_cells / total) >= 0.99) {
+    this.bonus_reloc = true; // get_reloc_allowed에서 +1로 반영됨
+  }
   // ↓↓↓ 여기서 '열림'으로 간주되니 opened_cells 증가
   this.opened_cells = (this.opened_cells || 0) + 1;
 
