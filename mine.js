@@ -215,7 +215,55 @@
 	  }
 	  return false;
 	};
-	
+	// candidates 배열에서 m개 뽑는 조합들을 순차 생성(최대 C(10,m))
+Minefield.prototype._combinations_pick = function(candidates, m) {
+  var res = [];
+  function dfs(start, path) {
+    if (path.length === m) { res.push(path.slice()); return; }
+    for (var i = start; i <= candidates.length - (m - path.length); i++) {
+      path.push(candidates[i]);
+      dfs(i + 1, path);
+      path.pop();
+    }
+  }
+  if (m <= candidates.length && m > 0) dfs(0, []);
+  return res;
+};
+// 규칙에 맞게 최대 10칸 후보 선정
+Minefield.prototype._pick_reloc_candidates = function(excludeX, excludeY) {
+  var pref = [], rest = [];
+  for (var cx = 0; cx < this.columns; cx++) {
+    for (var cy = 0; cy < this.rows; cy++) {
+      if (cx === excludeX && cy === excludeY) continue;
+
+      // 이미 최대 지뢰인 칸 제외
+      if (this.mines[cx][cy] >= this.max_mines) continue;
+
+      // 안 열린 칸만
+      var cls = this.get_class(cx, cy);
+      var unopened = (cls === null) || /^flag/.test(cls) || (cls === "flag-0");
+      if (!unopened) continue;
+
+      // 열린 칸 인접 여부
+      var nearOpened = this.has_opened_neighbor(cx, cy);
+
+      if (!nearOpened) pref.push([cx, cy]);
+      else rest.push([cx, cy]);
+    }
+  }
+
+  // 무작위 섞기
+  function shuffle(a){
+    for (var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t;}
+  }
+  shuffle(pref); shuffle(rest);
+
+  var out = [];
+  for (var i=0; i<pref.length && out.length<10; i++) out.push(pref[i]);
+  for (var j=0; j<rest.length && out.length<10; j++) out.push(rest[j]);
+  return out; // 길이 <=10
+};
+
 	// 구제(지뢰 옮기기) 가능 횟수(허용량) 계산
 	Minefield.prototype.get_reloc_allowed = function() {
 	  var mm = Math.max(1, this.max_mines || 1);
@@ -230,86 +278,111 @@
 	};
 // (x,y) 칸의 지뢰를 다른 '안 열린' 칸들로 옮겨서
 // 이미 '열린' 칸들의 숫자를 바꾸지 않고 전부 재배치할 수 있으면 true(성공)
-	Minefield.prototype.try_relocate_from = function(x, y) {
-		var m = this.mines[x][y];
-		if (m <= 0) return false;
-		
-		// 눌린 칸 이웃에 '열린 칸'이 하나라도 있으면, 제거만으로도 숫자 변화 → 불가
-		if (this.has_opened_neighbor(x, y)) return false;
-		
-		// 후보: 안 열린 칸(자기 제외). 랜덤 순서(셔플)
-		var candidates = [];
-		for (var cx = 0; cx < this.columns; cx++) {
-			for (var cy = 0; cy < this.rows; cy++) {
-				if (cx === x && cy === y) continue;
-				var cls = this.get_class(cx, cy);
-				var unopened = (cls === null) || /^flag/.test(cls) || (cls === "flag-0");
-				if (unopened) candidates.push([cx, cy]);
-			}
-		}
-		if (candidates.length === 0) return false;
-		
-		// Fisher-Yates shuffle
-		for (var i = candidates.length - 1; i > 0; i--) {
-			var j = Math.floor(Math.random() * (i + 1));
-			var tmp = candidates[i]; candidates[i] = candidates[j]; candidates[j] = tmp;
-		}
-		
-		// “임의 다섯 칸” 요구는 셔플로 충족(무작위 순서로 전부 시도)
-		// 실제 재배치는 임시 보드에서 검증
-		var temp = JSON.parse(JSON.stringify(this.mines));
-		var mm = this.max_mines;
-		var remainingToMove = m;
-		
-		// ‘열린 칸 숫자 불변’ 조건을 빠르게 만족시키려면,
-		// 추가하려는 후보 칸의 이웃에도 열림이 없어야 함
-		// (이 조건만 만족하면 near- 값이 변할 일이 없음)
-		// 또한 후보 칸의 현재 지뢰 수 < max_mines 이어야 함.
-		
-		// 원본 보드에서 0→>0 로 처음으로 바뀌는 후보(유니크) 수를 세어
-		// remaining(안전 미오픈 칸 수) 보정을 위해 나중에 사용
-		var newlyToMineUnique = {}; // key "cx,cy" : true
-		
-		// 먼저 원본 temp에서 눌린 칸의 지뢰를 제거
-		temp[x][y] = 0;
-		
-		// 후보들 순회하며 한 개씩 배분
-		outer:
-		for (var k = 0; k < candidates.length && remainingToMove > 0; k++) {
-			var cx = candidates[k][0], cy = candidates[k][1];
-			
-			// 이 후보 칸 이웃에 '열린 칸'이 있으면 스킵
-			if (this.has_opened_neighbor(cx, cy)) continue;
-			
-			// 여유 용량 체크
-			var canAdd = Math.min(remainingToMove, mm - temp[cx][cy]);
-			while (canAdd > 0 && remainingToMove > 0) {
-				// 1개씩 추가
-				temp[cx][cy] += 1;
-				remainingToMove -= 1;
-				canAdd -= 1;
-				
-				// 원본 mines에서 0이던 칸이 처음 >0이 되면 표시
-				if (this.mines[cx][cy] === 0 && temp[cx][cy] === 1) {
-					newlyToMineUnique[cx + "," + cy] = true;
-				}
-			}
-		}
-		
-		// 다 못 옮겼다면 실패
-		if (remainingToMove > 0) return false;
-		
-		// 성공: 커밋
-		// remaining 보정:
-		// - 원래 (x,y)는 지뢰칸>0 → 0 이 되었으니 안전 미오픈 칸 +1
-		// - 새로 지뢰가 된 유니크 칸 개수만큼 안전 미오픈 칸 -1
-		var deltaRemaining = 1 - Object.keys(newlyToMineUnique).length;
-		this.mines = temp;
-		this.near_mines = this.generate_near_mines(this.mines);
-		this.remaining += deltaRemaining;
-		
-		return true;
-	};
+	// (x,y) 지뢰칸의 m개 지뢰를 후보 10칸에 1개씩 분배해,
+// '열린 칸' 숫자 불변 조건을 만족하는 조합을 찾으면 적용
+Minefield.prototype.try_relocate_from = function(x, y) {
+  var m = this.mines[x][y];
+  if (m <= 0) return false;
+
+  // 후보 10칸 선정 (규칙 적용)
+  var cand = this._pick_reloc_candidates(x, y);
+  if (cand.length < m) return false; // 담을 자리가 모자람
+
+  // 영향을 받는 '열린 칸'만 검사: (x,y)의 8이웃 + 각 후보의 8이웃
+  // set으로 수집
+  var affected = {};
+  var self = this;
+
+  function addNeighbors(px, py) {
+    var adj = self.near_positions(px, py);
+    for (var i=0;i<adj.length;i++){
+      var nx=adj[i][0], ny=adj[i][1];
+      if (self.is_opened(nx, ny)) affected[nx + "," + ny] = [nx, ny];
+    }
+  }
+  addNeighbors(x, y);
+  for (var c=0;c<cand.length;c++) addNeighbors(cand[c][0], cand[c][1]);
+
+  // 조합을 생성: cand 중 m칸 선택
+  var combos = this._combinations_pick(cand, m);
+
+  // 유효 조합 찾기
+  for (var ci=0; ci<combos.length; ci++) {
+    var picks = combos[ci]; // [[cx,cy], ...] 길이 m
+
+    // (1) 각 pick 칸이 max_mines-1 이하인지 확인 (1개 추가 가능해야 함)
+    var okSlots = true;
+    for (var p=0; p<picks.length; p++) {
+      var px = picks[p][0], py = picks[p][1];
+      if (this.mines[px][py] + 1 > this.max_mines) { okSlots = false; break; }
+    }
+    if (!okSlots) continue;
+
+    // (2) 숫자 변화 로컬 검증: affected 열린 칸만 확인
+    // 각 열린 칸에 대해 delta = (+1 * #picks that are neighbor) + (-m if neighbor of (x,y))
+    var allSame = true;
+    // 미리 (x,y)와의 이웃성 캐시
+    var decNeighbors = {};
+    var adjXY = this.near_positions(x, y);
+    for (var i2=0;i2<adjXY.length;i2++){
+      decNeighbors[adjXY[i2][0] + "," + adjXY[i2][1]] = true;
+    }
+
+    // 각 pick의 이웃 집합(증가 대상)을 미리 카운트
+    var incCount = {}; // key -> times
+    for (var q=0; q<picks.length; q++) {
+      var ax = picks[q][0], ay = picks[q][1];
+      var adjA = this.near_positions(ax, ay);
+      for (var r=0; r<adjA.length; r++) {
+        var key = adjA[r][0] + "," + adjA[r][1];
+        incCount[key] = (incCount[key] || 0) + 1; // 한 pick당 +1
+      }
+    }
+
+    // 열린 칸만 확인
+    for (var key in affected) {
+      var pos = affected[key];
+      var ox = pos[0], oy = pos[1];
+      var orig = this.near_mines[ox][oy];
+
+      var delta = 0;
+      if (decNeighbors[key]) delta -= m;
+      if (incCount[key])     delta += incCount[key];
+
+      if (orig + delta !== orig) { allSame = false; break; }
+    }
+    if (!allSame) continue;
+
+    // 통과: 커밋
+    var temp = JSON.parse(JSON.stringify(this.mines));
+    // 원래 칸 비우기
+    temp[x][y] = 0;
+
+    // unique: 0 -> 1로 바뀌는 칸 개수 세기
+    var newly = {};
+    for (var s=0; s<picks.length; s++) {
+      var tx = picks[s][0], ty = picks[s][1];
+      if (temp[tx][ty] === 0) newly[tx + "," + ty] = true;
+      temp[tx][ty] += 1; // 한 칸당 1개씩
+    }
+
+    // 적용
+    this.mines = temp;
+    this.near_mines = this.generate_near_mines(this.mines);
+
+    // remaining 보정:
+    // (x,y) : >0 → 0 이므로 +1
+    // newly 된 칸 수 만큼 -1
+    var deltaRemaining = 1 - Object.keys(newly).length;
+    this.remaining += deltaRemaining;
+
+    return true; // 성공
+  }
+
+  // 어떤 조합도 통과 못함
+  return false;
+};
+
 
 	Minefield.prototype.init_mines = function() {
 		var n, n_max, num_mine_created, x, y,n2;
