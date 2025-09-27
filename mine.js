@@ -515,6 +515,18 @@ Minefield.prototype.try_relocate_from = function(x, y) {
       if (this.game_status < 0) {
         return;
       }
+			 // ★ 추가: 현재 칸이 '깃발 n개'(flag-1..flag-max)이면
+		//        열지 않고 좌클릭 순환만 수행
+		var td_class = this.get_class(x, y);
+		if (td_class !== null && td_class !== "flag-0" && /^flag-/.test(td_class)) {
+		this.cycle_flag_leftclick(x, y);
+		// 외부 카운터 갱신 콜백을 재사용(우클릭과 동일한 효과)
+		if (this.on_rclick_func) {
+		  this.on_rclick_func(x, y);
+		}
+		// 게임 상태 변화 없음
+		return;
+		}
       if (this.game_status === 1) {
         this.start(x, y);
       }
@@ -550,6 +562,33 @@ Minefield.prototype.try_relocate_from = function(x, y) {
         return this.on_game_status_changed();
       }
     };
+// 좌클릭일 때: 깃발 상태 유지하며 개수만 순환 (1..max → 1)
+Minefield.prototype.cycle_flag_leftclick = function(x, y) {
+  var cur = this.flags[x][y] || 0;        // 현재 깃발 수
+  if (cur <= 0) return;                   // 깃발 아님(없음/ ? )이면 무시
+
+  var next = cur + 1;
+  var delta;
+  if (next > this.max_mines) {
+    next = 1;                             // max → 1 로 래핑
+    delta = 1 - cur;                      // num_flags 보정 (예: max=5이면 -4)
+  } else {
+    delta = 1;                            // 한 개 증가
+  }
+
+  // 카운터/인접 플래그 합 반영
+  this.flags[x][y] = next;
+  this.num_flags += delta;
+
+  var adj = this.near_positions(x, y);
+  for (var i = 0; i < adj.length; i++) {
+    var nx = adj[i][0], ny = adj[i][1];
+    this.near_flags[nx][ny] += delta;
+  }
+
+  // UI 반영: 깃발 상태 유지
+  this.set_class(x, y, "flag-" + next);
+};
 
     Minefield.prototype.on_game_status_changed = function() {
       if (this.game_status_changed_func) {
