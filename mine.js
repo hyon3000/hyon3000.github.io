@@ -814,26 +814,37 @@ if (pr < 0) {
       td.onmousedown=null;
       td.oncontextmenu=null;
       }
-      var mine, x, y, _i, _ref, _results;
-      _results = [];
-      for (y = _i = 0, _ref = this.rows - 1; 0 <= _ref ? _i <= _ref : _i >= _ref; y = 0 <= _ref ? ++_i : --_i) {
-        _results.push((function() {
-          var _j, _ref1, _results1;
+// ★ 정답 기준으로 깃발/카운터 재정렬
+  this.num_flags = 0;
+  this.near_flags = this.new_table(); // 인접 깃발 수 재계산을 위해 초기화
 
-          _results1 = [];
-          for (x = _j = 0, _ref1 = this.columns - 1; 0 <= _ref1 ? _j <= _ref1 : _j >= _ref1; x = 0 <= _ref1 ? ++_j : --_j) {
-            mine = this.mines[x][y];
-            if (mine > 0) {
-              this.set_class(x, y, "flag-" + mine);
-              
-               _results1.push(void 0);
-              
-            }
-          }
-          return _results1;
-        }).call(this));
+  for (var yy = 0; yy < this.rows; yy++) {
+    for (var xx = 0; xx < this.columns; xx++) {
+      var mine = this.mines[xx][yy];
+
+      if (mine > 0) {
+        // 지뢰칸: 정답 깃발 개수로 세팅
+        this.flags[xx][yy] = mine;
+        this.num_flags += mine;
+        this.set_class(xx, yy, "flag-" + mine);
+
+        // 인접 깃발 합계 갱신
+        var adj = this.near_positions(xx, yy);
+        for (var i = 0; i < adj.length; i++) {
+          var nx = adj[i][0], ny = adj[i][1];
+          this.near_flags[nx][ny] += mine;
+        }
+      } else {
+        // 안전칸: 깃발 해제하고 열린 상태를 명확히 표시
+        this.flags[xx][yy] = 0;
+        if (this.near_mines[xx][yy] === 0) {
+          this.set_class(xx, yy, "empty");
+        } else {
+          this.set_class(xx, yy, "near-" + this.near_mines[xx][yy]);
+        }
       }
-      this.num_flags=this.num_mines;
+    }
+  }
       return this.game_status = -2;
     };
     Minefield.prototype.on_down = function() {
