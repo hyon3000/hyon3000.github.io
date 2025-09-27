@@ -279,9 +279,9 @@ Minefield.prototype._pick_reloc_candidates = function(excludeX, excludeY) {
 	};
 	Minefield.prototype.compute_bonus_thresholds = function() {
 		var mm = Math.max(1, this.max_mines || 1);
-		if (mm <= 2) return [0.998];            // 99.8%
-		if (mm <= 4) return [0.99, 0.998];      // 99%, 99.8%
-		if (mm >= 5) return [0.95, 0.99, 0.998];// 95%, 99%, 99.8%
+		if (mm <= 2) return [0.997];            // 99.7%
+		if (mm <= 4) return [0.99, 0.997];      // 99%, 99.7%
+		if (mm >= 5) return [0.95, 0.99, 0.999];// 95%, 99%, 99.9%
 		return [];
 	};
 // (x,y) 칸의 지뢰를 다른 '안 열린' 칸들로 옮겨서
