@@ -113,7 +113,8 @@
 		this.reloc_used   = 0;     // 구제(지뢰 옮기기) 사용 횟수
 		this.opened_safe  = 0;     // 연 칸 중 지뢰 없는 칸 수
 		this.total_safe   = 0;     // 지뢰 없는 전체 칸 수 (init_mines 후 계산)
-		this.bonus_reloc  = false; // 99% 보너스 지급 여부
+		this.bonus_reloc_count = 0;    // 보너스 누적 개수
+		this.bonus_thresholds  = this.compute_bonus_thresholds(); // 임계치 목록
 		if (this.table) {
 			this.window.removeChild(this.table);
 			this.game_status = -1;
@@ -266,15 +267,22 @@ Minefield.prototype._pick_reloc_candidates = function(excludeX, excludeY) {
 
 	// 구제(지뢰 옮기기) 가능 횟수(허용량) 계산
 	Minefield.prototype.get_reloc_allowed = function() {
-	  var mm = Math.max(1, this.max_mines || 1);
+		var mm = Math.max(1, this.max_mines || 1);
 		if(mm==1) mm=10000;
-		else if(mm==2) mm=3000;
-		else if(mm==3) mm=1000;
+		else if(mm==2) mm=2000;
+		else if(mm==3) mm=400;
 		else if(mm==4) mm=300;
-		else mm=200;
-		var bonus = this.bonus_reloc ? 1 : 0;                       // 99% 보너스 1회
-	
-	  return Math.floor(this.opened_cells / mm)+bonus;
+		else mm=225;
+		var base = Math.floor( this.opened_cells / mm);   // 기본 규칙
+		var bonus = this.bonus_reloc_count || 0;                      // 보너스 누적
+		return base + bonus;
+	};
+	Minefield.prototype.compute_bonus_thresholds = function() {
+		var mm = Math.max(1, this.max_mines || 1);
+		if (mm <= 2) return [0.998];            // 99.8%
+		if (mm <= 4) return [0.99, 0.998];      // 99%, 99.8%
+		if (mm >= 5) return [0.95, 0.99, 0.998];// 95%, 99%, 99.8%
+		return [];
 	};
 // (x,y) 칸의 지뢰를 다른 '안 열린' 칸들로 옮겨서
 // 이미 '열린' 칸들의 숫자를 바꾸지 않고 전부 재배치할 수 있으면 true(성공)
@@ -620,12 +628,13 @@ Minefield.prototype.on_game_status_changed2 = function() {
 		// 이 함수는 지뢰가 있는 칸이면 이미 위에서 return -1 했으므로,
 		// 여기 도달한 경우는 "지뢰 없는 칸"을 연 것 = opened_safe 증가
 		this.opened_safe = (this.opened_safe || 0) + 1;
-		
-		// ★ 보너스: 지뢰 없는 칸 기준 99% 이상 열었을 때 1회 지급
-		if (!this.bonus_reloc && this.total_safe > 0 &&
-		  (this.opened_safe / this.total_safe) >= 0.99) {
-			this.bonus_reloc = true; // get_reloc_allowed()에서 +1로 반영
-		}
+		  // ★ 보너스 지급: 누적 오픈 비율이 임계치들을 통과할 때마다 +1
+		  var ratio = this.opened_safe / this.total_safe;
+  if (!this.bonus_thresholds) this.bonus_thresholds = this.compute_bonus_thresholds();
+  while ((this.bonus_reloc_count || 0) < this.bonus_thresholds.length &&
+         ratio >= this.bonus_thresholds[this.bonus_reloc_count]) {
+    this.bonus_reloc_count += 1;  // 보너스 1회 추가
+  }
 		
 		if (this.near_mines[x][y] === 0) {
 			this.set_class(x, y, "empty");
