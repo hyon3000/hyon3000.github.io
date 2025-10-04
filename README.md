@@ -4,13 +4,13 @@ klutzy 지뢰찾기 기반
 
 <img src="/a2.png" alt="a">
 
-ㄴ약간의 버그 수정함
+* 약간의 버그 수정함
 
-ㄴ지능적인 판 생성(찍기 상황 회피) 기능 추가
+* 지능적인 판 생성(찍기 상황 회피) 기능 추가
 
-ㄴ 초대형 판을 위한 최적화
+* 초대형 판을 위한 최적화
 
-http://hyon3000.github.io/
+* 최대 지뢰 수 6개, 음수 지뢰 추가(-1~-6)
 
 ////////////////////////////////////////
 
@@ -27,5 +27,6 @@ See [index.html](index.html) or [Demo][] for usage.
 * [Demo][] page uses
   [puzzlet/fake-mswin](http://github.com/puzzlet/fake-mswin/) theme.
 * [egraether/mine3D](https://github.com/egraether/mine3D)
+* https://duncanacnud.itch.io/omegasweeper
 
 [Demo]: http://hyon3000.github.io/
