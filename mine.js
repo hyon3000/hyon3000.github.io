@@ -172,6 +172,80 @@ Minefield.prototype._renderRowsIncrementally = function (rowOrder, cellClassAtXY
         this._queueY = new Int32Array(size);
       }
     };
+    Minefield.prototype._attachDelegatedEvents = function () {
+  if (!this.table) return;
+  const tbl  = this.table;
+  const self = this;
+
+  // 이미 붙어 있으면 중복 방지
+  if (this._delegated) this._detachDelegatedEvents();
+
+  function getXYFrom(td) {
+    // reset_board에서 넣어 둔 data-x / data-y 사용
+    const x = td && td.dataset ? parseInt(td.dataset.x, 10) : NaN;
+    const y = td && td.dataset ? parseInt(td.dataset.y, 10) : NaN;
+    return [x, y];
+  }
+
+  const onClick = function (e) {
+    // 좌클릭만 처리 (중간/우클릭 제외)
+    if (e.button !== 0) return;
+    const td = e.target.closest('td');
+    if (!td || !tbl.contains(td)) return;
+    const [x, y] = getXYFrom(td);
+    if (Number.isNaN(x) || Number.isNaN(y)) return;
+    self.on_click(x, y);
+    e.preventDefault();
+  };
+
+  const onContextMenu = function (e) {
+    // 우클릭: 깃발 토글
+    const td = e.target.closest('td');
+    if (!td || !tbl.contains(td)) return;
+    const [x, y] = getXYFrom(td);
+    if (Number.isNaN(x) || Number.isNaN(y)) return;
+    self.on_rclick(x, y);
+    e.preventDefault(); // 브라우저 기본 메뉴 방지
+  };
+
+  const onMouseDown = function (e) {
+    // 가운데 버튼(1)은 건드리지 않음 → 오토스크롤 유지
+    if (e.button === 1) return;
+    const td = e.target.closest('td');
+    if (!td || !tbl.contains(td)) return;
+    const [x, y] = getXYFrom(td);
+    if (Number.isNaN(x) || Number.isNaN(y)) return;
+    self.on_down(x, y);
+    // 좌/우 버튼에 대해서만 눌림 표정 등 UI 반응, 기본동작 막을 필요는 없음
+  };
+
+  const onMouseUp = function (e) {
+    if (e.button === 1) return; // 가운데 버튼은 무시
+    const td = e.target.closest('td');
+    if (!td || !tbl.contains(td)) return;
+    const [x, y] = getXYFrom(td);
+    if (Number.isNaN(x) || Number.isNaN(y)) return;
+    self.on_up(x, y);
+  };
+
+  tbl.addEventListener('click', onClick);
+  tbl.addEventListener('contextmenu', onContextMenu);
+  tbl.addEventListener('mousedown', onMouseDown);
+  tbl.addEventListener('mouseup', onMouseUp);
+
+  this._delegated = { onClick, onContextMenu, onMouseDown, onMouseUp };
+};
+
+// 필요 시(예: 재설치 전) 제거
+Minefield.prototype._detachDelegatedEvents = function () {
+  if (!this.table || !this._delegated) return;
+  const { onClick, onContextMenu, onMouseDown, onMouseUp } = this._delegated;
+  this.table.removeEventListener('click', onClick);
+  this.table.removeEventListener('contextmenu', onContextMenu);
+  this.table.removeEventListener('mousedown', onMouseDown);
+  this.table.removeEventListener('mouseup', onMouseUp);
+  this._delegated = null;
+};
 // 행 묶음(batch)으로 테이블을 점진적으로 만드는 헬퍼
 // done() 콜백은 모든 행/셀 생성이 끝난 뒤 한 번 호출됩니다.
 Minefield.prototype._buildTableIncrementally = function(done) {
@@ -285,6 +359,7 @@ Minefield.prototype.reset_board = function() {
 
   // 비동기 생성이므로 즉시 반환
   // (테이블이 모두 만들어지면 콜백에서 on_game_status_changed가 호출됩니다)
+  this._attachDelegatedEvents();
 };
 
 
