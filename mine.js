@@ -153,37 +153,49 @@ Minefield.prototype._rebuild_near_from_parts = function () {
   }
 };
 
+// 기존 함수 삭제/대체
+Minefield.prototype._adjustNearAroundColors = function (x, y, dBlack, dWhite) {
+  var adj = this.near_positions(x, y);
+  for (var i = 0; i < adj.length; i++) {
+    var nx = adj[i][0], ny = adj[i][1];
+    if (dBlack) this._near_black[nx][ny] += dBlack;
+    if (dWhite) this._near_white[nx][ny] += dWhite;
+  }
+  this._rebuild_near_from_parts();
+};
+Minefield.prototype._relocateFirstClick = function (x, y) {
+  var m = this.mines[x][y];
+  if (m === 0) return true;
 
-    // ★ 첫 클릭 보장(검은/흰 모두, 같은 색만 이동)
-    Minefield.prototype._relocateFirstClick = function (x, y) {
-      var m = this.mines[x][y];
-      if (m === 0) return true; // 안전
-      var isWhite = (m < 0);
-      var count = Math.abs(m);
-      var cap = isWhite ? this.max_mines_white : this.max_mines;
+  var isWhite = (m < 0);
+  var count   = Math.abs(m);
+  var cap     = isWhite ? this.max_mines_white : this.max_mines;
 
-      var W = this.columns, H = this.rows;
-      var tx = -1, ty = -1;
+  var W = this.columns, H = this.rows, tx = -1, ty = -1;
+  outer:
+  for (var yy = 0; yy < H; yy++) {
+    for (var xx = 0; xx < W; xx++) {
+      if (xx === x && yy === y) continue;
+      if (this.mines[xx][yy] !== 0) continue;
+      if (count <= cap) { tx = xx; ty = yy; break outer; }
+    }
+  }
+  if (tx < 0) return false;
 
-      outer:
-      for (var yy = 0; yy < H; yy++) {
-        for (var xx = 0; xx < W; xx++) {
-          if (xx === x && yy === y) continue;
-          var v = this.mines[xx][yy];
-          if (v !== 0) continue; // 혼합 금지 → 빈칸만
-          if (count <= cap) { tx = xx; ty = yy; break outer; }
-        }
-      }
-      if (tx < 0) return false;
+  // 색상별 델타 계산
+  var addB = Math.max(0,  m);  // 옮기는 ‘검은’ 개수
+  var addW = Math.max(0, -m);  // 옮기는 ‘흰’   개수
 
-      // 소스 주변 -m, 타깃 주변 +m (부호 유지)
-      this._adjustNearAround(x, y, -m);
-      this._adjustNearAround(tx, ty, +m);
+  // 원래 칸: 주변에서 해당 색상 수치 감소
+  this._adjustNearAroundColors(x,  y, -addB, -addW);
+  // 새 칸: 주변에서 해당 색상 수치 증가
+  this._adjustNearAroundColors(tx, ty, +addB, +addW);
 
-      this.mines[x][y] = 0;
-      this.mines[tx][ty] = m;
-      return true;
-    };
+  // 실제 지뢰 이동
+  this.mines[x][y]   = 0;
+  this.mines[tx][ty] = m;
+  return true;
+};
 
     // 현재 판에서 "주변 지뢰 합 0" & 자기칸 0
     Minefield.prototype.count_zero_no_neighbor = function () {
@@ -465,54 +477,147 @@ Minefield.prototype._rebuild_near_from_parts = function () {
     };
 
     // 색상 구분 후보 추출
-    Minefield.prototype._pick_reloc_candidates = function (excludeX, excludeY, isWhite) {
-      var pref = [], rest = [];
-      var cap = isWhite ? this.max_mines_white : this.max_mines;
+    // 후보 추출: 성능 튜닝(랜덤 샘플 → 실패 많으면 선형 스캔), 총 10칸 제한
+// - 소스 8방향은 예외/최우선 후보(조건 맞으면 모두 포함)
+// - 그 외는 "열린 칸 인접 아님" + 색 혼합 금지 + CAP 미만
+// - 총 반환 개수: 최대 10개(소스 우선)
+Minefield.prototype._pick_reloc_candidates = function (srcX, srcY, isWhite) {
+  var cap = isWhite ? this.max_mines_white : this.max_mines;
+  var LIMIT_TOTAL = 10;
 
-      for (var cx = 0; cx < this.columns; cx++) {
-        for (var cy = 0; cy < this.rows; cy++) {
-          if (cx === excludeX && cy === excludeY) continue;
+  function canAccept(self, cx, cy) {
+    var v = self.mines[cx][cy];
+    if ((isWhite && v > 0) || (!isWhite && v < 0)) return false; // 색 혼합 금지
+    return Math.abs(v) < cap; // CAP 미만
+  }
+  function isUnopenedOrFlag(self, cx, cy) {
+    var cls = self.get_class(cx, cy);
+    return (cls === null) || /^flag/.test(cls) || (cls === "flag-0");
+  }
 
-          var cellMine = this.mines[cx][cy];
-          // 다른 색과 혼합 금지
-          if ((isWhite && cellMine > 0) || (!isWhite && cellMine < 0)) continue;
+  // 소스 8방향(예외/최우선)
+  var nearSrc = this.near_positions(srcX, srcY);
+  var nearSrcSet = {};
+  for (var i = 0; i < nearSrc.length; i++) {
+    nearSrcSet[nearSrc[i][0] + "," + nearSrc[i][1]] = true;
+  }
 
-          // 수용 가능성(한 개 추가 가정)
-          var next = cellMine + (isWhite ? -1 : +1);
-          if (cellMine !== 0 && Math.sign(cellMine) !== Math.sign(next)) continue; // 부호 뒤틀림 방지
-          if (Math.abs(next) > cap) continue;
+  // 1) 소스 8방향에서 조건 충족 전부 수집
+  var priority0 = [];
+  for (var i0 = 0; i0 < nearSrc.length; i0++) {
+    var nx = nearSrc[i0][0], ny = nearSrc[i0][1];
+    if (!isUnopenedOrFlag(this, nx, ny)) continue;
+    if (!canAccept(this, nx, ny)) continue;
+    priority0.push([nx, ny]);
+  }
 
-          var cls = this.get_class(cx, cy);
-          var unopened = (cls === null) || /^flag/.test(cls) || (cls === "flag-0");
-          if (!unopened) continue;
+  // 총 한도에서 소스 후보만큼 먼저 차감
+  var remainSlots = Math.max(0, LIMIT_TOTAL - priority0.length);
+  if (remainSlots === 0) {
+    // 10개 꽉 찼으면 소스 8방향만 반환(랜덤 약간 섞기)
+    shuffle(priority0);
+    return priority0;
+  }
 
-          var nearOpened = this.has_opened_neighbor(cx, cy);
-          if (!nearOpened) pref.push([cx, cy]); else rest.push([cx, cy]);
+  // 2) 그 외 후보는…
+  //    - 소스 8방향 제외
+  //    - 소스 셀 자체 제외
+  //    - 이미 열린 칸 인접(X)
+  //    - 위 조건 + 수용 가능
+  function isEligibleRest(self, cx, cy) {
+    if (cx === srcX && cy === srcY) return false;
+    if (nearSrcSet[cx + "," + cy]) return false;
+    if (!isUnopenedOrFlag(self, cx, cy)) return false;
+    if (!canAccept(self, cx, cy)) return false;
+    // 열린 칸에 인접하면 제외
+    if (self.has_opened_neighbor(cx, cy)) return false;
+    return true;
+  }
+
+  // 전체 안 열린 칸 수를 대강 파악(10개보다 작으면 그 수만큼만 뽑게)
+  var unopenedCount = 0;
+  // (너무 큰 판에서 전수 세기 비용이 크면 생략 가능하지만,
+  //  여기서는 O(WH) 1회가 허용 가능하다고 보고 간단히 셉니다.)
+  for (var by = 0; by < this.rows; by++) {
+    for (var bx = 0; bx < this.columns; bx++) {
+      if (bx === srcX && by === srcY) continue;
+      var cls0 = this.get_class(bx, by);
+      if ((cls0 === null) || /^flag/.test(cls0) || (cls0 === "flag-0")) unopenedCount++;
+    }
+  }
+  // 남은 슬롯 상한을 전체 안 열린 칸 수로도 한 번 더 클램프
+  remainSlots = Math.min(remainSlots, Math.max(0, unopenedCount));
+
+  // 랜덤 샘플링으로 시도
+  var rest = [];
+  var used = {}; // 중복 방지
+  var tries = 0;
+  var FAIL_LIMIT = Math.max(1000, remainSlots * 200); // 실패 많이 나면 선형 스캔 전환
+  while (rest.length < remainSlots && tries < FAIL_LIMIT) {
+    var rx = (Math.random() * this.columns) | 0;
+    var ry = (Math.random() * this.rows) | 0;
+    var key = rx + "," + ry;
+    if (used[key]) { tries++; continue; }
+    used[key] = 1;
+
+    if (isEligibleRest(this, rx, ry)) {
+      rest.push([rx, ry]);
+    } else {
+      tries++;
+    }
+  }
+
+  // 랜덤으로 충분히 못 채웠다면, 선형 스캔으로 보충(앞에서부터 차곡차곡)
+  if (rest.length < remainSlots) {
+    for (var cy = 0; cy < this.rows && rest.length < remainSlots; cy++) {
+      for (var cx = 0; cx < this.columns && rest.length < remainSlots; cx++) {
+        var k2 = cx + "," + cy;
+        if (used[k2]) continue; // 랜덤에서 이미 시도한 좌표면 패스
+        if (isEligibleRest(this, cx, cy)) {
+          rest.push([cx, cy]);
         }
       }
-      function shuffle(a) {
-        for (var i = a.length - 1; i > 0; i--) {
-          var j = Math.floor(Math.random() * (i + 1));
-          var t = a[i]; a[i] = a[j]; a[j] = t;
-        }
-      }
-      shuffle(pref); shuffle(rest);
+    }
+    // 만약 조건에 맞는 칸이 부족하면, 그냥 있는 만큼만 사용(규칙대로)
+  }
 
-      var out = [];
-      for (var i = 0; i < pref.length && out.length < 10; i++) out.push(pref[i]);
-      for (var j = 0; j < rest.length && out.length < 10; j++) out.push(rest[j]);
-      return out;
-    };
+  shuffle(priority0);
+  shuffle(rest);
+
+  // 총 10칸(또는 그보다 적은 수)으로 합치기
+  // 소스 8방향(우선) + 나머지
+  var out = priority0.slice(0, LIMIT_TOTAL);
+  var need = LIMIT_TOTAL - out.length;
+  for (var i2 = 0; i2 < rest.length && need > 0; i2++, need--) {
+    out.push(rest[i2]);
+  }
+  return out;
+
+  // ---- 유틸: 셔플 ----
+  function shuffle(a) {
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = (Math.random() * (i + 1)) | 0;
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+  }
+};
+
 
     /* ---------- 구제 규칙 ---------- */
     Minefield.prototype.get_reloc_allowed = function () {
-      var mm = Math.max(1, this.max_mines || 1);
+      var mm = Math.max(1, (this.max_mines+this.max_mines_white) || 1);
       if (mm == 1) mm = 10000;
       else if (mm == 2) mm = 2000;
       else if (mm == 3) mm = 400;
       else if (mm == 4) mm = 300;
       else if (mm == 5) mm = 225;
-      else mm = 168;
+      else if (mm == 6) mm = 167;
+      else if (mm == 7) mm = 126;
+      else if (mm == 8) mm = 95;
+      else if (mm == 9) mm = 71;
+      else if (mm == 10) mm = 53;
+      else if (mm == 11) mm = 40;
+      else mm = 30;
 
       var base = Math.floor(this.opened_cells / mm);
       var bonus = this.bonus_reloc_count || 0;
@@ -520,11 +625,13 @@ Minefield.prototype._rebuild_near_from_parts = function () {
     };
 
     Minefield.prototype.compute_bonus_thresholds = function () {
-      var mm = Math.max(1, this.max_mines || 1);
+      var mm = Math.max(1, (this.max_mines+this.max_mines_white) || 1);
       if (mm <= 2) return [0.997];
-      if (mm <= 4) return [0.99, 0.997];
-      if (mm >= 5) return [0.95, 0.99, 0.999];
-      return [];
+      else if (mm <= 4) return [0.99, 0.997];
+      else if (mm <= 6) return [0.95, 0.99, 0.999];
+      else if (mm <= 8) return [0.93, 0.99, 0.993, 0.999];
+      else if (mm <= 10) return [0.9, 0.93, 0.99, 0.993, 0.999];
+      else return [0.7, 0.9, 0.93, 0.99, 0.993, 0.999];
     };
 
     /* ---------- 지뢰 재배치(구제) ---------- */
@@ -568,34 +675,77 @@ Minefield.prototype._rebuild_near_from_parts = function () {
 
         var allSame = true;
 
-        var decNeighbors = {};
-        var adjXY = this.near_positions(x, y);
-        for (var i2 = 0; i2 < adjXY.length; i2++) {
-          decNeighbors[adjXY[i2][0] + "," + adjXY[i2][1]] = true;
-        }
+// --- (직전 코드 동일) ---
+var allSame = true;
 
-        var incCount = {};
-        for (var q = 0; q < picks.length; q++) {
-          var ax = picks[q][0], ay = picks[q][1];
-          var adjA = this.near_positions(ax, ay);
-          for (var r = 0; r < adjA.length; r++) {
-            var key = adjA[r][0] + "," + adjA[r][1];
-            incCount[key] = (incCount[key] || 0) + 1;
-          }
-        }
+// 소스 이웃(합/절댓값에 공통으로 빠질 대상) 표시
+var decNeighbors = {};
+var adjXY = this.near_positions(x, y);
+for (var i2 = 0; i2 < adjXY.length; i2++) {
+  decNeighbors[adjXY[i2][0] + "," + adjXY[i2][1]] = true;
+}
 
-        for (var key in affected) {
-          var pos = affected[key];
-          var ox = pos[0], oy = pos[1];
-          var orig = this.near_mines[ox][oy];
-          var origEff = (orig === 1000 ? 0 : orig);
-          var delta = 0;
-          delta -= mSigned; // 소스에서 mSigned 제거
-          var incDelta = isWhite ? - (incCount[key] || 0) : (incCount[key] || 0);
-          delta += incDelta;
+// 타깃별 이웃에 “몇 개” 들어가는지 카운트
+var incCount = {};
+for (var q = 0; q < picks.length; q++) {
+  var ax = picks[q][0], ay = picks[q][1];
+  var adjA = this.near_positions(ax, ay);
+  for (var r = 0; r < adjA.length; r++) {
+    var key = adjA[r][0] + "," + adjA[r][1];
+    incCount[key] = (incCount[key] || 0) + 1;
+  }
+}
 
-          if ((origEff + delta) !== origEff) { allSame = false; break; }
-        }
+// 유틸: 현재 절댓값 합(near_abs) 계산
+function currentAbsAt(self, cx, cy) {
+  var adj = self.near_positions(cx, cy);
+  var s = 0;
+  for (var u = 0; u < adj.length; u++) {
+    var vx = adj[u][0], vy = adj[u][1];
+    s += Math.abs(self.mines[vx][vy]);
+  }
+  return s;
+}
+
+// 공개된(열린) 영향 칸들 확인
+for (var key in affected) {
+  var pos = affected[key];
+  var ox = pos[0], oy = pos[1];
+
+  var origSent = this.near_mines[ox][oy];        // 1000 / 0 / ±n
+  var origSum  = (origSent === 1000 ? 0 : origSent);
+  var curAbs   = currentAbsAt(this, ox, oy);
+
+  // 합 변화량
+  var deltaSum = 0;
+  if (decNeighbors[key]) deltaSum -= mSigned; // 소스 제거(부호 포함)
+  var incC = incCount[key] || 0;              // 타깃 추가 개수
+  deltaSum += isWhite ? -incC : incC;
+
+  // 절댓값 합 변화량(색 불문 동일하게 증가/감소)
+  var deltaAbs = 0;
+  if (decNeighbors[key]) deltaAbs -= Math.abs(mSigned);
+  deltaAbs += incC;
+
+  var finalSum = origSum + deltaSum;
+  var finalAbs = curAbs  + deltaAbs;
+
+  var ok = true;
+  if (origSent === 1000) {
+    // 상쇄0은 "보이는 값 0" + "실존 지뢰 존재"
+    ok = (finalSum === 0 && finalAbs > 0);
+  } else if (origSent === 0) {
+    // 진짜0은 인접 지뢰가 아예 없어야 함
+    ok = (finalSum === 0 && finalAbs === 0);
+  } else {
+    // 숫자칸은 숫자 보존(부호/값 동일)
+    ok = (finalSum === origSum);
+  }
+
+  if (!ok) { allSame = false; break; }
+}
+// --- (이후 기존 코드 흐름 동일) ---
+
         if (!allSame) continue;
 
         var temp = JSON.parse(JSON.stringify(this.mines));

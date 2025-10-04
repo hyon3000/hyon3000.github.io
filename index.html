@@ -51,7 +51,7 @@
     // capWhiteTotal = capBlackTotal - blackTotal(최종값), 음수면 0
 function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 0) {
   // 1) 전체 칸수 및 검은지뢰 총 수용량
-  const C = Math.max(1, cols | 0);
+  const C = Math.max(3, cols | 0);
   const R = Math.max(1, rows | 0);
   const cells = C * R;
 
@@ -74,7 +74,7 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
 
     // 폼 입력에 실시간 적용: 상호 의존 상한 보정
      function applyFormCaps(){
-    const cols = toInt(x.value, 1);
+    const cols = toInt(x.value, 3);
     const rows = toInt(y.value, 1);
 
     // 1) 칸당 최대 검은지뢰수 (1~6)
@@ -105,7 +105,7 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
     /* ---------- 실행 함수 (흰색 지뢰 지원) ---------- */
     var execute = function(i, j, k, l = 1, whiteTotal = 0, whiteMax = 0) {
       // 1) 입력 정규화
-      i = toInt(i, 1); j = toInt(j, 1); k = toInt(k, 1); l = clamp(toInt(l, 1), 1, 6);
+      i = Math.max(3,toInt(i, 3)); j = toInt(j, 1); k = toInt(k, 1); l = clamp(toInt(l, 1), 1, 6);
       whiteTotal = Math.max(0, toInt(whiteTotal, 0));
       whiteMax   = clamp(toInt(whiteMax, 0), 0, 6);
 
@@ -247,7 +247,7 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
   <div id="userctrl" class="userctrl" style="margin:0">
     <form oninput="applyFormCaps()">
       주문제작:가로
-      <input type="number" id="x"  min="1" max="9999" step="1" style="width:60px;" value="30">
+      <input type="number" id="x"  min="3" max="9999" step="1" style="width:60px;" value="30">
       세로
       <input type="number" id="y"  min="1" max="9999" step="1" style="width:60px;" value="16">
       1칸당 최대 지뢰 수
@@ -311,7 +311,7 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
 
     /* GET 리다이렉트(보내기 전에 상한 보정) */
     function hideViaURL() {
-      let cols = clamp(toInt(x.value,1), 1, 999999);
+      let cols = clamp(toInt(x.value,3), 3, 999999);
       let rows = clamp(toInt(y.value,1), 1, 999999);
       let mpc  = clamp(toInt(m.value,1), 1, 6);
       let mines= Math.max(1, toInt(t.value,1));
@@ -478,7 +478,7 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
     document.addEventListener('DOMContentLoaded', function() {
       const q = getQueryParams();
       if (hasCoreParams(q)) {
-        let cols = toInt(q.cols, 30);
+        let cols = Math.max(3, toInt(q.cols, 30));
         let rows = toInt(q.rows, 16);
         let mpc  = clamp(toInt(q.minespercell, 1), 1, 6);
         let mines= Math.max(1, toInt(q.mines, 99));
@@ -504,6 +504,82 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
         hideUserInputs();
       }
     });
-  </script>
+
+/* ===== Runtime i18n: if not Korean, switch UI texts to English ===== */
+(function () {
+  function isKorean() {
+    var lang = (navigator.language || navigator.userLanguage || "").toLowerCase();
+    return lang.startsWith("ko");
+  }
+
+  function localizeToEnglish() {
+    // Document language
+    document.documentElement.setAttribute("lang", "en");
+
+    // 1) Menu labels
+    var menuText = {
+      ".menu1":  "Beginner",
+      ".menu2":  "Intermediate",
+      ".menu3":  "Expert",
+      ".menu4":  "Ultra",
+      ".menu5":  "😱",
+      ".menu6":  "💀",
+      ".menu7":  "☠️",
+      ".menu8":  "☠️☠️",
+      ".menu9":  "☠️☠️☠️",
+      ".menu10": "Anti-mines",
+      ".menu11": "Large",
+      ".menu12": "XLarge",
+      ".menu13": "XXLarge"
+    };
+    Object.keys(menuText).forEach(function (sel) {
+      var el = document.querySelector(sel);
+      if (el) el.textContent = menuText[sel];
+    });
+
+    // 2) Counter icon tooltips
+    var blackIcon = document.querySelector(".icon-flag-black");
+    if (blackIcon) blackIcon.setAttribute("title", "Black mine");
+    var whiteIcon = document.querySelector(".icon-flag-white");
+    if (whiteIcon) whiteIcon.setAttribute("title", "Anti-mine");
+
+    // 3) Form labels / buttons (safe innerHTML replacements on static markup)
+    var form = document.querySelector("#userctrl form");
+    if (form) {
+      var html = form.innerHTML;
+      html = html.replace("주문제작:가로", "Custom: cols")
+                 .replace("세로", "rows")
+                 .replace("1칸당 최대 지뢰 수", "Max mines / cell")
+                 .replace("전체 지뢰 수", "Total mines")
+                 .replace("1칸당 최대 음수지뢰 수", "Max anti-mines / cell")
+                 .replace("전체 음수지뢰 수", "Total anti-mines")
+                 .replace("생성", "Create")
+                 .replace("문구 숨기기", "Hide controls");
+      form.innerHTML = html;
+    }
+
+    // 4) Heavy notice
+    var notice = document.getElementById("heavy-notice");
+    if (notice) {
+      notice.textContent =
+        "If there are many mines, the first click can take a while. Please wait.";
+    }
+
+    // 5) Window title bar (already 'Minesweeper', but keep consistent if needed)
+    // const titleEl = document.querySelector(".title-bar .title");
+    // if (titleEl) titleEl.textContent = "Minesweeper";
+  }
+
+  // Run after DOM is ready
+  if (!isKorean()) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", localizeToEnglish);
+    } else {
+      localizeToEnglish();
+    }
+  }
+})();
+</script>
+
 </body>
 </html>
