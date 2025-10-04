@@ -224,7 +224,8 @@ updateHScrollGuard();   // ← 추가
         <input type="text" id="t" min="1" step="1" style="width:40px;" value="99">
         
         <input type="button" onclick="execute(document.getElementById('x').value, document.getElementById('y').value, document.getElementById('t').value, document.getElementById('m').value)" value="생성">
-    </form>
+        <input type="button" onclick="hideViaURL()" value="숨기기">
+	</form>
 </div>
 	<div>지뢰 수가 많으면 첫 버튼 누른 뒤 시간이 오래 걸리니 기다리기 바랍니다</div>
 
@@ -234,7 +235,73 @@ updateHScrollGuard();   // ← 추가
 <script src="jquery.mswin.listview.js"></script>
 <script src="jquery.mswin.menu.js"></script>
 <script src="mine.js"></script>
+<script>
+/* --- GET 파서 --- */
+function getQueryParams() {
+  const p = new URLSearchParams(window.location.search);
+  return {
+    rows: p.get('rows'),
+    cols: p.get('cols'),
+    minespercell: p.get('minespercell'),
+    mines: p.get('mines'),
+  };
+}
+function hasAllParams(q) {
+  return q.rows !== null && q.cols !== null && q.minespercell !== null && q.mines !== null;
+}
 
+/* --- 하단 입력/문구 숨기기 --- */
+function hideUserInputs() {
+  const u = document.getElementById('userctrl');
+  if (u) u.style.display = 'none';
+  const n = document.getElementById('heavy-notice');
+  if (n) n.style.display = 'none';
+}
+
+/* --- 현재 입력값으로 GET 인자 붙여 리다이렉트 --- */
+function hideViaURL() {
+  const x = document.getElementById('x').value;
+  const y = document.getElementById('y').value;
+  const m = document.getElementById('m').value;
+  const t = document.getElementById('t').value;
+
+  // 유효범위 간단 클램프(실제 제한은 execute에서도 처리)
+  const cols = Math.max(1, parseInt(x) || 1);
+  const rows = Math.max(1, parseInt(y) || 1);
+  let minespercell = Math.max(1, parseInt(m) || 1);
+  if (minespercell > 6) minespercell = 6;
+  const mines = Math.max(1, parseInt(t) || 1);
+
+  const u = new URL(window.location.href);
+  u.searchParams.set('cols', cols);
+  u.searchParams.set('rows', rows);
+  u.searchParams.set('minespercell', minespercell);
+  u.searchParams.set('mines', mines);
+  // 리다이렉트
+  window.location.href = u.pathname + '?' + u.searchParams.toString();
+}
+
+/* --- 페이지 로드 시 GET 인자 적용 --- */
+document.addEventListener('DOMContentLoaded', function() {
+  const q = getQueryParams();
+  if (hasAllParams(q)) {
+    // 숫자 변환 + execute 호출(이미 내부에서 각종 사이즈/메뉴 처리)
+    const cols = parseInt(q.cols);
+    const rows = parseInt(q.rows);
+    let mpc = parseInt(q.minespercell);
+    const mines = parseInt(q.mines);
+
+    if (!isNaN(cols) && !isNaN(rows) && !isNaN(mpc) && !isNaN(mines)) {
+      if (mpc < 1) mpc = 1;
+      if (mpc > 6) mpc = 6;
+      execute(cols, rows, mines, mpc);
+      hideUserInputs();     // 인자가 있으면 하단 입력/문구 숨김
+    }
+  } else {
+    // 인자 없으면 기존 동작 유지(이미 아래에서 init_board 호출함)
+  }
+});
+</script>
 <script>
 $('.window').window();
 $('.listview').listview();
