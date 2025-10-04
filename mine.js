@@ -157,7 +157,10 @@ Minefield.prototype._renderRowsIncrementally = function (rowOrder, cellClassAtXY
       this.rows = rows;
       this.num_mines = num_mines;
       this.max_mines = max_mines != null ? max_mines : 1;
-      return this.reset_board();
+  // ★ 사이즈만 먼저 알려주고 워크버퍼 확보(빠르게 끝남)
+  this._ensureWorkBuffers();
+
+  return this.reset_board();
     };
 
     Minefield.prototype._ensureWorkBuffers = function () {
@@ -301,7 +304,13 @@ Minefield.prototype.reset_board = function() {
   this.total_safe   = 0;           // 지뢰 없는 전체 칸 수 (init_mines 후 계산)
   this.bonus_reloc_count = 0;      // 보너스 누적 개수
   this.bonus_thresholds  = this.compute_bonus_thresholds(); // 임계치 목록
+this.num_flags  = 0;
+this.flags      = this.new_table();
+this.near_flags = this.new_table();
+this.tds        = this.new_table();
 
+// ★ 큐/방문배열 등 워크버퍼 준비 (보드 크기에 맞춰 재할당)
+this._ensureWorkBuffers();
   // 이전 테이블 제거
   if (this.table) {
     this.window.removeChild(this.table);
@@ -360,6 +369,7 @@ Minefield.prototype.reset_board = function() {
   // 비동기 생성이므로 즉시 반환
   // (테이블이 모두 만들어지면 콜백에서 on_game_status_changed가 호출됩니다)
   this._attachDelegatedEvents();
+  
 };
 
 
@@ -790,6 +800,9 @@ Minefield.prototype.reset_board = function() {
 
     /* ---------- 고속 확장(BFS) - 원본과 같은 규칙 ---------- */
     Minefield.prototype.expand = function (start_x, start_y) {
+        if (!this._visit || this._visit.length !== this.columns * this.rows) {
+    this._ensureWorkBuffers();
+  }
       // 깃발이면 확장 금지(원본과 동일)
       var td_class = this.get_class(start_x, start_y);
       if (td_class !== null && (td_class !== "flag-0" && /^flag/.exec(td_class))) {
