@@ -110,6 +110,30 @@ var execute=function(i,j,k,l=1){
 	else {
 		$(".menu8").removeAttr("style");
 	}
+	if(i<25) {
+		$(".menu9").css({"display": "none",});
+	}
+	else {
+		$(".menu9").removeAttr("style");
+	}
+	if(i<28) {
+		$(".menu10").css({"display": "none",});
+	}
+	else {
+		$(".menu10").removeAttr("style");
+	}
+	if(i<32) {
+		$(".menu11").css({"display": "none",});
+	}
+	else {
+		$(".menu11").removeAttr("style");
+	}
+	if(i<36) {
+		$(".menu12").css({"display": "none",});
+	}
+	else {
+		$(".menu12").removeAttr("style");
+	}
 	minefield.init_board(i, j, k,l);
 	$(".mine-window").css({
 		"width": 22+i*16,
