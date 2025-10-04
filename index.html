@@ -12,6 +12,19 @@
 </head>
 
 <body>
+	<style>
+  /* 문서 전체에서 가로 스크롤 허용 */
+  html, body { overflow-x: auto; }
+
+  /* 바깥 래퍼에 가로 스크롤 생성 (강제 우선) */
+  .windows { overflow-x: auto !important; }
+
+  /* 내부 창의 폭 제한 해제 (max-width:100% 등을 무시) */
+  .mine-window { max-width: none !important; }
+
+  /* 내용이 넓어져도 한 줄로 놓고 가로로 스크롤되게 */
+  .windows .window { display: inline-block; white-space: normal; }
+</style>
 <script>
 var execute=function(i,j,k,l=1){
 	i = parseInt(i);
