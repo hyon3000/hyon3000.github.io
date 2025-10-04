@@ -126,8 +126,10 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
 
       /* 메뉴 표시 범위 조절 */
       const toggleMenu = (sel, show) => show ? $(sel).removeAttr("style") : $(sel).css({"display":"none"});
-      toggleMenu(".menu4",  i>=10);
-      toggleMenu(".menu5",  i>=13);
+      toggleMenu(".menu2",  i>=7);
+      toggleMenu(".menu3",  i>=10);
+      toggleMenu(".menu4",  i>=13);
+      toggleMenu(".menu5",  i>=14);
       toggleMenu(".menu6",  i>=16);
       toggleMenu(".menu7",  i>=19);
       toggleMenu(".menu8",  i>=21);
@@ -187,7 +189,7 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
         <li class="menu6"  onclick="execute(30, 16, 220, 4, 0, 0)">💀</li>
         <li class="menu7"  onclick="execute(30, 16, 420, 4, 0, 0)">☠️</li>
         <li class="menu8"  onclick="execute(30, 16, 530, 5, 0, 0)">☠️☠️</li>
-        <li class="menu9"  onclick="execute(30, 16, 680, 6, 0, 0)">☠️☠️☠️</li>
+        <li class="menu9"  onclick="execute(30, 16, 680, 6, 0, 0)">3☠️</li>
         <li class="menu10" onclick="execute(16, 16, 28, 1, 12, 1)">음수지뢰</li>
         <li class="menu11" onclick="execute(118, 58, 1412, 1, 0, 0)">대형</li>
         <li class="menu12" onclick="execute(640, 480, 63300, 1, 0, 0)" style="display:none">초대형</li>
@@ -526,8 +528,8 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
       ".menu6":  "💀",
       ".menu7":  "☠️",
       ".menu8":  "☠️☠️",
-      ".menu9":  "☠️☠️☠️",
-      ".menu10": "Anti-mines",
+      ".menu9":  "3☠️",
+      ".menu10": "AntiMine",
       ".menu11": "Large",
       ".menu12": "XLarge",
       ".menu13": "XXLarge"
