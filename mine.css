@@ -5,9 +5,12 @@ table.minetable {
  padding: 0;
  margin: 0; }
  table.minetable td {
- width: 16px;
- height: 16px;
- background-image: url(mine.png);
+  background-image: url(mine.png);   /* 업스케일된 새 파일로 교체 */
+  background-size: 160px 128px;      /* 스프라이트 '원래' 크기(= 절반)로 고정 */
+  image-rendering: pixelated;        /* 픽셀아트 선명도 개선 (선택) */
+  width: 16px;
+  height: 16px;
+ 
  background-position: 0px -16px; }
 table.minetable td:active {
  background-image: url(mine.png);
@@ -372,15 +375,87 @@ table.minetable td.mine-exploded5 {
  table.minetable td.near-40:active {
  background-image: url(mine.png);
  background-position: 0px -96px; }
+ table.minetable td.near-41 {
+ background-image: url(mine.png);
+ background-position: -16px -96px; }
+ table.minetable td.near-41:active {
+ background-image: url(mine.png);
+ background-position: -16px -96px; }
+ table.minetable td.near-42 {
+ background-image: url(mine.png);
+ background-position: -32px -96px; }
+ table.minetable td.near-42:active {
+ background-image: url(mine.png);
+ background-position: -32px -96px; }
+ table.minetable td.near-43 {
+ background-image: url(mine.png);
+ background-position: -48px -96px; }
+ table.minetable td.near-43:active {
+ background-image: url(mine.png);
+ background-position: -48px -96px; }
+ table.minetable td.near-44 {
+ background-image: url(mine.png);
+ background-position: -64px -96px; }
+ table.minetable td.near-44:active {
+ background-image: url(mine.png);
+ background-position: -64px -96px; }
+ table.minetable td.near-45 {
+ background-image: url(mine.png);
+ background-position: -80px -96px; }
+ table.minetable td.near-45:active {
+ background-image: url(mine.png);
+ background-position: -80px -96px; }
+ table.minetable td.near-46 {
+ background-image: url(mine.png);
+ background-position: -96px -96px; }
+ table.minetable td.near-46:active {
+ background-image: url(mine.png);
+ background-position: -96px -96px; }
+ table.minetable td.near-47 {
+ background-image: url(mine.png);
+ background-position: -112px -96px; }
+ table.minetable td.near-47:active {
+ background-image: url(mine.png);
+ background-position: -112px -96px; }
+ table.minetable td.near-48 {
+ background-image: url(mine.png);
+ background-position: -128px -96px; }
+ table.minetable td.near-48:active {
+ background-image: url(mine.png);
+ background-position: -128px -96px; }
  table.minetable td.mine-wrong5 {
  background-image: url(mine.png);
- background-position: -16px -96px; }
+ background-position: 0px -120px; }
  table.minetable td.mine-wrong5:active {
  background-image: url(mine.png);
- background-position: -16px -96px; }
+ background-position: 0px -120px; }
  table.minetable td.flag-5 {
  background-image: url(mine.png);
- background-position: -32px -96px; }
+ background-position: -16px -120px; }
  table.minetable td.flag-5:active {
  background-image: url(mine.png);
- background-position: -32px -96px; }
+ background-position: -16px -120px; }
+ table.minetable td.mine-6 {
+ background-image: url(mine.png);
+ background-position: -32px -120px; }
+ table.minetable td.mine-6:active {
+ background-image: url(mine.png);
+ background-position: -32px -120px; }
+ table.minetable td.mine-exploded6 {
+ background-image: url(mine.png);
+ background-position: -48px -120px; }
+ table.minetable td.mine-exploded6:active {
+ background-image: url(mine.png);
+ background-position: -48px -120px; }
+ table.minetable td.mine-wrong6 {
+ background-image: url(mine.png);
+ background-position: -64px -120px; }
+ table.minetable td.mine-wrong6:active {
+ background-image: url(mine.png);
+ background-position: -64px -120px; }
+ table.minetable td.flag-6 {
+ background-image: url(mine.png);
+ background-position: -80px -120px; }
+ table.minetable td.flag-6:active {
+ background-image: url(mine.png);
+ background-position: -80px -120px; }
