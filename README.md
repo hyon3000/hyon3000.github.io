@@ -1,7 +1,7 @@
 klutzy 지뢰찾기 기반
 
 <img src="/a1.png" alt="a">
-
+<img src="/a3.png" alt="a">
 <img src="/a2.png" alt="a">
 
 * 약간의 버그 수정함
