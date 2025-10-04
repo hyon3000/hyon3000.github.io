@@ -59,6 +59,54 @@
       var zeroMax = total - best;
       return zeroMax < 0 ? 0 : zeroMax;
     };
+// 1) 행 우선순위 구성: centerY 주변 ±windowRows → 나머지
+Minefield.prototype._buildRowOrder = function(centerY, windowRows) {
+  const H = this.rows;
+  const inRange = [];
+  const rest = [];
+  const top = Math.max(0, centerY - windowRows);
+  const bottom = Math.min(H - 1, centerY + windowRows);
+  for (let y = 0; y < H; y++) {
+    if (y >= top && y <= bottom) inRange.push(y);
+    else rest.push(y);
+  }
+  return inRange.concat(rest);
+};
+
+// 2) 한 행의 모든 셀 클래스를 계산해 한 번에 적용
+Minefield.prototype._applyRow = function(y, cellClassAtXY) {
+  for (let x = 0; x < this.columns; x++) {
+    const cls = cellClassAtXY(x, y);
+    if (cls === null) {
+      this.tds[x][y].removeAttribute("class");
+    } else {
+      // 같은 값이면 touch 안 함(불필요한 레이아웃/페인트 방지)
+      if (this.tds[x][y].getAttribute("class") !== cls) {
+        this.tds[x][y].setAttribute("class", cls);
+      }
+    }
+  }
+};
+
+// 3) 대량 업데이트를 1행씩 rAF로 분절 처리 (프리징 방지)
+Minefield.prototype._renderRowsIncrementally = function(rowOrder, cellClassAtXY, done) {
+  let idx = 0;
+  const step = () => {
+    const start = idx;
+    // 한 프레임에 1~2행 정도가 무난. 필요하면 튜닝 가능.
+    const budget = Math.min(rowOrder.length - idx, 2);
+    for (let k = 0; k < budget; k++) {
+      const y = rowOrder[idx++];
+      this._applyRow(y, cellClassAtXY);
+    }
+    if (idx < rowOrder.length) {
+      requestAnimationFrame(step);
+    } else if (done) {
+      done();
+    }
+  };
+  requestAnimationFrame(step);
+};
 
     // 현재 판에서 "주변 지뢰 0칸" 개수(자기 칸에 지뢰 없어야 함)
     Minefield.prototype.count_zero_no_neighbor = function () {
@@ -739,94 +787,95 @@
     };
 
     /* ---------- 게임 종료 ---------- */
-    Minefield.prototype.gameover = function (fail_x, fail_y) {
-      var mine, x, y, _i, _ref, _results;
-      var tmp, td;
-      tmp = (document.getElementsByClassName("minetable")[0]).getElementsByTagName("td");
+Minefield.prototype.gameover = function(fail_x, fail_y) {
+  // 이벤트 전부 끄기(기존 로직 유지)
+  var tmp = (document.getElementsByClassName("minetable")[0]).getElementsByTagName("td");
+  for (var i = 0; i < tmp.length; i++) {
+    var td = tmp[i];
+    td.onclick = td.onmouseup = td.onmousedown = td.oncontextmenu = null;
+  }
+  this.game_status = -1;
 
-      for (y = 0; y < tmp.length; y++) {
-        td = tmp[y];
-        td.onclick = null;
-        td.onmouseup = null;
-        td.onmousedown = null;
-        td.oncontextmenu = null;
-      }
+  const self = this;
 
-      this.game_status = -1;
-      _results = [];
-      for (y = _i = 0, _ref = this.rows - 1; 0 <= _ref ? _i <= _ref : _i >= _ref; y = 0 <= _ref ? ++_i : --_i) {
-        _results.push((function () {
-          var _j, _ref1, _results1;
-          _results1 = [];
-          for (x = _j = 0, _ref1 = this.columns - 1; 0 <= _ref1 ? _j <= _ref1 : _j >= _ref1; x = 0 <= _ref1 ? ++_j : --_j) {
-            mine = this.mines[x][y];
-            var flag = this.flags[x][y];
-            if (mine > 0) {
-              if (this.get_class(x, y) !== "flag-0" && /^flag/.exec(this.get_class(x, y))) {
-                _results1.push(void 0);
-                continue;
-              }
-              this.set_class(x, y, "mine-" + mine);
-              if (fail_x === x && fail_y === y) {
-                _results1.push(this.set_class(x, y, "mine-exploded" + mine));
-              } else {
-                _results1.push(void 0);
-              }
-            } else {
-              if (this.flags[x][y] > 0) {
-                _results1.push(this.set_class(x, y, "mine-wrong" + flag));
-              } else if (this.near_mines[x][y] === 0) {
-                _results1.push(this.set_class(x, y, "empty"));
-              } else {
-                _results1.push(this.set_class(x, y, "near-" + this.near_mines[x][y]));
-              }
-            }
-          }
-          return _results1;
-        }).call(this));
-      }
-      return _results;
-    };
+  // 각 셀의 최종 class 계산 함수 (행 단위로 호출)
+  function cellClassAtXY(x, y) {
+    const mine = self.mines[x][y];
+    const flag = self.flags[x][y];
+    const cur = self.get_class(x, y);
 
-    Minefield.prototype.gameclear = function () {
-      var tmp, td;
-      tmp = (document.getElementsByClassName("minetable")[0]).getElementsByTagName("td");
-      for (var y = 0; y < tmp.length; y++) {
-        td = tmp[y];
-        td.onclick = null;
-        td.onmouseup = null;
-        td.onmousedown = null;
-        td.oncontextmenu = null;
-      }
+    if (mine > 0) {
+      // 이미 정답 깃발이면 그대로 두기(원본 행동 유지)
+      if (cur !== "flag-0" && /^flag/.test(cur)) return cur;
+      // 지뢰 표시
+      if (x === fail_x && y === fail_y) return "mine-exploded" + mine;
+      return "mine-" + mine;
+    } else {
+      if (flag > 0) return "mine-wrong" + flag;       // 오깃발
+      if (self.near_mines[x][y] === 0) return "empty";
+      return "near-" + self.near_mines[x][y];
+    }
+  }
 
-      // ★ 정답 기준으로 깃발/카운터 재정렬 (잘못 꽂았던 깃발은 정답으로 교정)
-      this.num_flags = 0;
-      this.near_flags = this.new_table(); // 인접 깃발 수 재계산
+  // 업데이트 순서: fail_y 주변 50행 → 나머지
+  const order = this._buildRowOrder(fail_y, 50);
 
-      for (var yy = 0; yy < this.rows; yy++) {
-        for (var xx = 0; xx < this.columns; xx++) {
-          var mine = this.mines[xx][yy];
+  // 프리징 없이 단계적으로 렌더
+  this._renderRowsIncrementally(order, cellClassAtXY, function() {
+    // 완료 시 필요하면 후처리 가능
+  });
 
-          if (mine > 0) {
-            this.flags[xx][yy] = mine;
-            this.num_flags += mine;
-            this.set_class(xx, yy, "flag-" + mine);
+  return true;
+};
 
-            var adj = this.near_positions(xx, yy);
-            for (var i = 0; i < adj.length; i++) {
-              var nx = adj[i][0], ny = adj[i][1];
-              this.near_flags[nx][ny] += mine;
-            }
-          } else {
-            this.flags[xx][yy] = 0;
-            if (this.near_mines[xx][yy] === 0) this.set_class(xx, yy, "empty");
-            else this.set_class(xx, yy, "near-" + this.near_mines[xx][yy]);
-          }
+    
+
+   Minefield.prototype.gameclear = function () {
+  // 입력 종료(기존 유지)
+  var tmp = (document.getElementsByClassName("minetable")[0]).getElementsByTagName("td");
+  for (var i = 0; i < tmp.length; i++) {
+    var td = tmp[i];
+    td.onclick = td.onmouseup = td.onmousedown = td.oncontextmenu = null;
+  }
+
+  // 정답 기반으로 flags/near_flags 재계산 (기존 동작)
+  this.num_flags = 0;
+  this.near_flags = this.new_table();
+  for (var y = 0; y < this.rows; y++) {
+    for (var x = 0; x < this.columns; x++) {
+      var mine = this.mines[x][y];
+      if (mine > 0) {
+        this.flags[x][y] = mine;
+        this.num_flags += mine;
+        // near_flags 합산
+        var adj = this.near_positions(x, y);
+        for (var i2 = 0; i2 < adj.length; i2++) {
+          var nx = adj[i2][0], ny = adj[i2][1];
+          this.near_flags[nx][ny] += mine;
         }
+      } else {
+        this.flags[x][y] = 0;
       }
-      this.game_status = -2;
-      return this.game_status;
-    };
+    }
+  }
+
+  const self = this;
+  function cellClassAtXY(x, y) {
+    const mine = self.mines[x][y];
+    if (mine > 0) return "flag-" + mine; // 정답 깃발
+    return (self.near_mines[x][y] === 0) ? "empty" : ("near-" + self.near_mines[x][y]);
+  }
+
+  // 전체 행 1행씩(대형 보드 프리징 방지)
+  const order = Array.from({ length: this.rows }, (_, y) => y);
+  this._renderRowsIncrementally(order, cellClassAtXY, () => {
+    self.game_status = -2;
+    // 바깥 카운터(남은 지뢰 = 0) 갱신은 기존 콜백 흐름으로 처리됨
+  });
+
+  return this.game_status;
+};
+
 
     /* ---------- 마우스 프레스 표시 ---------- */
     Minefield.prototype.on_down = function () {
