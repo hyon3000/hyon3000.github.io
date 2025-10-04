@@ -13,8 +13,45 @@
 
 <body>
 	<style>
-  /* 문서 전체에서 가로 스크롤 허용 */
-  html, body { overflow-x: auto; }
+/* 1) 문서 레벨에서 가로 스크롤 허용 */
+html, body {
+  overflow-x: auto;   /* 필요 시 브라우저 하단 가로 스크롤 생성 */
+  min-height: 100%;
+}
+
+/* 2) 가상 Win98 컨테이너가 콘텐츠 폭만큼 넓어질 수 있게 */
+.windows {
+  position: relative;   /* absolute 해제 → 문서 레이아웃에 참여 */
+  left: auto;
+  right: auto;
+  bottom: auto;
+  overflow: visible;     /* 숨기지 말고 넘치게 */
+  width: max-content;    /* 안의 내용 폭만큼 확장 */
+  min-width: 100%;       /* 화면보다 좁을 땐 최소 100% */
+  min-height: 100vh;     /* 세로는 기존처럼 채우기 */
+}
+
+/* 3) 지뢰창이 레이아웃 폭 계산에 참여하도록(필요 시) */
+.mine-window {
+  position: relative;    /* absolute → relative 로 변경 */
+  display: inline-block; /* 내용폭만큼 차지, 여러 창일 때 옆으로 늘어남 */
+}
+
+/* 4) 헤더 카운터 영역이 늘어난 폭에서 줄바꿈/수축 없이 보이도록 안전장치 */
+.mine-counter {
+  display: flex;
+  flex-direction: row;
+  white-space: nowrap;
+}
+
+/* 5) 혹시 상위 어디서라도 overflow-x를 막았을 경우 대비 */
+*,
+*::before,
+*::after {
+  /* 필요시 주석 해제
+  max-width: none;
+  */
+}
 
 </style>
 <script>
