@@ -6,7 +6,7 @@ table.minetable {
  margin: 0; }
  table.minetable td {
   background-image: url(mine.png);   /* 업스케일된 새 파일로 교체 */
-  background-size: 160px 128px;      /* 스프라이트 '원래' 크기(= 절반)로 고정 */
+  background-size: 160px 256px;      /* 스프라이트 '원래' 크기(= 절반)로 고정 */
   image-rendering: pixelated;        /* 픽셀아트 선명도 개선 (선택) */
   width: 16px;
   height: 16px;
@@ -459,5 +459,6 @@ table.minetable td.mine-exploded5 {
  table.minetable td.flag-6:active {
  background-image: url(mine.png);
  background-position: -80px -112px; }
+
 
 
