@@ -1,4 +1,8 @@
-klutzy 지뢰찾기의 최신 빌드를 제공합니다
+klutzy 지뢰찾기 기반
+
+<img src="/a1.png" alt="a">
+
+<img src="/a2.png" alt="a">
 
 ㄴ약간의 버그 수정함
 
