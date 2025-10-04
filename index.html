@@ -455,7 +455,11 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
         }
       },
       function(status) {
-        var smile = $(".mine-reset-button .mine-reset-button-inner");
+  // ★ 게임이 끝난 상태(-1: 패배, -2: 클리어)에서는 덮어쓰지 않음
+  if (minefield.game_status < 0) return;
+
+  var smile = $(".mine-reset-button .mine-reset-button-inner");
+
         smile.css({"background-position": (status === 1) ? "-34px 0" : "0 0"});
       }
     );

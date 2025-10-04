@@ -1370,7 +1370,9 @@ Minefield.prototype.generate_near_mines = function (mines) {
         td.onclick = td.onmouseup = td.onmousedown = td.oncontextmenu = null;
       }
       this.game_status = -1;
-
+  if (typeof this.on_game_status_changed === "function") {
+    this.on_game_status_changed();
+  }
       const self = this;
 
       function cellClassAtXY(x, y) {
@@ -1459,12 +1461,17 @@ Minefield.prototype.generate_near_mines = function (mines) {
         return "near-m" + (-v);
       }
 
-      const order = Array.from({ length: this.rows }, (_, y) => y);
-      this._renderRowsIncrementally(order, cellClassAtXY, () => {
-        self.game_status = -2;
-      });
+  const order = Array.from({ length: this.rows }, (_, y) => y);
+  this._renderRowsIncrementally(order, cellClassAtXY, () => {
+    const self = this;
+    self.game_status = -2;
+    // ★ 추가: 상태 변경 알림을 즉시 호출해 타이머를 멈춘다
+    if (typeof self.on_game_status_changed === "function") {
+      self.on_game_status_changed();
+    }
+  });
 
-      return this.game_status;
+  return this.game_status;
     };
 
     /* ---------- 마우스 프레스 표시 ---------- */
