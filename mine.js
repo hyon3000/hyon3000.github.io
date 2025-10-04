@@ -59,6 +59,13 @@
       var zeroMax = total - best;
       return zeroMax < 0 ? 0 : zeroMax;
     };
+    Minefield.prototype._rowsPerFrame = function () {
+  var cols = this.columns || 1;
+  var n = Math.floor(1000 / cols);
+  if (n < 1) n = 1;               // 최소 1행
+  // 필요하면 상한을 두고 싶다면(지나친 한 번에 처리 방지): n = Math.min(n, 16);
+  return n;
+};
 // 1) 행 우선순위 구성: centerY 주변 ±windowRows → 나머지
 Minefield.prototype._buildRowOrder = function(centerY, windowRows) {
   const H = this.rows;
@@ -89,12 +96,11 @@ Minefield.prototype._applyRow = function(y, cellClassAtXY) {
 };
 
 // 3) 대량 업데이트를 1행씩 rAF로 분절 처리 (프리징 방지)
-Minefield.prototype._renderRowsIncrementally = function(rowOrder, cellClassAtXY, done) {
+Minefield.prototype._renderRowsIncrementally = function (rowOrder, cellClassAtXY, done) {
   let idx = 0;
   const step = () => {
-    const start = idx;
-    // 한 프레임에 1~2행 정도가 무난. 필요하면 튜닝 가능.
-    const budget = Math.min(rowOrder.length - idx, 2);
+    // 남은 행 수와 프레임 예산 중 최소치만 처리
+    const budget = Math.min(rowOrder.length - idx, this._rowsPerFrame());
     for (let k = 0; k < budget; k++) {
       const y = rowOrder[idx++];
       this._applyRow(y, cellClassAtXY);
