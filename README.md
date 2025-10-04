@@ -1,4 +1,4 @@
-klutzy 지뢰찾기 기반
+klutzy 지뢰찾기 기반의 로컬에서 동작하는 웹 버전 지뢰찾기 
 
 <img src="/a1.png" alt="a">
 <img src="/a3.png" alt="a">
