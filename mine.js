@@ -171,7 +171,7 @@
 		var bestMines = null;
 		var bestNear = null;
 		var bestRemaining = 0;
-		var retryMap = {1:1, 2:2, 3:4, 4:8, 5:12};
+		var retryMap = {1:1, 2:2, 3:4, 4:8, 5:12, 6:18};
 		var retries = retryMap[this.max_mines] || 1;
 		for (var attempt = 0; attempt < retries; attempt++) {
 		  this.init_mines(); // mines/near_mines/remaining/game_status 갱신
@@ -272,7 +272,8 @@ Minefield.prototype._pick_reloc_candidates = function(excludeX, excludeY) {
 		else if(mm==2) mm=2000;
 		else if(mm==3) mm=400;
 		else if(mm==4) mm=300;
-		else mm=225;
+		else if(mm==5) mm=225;
+		else mm=168;
 		var base = Math.floor( this.opened_cells / mm);   // 기본 규칙
 		var bonus = this.bonus_reloc_count || 0;                      // 보너스 누적
 		return base + bonus;
@@ -415,7 +416,8 @@ Minefield.prototype.try_relocate_from = function(x, y) {
 				var p = (n === 2 ? 0.2 :
 				n === 3 ? 0.5 :
 				n === 4 ? 0.5 :
-				n === 5 ? 0.5 : 0);
+				n === 5 ? 0.5 : 
+				n === 6 ? 0.5 : 0);
 				
 				if (Math.random() < p) {
 				// 이웃에 지뢰가 없으면 이 배치는 취소하고 다시 뿌리러 감(continue)
