@@ -459,6 +459,143 @@ table.minetable td.mine-exploded5 {
  table.minetable td.flag-6:active {
  background-image: url(mine.png);
  background-position: -80px -112px; }
+/* 깃발 (flag-m1..m6) — 기존 flag-1..6의 Y +128px */
+table.minetable td.flag-m1 { background-image: url(mine.png); background-position: -16px -144px; }
+table.minetable td.flag-m1:active { background-image: url(mine.png); background-position: -16px -144px; }
 
+table.minetable td.flag-m2 { background-image: url(mine.png); background-position: -32px -144px; }
+table.minetable td.flag-m2:active { background-image: url(mine.png); background-position: -32px -144px; }
 
+table.minetable td.flag-m3 { background-image: url(mine.png); background-position: -48px -144px; }
+table.minetable td.flag-m3:active { background-image: url(mine.png); background-position: -48px -144px; }
+
+table.minetable td.flag-m4 { background-image: url(mine.png); background-position: -64px -144px; }
+table.minetable td.flag-m4:active { background-image: url(mine.png); background-position: -64px -144px; }
+
+/* flag-5, flag-6 는 원본이 -112px row에 있으므로 +128 → -240px */
+table.minetable td.flag-m5 { background-image: url(mine.png); background-position: -16px -240px; }
+table.minetable td.flag-m5:active { background-image: url(mine.png); background-position: -16px -240px; }
+
+table.minetable td.flag-m6 { background-image: url(mine.png); background-position: -80px -240px; }
+table.minetable td.flag-m6:active { background-image: url(mine.png); background-position: -80px -240px; }
+
+/* 지뢰 (mine-m1..m6) — 기본은 0px row → +128 → -128px
+   단, mine-6 는 원본이 -112px row → +128 → -240px */
+table.minetable td.mine-m1 { background-image: url(mine.png); background-position: 0px -128px; }
+table.minetable td.mine-m1:active { background-image: url(mine.png); background-position: 0px -128px; }
+
+table.minetable td.mine-m2 { background-image: url(mine.png); background-position: -16px -128px; }
+table.minetable td.mine-m2:active { background-image: url(mine.png); background-position: -16px -128px; }
+
+table.minetable td.mine-m3 { background-image: url(mine.png); background-position: -32px -128px; }
+table.minetable td.mine-m3:active { background-image: url(mine.png); background-position: -32px -128px; }
+
+table.minetable td.mine-m4 { background-image: url(mine.png); background-position: -48px -128px; }
+table.minetable td.mine-m4:active { background-image: url(mine.png); background-position: -48px -128px; }
+
+table.minetable td.mine-m5 { background-image: url(mine.png); background-position: -64px -128px; }
+table.minetable td.mine-m5:active { background-image: url(mine.png); background-position: -64px -128px; }
+
+/* irregular */
+table.minetable td.mine-m6 { background-image: url(mine.png); background-position: -32px -240px; }
+table.minetable td.mine-m6:active { background-image: url(mine.png); background-position: -32px -240px; }
+
+/* 폭발(mine-exploded-m1..m6) — 1..5는 0px row → -128px, 6은 -112px → -240px */
+table.minetable td.mine-exploded-m1 { background-image: url(mine.png); background-position: -80px -128px; }
+table.minetable td.mine-exploded-m1:active { background-image: url(mine.png); background-position: -80px -128px; }
+
+table.minetable td.mine-exploded-m2 { background-image: url(mine.png); background-position: -96px -128px; }
+table.minetable td.mine-exploded-m2:active { background-image: url(mine.png); background-position: -96px -128px; }
+
+table.minetable td.mine-exploded-m3 { background-image: url(mine.png); background-position: -112px -128px; }
+table.minetable td.mine-exploded-m3:active { background-image: url(mine.png); background-position: -112px -128px; }
+
+table.minetable td.mine-exploded-m4 { background-image: url(mine.png); background-position: -128px -128px; }
+table.minetable td.mine-exploded-m4:active { background-image: url(mine.png); background-position: -128px -128px; }
+
+table.minetable td.mine-exploded-m5 { background-image: url(mine.png); background-position: -144px -128px; }
+table.minetable td.mine-exploded-m5:active { background-image: url(mine.png); background-position: -144px -128px; }
+
+/* irregular */
+table.minetable td.mine-exploded-m6 { background-image: url(mine.png); background-position: -48px -240px; }
+table.minetable td.mine-exploded-m6:active { background-image: url(mine.png); background-position: -48px -240px; }
+
+/* 오깃발(mine-wrong-m1..m6) — 1..4는 -16px row → -144px, 5/6은 -112px → -240px */
+table.minetable td.mine-wrong-m1 { background-image: url(mine.png); background-position: -80px -144px; }
+table.minetable td.mine-wrong-m1:active { background-image: url(mine.png); background-position: -80px -144px; }
+
+table.minetable td.mine-wrong-m2 { background-image: url(mine.png); background-position: -96px -144px; }
+table.minetable td.mine-wrong-m2:active { background-image: url(mine.png); background-position: -96px -144px; }
+
+table.minetable td.mine-wrong-m3 { background-image: url(mine.png); background-position: -112px -144px; }
+table.minetable td.mine-wrong-m3:active { background-image: url(mine.png); background-position: -112px -144px; }
+
+table.minetable td.mine-wrong-m4 { background-image: url(mine.png); background-position: -128px -144px; }
+table.minetable td.mine-wrong-m4:active { background-image: url(mine.png); background-position: -128px -144px; }
+
+/* irregular */
+table.minetable td.mine-wrong-m5 { background-image: url(mine.png); background-position: 0px -240px; }
+table.minetable td.mine-wrong-m5:active { background-image: url(mine.png); background-position: 0px -240px; }
+
+table.minetable td.mine-wrong-m6 { background-image: url(mine.png); background-position: -64px -240px; }
+table.minetable td.mine-wrong-m6:active { background-image: url(mine.png); background-position: -64px -240px; }
+
+/* 숫자(음수) near-m1..m48 — 기존 near-1..near-48의 Y +128px
+   (행별 Y: -32→-160, -48→-176, -64→-192, -80→-208, -96→-224) */
+table.minetable td.near-m1  { background-image: url(mine.png); background-position: -16px -160px; }
+table.minetable td.near-m2  { background-image: url(mine.png); background-position: -32px -160px; }
+table.minetable td.near-m3  { background-image: url(mine.png); background-position: -48px -160px; }
+table.minetable td.near-m4  { background-image: url(mine.png); background-position: -64px -160px; }
+table.minetable td.near-m5  { background-image: url(mine.png); background-position: -80px -160px; }
+table.minetable td.near-m6  { background-image: url(mine.png); background-position: -96px -160px; }
+table.minetable td.near-m7  { background-image: url(mine.png); background-position: -112px -160px; }
+table.minetable td.near-m8  { background-image: url(mine.png); background-position: -128px -160px; }
+table.minetable td.near-m9  { background-image: url(mine.png); background-position: -144px -160px; }
+
+table.minetable td.near-m10 { background-image: url(mine.png); background-position: 0px -176px; }
+table.minetable td.near-m11 { background-image: url(mine.png); background-position: -16px -176px; }
+table.minetable td.near-m12 { background-image: url(mine.png); background-position: -32px -176px; }
+table.minetable td.near-m13 { background-image: url(mine.png); background-position: -48px -176px; }
+table.minetable td.near-m14 { background-image: url(mine.png); background-position: -64px -176px; }
+table.minetable td.near-m15 { background-image: url(mine.png); background-position: -80px -176px; }
+table.minetable td.near-m16 { background-image: url(mine.png); background-position: -96px -176px; }
+table.minetable td.near-m17 { background-image: url(mine.png); background-position: -112px -176px; }
+table.minetable td.near-m18 { background-image: url(mine.png); background-position: -128px -176px; }
+table.minetable td.near-m19 { background-image: url(mine.png); background-position: -144px -176px; }
+
+table.minetable td.near-m20 { background-image: url(mine.png); background-position: 0px -192px; }
+table.minetable td.near-m21 { background-image: url(mine.png); background-position: -16px -192px; }
+table.minetable td.near-m22 { background-image: url(mine.png); background-position: -32px -192px; }
+table.minetable td.near-m23 { background-image: url(mine.png); background-position: -48px -192px; }
+table.minetable td.near-m24 { background-image: url(mine.png); background-position: -64px -192px; }
+table.minetable td.near-m25 { background-image: url(mine.png); background-position: -80px -192px; }
+table.minetable td.near-m26 { background-image: url(mine.png); background-position: -96px -192px; }
+table.minetable td.near-m27 { background-image: url(mine.png); background-position: -112px -192px; }
+table.minetable td.near-m28 { background-image: url(mine.png); background-position: -128px -192px; }
+table.minetable td.near-m29 { background-image: url(mine.png); background-position: -144px -192px; }
+
+table.minetable td.near-m30 { background-image: url(mine.png); background-position: 0px -208px; }
+table.minetable td.near-m31 { background-image: url(mine.png); background-position: -16px -208px; }
+table.minetable td.near-m32 { background-image: url(mine.png); background-position: -32px -208px; }
+table.minetable td.near-m33 { background-image: url(mine.png); background-position: -48px -208px; }
+table.minetable td.near-m34 { background-image: url(mine.png); background-position: -64px -208px; }
+table.minetable td.near-m35 { background-image: url(mine.png); background-position: -80px -208px; }
+table.minetable td.near-m36 { background-image: url(mine.png); background-position: -96px -208px; }
+table.minetable td.near-m37 { background-image: url(mine.png); background-position: -112px -208px; }
+table.minetable td.near-m38 { background-image: url(mine.png); background-position: -128px -208px; }
+table.minetable td.near-m39 { background-image: url(mine.png); background-position: -144px -208px; }
+
+table.minetable td.near-m40 { background-image: url(mine.png); background-position: 0px -224px; }
+table.minetable td.near-m41 { background-image: url(mine.png); background-position: -16px -224px; }
+table.minetable td.near-m42 { background-image: url(mine.png); background-position: -32px -224px; }
+table.minetable td.near-m43 { background-image: url(mine.png); background-position: -48px -224px; }
+table.minetable td.near-m44 { background-image: url(mine.png); background-position: -64px -224px; }
+table.minetable td.near-m45 { background-image: url(mine.png); background-position: -80px -224px; }
+table.minetable td.near-m46 { background-image: url(mine.png); background-position: -96px -224px; }
+table.minetable td.near-m47 { background-image: url(mine.png); background-position: -112px -224px; }
+table.minetable td.near-m48 { background-image: url(mine.png); background-position: -128px -224px; }
+
+/* 숫자 0(near-0) — near-m1의 왼쪽 (지시: 0 -128) */
+table.minetable td.near-0 { background-image: url(mine.png); background-position: 0px -160px; }
+table.minetable td.near-0:active { background-image: url(mine.png); background-position: 0px -160px; }
 
