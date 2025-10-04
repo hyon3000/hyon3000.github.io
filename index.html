@@ -58,7 +58,7 @@ var execute=function(i,j,k,l=1){
 	j = parseInt(j);
 	k = parseInt(k);
 	l = parseInt(l);
-	if(l>5) l=5;
+	if(l>6) l=6;
 	else if(l<1) l=1;
 	if((i*j-1)*l<k) k=(i*j-1)*l;
 	document.getElementById('x').value=i;
@@ -146,6 +146,7 @@ var execute=function(i,j,k,l=1){
 <li class="menu6" onclick="execute(30, 16, 220, 4)">💀</li>
 <li class="menu7" onclick="execute(30, 16, 420, 4)">☠️</li>
 <li class="menu8" onclick="execute(30, 16, 530, 5)">☠️☠️</li>
+<li class="menu8" onclick="execute(30, 16, 650, 6)">☠️☠️☠️</li>
     </ul>
 
     <div class="window-content">
@@ -171,14 +172,14 @@ var execute=function(i,j,k,l=1){
 
 </div>
     
-<div class="userctrl" style="margin:373px 0px 0px 0px;">
+<div class="userctrl" style="margin:0px 0px 0px 0px;">
     <form>
         주문제작:가로
         <input type="text" id="x" min="1" step="1" style="width:40px;" value="30">
         세로
         <input type="text" id="y" min="1" step="1" style="width:40px;" value="16">
         1칸당 최대 지뢰 수
-        <input type="text" id="m" min="1" max="5" step="1" style="width:40px;" value="1">
+        <input type="text" id="m" min="1" max="6" step="1" style="width:40px;" value="1">
         전체 지뢰 수
         <input type="text" id="t" min="1" step="1" style="width:40px;" value="99">
         
