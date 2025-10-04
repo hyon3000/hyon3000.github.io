@@ -172,114 +172,121 @@ Minefield.prototype._renderRowsIncrementally = function (rowOrder, cellClassAtXY
         this._queueY = new Int32Array(size);
       }
     };
+// 행 묶음(batch)으로 테이블을 점진적으로 만드는 헬퍼
+// done() 콜백은 모든 행/셀 생성이 끝난 뒤 한 번 호출됩니다.
+Minefield.prototype._buildTableIncrementally = function(done) {
+  const batchRows = 40;        // 환경에 맞게 20~80 조절 가능
+  let y = 0;
+  const tbl  = this.table;
+  const cols = this.columns;
+  const rows = this.rows;
 
-    Minefield.prototype.reset_board = function () {
-      var on_click_to, on_rclick_to, mousedown, mouseup, td, tr, x, y, _i, _j, _ref, _ref1;
+  const step = () => {
+    const frag = document.createDocumentFragment();
+    const yEnd = Math.min(rows, y + batchRows);
 
-      this.opened_cells = 0;          // 실제로 연 칸 수(지뢰 없는 칸만)
-      this.reloc_used = 0;            // 구제(지뢰 옮기기) 사용 횟수
-      this.opened_safe = 0;           // 연 칸 중 지뢰 없는 칸 수
-      this.total_safe = 0;            // 지뢰 없는 전체 칸 수(init_mines 후 계산)
-      this.bonus_reloc_count = 0;     // 보너스 누적 개수
-      this.bonus_thresholds = this.compute_bonus_thresholds();
+    for (; y < yEnd; y++) {
+      const tr = document.createElement('tr');
+      for (let x = 0; x < cols; x++) {
+        const td = document.createElement('td');
 
-      if (this.table) {
-        this.window.removeChild(this.table);
-        this.game_status = -1;
-        this.table = null;
+        // ✅ 원본과 동일하게 id 부여 (x{X}y{Y})
+        td.setAttribute('id', 'x' + x + 'y' + y);
+
+        // 외부 위임을 위해 좌표도 남겨 둠(선택 사항)
+        td.dataset.x = x;
+        td.dataset.y = y;
+
+        this.tds[x][y] = td;
+        tr.appendChild(td);
       }
+      frag.appendChild(tr);
+    }
 
-      this.table = document.createElement('table');
-      this.table.setAttribute("class", "minetable");
-      this.num_flags = 0;
-      this.flags = this.new_table();
-      this.near_flags = this.new_table();
-      this.tds = this.new_table();
+    tbl.appendChild(frag);
 
-      for (y = _i = 0, _ref = this.rows - 1; 0 <= _ref ? _i <= _ref : _i >= _ref; y = 0 <= _ref ? ++_i : --_i) {
-        tr = document.createElement('tr');
-        for (x = _j = 0, _ref1 = this.columns - 1; 0 <= _ref1 ? _j <= _ref1 : _j >= _ref1; x = 0 <= _ref1 ? ++_j : --_j) {
-          td = document.createElement('td');
-          td.setAttribute("id", "x" + x + "y" + y);
+    if (y < rows) {
+      requestAnimationFrame(step);  // 다음 프레임에 이어서 생성 → 프리징 방지
+    } else {
+      // 모든 행 완성 → 컨테이너에 부착
+      this.window.appendChild(tbl);
+      if (typeof done === "function") done();
+    }
+  };
 
-          on_click_to = function (x_, y_, self) {
-            return function (e) {
-              // 가운데(휠) 클릭 방해 금지: 사용자가 설정한 상위 핸들로 넘김
-              if (e && e.button === 1) return true;
-              self.on_click(x_, y_);
-              return false;
-            };
-          };
-          td.onclick = on_click_to(x, y, this);
+  requestAnimationFrame(step);
+};
 
-          on_rclick_to = function (x_, y_, self) {
-            return function (e) {
-              if (e && e.button === 1) return true;
-              self.on_rclick(x_, y_);
-              return false;
-            };
-          };
-          td.oncontextmenu = on_rclick_to(x, y, this);
 
-          mousedown = function (x_, y_, self) {
-            return function (e) {
-              if (e && e.button === 1) return true;
-              self.on_down(x_, y_);
-              return false;
-            };
-          };
-          td.onmousedown = mousedown(x, y, this);
+// reset_board: 기존 로직을 유지하되, 테이블 생성만 점진적으로 수행
+Minefield.prototype.reset_board = function() {
+  // --- 상태 초기화 (원본과 동일한 필드들) ---
+  this.opened_cells = 0;           // 실제로 연 칸 수
+  this.reloc_used   = 0;           // 구제(지뢰 옮기기) 사용 횟수
+  this.opened_safe  = 0;           // 연 칸 중 지뢰 없는 칸 수
+  this.total_safe   = 0;           // 지뢰 없는 전체 칸 수 (init_mines 후 계산)
+  this.bonus_reloc_count = 0;      // 보너스 누적 개수
+  this.bonus_thresholds  = this.compute_bonus_thresholds(); // 임계치 목록
 
-          mouseup = function (x_, y_, self) {
-            return function (e) {
-              if (e && e.button === 1) return true;
-              self.on_up(x_, y_);
-              return false;
-            };
-          };
-          td.onmouseup = mouseup(x, y, this);
+  // 이전 테이블 제거
+  if (this.table) {
+    this.window.removeChild(this.table);
+    this.game_status = -1;
+    this.table = null;
+  }
 
-          this.tds[x][y] = td;
-          tr.appendChild(td);
-        }
-        this.table.appendChild(tr);
+  // 새로운 테이블 준비
+  this.table = document.createElement('table');
+  this.table.setAttribute("class", "minetable");
+
+  // 보드용 배열들 초기화 (원본과 동일)
+  this.num_flags  = 0;
+  this.flags      = this.new_table();
+  this.near_flags = this.new_table();
+  this.tds        = this.new_table();
+
+  // ★ 테이블을 한 번에 만들지 말고, 행 배치로 나눠서 생성
+  this._buildTableIncrementally(function() {
+    // ----- 여기부터는 원본 reset_board 하단 로직 그대로 -----
+
+    // 후보 여러 판 생성 후, 주변 지뢰 0칸이 가장 많은 판을 선택
+    var bestZero = -1;
+    var bestMines = null;
+    var bestNear = null;
+    var bestRemaining = 0;
+
+    var retryMap = {1:1, 2:2, 3:4, 4:8, 5:12, 6:18};
+    var retries = retryMap[this.max_mines] || 1;
+
+    for (var attempt = 0; attempt < retries; attempt++) {
+      this.init_mines(); // mines/near_mines/remaining/game_status 갱신
+      var curZero = this.count_zero_no_neighbor();
+
+      if (curZero > bestZero) {
+        bestZero = curZero;
+        // 깊은 복사
+        bestMines = JSON.parse(JSON.stringify(this.mines));
+        bestNear = JSON.parse(JSON.stringify(this.near_mines));
+        bestRemaining = this.remaining;
       }
-      this.window.appendChild(this.table);
+    }
 
-      // 워크 버퍼 준비
-      this._ensureWorkBuffers();
+    // 베스트 스냅샷 복원
+    if (bestMines) {
+      this.mines      = bestMines;
+      this.near_mines = bestNear;
+      this.remaining  = bestRemaining;
+      this.game_status = 1; // 준비 상태
+    }
 
-      // 주변 지뢰 0칸 최대인 보드를 선택(재시도 매핑)
-      var bestZero = -1;
-      var bestMines = null;
-      var bestNear = null;
-      var bestRemaining = 0;
+    // 외부(스마일/타이머 등) 상태 반영
+    this.on_game_status_changed();
+  }.bind(this));
 
-      // 사용자가 6을 입력할 수도 있으니 확장(없으면 무시)
-      var retryMap = { 1: 1, 2: 2, 3: 4, 4: 8, 5: 12, 6: 18 };
-      var retries = retryMap[this.max_mines] || 1;
+  // 비동기 생성이므로 즉시 반환
+  // (테이블이 모두 만들어지면 콜백에서 on_game_status_changed가 호출됩니다)
+};
 
-      for (var attempt = 0; attempt < retries; attempt++) {
-        this.init_mines(); // mines/near_mines/remaining/game_status 갱신
-        var curZero = this.count_zero_no_neighbor();
-
-        if (curZero > bestZero) {
-          bestZero = curZero;
-          bestMines = JSON.parse(JSON.stringify(this.mines));
-          bestNear = JSON.parse(JSON.stringify(this.near_mines));
-          bestRemaining = this.remaining;
-        }
-      }
-
-      if (bestMines) {
-        this.mines = bestMines;
-        this.near_mines = bestNear;
-        this.remaining = bestRemaining;
-        this.game_status = 1; // 준비 상태
-      }
-
-      return this.on_game_status_changed();
-    };
 
     /* ---------- 상태 체크 ---------- */
     Minefield.prototype.is_opened = function (x, y) {
