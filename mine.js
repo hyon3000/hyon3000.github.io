@@ -113,7 +113,48 @@ Minefield.prototype._renderRowsIncrementally = function (rowOrder, cellClassAtXY
   };
   requestAnimationFrame(step);
 };
+Minefield.prototype._adjustNearAround = function (x, y, delta) {
+  var adj = this.near_positions(x, y);
+  for (var i = 0; i < adj.length; i++) {
+    var nx = adj[i][0], ny = adj[i][1];
+    this.near_mines[nx][ny] += delta;
+  }
+};
+    // 첫 클릭 보장: (x,y)에 지뢰 m개가 있으면, mines==0이고 수용 가능(<=max_mines)한 다른 칸 하나로 m개 전부 이동
+// 성공하면 true, 못 찾으면 false를 반환(→ 상위에서 기존 start() 등으로 폴백)
+Minefield.prototype._relocateFirstClick = function (x, y) {
+  var m = this.mines[x][y];
+  if (m <= 0) return true; // 이미 안전
 
+  var W = this.columns, H = this.rows, M = this.max_mines;
+
+  // 1) (x,y)가 아닌, 현재 지뢰 없는 칸들 중 m개를 한 번에 수용 가능한 타깃 찾기
+  var tx = -1, ty = -1;
+  outer:
+  for (var yy = 0; yy < H; yy++) {
+    for (var xx = 0; xx < W; xx++) {
+      if (xx === x && yy === y) continue;
+      if (this.mines[xx][yy] === 0 && m <= M) { // 0칸은 m개를 그대로 수용 가능(최대치 M 이상만 아니면)
+        tx = xx; ty = yy;
+        break outer;
+      }
+    }
+  }
+
+  if (tx < 0) return false; // 단일 타깃 실패 → 상위에서 폴백 처리
+
+  // 2) near_mines 빠른 보정: 소스 주변 -m, 타깃 주변 +m
+  this._adjustNearAround(x, y, -m);
+  this._adjustNearAround(tx, ty, +m);
+
+  // 3) mines 재배치 (remaining은 '지뢰가 있는 칸 수' 기준 → 소스 1줄고 타깃 1늘어서 총합 불변)
+  this.mines[x][y] = 0;
+  this.mines[tx][ty] = m;
+
+  // total_safe 는 '지뢰 없는 칸 수'라 소스(+1), 타깃(-1) → 총합 불변. 갱신 불필요.
+
+  return true;
+};
     // 현재 판에서 "주변 지뢰 0칸" 개수(자기 칸에 지뢰 없어야 함)
     Minefield.prototype.count_zero_no_neighbor = function () {
       var cnt = 0;
@@ -810,9 +851,10 @@ this._ensureWorkBuffers();
         return 1;
       }
   if (this.opened_cells === 0 && this.mines[start_x][start_y] > 0) {
-    // 원본 start는 클릭 칸이 지뢰일 때 보드를 shift해서 (start_x,start_y)를 0으로 맞춥니다.
-    // (start는 내부에서 game_status=0으로 바꾸는 것도 원본과 동일)
-    this.start(start_x, start_y);
+    if (!this._relocateFirstClick(start_x, start_y)) {
+      // 단일 타깃을 못 찾은 드문 경우엔 기존 무거운 start()로 폴백
+      this.start(start_x, start_y);
+    }
   }
       // 첫 클릭/확장: press() 결과 체크
       var pr = this.press(start_x, start_y);
