@@ -615,7 +615,7 @@ Minefield.prototype.reset_board = function() {
     /* ---------- DOM 헬퍼 ---------- */
     Minefield.prototype.get_class = function (x, y) {
       var td_class = this.tds[x][y].getAttribute("class");
-      if (td_class === null || td_class === "") { null; }
+      if (td_class === null || td_class === "") { return null; }
       return td_class;
     };
 
