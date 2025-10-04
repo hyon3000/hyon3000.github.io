@@ -803,12 +803,17 @@ this._ensureWorkBuffers();
         if (!this._visit || this._visit.length !== this.columns * this.rows) {
     this._ensureWorkBuffers();
   }
+      
       // 깃발이면 확장 금지(원본과 동일)
       var td_class = this.get_class(start_x, start_y);
       if (td_class !== null && (td_class !== "flag-0" && /^flag/.exec(td_class))) {
         return 1;
       }
-
+  if (this.opened_cells === 0 && this.mines[start_x][start_y] > 0) {
+    // 원본 start는 클릭 칸이 지뢰일 때 보드를 shift해서 (start_x,start_y)를 0으로 맞춥니다.
+    // (start는 내부에서 game_status=0으로 바꾸는 것도 원본과 동일)
+    this.start(start_x, start_y);
+  }
       // 첫 클릭/확장: press() 결과 체크
       var pr = this.press(start_x, start_y);
       if (pr < 0) {
