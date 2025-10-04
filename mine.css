@@ -452,11 +452,12 @@ table.minetable td.mine-exploded5 {
  background-position: -64px -112px; }
  table.minetable td.mine-wrong6:active {
  background-image: url(mine.png);
- background-position: -64px -120px; }
+ background-position: -64px -112px; }
  table.minetable td.flag-6 {
  background-image: url(mine.png);
- background-position: -80px -120px; }
+ background-position: -80px -112px; }
  table.minetable td.flag-6:active {
  background-image: url(mine.png);
- background-position: -80px -120px; }
+ background-position: -80px -112px; }
+
 
