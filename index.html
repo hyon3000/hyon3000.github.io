@@ -13,6 +13,7 @@
 
 <body>
 	<style>
+		
 /* 1) 문서 레벨에서 가로 스크롤 허용 */
 html, body {
   overflow-x: auto;   /* 필요 시 브라우저 하단 가로 스크롤 생성 */
@@ -49,6 +50,31 @@ html, body {
   /* 필요시 주석 해제
   max-width: none;
   */
+}
+/* 1) 스크롤은 뷰포트가 담당 (가로는 html, 세로는 body) */
+html { overflow-x: auto; }    /* 브라우저 하단에 가로 스크롤 생성 */
+body { overflow-y: auto; overflow-x: visible; }
+
+/* 2) 가상 Win98 루트가 문서 레이아웃에 참여하게(절대배치/하단고정 해제) */
+.windows {
+  position: static;       /* 기존 absolute, top/left/right/bottom 제거 */
+  width: max-content;     /* 내부 콘텐츠 폭만큼 넓어짐 → 뷰포트 가로 스크롤 트리거 */
+  min-width: 100vw;       /* 화면보다 좁으면 최소 화면폭 유지 */
+  height: auto;
+  overflow: visible;      /* 내부에서 가로/세로 잘리지 않게 */
+}
+
+/* 3) 지뢰창도 레이아웃에 정상 참여 */
+.mine-window {
+  position: static;       /* 기존 absolute/relative로 인한 별도 스크롤 컨텍스트 방지 */
+  display: inline-block;  /* 내용 폭만큼 차지 (여러 창이면 가로로 이어짐) */
+}
+
+/* 4) 상위 컨테이너가 스크롤을 가로채지 않도록 */
+.windows-98,
+.windows-98 .window,
+.windows-98 .window > .window-content {
+  overflow: visible !important;
 }
 
 </style>
