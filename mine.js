@@ -7,6 +7,7 @@
   Minefield = (function () {
     function Minefield(window, game_status_changed_func, game_status_changed_func2) {
       this.window = window;
+
       this.game_status_changed_func = game_status_changed_func != null ? game_status_changed_func : null;
       this.game_status_changed_func2 = game_status_changed_func2 != null ? game_status_changed_func2 : null;
       this.game_status = -1;
@@ -237,7 +238,8 @@ Minefield.prototype._relocateFirstClick = function (x, y) {
 
     /* ---------- 초기화 ---------- */
     // 흰지뢰 인자 추가(하위호환 OK)
-    Minefield.prototype.init_board = function (columns, rows, num_mines, max_mines, num_mines_white, max_mines_white) {
+    Minefield.prototype.init_board = function (columns, rows, num_mines, max_mines, num_mines_white, max_mines_white,use_nopick) {
+      this.use_nopick = use_nopick;  
       this.columns = columns;
       this.rows = rows;
       this.num_mines = num_mines|0;
@@ -412,9 +414,11 @@ Minefield.prototype._relocateFirstClick = function (x, y) {
         var bestRemaining = 0;
 
         var retryMap = {1:1, 2:2, 3:4, 4:8, 5:12, 6:18};
-        var retries = retryMap[this.max_mines] || 1;
+        if(this.use_nopick === true) retryMap = {1:1, 2:1, 3:1, 4:1, 5:1, 6:1};
+        var retries = retryMap[Math.min(this.max_mines+this.max_mines_white,6)] || 1;
 
         for (var attempt = 0; attempt < retries; attempt++) {
+          
           this.init_mines(); // mines/near_mines/_near_black/_near_white/remaining 갱신
           var curZero = this.count_zero_no_neighbor();
           if (curZero > bestZero) {
@@ -1120,6 +1124,596 @@ Minefield.prototype.init_mines = function () {
   this.game_status = 1;
   return this.game_status;
 };
+// ★ 붙여넣기용: "no-pick(찍기 없음) 보드" 생성기 (빠른판)
+// 조건:
+//  - 무작위 보드는 기존 this.init_mines()를 그대로 사용해 생성
+//  - 첫 클릭 (firstX, firstY) 및 주변 8칸은 반드시 지뢰 0(=진짜 0, 상쇄0 금지)
+//  - 보드가 '추론만으로' 풀리는지 빠른 검증(경량 규칙 + 존재성 DFS)
+//  - fallback(폴백) 금지: solvable한 보드를 찾을 때까지 '무한히' 시도
+//  - solvable 보드가 나오면, 추론 근거 트리를 console에 로그로 출력
+//  - 음수지뢰 존재하면 일부규칙(delta) 사용불가(1인 칸이 2검은지뢰+1하얀지뢰 가능)
+// ★ 붙여넣기용: "no-pick(찍기 없음) 보드" 생성기 (빠른판)
+
+Minefield.prototype.init_mines_nopick = function (firstX, firstY) {
+  const hasWhites = ((this.num_mines_white|0) > 0);  // 흰지뢰 존재 여부
+  const W = this.columns|0, H = this.rows|0;
+  const capB = Math.max(1, this.max_mines|0);        // 칸당 검은 지뢰 최대
+  const capW = Math.max(0, this.max_mines_white|0);  // 칸당 흰 지뢰 최대
+  const classicMode = (!hasWhites) && (capB === 1);  // 클래식 모드(칸당 0/1, 흰지뢰 없음)
+
+  // ===== 유틸 =====
+  const idx = (x,y)=> y*W + x;
+  const inBounds = (x,y)=> (x>=0 && y>=0 && x<W && y<H);
+
+  const rebuildParts = () => {
+    this._near_black = this.new_table();
+    this._near_white = this.new_table();
+    for (let x=0;x<W;x++) for (let y=0;y<H;y++){
+      const v = this.mines[x][y]|0;
+      if (!v) continue;
+      const addB = v>0 ? v : 0;
+      const addW = v<0 ? -v : 0;
+      const adj = this.near_positions(x,y);
+      for (let i=0;i<adj.length;i++){
+        const nx=adj[i][0], ny=adj[i][1];
+        this._near_black[nx][ny] += addB;
+        this._near_white[nx][ny] += addW;
+      }
+    }
+    this._rebuild_near_from_parts();
+  };
+
+  // 첫 3x3이 전부 0(지뢰 없음)인지
+  const first3x3AllZero = (X,Y) => {
+    for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++){
+      const x=X+dx, y=Y+dy;
+      if (!inBounds(x,y)) continue;
+      if ((this.mines[x][y]|0) !== 0) return false;
+    }
+    return true;
+  };
+
+  // ===== 추론 로거(결정 근거 트리) =====
+  const Trace = [];
+  function pushTrace(kind, payload) { Trace.push({ kind, ...payload }); }
+  function dumpTraceToConsole() {
+    console.groupCollapsed("[Minesweeper] 추론 근거 트리");
+    for (let i=0;i<Trace.length;i++){
+      const t=Trace[i];
+      if (t.kind==="open") {
+        console.log(`OPEN (${t.x},${t.y}) - ${t.reason}`);
+      } else if (t.kind==="flood") {
+        console.log(`FLOOD from (${t.x},${t.y})`);
+      } else if (t.kind==="ruleA") {
+        console.log(`RULE A: N==F → 안전 open ${t.cells.map(c=>`(${c[0]},${c[1]})`).join(", ")}`);
+      } else if (t.kind==="ruleB") {
+        console.log(`RULE B: N==F+U → 지뢰 확정(참고용) ${t.cells.map(c=>`(${c[0]},${c[1]})`).join(", ")}`);
+      } else if (t.kind==="subset") {
+        console.log(`SUBSET: Δ=${t.delta} → 안전 ${t.open?.map(c=>`(${c[0]},${c[1]})`).join(", ")||"없음"} / 강제값 ${t.force?.map(c=>`(${c[0]},${c[1]})`).join(", ")||"없음"}`);
+      } else if (t.kind==="exist") {
+        console.log(`EXISTENCE: 항상 안전 → open (${t.x},${t.y})`);
+      } else if (t.kind==="markMine") {
+        console.log(`FLAG (${t.x},${t.y}) - ${t.reason}`);
+      } else if (t.kind==="done") {
+        console.log(`DONE: 총 ${t.opens}칸 open (안전칸 모두 열림)`);
+      }
+    }
+    console.groupEnd();
+  }
+
+  // ===== 경량 솔버(노게스) =====
+  function solveNoGuessFast(firstX, firstY) {
+    // 컴포 캐시(요약 결과 저장)
+    const compCache = new Map();
+
+    rebuildParts();                         // near 갱신
+    if ((this.near_mines[firstX][firstY]|0) !== 0) return false; // 첫칸은 반드시 진짜 0
+
+    // 열린(안전) 상태 및 확정 지뢰 상태
+    const opened = new Uint8Array(W*H);     // 0/1
+    const confirmedMine = new Int8Array(W*H); // classic: 0/1
+    let openedCount = 0, totalSafe = 0;
+    for (let y=0;y<H;y++) for (let x=0;x<W;x++) if ((this.mines[x][y]|0)===0) totalSafe++;
+
+    function openCell(x,y, reason) {
+      const k=idx(x,y);
+      if (opened[k]) return;
+      opened[k]=1; openedCount++;
+      pushTrace("open", {x,y,reason});
+    }
+    function markMine(x,y,reason){
+      const k = idx(x,y);
+      if (confirmedMine[k]) return false; // 이미 확정
+      confirmedMine[k] = 1;
+      pushTrace("markMine", {x,y,reason});
+      return true;
+    }
+    function floodFrom(x0,y0) {
+      // 진짜 0만 퍼짐(상쇄0(1000)은 퍼지지 않음)
+      const stack=[[x0,y0]];
+      pushTrace("flood",{x:x0,y:y0});
+      while(stack.length){
+        const [x,y]=stack.pop();
+        const adj=this.near_positions(x,y);
+        for (let i=0;i<adj.length;i++){
+          const ax=adj[i][0], ay=adj[i][1];
+          const ak=idx(ax,ay);
+          if (opened[ak]) continue;
+          openCell(ax,ay,"flood-neighbor");
+          if ((this.near_mines[ax][ay]|0)===0) stack.push([ax,ay]);
+        }
+      }
+    }
+    openCell(firstX, firstY, "seed");
+    floodFrom.call(this, firstX, firstY);
+
+    function done(){ return openedCount === totalSafe; }
+
+    // 경계 수집(확정 지뢰를 target에서 차감)
+    const collectFrontier = () => {
+      const nums = [];
+      for (let y=0;y<H;y++) for (let x=0;x<W;x++){
+        if (!opened[idx(x,y)]) continue;
+        const v = this.near_mines[x][y]|0;
+        if (v!==0) nums.push([x,y,v]);
+      }
+      const varIdx = new Map();
+      const vars=[];
+      function addVar(x,y){
+        const key = x+","+y;
+        if (!varIdx.has(key)) { varIdx.set(key, vars.length); vars.push([x,y]); }
+      }
+      const cons=[];
+      for (let i=0;i<nums.length;i++){
+        const [x,y,v0]=nums[i];
+        const adj=this.near_positions(x,y);
+        const vs=[];
+        let target = (v0===1000?0:(v0|0));  // 합
+        for (let j=0;j<adj.length;j++){
+          const ax=adj[j][0], ay=adj[j][1];
+          const k=idx(ax,ay);
+          if (opened[k]) continue;
+          if (confirmedMine[k]) { target -= 1; continue; } // classic: 1개 차감
+          addVar(ax,ay);
+          vs.push(varIdx.get(ax+","+ay));
+        }
+        cons.push({vars:vs, target, isAbs:(v0===1000)});
+      }
+      return { vars, cons };
+    };
+
+    // RULE A/B
+    const applyRuleAB = (vars, cons) => {
+      let progressed=false, flagged=false;
+      for (let ci=0; ci<cons.length; ci++){
+        const {vars:vs, target, isAbs} = cons[ci];
+        const U = vs.length, N = target|0;
+        // RULE A: N==0 & !isAbs → 모두 안전 오픈
+        if (N===0 && !isAbs && U>0){
+          const cells=[];
+          for (let k=0;k<vs.length;k++){
+            const [x,y]=vars[vs[k]];
+            if (!opened[idx(x,y)]){ openCell(x,y,"RuleA N==0"); cells.push([x,y]); }
+          }
+          if (cells.length){ pushTrace("ruleA",{cells}); progressed=true; }
+        }
+        // RULE B: N==U → 전부 지뢰 확정 (클래식 모드에서만 안전하게 사용)
+        if (classicMode && U>0 && N===U){
+          const cells=[];
+          for (let k=0;k<vs.length;k++){
+            const [x,y]=vars[vs[k]];
+            if (markMine(x,y,"RuleB N==U")) { cells.push([x,y]); flagged=true; }
+          }
+          if (cells.length) pushTrace("ruleB",{cells});
+        }
+      }
+      if (flagged) progressed = true;
+
+      if (progressed){
+        // flood 전개
+        for (let y=0;y<H;y++) for (let x=0;x<W;x++){
+          if (opened[idx(x,y)] && (this.near_mines[x][y]|0)===0){
+            const adj=this.near_positions(x,y);
+            for (let i=0;i<adj.length;i++){
+              const ax=adj[i][0], ay=adj[i][1];
+              if (!opened[idx(ax,ay)]) { floodFrom.call(this, x,y); break; }
+            }
+          }
+        }
+      }
+      return progressed;
+    };
+
+    // subset(아주 제한)
+    const applySmallSubset = (vars, cons) => {
+      const small = cons.map((c)=>({ s:new Set(c.vars), t:c.target|0, a:c.isAbs }))
+                        .filter(o=>o.s.size>0 && o.s.size<=5);
+      if (small.length<2) return false;
+
+      let progressed=false, flagged=false;
+      for (let i=0;i<small.length;i++){
+        const A=small[i]; if (A.a) continue;
+        for (let j=0;j<small.length;j++){
+          if (i===j) continue;
+          const B=small[j]; if (B.a) continue;
+
+          // A ⊆ B ?
+          let subset=true; A.s.forEach(v=>{ if (!B.s.has(v)) subset=false; });
+          if (!subset) continue;
+
+          const S=[]; B.s.forEach(v=>{ if (!A.s.has(v)) S.push(v); });
+          if (!S.length) continue;
+
+          const delta = B.t - A.t;
+          const len = S.length;
+
+          if (delta===0){
+            if (!hasWhites){
+              const openedNow=[];
+              for (const id of S){
+                const [x,y]=vars[id];
+                if (!opened[idx(x,y)]){ openCell(x,y,"subset Δ=0"); openedNow.push([x,y]); }
+              }
+              if (openedNow.length){ pushTrace("subset",{delta:0, open:openedNow}); progressed=true; }
+            } else {
+              pushTrace("subset",{delta:0, note:"whites-present → no-open"});
+            }
+          } else if (classicMode){
+            if (delta===len){ // 모두 지뢰
+              const forced=[];
+              for (const id of S){
+                const [x,y]=vars[id];
+                if (markMine(x,y,"subset Δ=|S|")) { forced.push([x,y]); flagged=true; }
+              }
+              if (forced.length) pushTrace("subset",{delta, force:forced});
+            } else if (delta===-len){ // 모두 안전
+              const openedNow=[];
+              for (const id of S){
+                const [x,y]=vars[id];
+                if (!opened[idx(x,y)]){ openCell(x,y,"subset Δ=-|S|"); openedNow.push([x,y]); }
+              }
+              if (openedNow.length){ pushTrace("subset",{delta, open:openedNow}); progressed=true; }
+            }
+          } else {
+            // 일반 모드: 로그만
+            pushTrace("subset",{delta, force:S.map(id=>vars[id])});
+          }
+        }
+      }
+
+      if (flagged) progressed = true;
+      if (progressed){
+        for (let y=0;y<H;y++) for (let x=0;x<W;x++){
+          if (opened[idx(x,y)] && (this.near_mines[x][y]|0)===0){
+            const adj=this.near_positions(x,y);
+            for (let i=0;i<adj.length;i++){
+              const ax=adj[i][0], ay=adj[i][1];
+              if (!opened[idx(ax,ay)]) { floodFrom.call(this, x,y); break; }
+            }
+          }
+        }
+      }
+      return progressed;
+    };
+
+    // 연결요소로 쪼개기(변수-제약 이분그래프)
+    const splitComponents = (vars, cons) => {
+      const nV=vars.length, nC=cons.length;
+      const adj = Array.from({length:nV+nC}, ()=>[]);
+      for (let ci=0; ci<nC; ci++){
+        const vs=cons[ci].vars;
+        for (let k=0;k<vs.length;k++){
+          const v=vs[k];
+          adj[v].push(nV+ci);
+          adj[nV+ci].push(v);
+        }
+      }
+      const comp = new Int32Array(nV+nC).fill(-1);
+      const comps=[];
+      let id=0;
+      for (let s=0; s<comp.length; s++){
+        if (comp[s]!==-1) continue;
+        const q=[s]; comp[s]=id; const nodes=[s];
+        while(q.length){
+          const u=q.pop();
+          const au=adj[u];
+          for (let i=0;i<au.length;i++){
+            const w=au[i];
+            if (comp[w]!==-1) continue;
+            comp[w]=id; q.push(w); nodes.push(w);
+          }
+        }
+        const vIdx=[], cIdx=[];
+        for (const u of nodes){
+          if (u<nV) vIdx.push(u);
+          else cIdx.push(u-nV);
+        }
+        comps.push({vIdx,cIdx});
+        id++;
+      }
+      return comps;
+    };
+
+    // 컴포넌트 키
+    function makeComponentKey(subVars, subCons){
+      const order = [...subVars.keys()].sort((a,b)=>{
+        const [ax,ay]=subVars[a], [bx,by]=subVars[b];
+        return (ay-by) || (ax-bx);
+      });
+      const map = new Map(order.map((old,i)=>[old,i]));
+      const varsN = order.map(i=>subVars[i]); // 정렬된 좌표 목록
+
+      const consN = subCons.map(c=>{
+        const vs = c.vars.map(v=>map.get(v)).sort((a,b)=>a-b);
+        return { vars:vs, target:c.target|0, isAbs:!!c.isAbs };
+      }).sort((a,b)=>{
+        if (a.vars.length!==b.vars.length) return a.vars.length - b.vars.length;
+        if (a.target!==b.target) return a.target - b.target;
+        if (a.isAbs!==b.isAbs) return (a.isAbs?1:0)-(b.isAbs?1:0);
+        for (let i=0;i<a.vars.length;i++) if (a.vars[i]!==b.vars[i]) return a.vars[i]-b.vars[i];
+        return 0;
+      });
+
+      return JSON.stringify({v:varsN, c:consN});
+    }
+
+    // 조기 불능 체크
+    function quickInfeasible(subVars, subCons){
+      for (const c of subCons){
+        const U = c.vars.length;
+        const minS = -capW * U, maxS = capB * U;
+        if (c.target < minS || c.target > maxS) return true;
+        if (c.isAbs && c.target===0 && U===0) return true;
+      }
+      const fixed = new Map();
+      for (const c of subCons){
+        if (c.vars.length===1){
+          const v = c.vars[0];
+          const t = c.target|0;
+          if (t< -capW || t> capB) return true;
+          const prev = fixed.get(v);
+          if (prev!=null && prev!==t) return true;
+          fixed.set(v, t);
+          if (c.isAbs && t===0) return true;
+        }
+      }
+      return false;
+    }
+
+    // 존재성 요약(컴포의 모든 변수에 대해 -1/0/+1)
+    function summarizeComponentByExistence(subVars, subCons){
+      // 도메인
+      const domains = new Array(subVars.length);
+      for (let i=0;i<subVars.length;i++){
+        const d=[0];
+        for (let a=1;a<=capB;a++) d.push(a);
+        for (let b=1;b<=capW;b++) d.push(-b);
+        domains[i]=d;
+      }
+      // 가지치기
+      function feasible(partial) {
+        for (let ci=0; ci<subCons.length; ci++){
+          const {vars:vs, target} = subCons[ci];
+          let sum=0, unk=0;
+          for (let k=0;k<vs.length;k++){
+            const id=vs[k], v=partial[id];
+            if (v==null) unk++;
+            else sum+=v;
+          }
+          const minPossible = sum - capW*unk;
+          const maxPossible = sum + capB*unk;
+          if (target<minPossible || target>maxPossible) return false;
+        }
+        return true;
+      }
+      function checkAllSatisfied(partial) {
+        for (let ci=0; ci<subCons.length; ci++){
+          const {vars:vs, target, isAbs} = subCons[ci];
+          let s=0, abs=0;
+          for (let k=0;k<vs.length;k++){
+            const id=vs[k], v=partial[id];
+            if (v==null) return false;
+            s+=v; abs+=Math.abs(v);
+          }
+          if (s!==target) return false;
+          if (isAbs && !(abs>0)) return false;
+        }
+        return true;
+      }
+      // 탐색 순서
+      const conDeg = new Array(subVars.length).fill(0);
+      for (let ci=0; ci<subCons.length; ci++){
+        const vs=subCons[ci].vars;
+        for (let k=0;k<vs.length;k++) conDeg[vs[k]]++;
+      }
+      const ORDER_ALL = [...Array(subVars.length).keys()].sort((a,b)=>conDeg[b]-conDeg[a]);
+
+      const partial = new Array(subVars.length).fill(null);
+      const primaryCap   = 120000;
+      const secondaryCap = 600000;
+      function ExistsResult(ok, timedOut){ return { ok, timedOut }; }
+
+      function existsWithCap(assignZero, targetId, CAP1, CAP2){
+        function run(NCAP){
+          let nodeVisits=0, found=false, timedOut=false;
+          const order=[targetId].concat(ORDER_ALL.filter(v=>v!==targetId));
+          function dfs(p){
+            if (found || timedOut) return;
+            if (++nodeVisits > NCAP) { timedOut=true; return; }
+            if (p===order.length){
+              if (checkAllSatisfied(partial)) found=true;
+              return;
+            }
+            const vid=order[p], dom=domains[vid];
+
+            if (vid===targetId){
+              if (assignZero){
+                partial[vid]=0;
+                if (feasible(partial)) dfs(p+1);
+                partial[vid]=null;
+              } else {
+                for (let i=1;i<dom.length;i++){
+                  partial[vid]=dom[i];
+                  if (feasible(partial)) dfs(p+1);
+                  if (found||timedOut){ partial[vid]=null; return; }
+                  partial[vid]=null;
+                }
+              }
+              return;
+            }
+
+            partial[vid]=0; if (feasible(partial)) dfs(p+1);
+            if (found||timedOut){ partial[vid]=null; return; }
+            partial[vid]=null;
+
+            for (let i=1;i<dom.length;i++){
+              partial[vid]=dom[i];
+              if (feasible(partial)) dfs(p+1);
+              if (found||timedOut){ partial[vid]=null; return; }
+              partial[vid]=null;
+            }
+          }
+          dfs(0);
+          return timedOut ? ExistsResult(false,true) : ExistsResult(found,false);
+        }
+        let r=run(CAP1);
+        if (r.timedOut) r=run(CAP2);
+        return r;
+      }
+
+      const verdict = new Int8Array(subVars.length); // -1(always0), 0(unknown), +1(always1; classic only)
+      // 항상 0 체크
+      for (let v=0; v<subVars.length; v++){
+        const r = existsWithCap(false, v, primaryCap, secondaryCap);
+        if (!r.timedOut && !r.ok) verdict[v] = -1;
+      }
+      // 클래식: 항상 1 체크
+      if (classicMode){
+        for (let v=0; v<subVars.length; v++){
+          if (verdict[v]!==0) continue;
+          const r = existsWithCap(true, v, primaryCap, secondaryCap);
+        if (!r.timedOut && !r.ok) verdict[v] = +1;
+        }
+      }
+      return verdict;
+    }
+
+    // 메인 루프
+    let guard = W*H*8;
+    while(!done() && guard-- > 0){
+      const {vars, cons} = collectFrontier.call(this);
+      if (!vars.length || !cons.length) return false;
+
+      if (applyRuleAB.call(this, vars, cons)) continue;
+      if (applySmallSubset.call(this, vars, cons)) continue;
+
+      // 연결요소 단위 존재성 탐색
+      const comps = splitComponents(vars, cons);
+      let progressed = false;
+
+      for (let i=0;i<comps.length && !progressed;i++){
+        const {vIdx, cIdx} = comps[i];
+        if (!vIdx.length) continue;
+
+        const subVars = vIdx.map(id=>vars[id]);
+        const idMap = new Map(vIdx.map((old,i)=>[old,i]));
+        const subCons = cIdx.map(ci=>{
+          const c = cons[ci];
+          const vsNew = c.vars.map(v=>idMap.get(v)).filter(v=>v!=null);
+          return {vars:vsNew, target:c.target, isAbs:c.isAbs};
+        });
+
+        const capSize = classicMode ? 40 : 22;
+        if (subVars.length > capSize) continue;
+
+        const cacheKey = makeComponentKey(subVars, subCons);
+
+        // 캐시 사용
+        const cached = compCache.get(cacheKey);
+        if (cached && cached.kind==="varSummary"){
+          let progressedLocal=false;
+          for (let k=0;k<cached.verdict.length;k++){
+            const [x,y]=subVars[k];
+            const v = cached.verdict[k];
+            if (v===-1){
+              if (!opened[idx(x,y)]) { openCell(x,y,"cache(always 0)"); progressedLocal=true; }
+            } else if (classicMode && v===+1){
+              if (markMine(x,y,"cache(always 1)")) progressedLocal=true;
+            }
+          }
+          if (progressedLocal){ progressed=true; continue; }
+        }
+
+        if (quickInfeasible(subVars, subCons)) continue;
+
+        // 존재성 요약 계산
+        const verdict = summarizeComponentByExistence(subVars, subCons);
+        compCache.set(cacheKey, { kind:"varSummary", verdict });
+
+        // 적용
+        let progressedLocal=false;
+        for (let k=0;k<verdict.length;k++){
+          const [x,y] = subVars[k];
+          const v = verdict[k];
+          if (v===-1){
+            if (!opened[idx(x,y)]) { openCell(x,y,"exist(always 0)"); progressedLocal=true; }
+          } else if (classicMode && v===+1){
+            if (markMine(x,y,"exist(always 1)")) progressedLocal=true;
+          }
+        }
+
+        if (progressedLocal){
+          // 방금 연 0칸에서 flood
+          for (let k=0;k<verdict.length;k++){
+            if (verdict[k]!==-1) continue;
+            const [x,y]=subVars[k];
+            if ((this.near_mines[x][y]|0)===0) floodFrom.call(this, x,y);
+          }
+          progressed = true;
+        }
+      }
+
+      if (!progressed) return false; // 이번 스텝에 '열기'도 '지뢰확정'도 없으면 포기
+    }
+
+    if (done()){
+      pushTrace("done",{opens:openedCount});
+      return true;
+    }
+    return false;
+  }
+
+  // ====== 메인: 무한히 시도하여 solvable 보드가 나올 때까지 ======
+  for (let attempt=1; ; attempt++) {
+    // 무작위 보드 생성
+    this.init_mines();
+
+    // 첫 3x3 비우기 + 첫칸 진짜0 보장
+    if (!first3x3AllZero(firstX, firstY)) continue;
+    rebuildParts();
+    if ((this.near_mines[firstX][firstY]|0) !== 0) continue;
+
+    // 추론 로그 초기화
+    Trace.length = 0;
+
+    // 빠른 결정 솔버
+    if (solveNoGuessFast.call(this, firstX, firstY)) {
+      // 상태 보정
+      this.remaining = W*H;
+      for (let y=0;y<H;y++) for (let x=0;x<W;x++) if ((this.mines[x][y]|0)!==0) this.remaining--;
+      this.total_safe = this.remaining;
+      this.game_status = 1;
+
+      // 추론 근거 트리 출력
+      try { dumpTraceToConsole(); } catch (e) {}
+
+      return 1; // 성공
+    }
+    // 실패 시 다음 보드 계속 시도(무한)
+  }
+};
+
+
 
 Minefield.prototype.generate_near_mines = function (mines) {
   var near_sum = this.new_table();
@@ -1277,6 +1871,7 @@ Minefield.prototype.generate_near_mines = function (mines) {
 
     Minefield.prototype.start = function (x, y) {
       this.game_status = 0;
+      if(this.use_nopick === true) { this.init_mines_nopick(x,y); this.game_status = 0; }
       if (this.mines[x][y] === 0) return;
 
       // 가벼운 재배치 시도(같은 색)

@@ -29,6 +29,63 @@
     .icon-flag-black { background-position: -145px -145px; }
     /* (하얀지뢰깃발) 원본(0,288~32,320) → 절반 좌표(0,-144px) */
     .icon-flag-white { background-position: -1px -145px; }
+    .notice {
+    margin: 10px 0 14px;
+    padding: 10px 12px;
+    border: 1px solid #b5b5b5;
+    background: #fcfcfc;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .notice h3 {
+    margin: 0 0 6px;
+    font-size: 14px;
+  }
+  .notice ul { margin: 6px 0 0 18px; padding: 0; }
+  .notice li { margin: 2px 0; }
+  .notice .warn {
+    display: inline-block;
+    padding: 0 6px;
+    border-radius: 3px;
+    background: #fff3cd;
+    border: 1px solid #ffe69c;
+  }
+
+  /* --- Console 미러 패널 --- */
+  .console-panel {
+    margin: 10px 0 18px;
+    border: 1px solid #b5b5b5;
+    background: #ffffff;
+  }
+  .console-panel .console-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: #f2f2f2;
+    border-bottom: 1px solid #d0d0d0;
+    font-size: 13px;
+  }
+  .console-panel .console-head .title { font-weight: 600; margin-right: auto; }
+  .console-panel .console-head button,
+  .console-panel .console-head label {
+    font-size: 12px;
+  }
+  .console-panel .console-body {
+    max-height: 220px;
+    overflow: auto;
+    background: #ffffff;
+    font: 12px/1.5 monospace;
+    padding: 8px;
+    white-space: pre-wrap;
+  }
+  .console-line { padding: 1px 0; }
+  .console-time { color: #888; }
+  .console-lvl-log   { color: #222; }
+  .console-lvl-info  { color: #146c94; }
+  .console-lvl-warn  { color: #a46c00; }
+  .console-lvl-error { color: #b00020; }
+
   </style>
 </head>
 
@@ -103,11 +160,18 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
   }
 
     /* ---------- 실행 함수 (흰색 지뢰 지원) ---------- */
-    var execute = function(i, j, k, l = 1, whiteTotal = 0, whiteMax = 0) {
-      // 1) 입력 정규화
-      i = Math.max(3,toInt(i, 3)); j = toInt(j, 1); k = toInt(k, 1); l = clamp(toInt(l, 1), 1, 6);
-      whiteTotal = Math.max(0, toInt(whiteTotal, 0));
-      whiteMax   = clamp(toInt(whiteMax, 0), 0, 6);
+var execute = function(i, j, k, l = 1, whiteTotal = 0, whiteMax = 0, aiLevel = null) {
+  // 1) 입력 정규화
+  i = Math.max(3,toInt(i, 3)); j = toInt(j, 1); k = toInt(k, 1); l = clamp(toInt(l, 1), 1, 6);
+  whiteTotal = Math.max(0, toInt(whiteTotal, 0));
+  whiteMax   = clamp(toInt(whiteMax, 0), 0, 6);
+
+  // 1-1) 지능형 생성 수준 확정 (기본값 0)
+  if (aiLevel === null || typeof aiLevel === "undefined") {
+    aiLevel = toInt(document.getElementById('ai')?.value, 0);
+  } else {
+    aiLevel = toInt(aiLevel, 0);
+  }
 
       // 2) 상한 보정(모든 경로에서 동일하게 강제)
       //    2-1) 검은지뢰 총수 k 보정
@@ -117,10 +181,12 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
       //    2-2) 흰지뢰 총수 whiteTotal 보정 (검은 확정치 사용)
       caps = calcCaps(i, j, l, k,whiteMax);
       if (whiteTotal > caps.capWhiteTotal) whiteTotal = caps.capWhiteTotal;
+  // 3) 폼 값 반영 + 폼 max 힌트 반영
+  x.value  = i; y.value  = j; m.value  = l; t.value  = k;
+  wm.value = whiteMax; wt.value = whiteTotal;
+  const aiSel = document.getElementById('ai');
+  if (aiSel) aiSel.value = String(aiLevel);
 
-      // 3) 폼 값 반영 + 폼 max 힌트 반영
-      x.value  = i; y.value  = j; m.value  = l; t.value  = k;
-      wm.value = whiteMax; wt.value = whiteTotal;
       t.max  = String(caps.capBlackTotal);
       wt.max = String(caps.capWhiteTotal);
 
@@ -140,14 +206,19 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
       toggleMenu(".menu13", i>=35);
 
       /* 보드 생성 (mine.js가 6인자 지원 시 그대로 전달) */
-      if (typeof minefield.init_board === 'function' && minefield.init_board.length >= 6) {
-        minefield.init_board(i, j, k, l, whiteTotal, whiteMax);
-      } else {
-        minefield.init_board(i, j, k, l);
-        minefield.white_total = whiteTotal;
-        minefield.white_max   = whiteMax;
-        if (typeof minefield.set_white_config === 'function') minefield.set_white_config(whiteTotal, whiteMax);
-      }
+
+  if (aiLevel === 2) {
+    // 찍기 패턴 원천 차단
+    minefield.init_board(i, j, k, l, whiteTotal, whiteMax, true);
+  } else {
+    // 찍기 허용
+    minefield.init_board(i, j, k, l, whiteTotal, whiteMax, false);
+    if (aiLevel === 1) {
+      // 무제한 구제
+      minefield.bonus_reloc_count = 1000000;
+    }
+  }
+      
 
       /* 레이아웃: 이중 카운터면 헤더 높이/창 높이를 키움 */
       const hasWhite = whiteTotal > 0;
@@ -181,19 +252,19 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
       </div>
 
       <ul class="menu-bar">
-        <li class="menu1"  onclick="execute(9, 9, 10, 1, 0, 0)">초급</li>
-        <li class="menu2"  onclick="execute(16, 16, 40, 1, 0, 0)">중급</li>
-        <li class="menu3"  onclick="execute(30, 16, 99, 1, 0, 0)">고급</li>
-        <li class="menu4"  onclick="execute(30, 16, 120, 2, 0, 0)">초고급</li>
-        <li class="menu5"  onclick="execute(30, 16, 160, 3, 0, 0)">😱</li>
-        <li class="menu6"  onclick="execute(30, 16, 220, 4, 0, 0)">💀</li>
-        <li class="menu7"  onclick="execute(30, 16, 420, 4, 0, 0)">☠️</li>
-        <li class="menu8"  onclick="execute(30, 16, 530, 5, 0, 0)">☠️☠️</li>
-        <li class="menu9"  onclick="execute(30, 16, 680, 6, 0, 0)">3☠️</li>
-        <li class="menu10" onclick="execute(30, 16, 70, 1, 30, 1)">음수지뢰</li>
-        <li class="menu11" onclick="execute(118, 58, 1412, 1, 0, 0)">대형</li>
-        <li class="menu12" onclick="execute(640, 480, 63300, 1, 0, 0)" style="display:none">초대형</li>
-        <li class="menu13" onclick="execute(1280, 720, 192000, 1, 0, 0)" style="display:none">특대형</li>
+        <li class="menu1"  onclick="execute(9, 9, 10, 1, 0, 0,2)">초급</li>
+        <li class="menu2"  onclick="execute(16, 16, 40, 1, 0, 0,2)">중급</li>
+        <li class="menu3"  onclick="execute(30, 16, 99, 1, 0, 0,2)">고급</li>
+        <li class="menu4"  onclick="execute(30, 16, 120, 2, 0, 0,0)">초고급</li>
+        <li class="menu5"  onclick="execute(30, 16, 160, 3, 0, 0,0)">😱</li>
+        <li class="menu6"  onclick="execute(30, 16, 220, 4, 0, 0,0)">💀</li>
+        <li class="menu7"  onclick="execute(30, 16, 420, 4, 0, 0,0)">☠️</li>
+        <li class="menu8"  onclick="execute(30, 16, 530, 5, 0, 0,0)">☠️☠️</li>
+        <li class="menu9"  onclick="execute(30, 16, 680, 6, 0, 0,0)">3☠️</li>
+        <li class="menu10" onclick="execute(30, 16, 70, 1, 30, 1,0)">음수지뢰</li>
+        <li class="menu11" onclick="execute(118, 58, 1412, 1, 0, 0,0)">대형</li>
+        <li class="menu12" onclick="execute(640, 480, 63300, 1, 0, 0,0)" style="display:none">초대형</li>
+        <li class="menu13" onclick="execute(1280, 720, 192000, 1, 0, 0,0)" style="display:none">특대형</li>
       </ul>
 
       <div class="window-content">
@@ -262,7 +333,12 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
       <input type="number" id="wm" min="0" max="6" step="1" style="width:60px;" value="0">
       전체 음수지뢰 수
       <input type="number" id="wt" min="0" step="1" style="width:80px;" value="0">
-
+      지능형 생성
+      <select id="ai" style="width:220px;">
+        <option value="0">0: 찍기 패턴 발생 허용 + 최소 구제</option>
+        <option value="1">1: 찍기 패턴 발생 허용 + 무제한 구제</option>
+        <option value="2">2: 찍기 패턴 발생 원천 차단 (매우 느림)</option>
+      </select>
       <input type="button"
         onclick="execute(
           document.getElementById('x').value,
@@ -270,13 +346,48 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
           document.getElementById('t').value,
           document.getElementById('m').value,
           document.getElementById('wt').value,
-          document.getElementById('wm').value
+          document.getElementById('wm').value,
+          document.getElementById('ai').value
         )"
         value="생성">
       <input type="button" onclick="hideViaURL()" value="문구 숨기기">
     </form>
   </div>
-  <div id="heavy-notice">지뢰 수가 많으면 첫 버튼 누른 뒤 시간이 오래 걸리니 기다리기 바랍니다</div>
+<div id="heavy-notice" class="notice">
+  <h3>안내 / 성능 주의</h3>
+  <ul>
+    <li>첫 클릭 직후 <span class="warn">판 생성</span>에 시간이 걸릴 수 있습니다. (지뢰 수↑, 판 크기↑일수록 증가)</li>
+    <ul>
+      <li>초대형과 특대형 판은 초기화에 약 5~10초가 소요됩니다</li>
+    </ul>
+    <li><strong>찍기 패턴 발생 허용의 구제 기능 관련</strong>
+      <ul>
+        <li>복수해가 존재하여 찍기 상황이 발생하였고, 사용자가 지뢰칸을 선택했더라도 사용자의 입력이 이미 공개된 정보에 모순을 만들지 않는다면 그 칸에 지뢰가 없도록 판을 수정합니다</li>
+        <li>하지만 무제한 구제는 난이도를 심각하게 낮춥니다</li>
+      </ul>
+    </li>
+    <li><strong>찍기 패턴 원천 차단</strong> 모드 성능 주의:
+      <ul>
+        <li>음수지뢰가 있으면 매우 느립니다. (중급 크기의 판 이상에서 비권장)</li>
+        <li>1칸당 최대 지뢰 수가 3 이상이면 매우 느립니다.</li>
+        <li>대형 이상의 큰 판에서는 매우 느립니다.</li>
+        <li>해당 모드는 “찍기 없는 풀이 순서”를 <strong>항상 보장</strong>하며,
+        개발자 도구 콘솔 또는 아래 <em>실시간 로그</em> 패널에서 확인할 수 있습니다.</li>
+      </ul>
+    </li>
+    
+  </ul>
+  <div id="console-panel" class="console-panel">
+  <div class="console-head">
+    <span class="title">실시간 로그 (Console mirror)</span>
+    <label><input type="checkbox" id="console-autoscroll" checked> 자동 스크롤</label>
+    <button type="button" id="console-pause">일시정지</button>
+    <button type="button" id="console-clear">비우기</button>
+    <button type="button" id="console-copy">복사</button>
+  </div>
+  <div class="console-body" id="console-body" aria-live="polite"></div>
+</div>
+</div>
 
   <script src="vendor/jquery.min.js"></script>
   <script src="vendor/jquery-ui.min.js"></script>
@@ -296,6 +407,8 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
         mines: p.get('mines'),
         whiteminespercell: p.get('whiteminespercell'),
         whitemines: p.get('whitemines'),
+        logic: p.get('logic'),
+        hide: p.get('hide'),
       };
     }
     function hasCoreParams(q) {
@@ -341,7 +454,15 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
       u.searchParams.set('mines', mines);
       u.searchParams.set('whiteminespercell', wmpc);
       u.searchParams.set('whitemines', wmines);
-      window.location.href = u.pathname + '?' + u.searchParams.toString();
+      // 지능형 생성 수준 포함(기본 0)
+      let logic = toInt(document.getElementById('ai')?.value, 0);
+      u.searchParams.set('logic', logic);
+      // 숨김 플래그 & 캐시 방지용 타임스탬프
+      u.searchParams.set('hide', '1');
+      u.searchParams.set('ts', String(Date.now()));
+
+      // 뒤로가기 히스토리를 남기지 않고, 강제 새로고침 효과
+      window.location.replace(u.pathname + '?' + u.searchParams.toString());
     }
 
     /* 유틸: digit DOM 수 맞추기 */
@@ -470,7 +591,7 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
     minefield.on_rclick_func = function(){ update_all_mine_counters(); };
 
     /* 초기 시작: 기본(흰 지뢰 없음) + 폼 상한 초기화 */
-    minefield.init_board(30, 16, 99, 1);
+    minefield.init_board(30, 16, 99, 1,0,0,true);
     renderCounters(false);
     applyFormCaps();
     updateHScrollGuard();
@@ -486,7 +607,7 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
         let mines= Math.max(1, toInt(q.mines, 99));
         let wmpc = clamp(getQueryDefault0(q.whiteminespercell), 0, 6);
         let wmines = Math.max(0, getQueryDefault0(q.whitemines));
-
+        let logic = (q.logic !== null) ? clamp(toInt(q.logic, 0), 0, 2) : 0;
         // 보정 1: 검은 총수
         let caps = calcCaps(cols, rows, mpc, mines,wmpc);
         if (mines > caps.capBlackTotal) mines = caps.capBlackTotal;
@@ -495,17 +616,101 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
         caps = calcCaps(cols, rows, mpc, mines,wmpc);
         if (wmines > caps.capWhiteTotal) wmines = caps.capWhiteTotal;
 
-        execute(cols, rows, mines, mpc, wmines, wmpc);
+        execute(cols, rows, mines, mpc, wmines, wmpc, logic);
 
         // 폼과 max 힌트도 동기화
         x.value=cols; y.value=rows; m.value=mpc; t.value=mines;
         wm.value=wmpc; wt.value=wmines;
         t.max  = String(caps.capBlackTotal);
         wt.max = String(caps.capWhiteTotal);
-
+        const aiSel = document.getElementById('ai');
+        if (aiSel) aiSel.value = String(logic);
         hideUserInputs();
       }
+      else if (q.hide === '1') {
+        // 핵심 파라미터가 없더라도, hide=1이면 설명/폼을 무조건 숨김
+        hideUserInputs();
+      }
+
     });
+/* ===== Console Mirror ===== */
+(function setupConsoleMirror(){
+  const bodyEl   = document.getElementById('console-body');
+  const btnPause = document.getElementById('console-pause');
+  const btnClear = document.getElementById('console-clear');
+  const btnCopy  = document.getElementById('console-copy');
+  const cbAuto   = document.getElementById('console-autoscroll');
+
+  if (!bodyEl) return; // 안전가드
+
+  let paused = false;
+  function ts() {
+    const d = new Date();
+    const pad = (n)=> String(n).padStart(2,'0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3,'0')}`;
+  }
+  function print(level, args) {
+    if (paused) return;
+    const line = document.createElement('div');
+    line.className = `console-line console-lvl-${level}`;
+    const t = document.createElement('span');
+    t.className = 'console-time';
+    t.textContent = `[${ts()}] `;
+    line.appendChild(t);
+
+    const content = Array.from(args).map(v => {
+      try {
+        if (typeof v === 'string') return v;
+        return JSON.stringify(v);
+      } catch(_) {
+        return String(v);
+      }
+    }).join(' ');
+    line.appendChild(document.createTextNode(content));
+    bodyEl.appendChild(line);
+
+    if (cbAuto && cbAuto.checked) {
+      bodyEl.scrollTop = bodyEl.scrollHeight;
+    }
+  }
+
+  // 원본 보존
+  const orig = {
+    log:   console.log.bind(console),
+    info:  console.info?.bind(console)  || function(){},
+    warn:  console.warn?.bind(console)  || function(){},
+    error: console.error?.bind(console) || function(){},
+  };
+
+  // 후킹
+  console.log  = function(){ print('log', arguments);  orig.log.apply(console, arguments); };
+  console.info = function(){ print('info', arguments); orig.info.apply(console, arguments); };
+  console.warn = function(){ print('warn', arguments); orig.warn.apply(console, arguments); };
+  console.error= function(){ print('error', arguments);orig.error.apply(console, arguments); };
+
+  // 컨트롤
+  if (btnPause) {
+    btnPause.addEventListener('click', function(){
+      paused = !paused;
+      btnPause.textContent = paused ? '재개' : '일시정지';
+    });
+  }
+  if (btnClear) {
+    btnClear.addEventListener('click', function(){
+      bodyEl.textContent = '';
+    });
+  }
+  if (btnCopy) {
+    btnCopy.addEventListener('click', async function(){
+      const text = Array.from(bodyEl.querySelectorAll('.console-line'))
+        .map(el => el.textContent).join('\n');
+      try { await navigator.clipboard.writeText(text); } catch(_) {}
+    });
+  }
+
+  // 시작 메시지
+  console.info('[Console mirror started]');
+})();
 
 /* ===== Runtime i18n: if not Korean, switch UI texts to English ===== */
 (function () {
@@ -560,16 +765,49 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
       form.innerHTML = html;
     }
 
-    // 4) Heavy notice
-    var notice = document.getElementById("heavy-notice");
-    if (notice) {
-      notice.textContent =
-        "If there are many mines, the first click can take a while. Please wait.";
-    }
+    // 4) Heavy notice (+ console panel labels)
+var notice = document.getElementById("heavy-notice");
+if (notice) {
+  notice.innerHTML =
+    '<h3>Notice / Performance Tips</h3>' +
+    '<ul>' +
+      '<li>Right after the first click, <span class="warn">board generation</span> may take a while. (More mines & larger boards take longer.)</li>' +
+      '<ul>' +
+        '<li>XLarge and XXLarge boards take about 5~10 seconds to initialize.</li>' +
+      '</ul>' +
+      '<li><strong>About the mine relocation feature that rescues from guess situations</strong>:' +
+        '<ul>' +
+          '<li>If multiple solutions exist and a guess situation occurs, and the user clicks the mine cell but does not contradict already revealed information, the board will be modified so that there is no mine in that cell.</li>' +
+          '<li>However, unlimited rescues significantly reduce the difficulty.</li>' +
+        '</ul>' +
+      '</li>' +
+      '<li><strong>Strict no-guess</strong> mode performance caveats:' +
+        '<ul>' +
+          '<li>Very slow when anti-mines are used (not recommended for ≥ Intermediate).</li>' +
+          '<li>Very slow if max mines per cell ≥ 3.</li>' +
+          '<li>Very slow on large boards (≥ Large).</li>' +
+          '<li>This mode <strong>guarantees a guess-free solution order</strong>.' +
+          ' You can inspect it in the developer console or in the <em>Live Log</em> panel below.</li>' +
+        '</ul>' +
+      '</li>' +
+      
+    '</ul>';
+}
+var cp = document.getElementById("console-panel");
+if (cp) {
+  // 헤더의 버튼/라벨 텍스트 교체
+  var titleEl = cp.querySelector('.console-head .title');
+  var pauseEl = document.getElementById('console-pause');
+  var clearEl = document.getElementById('console-clear');
+  var copyEl  = document.getElementById('console-copy');
+  var autoLbl = cp.querySelector('label[for="console-autoscroll"]') || cp.querySelector('.console-head label');
 
-    // 5) Window title bar (already 'Minesweeper', but keep consistent if needed)
-    // const titleEl = document.querySelector(".title-bar .title");
-    // if (titleEl) titleEl.textContent = "Minesweeper";
+  if (titleEl) titleEl.textContent = 'Live Log (Console mirror)';
+  if (autoLbl)  autoLbl.innerHTML  = '<input type="checkbox" id="console-autoscroll" checked> Auto scroll';
+  if (pauseEl)  pauseEl.textContent= 'Pause';
+  if (clearEl)  clearEl.textContent= 'Clear';
+  if (copyEl)   copyEl.textContent = 'Copy';
+}
   }
 
   // Run after DOM is ready
@@ -581,6 +819,7 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
     }
   }
 })();
+
 </script>
 
 </body>
