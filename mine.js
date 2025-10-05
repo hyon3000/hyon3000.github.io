@@ -237,6 +237,7 @@ Minefield.prototype._relocateFirstClick = function (x, y) {
     /* ---------- 초기화 ---------- */
     // 흰지뢰 인자 추가(하위호환 OK)
     Minefield.prototype.init_board = function (columns, rows, num_mines, max_mines, num_mines_white, max_mines_white,use_nopick) {
+      this._adj = null; this._adjW = this._adjH = -1;
       this.use_nopick = use_nopick;  
       this.columns = columns;
       this.rows = rows;
@@ -1722,27 +1723,28 @@ function applyBoundsGeneral(vars, cons) {
     };
 
     // 컴포넌트 키
-    function makeComponentKey(subVars, subCons){
-      const order = [...subVars.keys()].sort((a,b)=>{
-        const [ax,ay]=subVars[a], [bx,by]=subVars[b];
-        return (ay-by) || (ax-bx);
-      });
-      const map = new Map(order.map((old,i)=>[old,i]));
-      const varsN = order.map(i=>subVars[i]); // 정렬된 좌표 목록
-
-      const consN = subCons.map(c=>{
-        const vs = c.vars.map(v=>map.get(v)).sort((a,b)=>a-b);
-        return { vars:vs, target:c.target|0, isAbs:!!c.isAbs };
-      }).sort((a,b)=>{
-        if (a.vars.length!==b.vars.length) return a.vars.length - b.vars.length;
-        if (a.target!==b.target) return a.target - b.target;
-        if (a.isAbs!==b.isAbs) return (a.isAbs?1:0)-(b.isAbs?1:0);
-        for (let i=0;i<a.vars.length;i++) if (a.vars[i]!==b.vars[i]) return a.vars[i]-b.vars[i];
-        return 0;
-      });
-
-      return JSON.stringify({v:varsN, c:consN});
-    }
+function _fastHashInt(h, x){ // 32-bit mix
+  h ^= x + 0x9e3779b9 + ((h<<6)>>>0) + (h>>>2);
+  return h>>>0;
+}
+function makeComponentKey(vars, cons){
+  // 좌표/제약을 정규화된 순서로 가볍게 해시만 생성
+  let h = 2166136261>>>0;
+  // 변수 좌표
+  for (let k=0;k<vars.length;k++){
+    const v = vars[k]; // [x,y]
+    h = _fastHashInt(h, (v[0]|0)); h = _fastHashInt(h, (v[1]|0));
+  }
+  // 제약: (길이, target, isAbs, 정렬된 vars 목록) 순
+  for (let i=0;i<cons.length;i++){
+    const c = cons[i];
+    h = _fastHashInt(h, c.vars.length|0);
+    h = _fastHashInt(h, (c.target|0));
+    h = _fastHashInt(h, (c.isAbs?1:0));
+    for (let j=0;j<c.vars.length;j++) h = _fastHashInt(h, (c.vars[j]|0));
+  }
+  return "H"+h.toString(36);
+}
 
     // 조기 불능 체크
     function quickInfeasible(subVars, subCons){
@@ -2075,20 +2077,26 @@ Minefield.prototype.generate_near_mines = function (mines) {
         return this.tds[x][y].setAttribute("class", val);
       }
     };
+// === [PATCH 1] 인접 좌표 캐시 ===
+Minefield.prototype._ensureAdjCache = function () {
+  if (this._adj && this._adjW === this.columns && this._adjH === this.rows) return;
+  this._adjW = this.columns|0; this._adjH = this.rows|0;
+  this._adj = Array.from({ length: this._adjW }, () => Array(this._adjH));
+  for (let x=0; x<this._adjW; x++) for (let y=0; y<this._adjH; y++) {
+    const a = [];
+    for (let nx=x-1; nx<=x+1; nx++) for (let ny=y-1; ny<=y+1; ny++) {
+      if (nx===x && ny===y) continue;
+      if (nx>=0 && ny>=0 && nx<this._adjW && ny<this._adjH) a.push([nx,ny]);
+    }
+    this._adj[x][y] = a; // 한 번만 생성해 재사용
+  }
+};
 
-    Minefield.prototype.near_positions = function (x, y) {
-      var nx, ny, ret, _i, _j, _ref, _ref1, _ref2, _ref3;
-      ret = [];
-      for (nx = _i = _ref = x - 1, _ref1 = x + 1; _ref <= _ref1 ? _i <= _ref1 : _i >= _ref1; nx = _ref <= _ref1 ? ++_i : --_i) {
-        for (ny = _j = _ref2 = y - 1, _ref3 = y + 1; _ref2 <= _ref3 ? _j <= _ref3 : _j >= _ref3; ny = _ref2 <= _ref3 ? ++_j : --_j) {
-          if (nx === x && ny === y) continue;
-          if (nx >= this.columns || nx < 0 || ny >= this.rows || ny < 0) continue;
-          ret.push([nx, ny]);
-        }
-      }
-      return ret;
-    };
-
+// 기존 near_positions를 캐시로 대체
+Minefield.prototype.near_positions = function (x, y) {
+  this._ensureAdjCache();
+  return this._adj[x][y];
+};
     /* ---------- 입력 ---------- */
     Minefield.prototype.on_click = function (x, y) {
       var old_game_status = this.game_status;
