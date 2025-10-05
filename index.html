@@ -590,12 +590,7 @@ var execute = function(i, j, k, l = 1, whiteTotal = 0, whiteMax = 0, aiLevel = n
     /* 깃발 우클릭 시 카운터 갱신 */
     minefield.on_rclick_func = function(){ update_all_mine_counters(); };
 
-    /* 초기 시작: 기본(흰 지뢰 없음) + 폼 상한 초기화 */
-    minefield.init_board(30, 16, 99, 1,0,0,true);
-    renderCounters(false);
-    applyFormCaps();
-    updateHScrollGuard();
-    update_all_mine_counters();
+
 
     /* GET 인자 자동 적용 (로드 시에도 상한 보정 강제) */
     document.addEventListener('DOMContentLoaded', function() {
@@ -631,7 +626,7 @@ var execute = function(i, j, k, l = 1, whiteTotal = 0, whiteMax = 0, aiLevel = n
         // 핵심 파라미터가 없더라도, hide=1이면 설명/폼을 무조건 숨김
         hideUserInputs();
       }
-
+else execute(30, 16, 99, 1, 0, 0, 2);
     });
 /* ===== Console Mirror ===== */
 (function setupConsoleMirror(){
