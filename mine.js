@@ -1821,7 +1821,7 @@ function applyBoundsGeneral(vars, cons) {
   const partial = new Array(subVars.length).fill(null);
 
   // 변수 v의 가능한 최소/최대 값을 구함 (branch-and-bound)
-  function computeMinMaxForVar(varId, CAP1=240000, CAP2=1200000){
+  function computeMinMaxForVar(varId, CAP1=60000, CAP2=200000){
     let node=0, timedOut=false;
     let found=false, minV=+Infinity, maxV=-Infinity;
 
