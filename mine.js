@@ -162,39 +162,118 @@ Minefield.prototype._adjustNearAroundColors = function (x, y, dBlack, dWhite) {
   }
   this._rebuild_near_from_parts();
 };
-Minefield.prototype._relocateFirstClick = function (x, y) {
-  var m = this.mines[x][y];
-  if (m === 0) return true;
+// (x,y)의 지뢰를 옮기고, 옵션에 따라 주변 8칸도 가능한 한 비우는 베스트-에포트
+Minefield.prototype._relocateFirstClick = function (x, y, clearNeighbors /*=false*/) {
+  const W = this.columns, H = this.rows;
+  const capB = Math.max(1, this.max_mines|0);
+  const capW = Math.max(0, this.max_mines_white|0);
 
-  var isWhite = (m < 0);
-  var count   = Math.abs(m);
-  var cap     = isWhite ? this.max_mines_white : this.max_mines;
+  // 3x3 금지영역(첫 클릭 주변)
+  const forbid = {};
+  forbid[x + "," + y] = true;
+  if (clearNeighbors) {
+    const adj = this.near_positions(x, y);
+    for (let i=0;i<adj.length;i++) forbid[adj[i][0]+","+adj[i][1]] = true;
+  }
 
-  var W = this.columns, H = this.rows, tx = -1, ty = -1;
-  outer:
-  for (var yy = 0; yy < H; yy++) {
-    for (var xx = 0; xx < W; xx++) {
-      if (xx === x && yy === y) continue;
-      if (this.mines[xx][yy] !== 0) continue;
-      if (count <= cap) { tx = xx; ty = yy; break outer; }
+  const inForbid = (cx,cy) => !!forbid[cx+","+cy];
+
+  // 대상칸이 주어진 색(signNeg) 지뢰를 추가 수용 가능한지(혼합 금지+CAP)
+  function roomFor(self, cx, cy, signNeg) {
+    const v = self.mines[cx][cy] | 0;
+    if (signNeg) {                   // 흰 지뢰
+      if (v > 0) return 0;          // 혼합 불가
+      return Math.max(0, capW - Math.abs(v));
+    } else {                         // 검은 지뢰
+      if (v < 0) return 0;
+      return Math.max(0, capB - Math.abs(v));
     }
   }
-  if (tx < 0) return false;
 
-  // 색상별 델타 계산
-  var addB = Math.max(0,  m);  // 옮기는 ‘검은’ 개수
-  var addW = Math.max(0, -m);  // 옮기는 ‘흰’   개수
+  // 한 번 스캔해서 후보지 목록을 만들어 두고 순차 소진(3x3 바깥)
+  const targetsBySign = { black: [], white: [] };
+  for (let ty = 0; ty < H; ty++) {
+    for (let tx = 0; tx < W; tx++) {
+      if (inForbid(tx,ty)) continue;
+      // 두 색 모두 계산해 둠(필요할 때 room 재확인)
+      targetsBySign.black.push([tx,ty]);
+      targetsBySign.white.push([tx,ty]);
+    }
+  }
 
-  // 원래 칸: 주변에서 해당 색상 수치 감소
-  this._adjustNearAroundColors(x,  y, -addB, -addW);
-  // 새 칸: 주변에서 해당 색상 수치 증가
-  this._adjustNearAroundColors(tx, ty, +addB, +addW);
+  const adjust = (cx,cy, dB, dW) => this._adjustNearAroundColors(cx,cy,dB,dW);
 
-  // 실제 지뢰 이동
-  this.mines[x][y]   = 0;
-  this.mines[tx][ty] = m;
+  // (sx,sy)에서 countSigned(부호 포함)를 바깥 후보로 분산 이동
+  const moveOut = (sx, sy, countSigned) => {
+    if (!countSigned) return 0;
+    let left = Math.abs(countSigned);
+    const isWhite = countSigned < 0;
+    const bag = isWhite ? targetsBySign.white : targetsBySign.black;
+
+    for (let i=0; i<bag.length && left>0; i++) {
+      const tx = bag[i][0], ty = bag[i][1];
+      const room = roomFor(this, tx, ty, isWhite);
+      if (room <= 0) continue;
+
+      const vSrc = this.mines[sx][sy] | 0;
+      const take = Math.min(room, left);
+
+      // src 감소, dst 증가 (증분 near 갱신)
+      if (isWhite) {
+        // 흰 이동
+        this.mines[sx][sy] = vSrc + take;            // (vSrc는 음수→0에 가까워짐)
+        this.mines[tx][ty] = (this.mines[tx][ty]|0) - take;
+        adjust(sx,sy, 0, -take);
+        adjust(tx,ty, 0, +take);
+      } else {
+        // 검은 이동
+        this.mines[sx][sy] = vSrc - take;            // (vSrc는 양수→0에 가까워짐)
+        this.mines[tx][ty] = (this.mines[tx][ty]|0) + take;
+        adjust(sx,sy, -take, 0);
+        adjust(tx,ty, +take, 0);
+      }
+
+      // remaining 보정: 0→지뢰 or 지뢰→0 변화만 반영
+      if (vSrc !== 0 && this.mines[sx][sy] === 0) this.remaining += 1;
+      if (this.mines[tx][ty] !== 0 && ((this.mines[tx][ty] - (isWhite ? -take : +take)) === 0)) {
+        // 이전이 0이었다면 이제 지뢰가 생김
+        this.remaining -= 1;
+      }
+
+      left -= take;
+    }
+    return (Math.abs(countSigned) - left); // 실제로 옮긴 개수
+  };
+
+  // 1) 클릭 칸은 반드시 비움(전량 이동 성공해야 true)
+  const m0 = this.mines[x][y] | 0;
+  if (m0 !== 0) {
+    const moved = moveOut(x, y, m0);
+    if (moved !== Math.abs(m0)) {
+      // 클릭 칸 비우기 실패 → 되돌리진 않고 false만 반환(호출측에서 폴백)
+      // 안전을 위해 마지막에 near 재합성
+      this._rebuild_near_from_parts();
+      return false;
+    }
+  }
+
+  // 2) 주변 8칸은 "가능한 한" 비우기(요구사항: 시도만)
+  if (clearNeighbors) {
+    const adj = this.near_positions(x, y);
+    for (let i=0; i<adj.length; i++) {
+      const nx = adj[i][0], ny = adj[i][1];
+      const mv = this.mines[nx][ny] | 0;
+      if (mv === 0) continue;
+      // 전량 이동을 시도하되, 일부만 옮겨도 OK (best-effort)
+      moveOut(nx, ny, mv);
+    }
+  }
+
+  // 안전망: 합성(1000 처리 포함)
+  this._rebuild_near_from_parts();
   return true;
 };
+
 
     // 현재 판에서 "주변 지뢰 합 0" & 자기칸 0
     Minefield.prototype.count_zero_no_neighbor = function () {
@@ -250,9 +329,10 @@ Minefield.prototype._relocateFirstClick = function (x, y) {
 
     /* ---------- 초기화 ---------- */
     // 흰지뢰 인자 추가(하위호환 OK)
-    Minefield.prototype.init_board = function (columns, rows, num_mines, max_mines, num_mines_white, max_mines_white,use_nopick) {
+    Minefield.prototype.init_board = function (columns, rows, num_mines, max_mines, num_mines_white, max_mines_white,nopick_level) {
       this._adj = null; this._adjW = this._adjH = -1;
-      this.use_nopick = use_nopick;  
+      this.use_nopick = (nopick_level === 2);  
+      this.infinite_reloc = (nopick_level === 1);
       this.columns = columns;
       this.rows = rows;
       this.num_mines = num_mines|0;
@@ -386,7 +466,7 @@ Minefield.prototype._relocateFirstClick = function (x, y) {
       this.reloc_used   = 0;
       this.opened_safe  = 0;
       this.total_safe   = 0;
-      this.bonus_reloc_count = 0;
+      this.bonus_reloc_count = (this.infinite_reloc ? 1000000 : 0);
       this.bonus_thresholds  = this.compute_bonus_thresholds();
 
       this.num_flags  = 0;
@@ -2457,10 +2537,18 @@ Minefield.prototype.near_positions = function (x, y) {
     Minefield.prototype.start = function (x, y) {
       this.game_status = 0;
       if(this.use_nopick === true) { this.init_mines_nopick(x,y); this.game_status = 0; }
-      if (this.mines[x][y] === 0) return;
-
-      // 가벼운 재배치 시도(같은 색)
-      if (this._relocateFirstClick(x, y)) return;
+       // ★ 무한구제 모드(nopick_level===1): 첫 클릭에서 3×3 비우기 "시도"
+      if (this.infinite_reloc === true) {
+        // 클릭칸+주변 8칸을 가능한 한 비우도록 재배치 시도
+        if (this._relocateFirstClick(x, y, /*clearNeighbors=*/true)) return;
+        // (클릭 칸을 못 비웠다면 아래의 기존 폴백을 진행)
+      } else {
+        // 기본: 클릭 칸만 비우는 기존 동작
+        if (this.mines[x][y] === 0) return;
+        if (this._relocateFirstClick(x, y, /*clearNeighbors=*/false)) return;
+      }
+      
+      
 
       // 실패 시 기존 시프트 폴백(시프트 후 parts/near 전부 재구성)
       var nx, ny, _i, _ref, _results;

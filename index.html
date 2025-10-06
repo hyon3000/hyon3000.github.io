@@ -208,17 +208,12 @@ var execute = function(i, j, k, l = 1, whiteTotal = 0, whiteMax = 0, aiLevel = n
 
       /* 보드 생성 (mine.js가 6인자 지원 시 그대로 전달) */
 
-  if (aiLevel === 2) {
-    // 찍기 패턴 원천 차단
-    minefield.init_board(i, j, k, l, whiteTotal, whiteMax, true);
-  } else {
-    // 찍기 허용
-    minefield.init_board(i, j, k, l, whiteTotal, whiteMax, false);
-    if (aiLevel === 1) {
-      // 무제한 구제
-      minefield.bonus_reloc_count = 1000000;
-    }
-  }
+  
+    
+    minefield.init_board(i, j, k, l, whiteTotal, whiteMax, aiLevel);
+   
+    
+  
       // ▼ 노픽 모드일 때만 콘솔 미러 표시
 const cp = document.getElementById('console-panel');
 if (cp) {
@@ -349,7 +344,7 @@ if (cp) {
       지능형 생성
       <select id="ai" style="width:220px;" value="2">
         <option value="0">0: 찍기 패턴 발생 허용 + 최소 구제</option>
-        <option value="1">1: 찍기 패턴 발생 허용 + 무제한 구제</option>
+        <option value="1">1: 찍기 패턴 발생 허용 + 첫 클릭 오프닝 보장 + 무제한 구제</option>
         <option value="2" selected>2: 찍기 패턴 발생 차단 + 자동 지뢰 풀이(매우 느림)</option>
       </select>
       <input type="button"
@@ -784,7 +779,7 @@ const btnPlay  = document.getElementById('console-play');
       if (aiSel) {
         const opt = aiSel.options;
         if (opt[0]) opt[0].text = "0: allow guesses + minimal rescue";
-        if (opt[1]) opt[1].text = "1: allow guesses + unlimited rescue";
+        if (opt[1]) opt[1].text = "1: allow guesses + guaranteed first click opening +unlimited rescue";
         if (opt[2]) opt[2].text = "2: strict no-guess + auto-solve (slow)";
       }
     }
