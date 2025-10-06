@@ -27,9 +27,9 @@
       flex: 0 0 12px;
     }
     /* (검은지뢰깃발) 원본(288,288~320,320) → 절반 좌표(-144px,-144px) */
-    .icon-flag-black { background-position: -147px -145px; }
+    .icon-flag-black { background-position: -145px -145px; }
     /* (하얀지뢰깃발) 원본(0,288~32,320) → 절반 좌표(0,-144px) */
-    .icon-flag-white { background-position: -3px -145px; }
+    .icon-flag-white { background-position: -1px -145px; }
     .notice {
     margin: 10px 0 14px;
     padding: 10px 12px;
@@ -137,17 +137,17 @@ function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 
 
     // 1) 칸당 최대 검은지뢰수 (1~6)
     let maxBlackPerCell = clamp(toInt(m.value, 1), 1, 6);
-    m.value = maxBlackPerCell;
+    if(toInt(m.value, 1)<0 || toInt(m.value, 1)>6) m.value = maxBlackPerCell;
 
     // 2) 칸당 최대 흰지뢰수 (0~6)  ← id는 wm 이 맞습니다.
     let maxWhitePerCell = clamp(toInt(wm.value, 0), 0, 6);
-    wm.value = maxWhitePerCell;
+    if(toInt(wm.value, 0)<0 || toInt(wm.value, 0)>6) wm.value = maxWhitePerCell;
 
     // 3) 검은 총수 보정
     let k = Math.max(1, toInt(t.value, 1));
     let caps = calcCaps(cols, rows, maxBlackPerCell, k, maxWhitePerCell);
     if (k > caps.capBlackTotal) k = caps.capBlackTotal;
-    t.value = k;
+    if(toInt(t.value, 1)<0 || toInt(t.value, 1)>k) t.value = k;
 
     // 4) 흰 총수 보정 (검은 확정치 사용)
     caps = calcCaps(cols, rows, maxBlackPerCell, k, maxWhitePerCell);
@@ -238,7 +238,8 @@ if (cp) {
       $(".window-content .mine-head-area ").css({ "width": 2 + i*16 });
       $(".window-content .mine-area").css({ "width": i*16, "height": j*16 });
       $(".inner").css({ "width": i*16, "height": j*16 });
-      $(".window-content .mine-head-area .mine-reset-button").css({ "left": -8 + 8*i });
+      if(hasWhite) $(".window-content .mine-head-area .mine-reset-button").css({ "left": -5 + 8*i });
+      else $(".window-content .mine-head-area .mine-reset-button").css({ "left": -11 + 8*i });
       $(".windows").css({ "height": (112 + extraHead) + j*16 });
 
       renderCounters(hasWhite);
@@ -288,7 +289,7 @@ if (cp) {
 
           <!-- 이중 카운터: 컨테이너만 절대배치, 내부 카운터는 flex로 폭 자동 -->
           <div id="counters-dual" class="mine-counters-dual"
-               style="display:none; position:absolute; top:4px; left:6px;">
+               style="display:none; position:absolute; top:4px; left:1px;">
             <div id="counter-row-black" class="counter-row" style="min-height:23px;">
               <div class="counter-icon icon-flag-black" title="검은 지뢰"></div>
               <div class="mine-counter" id="mine-counter-black"
@@ -529,8 +530,22 @@ if (cp) {
       const single = document.getElementById('counters-single');
       const dual   = document.getElementById('counters-dual');
       if (!single || !dual) return;
-      if (hasWhite) { single.style.display = 'none'; dual.style.display = ''; }
-      else          { single.style.display = '';    dual.style.display   = 'none'; }
+      if (hasWhite) { 
+        single.style.display = 'none'; dual.style.display = '';
+        //div class가 mint-timer인 것과 mine-reset-button인 것의 style의 top을 16px로 설정
+        const timer = document.querySelector('.mine-timer');
+        if (timer) timer.style.top = '16px';
+        const resetBtn = document.querySelector('.mine-reset-button');
+        if (resetBtn) resetBtn.style.top = '16px';
+       }
+      else { 
+        single.style.display = '';    dual.style.display   = 'none'; 
+        //div class가 mint-timer인 것과 mine-reset-button인 것의 style의 top을 6px로 설정
+        const timer = document.querySelector('.mine-timer');
+        if (timer) timer.style.top = '6px';
+        const resetBtn = document.querySelector('.mine-reset-button');
+        if (resetBtn) resetBtn.style.top = '6px';
+      }
     }
 
     /* 모든 카운터 갱신 */
