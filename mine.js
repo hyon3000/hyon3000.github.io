@@ -1570,119 +1570,7 @@ function applyBoundsGeneral(vars, cons) {
 }
 
 
-    // RULE A/B
-    const applyRuleAB = (vars, cons) => {
-      let progressed=false, flagged=false;
-      for (let ci=0; ci<cons.length; ci++){
-        const {vars:vs, target, isAbs} = cons[ci];
-        const U = vs.length, N = target|0;
-        // RULE A: N==0 & !isAbs → 모두 안전 오픈
-        if (N===0 && !isAbs && U>0){
-          const cells=[];
-          for (let k=0;k<vs.length;k++){
-            const [x,y]=vars[vs[k]];
-            if (!opened[idx(x,y)]){ openCell(x,y,"RuleA N==0"); cells.push([x,y]); }
-          }
-          if (cells.length){ pushTrace("ruleA",{cells}); progressed=true; }
-        }
-        // RULE B: N==U → 전부 지뢰 확정 (클래식 모드에서만 안전하게 사용)
-        if (classicMode && U>0 && N===U){
-          const cells=[];
-          for (let k=0;k<vs.length;k++){
-            const [x,y]=vars[vs[k]];
-            if (markMine(x,y,"RuleB N==U")) { cells.push([x,y]); flagged=true; }
-          }
-          if (cells.length) pushTrace("ruleB",{cells});
-        }
-      }
-      if (flagged) progressed = true;
 
-      if (progressed){
-        // flood 전개
-        for (let y=0;y<H;y++) for (let x=0;x<W;x++){
-          if (opened[idx(x,y)] && (this.near_mines[x][y]|0)===0){
-            const adj=this.near_positions(x,y);
-            for (let i=0;i<adj.length;i++){
-              const ax=adj[i][0], ay=adj[i][1];
-              if (!opened[idx(ax,ay)]) { floodFrom.call(this, x,y); break; }
-            }
-          }
-        }
-      }
-      return progressed;
-    };
-
-    // subset(아주 제한)
-    const applySmallSubset = (vars, cons) => {
-      const small = cons.map((c)=>({ s:new Set(c.vars), t:c.target|0, a:c.isAbs }))
-                        .filter(o=>o.s.size>0 && o.s.size<=5);
-      if (small.length<2) return false;
-
-      let progressed=false, flagged=false;
-      for (let i=0;i<small.length;i++){
-        const A=small[i]; if (A.a) continue;
-        for (let j=0;j<small.length;j++){
-          if (i===j) continue;
-          const B=small[j]; if (B.a) continue;
-
-          // A ⊆ B ?
-          let subset=true; A.s.forEach(v=>{ if (!B.s.has(v)) subset=false; });
-          if (!subset) continue;
-
-          const S=[]; B.s.forEach(v=>{ if (!A.s.has(v)) S.push(v); });
-          if (!S.length) continue;
-
-          const delta = B.t - A.t;
-          const len = S.length;
-
-          if (delta===0){
-            if (!hasWhites){
-              const openedNow=[];
-              for (const id of S){
-                const [x,y]=vars[id];
-                if (!opened[idx(x,y)]){ openCell(x,y,"subset Δ=0"); openedNow.push([x,y]); }
-              }
-              if (openedNow.length){ pushTrace("subset",{delta:0, open:openedNow}); progressed=true; }
-            } else {
-              pushTrace("subset",{delta:0, note:"whites-present → no-open"});
-            }
-          } else if (classicMode){
-            if (delta===len){ // 모두 지뢰
-              const forced=[];
-              for (const id of S){
-                const [x,y]=vars[id];
-                if (markMine(x,y,"subset Δ=|S|")) { forced.push([x,y]); flagged=true; }
-              }
-              if (forced.length) pushTrace("subset",{delta, force:forced});
-            } else if (delta===-len){ // 모두 안전
-              const openedNow=[];
-              for (const id of S){
-                const [x,y]=vars[id];
-                if (!opened[idx(x,y)]){ openCell(x,y,"subset Δ=-|S|"); openedNow.push([x,y]); }
-              }
-              if (openedNow.length){ pushTrace("subset",{delta, open:openedNow}); progressed=true; }
-            }
-          } else {
-            // 일반 모드: 로그만
-            pushTrace("subset",{delta, force:S.map(id=>vars[id])});
-          }
-        }
-      }
-
-      if (flagged) progressed = true;
-      if (progressed){
-        for (let y=0;y<H;y++) for (let x=0;x<W;x++){
-          if (opened[idx(x,y)] && (this.near_mines[x][y]|0)===0){
-            const adj=this.near_positions(x,y);
-            for (let i=0;i<adj.length;i++){
-              const ax=adj[i][0], ay=adj[i][1];
-              if (!opened[idx(ax,ay)]) { floodFrom.call(this, x,y); break; }
-            }
-          }
-        }
-      }
-      return progressed;
-    };
 
     // 연결요소로 쪼개기(변수-제약 이분그래프)
     const splitComponents = (vars, cons) => {
@@ -1916,7 +1804,7 @@ if (!hasWhites){
           return {vars:vsNew, target:c.target, isAbs:c.isAbs};
         });
 
-        const capSize = classicMode ? 40 : 22;
+        const capSize = classicMode ? 40 : 20;
         if (subVars.length > capSize) continue;
 
         const cacheKey = makeComponentKey(subVars, subCons);
@@ -2013,6 +1901,7 @@ if (progressedLocal){
     this._nopick_trace = Trace.slice();
       return 1; // 성공
     }
+    //alert("regenerating");
     // 실패 시 다음 보드 계속 시도(무한)
   }
 };
@@ -2540,117 +2429,7 @@ Minefield.prototype.near_positions = function (x, y) {
       this.on_game_status_changed2();
       return 0;
     };
-Minefield.prototype.nopick_debug_macro = function () {
-  if (this.use_nopick===false) {
-    console.warn("[macro] 찍기 차단 모드가 아닙니다.");
-    return;
-  }
-  if (!Array.isArray(this._nopick_trace) || this._nopick_trace.length === 0) {
-    console.warn("[macro] 재생할 Trace가 없습니다. 첫 버튼을 눌러 맵 생성이 성공적으로 끝난 뒤 실행하세요.");
-    return;
-  }
-  if (this._macroTimer) {
-    clearInterval(this._macroTimer);
-    this._macroTimer = null;
-  }
 
-  // Trace → 액션 큐로 변환 (open: L-click, markMine: R-click)
-  const steps = [];
-  for (const t of this._nopick_trace) {
-    if (!t) continue;
-    if (t.kind === "open" && Number.isInteger(t.x) && Number.isInteger(t.y)) {
-      steps.push({ type: "L", x: t.x, y: t.y });
-    } else if (t.kind === "markMine" && Number.isInteger(t.x) && Number.isInteger(t.y)) {
-      steps.push({ type: "R", x: t.x, y: t.y });
-    }
-  }
-
-  if (steps.length === 0) {
-    console.warn("[macro] 실행할 클릭 단계가 없습니다.");
-    return;
-  }
-
-  if (this._macroTimer) {
-    clearInterval(this._macroTimer);
-    this._macroTimer = null;
-  }
-
-  // Trace를 얕은 복사로 보관
-  const trace = this._nopick_trace.slice();
-  let idx = 0;
-  const self = this;
-
-  function key(x, y) { return x + "," + y; }
-  function alreadyOpened(x, y) { return self.is_opened(x, y); }
-  function curFlag(x, y) { return self.flags[x][y] || 0; }
-  function targetFlagFromAnswer(x, y) {
-    // 실제 정답(양수=검은 n개, 음수=하얀 n개)
-    return self.mines[x][y] | 0;
-  }
-  function classIsFlagged(x, y) {
-    const c = self.get_class(x, y);
-    return c != null && /^flag-/.test(c);
-  }
-  function isActionForOpen(t) { return t && t.kind === "open" && Number.isInteger(t.x) && Number.isInteger(t.y); }
-  function isActionForMark(t){ return t && t.kind === "markMine" && Number.isInteger(t.x) && Number.isInteger(t.y); }
-
-  // 한 틱에 반드시 "보이는 액션"을 1번 수행
-  this._macroTimer = setInterval(function () {
-    if (self.game_status < 0) {
-      clearInterval(self._macroTimer);
-      self._macroTimer = null;
-      console.info("[macro] 게임 종료 감지 → 정지");
-      return;
-    }
-
-    let didSomething = false;
-
-    while (!didSomething) {
-      if (idx >= trace.length) {
-        // 더 이상 재생할 항목이 없음 → 종료
-        clearInterval(self._macroTimer);
-        self._macroTimer = null;
-        console.info("[macro] 완료");
-        return;
-      }
-
-      const t = trace[idx];
-
-      // 1) 좌클릭(open): 이미 열렸으면 스킵, 아니면 on_click 1회 → 액션
-      if (isActionForOpen(t)) {
-        if (!alreadyOpened(t.x, t.y)) {
-          try { self.on_click(t.x, t.y); } catch (e) { console.warn("[macro] L-click 실패:", t, e); }
-          didSomething = true;
-        }
-        idx++; // 소비(열렸든/스킵이든 다음으로 이동)
-        continue;
-      }
-
-      // 2) 우클릭(markMine): 목표 깃발(부호/개수)로 수렴하도록 "한 번만" 우클릭
-      if (isActionForMark(t)) {
-        const want = targetFlagFromAnswer(t.x, t.y);
-        // 목표가 0이면(지뢰 아님) 스킵
-        if (want === 0) { idx++; continue; }
-
-        const cur = curFlag(t.x, t.y);
-        if (cur !== want) {
-          // 한 번 우클릭해 상태를 다음 단계로 진행 (UI에 보이는 변화 발생)
-          try { self.on_rclick(t.x, t.y); } catch (e) { console.warn("[macro] R-click 실패:", t, e); }
-          didSomething = true;
-          // 같은 mark 항목은 그대로 유지(아직 목표 도달 X), 다음 틱에 또 우클릭해서 수렴
-          continue;
-        } else {
-          // 이미 목표 깃발 상태면 해당 항목 소모
-          idx++;
-          continue;
-        }
-      }
-
-      // 3) 기타 로그 항목은 소비만 하고 건너뜀 (open/mark가 아닌 것)
-      idx++;
-    }
-  }, 100);
-};
     /* ---------- 디버그 ---------- */
     Minefield.prototype.stringify = function () {
       return JSON.stringify(this.mines);

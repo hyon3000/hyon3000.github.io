@@ -697,15 +697,7 @@ const btnPlay  = document.getElementById('console-play');
   console.info = function(){ print('info', arguments); orig.info.apply(console, arguments); };
   console.warn = function(){ print('warn', arguments); orig.warn.apply(console, arguments); };
   console.error= function(){ print('error', arguments);orig.error.apply(console, arguments); };
-if (btnPlay) {
-   btnPlay.addEventListener('click', function(){
-     if (typeof window.minefield?.nopick_debug_macro === 'function') {
-       window.minefield.nopick_debug_macro();
-     } else {
-       console.warn('[macro] nopick_debug_macro가 없습니다. init_mines_nopick 성공 후 실행하거나 mine.js에 메서드를 추가하세요.');
-     }
-   });
- }
+
   // 컨트롤
   if (btnPause) {
     btnPause.addEventListener('click', function(){
@@ -890,422 +882,211 @@ if (btnPlay) {
 <span id="i18n-dead-en">Already dead</span>
 </div>
 <script>
+/* ===== 작은 i18n 헬퍼 ===== */
+const _isKO = () => (navigator.language||'').toLowerCase().startsWith('ko');
+function _msg(idKo,idEn, map={}) {
+  const root = document.getElementById('i18n-hint');
+  const el = root?.querySelector('#'+(_isKO()?idKo:idEn));
+  let s = el ? (el.textContent||'') : '';
+  return s.replace(/\{(\w+)\}/g, (_,k)=> (map[k]??''));
+}
+const _deadMsg = () => _msg('i18n-dead','i18n-dead-en') || 'you already dead';
+
+/* ===== 공통 유틸(깃발/열기) ===== */
+function _isFlagUI(mf,x,y){ const c=mf.get_class(x,y); return !!(c && /^flag-/.test(c)); }
+function _removeFlagFully(mf,x,y){ let g=24; while(_isFlagUI(mf,x,y)&&g--) mf.on_rclick(x,y); }
+function _ensureFlagExactly(mf,x,y,target){ if((mf.flags[x][y]||0)===target) return false; let g=24; while((mf.flags[x][y]||0)!==target&&g--) mf.on_rclick(x,y); return true; }
+function _openWithUnflag(mf,x,y){ if (_isFlagUI(mf,x,y)) _removeFlagFully(mf,x,y); if (mf.is_opened(x,y)) return false; mf.on_click(x,y); return true; }
+
+/* ===== trace 진행상태 유틸 ===== */
+function _done(mf,t){
+  if(!t) return true;
+  if(t.kind==='open') return mf.is_opened(t.x,t.y);
+  if(t.kind==='markMine') return ((mf.flags[t.x][t.y]||0)===(mf.mines[t.x][t.y]|0));
+  return true; // rule/subset/flood 등은 힌트/매크로 관점에서 소비된 것으로 간주
+}
+function _nextVisible(mf){
+  const tr=mf._nopick_trace||[]; let i=0;
+  while(i<tr.length && _done(mf,tr[i])) i++;
+  for(; i<tr.length; i++){ const t=tr[i]; if(t.kind==='open'||t.kind==='markMine') return t; }
+  return null;
+}
+function humanizeReason(raw) {
+  if (!raw) return "";
+  const KO = (navigator.language||"").toLowerCase().startsWith("ko");
+
+  // 규칙별 정규식 매핑 (위에서부터 우선적용)
+  const table = [
+    // Rule A
+    [/^RuleA N==0\b/i, () => KO
+      ? "숫자칸의 남은 지뢰 수 N이 0 → 주변 닫힌 칸은 모두 안전"
+      : "Remaining mines N is 0 → all adjacent closed cells are safe"],
+    [/^RuleA N==F\b/i, () => KO
+      ? "인접 깃발 수 F가 요구 지뢰 수 N과 같음 → 나머지 인접 칸은 모두 안전"
+      : "Flags F equals required mines N → all other adjacent cells are safe"],
+
+    // Rule B
+    [/^RuleB U==1 exact count=(\d+)/i, (m) => KO
+      ? `주변 닫힌 칸 U가 1개이고 남은 지뢰가 ${m[1]}개 → 그 1칸이 전부 지뢰`
+      : `Only 1 closed neighbor (U=1) and ${m[1]} mine(s) remaining → that cell must be a mine`],
+    [/^RuleB cap count=(\d+)/i, (m) => KO
+      ? `인접 제약(최대 수용)으로 지뢰 ${m[1]}개가 강제`
+      : `Capacity bounds force ${m[1]} mine(s)`],
+
+    // SUBSET
+    [/^subset single exact count=(\d+)/i, (m) => KO
+      ? `부분집합 추론으로 해당 칸(묶음)에 지뢰 ${m[1]}개가 정확히 필요`
+      : `Subset logic forces exactly ${m[1]} mine(s) in the cell set`],
+    [/^subset Δ=0\b/i, () => KO
+      ? "부분집합 추론 결과 Δ=0 → 비교된 나머지 칸은 모두 안전"
+      : "Subset logic Δ=0 → remaining compared cells are all safe"],
+    [/^subset Δ=\|S\|\*cap\b/i, () => KO
+      ? "부분집합 S의 크기×칸당 최대지뢰(cap)만큼 채워야 함 → S가 모두 지뢰"
+      : "Subset size × per-cell cap must be filled → S is all mines"],
+
+    // EXISTENCE
+    [/^exist\(range==\{0\}\)/i, () => KO
+      ? "모든 가능한 배치에서 주변 지뢰 수가 0 → 항상 안전"
+      : "In all placements neighbors count is 0 → always safe"],
+    [/^exist\(range==\{(\d+)\}\)/i, (m) => KO
+      ? `가능한 배치에서 주변 지뢰 수가 ${m[1]}으로만 일치`
+      : `Across all placements the neighbor count is always ${m[1]}`],
+
+    // BOUNDS
+    [/^bounds exact count=(\d+)/i, (m) => KO
+      ? `상·하한 경계 계산으로 정확히 지뢰 ${m[1]}개 필요`
+      : `Lower/upper bounds force exactly ${m[1]} mine(s)`],
+    [/^bounds chord N==minSum\b/i, () => KO
+      ? "최소 합이 이미 채워져 더 이상 지뢰 불가 → 나머지는 안전"
+      : "Minimum sum already satisfied → remaining cells are safe"],
+
+    // 기타 자주 보이는 로그 꼬리표
+    [/^flood-neighbor\b/i, () => KO
+      ? "0칸 연쇄 공개로 인접 안전칸 자동 공개"
+      : "Auto-reveal from zero-cell flood"],
+    [/^seed\b/i, () => KO
+      ? "첫 클릭으로 시작한 안전 오픈"
+      : "Safe open triggered by the first click"],
+
+    [/^RuleB\s+N==U\s+count=(\d+)/i, (m) => KO
+      ? `숫자칸에서 남은 지뢰 수 N이 미정 칸 수 U와 같음 → 그 U칸이 모두 지뢰 (총 ${m[1]}개)`
+      : `Remaining mines N equals number of unknown cells U → all U cells are mines (total ${m[1]})`],
+
+  ];
+
+  for (const [re, make] of table) {
+    const m = re.exec(raw);
+    if (m) {
+      const explain = make(m);
+      // 원문도 함께 보여 주되, 사람이 읽는 설명을 뒤에 덧붙임
+      return `${raw} — ${explain}`;
+    }
+  }
+  // 매칭 실패 시 원문 그대로
+  return raw;
+}
+/* ===== 힌트: wrong-flag 우선 알림+즉시수정 → 다음 스텝 1회 실행+근거 alert ===== */
+window.provide_nopick_hint = function(){
+  const mf = window.minefield;
+  if (!mf || !mf.use_nopick || !Array.isArray(mf._nopick_trace) || !mf._nopick_trace.length) {
+    alert(_msg('i18n-not-nopick','i18n-not-nopick-en')); return;
+  }
+  if (mf.game_status === -1){ alert(_deadMsg()); console.warn('you already dead'); return; }
+
+  const W=mf.columns|0,H=mf.rows|0, wrong=[];
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+    const f=mf.flags[x][y]||0; if(!f) continue;
+    const ans=mf.mines[x][y]|0; if(f!==ans) wrong.push([x,y,ans]);
+  }
+  if (wrong.length){
+    const [x,y,ans]=wrong[(Math.random()*wrong.length)|0];
+    alert(_msg('i18n-wrong-flag','i18n-wrong-flag-en',{x,y}));
+    if (ans===0) _removeFlagFully(mf,x,y); else _ensureFlagExactly(mf,x,y,ans);
+    return;
+  }
+
+  const t = _nextVisible(mf); if(!t){ alert(_msg('i18n-no-next','i18n-no-next-en')); return; }
+  const reason = (t.reason??(t.kind==='flood'?'인접 칸 자동 공개':'auto'));
+  if (t.kind==='open'){
+    if (_openWithUnflag(mf,t.x,t.y)) {
+      const nice = humanizeReason(reason);
+      alert(_msg('i18n-next-open','i18n-next-open-en',{x:t.x,y:t.y,reason:nice}));
+    }
+    else alert(_msg('i18n-no-next','i18n-no-next-en'));
+  } else {
+    const want = mf.mines[t.x][t.y]|0; if (!want) { alert(_msg('i18n-no-next','i18n-no-next-en')); return; }
+    if (_ensureFlagExactly(mf,t.x,t.y,want)){
+      const nice = humanizeReason(reason);
+      alert(_msg(want<0?'i18n-next-flag-white':'i18n-next-flag-black',
+      want<0?'i18n-next-flag-white-en':'i18n-next-flag-black-en',
+      {x:t.x,y:t.y,n:Math.abs(want),reason:nice}));
+    }
+      
+    else alert(_msg('i18n-no-next','i18n-no-next-en'));
+  }
+};
+
+/* ===== 보드 UID: init_mines_nopick 성공시 증가 ===== */
 (function(){
-  // 간단 i18n 헬퍼
-  function isKorean() {
-    var lang = (navigator.language || navigator.userLanguage || "").toLowerCase();
-    return lang.startsWith("ko");
+  const orig = window.Minefield?.prototype?.init_mines_nopick;
+  if (orig && !window.Minefield.prototype.__uidWrapped){
+    window.Minefield.prototype.__uidWrapped = true;
+    window.Minefield.prototype.init_mines_nopick = function(fx,fy){
+      const r = orig.call(this,fx,fy); if (r===1) this._nopick_board_uid=(this._nopick_board_uid||0)+1; return r;
+    };
   }
-  function i18nPick(idKo, idEn) {
-    var root = document.getElementById('i18n-hint');
-    if (!root) return '';
-    var el = document.getElementById(isKorean() ? idKo : idEn);
-    return el ? (el.textContent || el.innerText || '') : '';
-  }
-  function fill(tpl, map) {
-    return tpl.replace(/\{(\w+)\}/g, (_, k) => (map[k] != null ? String(map[k]) : ''));
-  }
+})();
 
-  // 좌표를 화면용으로 1-base로 보여주고 싶다면 +1 (여기선 0-base 유지)
-  function showAlertWrongFlag(x, y) {
-    const msg = fill(i18nPick('i18n-wrong-flag', 'i18n-wrong-flag-en'), {x, y});
-    alert(msg);
-  }
-  function showAlertNextOpen(x, y, reason) {
-    const msg = fill(i18nPick('i18n-next-open', 'i18n-next-open-en'), {x, y, reason});
-    alert(msg);
-  }
-  function showAlertNextFlag(x, y, n, isWhite, reason) {
-    const idKo = isWhite ? 'i18n-next-flag-white' : 'i18n-next-flag-black';
-    const idEn = isWhite ? 'i18n-next-flag-white-en' : 'i18n-next-flag-black-en';
-    const msg = fill(i18nPick(idKo, idEn), {x, y, n, reason});
-    alert(msg);
-  }
-  function alertNotNoPick(){ alert(i18nPick('i18n-not-nopick','i18n-not-nopick-en')); }
-  function alertNoNext(){ alert(i18nPick('i18n-no-next','i18n-no-next-en')); }
+/* ===== 자동재생: 0.3s, 보드교체/사망 정지, 버튼 토글(일시정지/재개) ===== */
+(function(){
+  const btn = document.getElementById('console-play');
+  const labelPlay  = () => _isKO() ? '지뢰 자동으로 풀기' : 'Solve Minesweeper Automatically';
+  const labelPause = () => _isKO() ? '자동 풀기 일시 중지' : 'Pause Auto-solve';
 
-  // 액션 적용 유틸
-  function ensureFlagToTarget(self, x, y, target) {
-    // target: 정답 부호/개수 (양수=검은 n, 음수=하얀 n)
-    // 현재 깃발 상태(self.flags[x][y])를 target에 "즉시" 맞춥니다.
-    if (!self || typeof self.on_rclick !== 'function') return false;
+  function startOrResume(mf){
+    if (!mf.use_nopick || !Array.isArray(mf._nopick_trace) || !mf._nopick_trace.length) { console.warn('[macro] no-pick trace unavailable.'); return; }
+    if (mf.game_status === -1){ alert(_deadMsg()); console.warn('you already dead'); return; }
 
-    const cur = self.flags[x][y] || 0;
-    if (cur === target) return false; // 변화 없음
+    if (mf._macro_timer && mf._macro_running && mf._macro_paused){ mf._macro_paused=false; btn&&(btn.textContent=labelPause()); return; }
+    if (mf._macro_timer && mf._macro_running && !mf._macro_paused){ mf._macro_paused=true;  btn&&(btn.textContent=labelPlay());  return; }
 
-    // flag()의 사이클을 모르는 사용자가 우클릭 n번 해야 하는 일을 함수로 대체
-    // 1) 먼저 null로 만들기
-    self.set_class(x, y, null);
-    self.flags[x][y] = 0;
+    if (mf._macro_timer) clearInterval(mf._macro_timer);
+    mf._macro_running=true; mf._macro_paused=false;
+    const startUID = mf._nopick_board_uid||0;
 
-    // 2) 목표까지 우클릭을 시뮬레이트
-    // flag()는 null→검1→…→검max→(흰 지원 시)흰1→…→흰max→?→null 순환
-    // 여기서는 바로 목표값에 세팅(내부 상태, 카운터, near_flags 갱신 포함) 하겠습니다.
-    // near_flags를 정확히 반영하려면 기존 flag 로직과 동일한 near_flags 갱신이 필요
-    // → 간단하게: 현재 칸을 '?'로 두고, 목표값만큼 on_rclick을 반복 호출해 동일 경로로 도달
+    mf._macro_timer = setInterval(function(){
+      if (!mf._macro_running) { stop('manual'); return; }
+      if (mf._macro_paused) return;
+      if ((mf._nopick_board_uid||0)!==startUID){ stop('board changed'); return; }
+      if (mf.game_status === -1){ stop('dead'); console.warn('you already dead'); alert(_deadMsg()); return; }
 
-    // 먼저 '?'로
-    self.set_class(x, y, "flag-0");
+      const step = _nextVisible(mf); if (!step){ stop('done'); return; }
+      if (step.kind==='open') _openWithUnflag(mf,step.x,step.y);
+      else _ensureFlagExactly(mf,step.x,step.y,(mf.mines[step.x][step.y]|0));
+      // 1틱당 1개만 수행
+    }, 80);
 
-    // 안전하게 루프(최대 20회)로 목표까지 진행
-    let guard = 20;
-    while ((self.flags[x][y] || 0) !== target && guard-- > 0) {
-      self.on_rclick(x, y);
+    function stop(reason){
+      clearInterval(mf._macro_timer); mf._macro_timer=null;
+      mf._macro_running=false; mf._macro_paused=false;
+      btn&&(btn.textContent=labelPlay());
+      if (reason) console.info('[macro] stopped:', reason);
     }
-    return true;
+    btn&&(btn.textContent=labelPause());
   }
 
-  function applyOpen(self, x, y) {
-    if (!self || typeof self.on_click !== 'function') return false;
-    if (self.is_opened(x, y)) return false;
-    self.on_click(x, y);
-    return true;
-  }
+  // Minefield 메서드로도 접근 가능하게
+  if (window.Minefield && !window.Minefield.prototype.nopick_debug_macro)
+    window.Minefield.prototype.nopick_debug_macro = function(){ startOrResume(this); };
 
-  // === 메인: 힌트 제공 ===
-  window.provide_nopick_hint = function() {
-    // minefield 전역 사용(페이지에서 이미 생성됨)
-    var self = window.minefield;
-    if (!self || !self.use_nopick || !Array.isArray(self._nopick_trace) || self._nopick_trace.length === 0) {
-      alertNotNoPick();
-      return;
-    }
-
-    const W = self.columns|0, H = self.rows|0;
-
-    // 0) 사용자가 '잘못 마킹한' 칸(깃발값 != 정답)을 찾는다
-    const wrong = [];
-    for (let y=0; y<H; y++) for (let x=0; x<W; x++) {
-      const f = self.flags[x][y] || 0;          // 사용자가 꽂은 깃발(부호/개수)
-      if (f === 0) continue;                    // 깃발 없음
-      const ans = self.mines[x][y] | 0;         // 실제 정답
-      if (f !== ans) wrong.push([x,y]);
-    }
-    if (wrong.length > 0) {
-      const pick = wrong[(Math.random()*wrong.length)|0];
-      showAlertWrongFlag(pick[0], pick[1]);
-      return;
-    }
-
-    // 1) 사용자가 현재 '열었거나 마킹한' 칸 파악은 self API로 충분 (is_opened / flags)
-    // 2) nopick_trace를 앞에서부터 보며, 사용자가 그 액션을 수행했는지 대조
-    const trace = self._nopick_trace;
-    let pos = 0;
-    function actionDone(t) {
-      if (!t) return true;
-      if (t.kind === 'open') {
-        return self.is_opened(t.x, t.y);
-      } else if (t.kind === 'markMine') {
-        // 정답 기준으로 목표 깃발(부호/개수) 도달?
-        const want = self.mines[t.x][t.y] | 0;
-        if (want === 0) return true; // 이론상 markMine이 0을 가리키진 않겠지만 방어
-        return (self.flags[t.x][t.y] || 0) === want;
-      }
-      // 힌트 관점에서 open/markMine만 의미. 다른 로그는 '수행한 것으로' 간주
-      return true;
-    }
-    while (pos < trace.length && actionDone(trace[pos])) pos++;
-
-    if (pos >= trace.length) {
-      // 더 이상 진행할 스텝이 없음
-      alertNoNext();
-      return;
-    }
-
-    // 3) 다음 스텝 수행 + 근거 alert
-    const t = trace[pos];
-    // 근거(reason) 정리(없을 수도 있음)
-    const reason = (t && t.reason) ? String(t.reason) :
-                   (t && t.kind === 'flood') ? '인접 칸 자동 공개' :
-                   (t && t.kind) ? ('rule ' + t.kind) : 'auto';
-
-    if (t.kind === 'open') {
-      if (applyOpen(self, t.x, t.y)) {
-        showAlertNextOpen(t.x, t.y, reason);
-        return;
-      } else {
-        // 열기 실패(이미 열림 등)면 다음 유효한 액션을 찾아 한 번 더 시도
-        let moved = false;
-        for (let i = pos+1; i < trace.length; i++) {
-          const tt = trace[i];
-          if (tt.kind === 'open' && applyOpen(self, tt.x, tt.y)) {
-            showAlertNextOpen(tt.x, tt.y, (tt.reason||reason));
-            moved = true; break;
-          }
-          if (tt.kind === 'markMine') {
-            const want = self.mines[tt.x][tt.y] | 0;
-            if (want !== 0 && ensureFlagToTarget(self, tt.x, tt.y, want)) {
-              showAlertNextFlag(tt.x, tt.y, Math.abs(want), want<0, (tt.reason||reason));
-              moved = true; break;
-            }
-          }
-        }
-        if (!moved) alertNoNext();
-        return;
-      }
-    } else if (t.kind === 'markMine') {
-      const want = self.mines[t.x][t.y] | 0;
-      if (want !== 0 && ensureFlagToTarget(self, t.x, t.y, want)) {
-        showAlertNextFlag(t.x, t.y, Math.abs(want), want<0, reason);
-        return;
-      } else {
-        // 다음 유효 액션 탐색
-        let moved = false;
-        for (let i = pos+1; i < trace.length; i++) {
-          const tt = trace[i];
-          if (tt.kind === 'open' && applyOpen(self, tt.x, tt.y)) {
-            showAlertNextOpen(tt.x, tt.y, (tt.reason||reason));
-            moved = true; break;
-          }
-          if (tt.kind === 'markMine') {
-            const w2 = self.mines[tt.x][tt.y] | 0;
-            if (w2 !== 0 && ensureFlagToTarget(self, tt.x, tt.y, w2)) {
-              showAlertNextFlag(tt.x, tt.y, Math.abs(w2), w2<0, (tt.reason||reason));
-              moved = true; break;
-            }
-          }
-        }
-        if (!moved) alertNoNext();
-        return;
-      }
-    } else {
-      // 로그가 rule, subset 등이라면 다음 actionable(open/markMine)로 건너뛰기
-      let moved = false;
-      for (let i = pos+1; i < trace.length; i++) {
-        const tt = trace[i];
-        if (tt.kind === 'open' && applyOpen(self, tt.x, tt.y)) {
-          showAlertNextOpen(tt.x, tt.y, (tt.reason||reason));
-          moved = true; break;
-        }
-        if (tt.kind === 'markMine') {
-          const w2 = self.mines[tt.x][tt.y] | 0;
-          if (w2 !== 0 && ensureFlagToTarget(self, tt.x, tt.y, w2)) {
-            showAlertNextFlag(tt.x, tt.y, Math.abs(w2), w2<0, (tt.reason||reason));
-            moved = true; break;
-          }
-        }
-      }
-      if (!moved) alertNoNext();
-      return;
-    }
-  };
-
-  // 버튼 연결
-  document.addEventListener('DOMContentLoaded', function(){
-    const btn = document.getElementById('console-hint');
-    if (btn) btn.addEventListener('click', function(){
-      try { window.provide_nopick_hint(); } catch(e){ console.error(e); }
-    });
+  // 버튼 클릭 핸들러
+  document.addEventListener('DOMContentLoaded', ()=>{
+    if (!btn) return;
+    btn.textContent = labelPlay();
+    btn.addEventListener('click', ()=>{ const mf=window.minefield; if (mf) startOrResume(mf); });
+    const hintBtn=document.getElementById('console-hint');
+    hintBtn&&hintBtn.addEventListener('click', ()=>{ try{ window.provide_nopick_hint(); }catch(e){ console.error(e); } });
   });
-})();
-(function(){
-  /* ===== 공통: 보드 UID ====
-     - init_mines_nopick가 성공할 때 mine.js에서 this._nopick_trace를 채워둠.
-     - 여기서는 보드가 바뀌었는지 감지하기 위해 UID를 만들어 두고,
-       자동재생 시작 시점의 UID와 매 틱마다 비교해 판 교체를 감지합니다. */
-  const _orig_init_nopick = window.Minefield?.prototype?.init_mines_nopick;
-  if (_orig_init_nopick && !window.Minefield.prototype._uid_wrapped_for_macro) {
-    window.Minefield.prototype._uid_wrapped_for_macro = true;
-    window.Minefield.prototype.init_mines_nopick = function(firstX, firstY){
-      const r = _orig_init_nopick.call(this, firstX, firstY);
-      // 성공(1) 시에만 UID 갱신
-      if (r === 1) {
-        this._nopick_board_uid = (this._nopick_board_uid || 0) + 1;
-      }
-      return r;
-    };
-  }
-
-  /* ===== 힌트: 죽었으면 you already dead ===== */
-  const _orig_provide_hint = window.provide_nopick_hint;
-  window.provide_nopick_hint = function(){
-    const mf = window.minefield;
-    if (!mf) return;
-    if (mf.game_status === -1) { // 패배만 차단 (요청사항)
-      alert('이미 죽었음');
-      return;
-    }
-    // 원본 힌트 실행
-    return _orig_provide_hint?.apply(this, arguments);
-  };
-
-  /* ===== 자동 재생 매크로: 가드 + 0.3s 간격 + 가시 액션만 ===== */
-  function _visibleOpen(mf, x, y){
-    if (mf.is_opened(x,y)) return false;
-    mf.on_click(x,y);
-    return true;
-  }
-  function _visibleFlagToAnswer(mf, x, y){
-    const want = mf.mines[x][y] | 0; // 정답(양=검, 음=흰, 개수=절댓값)
-    if (want === 0) return false;
-    if ((mf.flags[x][y]||0) === want) return false; // 이미 정답값
-    // 기존 flag 사이클을 그대로 태워서 near_flags/카운터 정합 보존
-    // null부터 시작해 목표값까지 on_rclick 반복
-    mf.set_class(x, y, "flag-0");
-    let guard = 24;
-    while((mf.flags[x][y]||0)!==want && guard-- > 0){
-      mf.on_rclick(x,y);
-    }
-    return true;
-  }
-  function _nextActionFromTrace(mf){
-    const tr = mf._nopick_trace || [];
-    if (!tr.length) return null;
-    // trace에서 현재 상태까지 수행된 부분을 건너뛰고
-    let i = 0;
-    const done = (t)=>{
-      if (!t) return true;
-      if (t.kind === 'open')     return mf.is_opened(t.x, t.y);
-      if (t.kind === 'markMine') return ((mf.flags[t.x][t.y]||0) === (mf.mines[t.x][t.y]|0));
-      return true; // 가시 액션이 아니면 수행된 것으로 간주
-    };
-    while (i<tr.length && done(tr[i])) i++;
-    // 이후부터 '가시적 액션'만 찾아 반환
-    for (; i<tr.length; i++){
-      const t = tr[i];
-      if (t.kind === 'open' || t.kind === 'markMine') return t;
-    }
-    return null;
-  }
-
-  window.Minefield.prototype.nopick_debug_macro = function(){
-    const mf = this;
-    // 시작 가드
-    if (!mf.use_nopick || !Array.isArray(mf._nopick_trace) || !mf._nopick_trace.length) {
-      console.warn('[macro] no-pick trace unavailable.');
-      return;
-    }
-    if (mf.game_status === -1) { // 죽은 판은 시작 금지
-      alert('이미 죽었음');
-      return;
-    }
-    // 이미 돌고 있으면 재시작 전 정리
-    if (mf._macro_timer) {
-      clearInterval(mf._macro_timer);
-      mf._macro_timer = null;
-    }
-    // 이 매크로가 시작된 보드의 UID를 기억
-    const startUID = mf._nopick_board_uid || 0;
-    mf._macro_running = true;
-
-    mf._macro_timer = setInterval(function tick(){
-      // 보드 바뀜/죽음/클리어 감지
-      if (!mf._macro_running ||
-          (mf._nopick_board_uid||0) !== startUID ||
-          mf.game_status === -1) {
-        clearInterval(mf._macro_timer);
-        mf._macro_timer = null;
-        mf._macro_running = false;
-        if (mf.game_status === -1) {
-          console.warn('already dead');
-        } else if ((mf._nopick_board_uid||0) !== startUID) {
-          console.info('[macro] stopped: board changed.');
-        }
-        return;
-      }
-
-      // 다음 가시적 액션 하나만 수행
-      const step = _nextActionFromTrace(mf);
-      if (!step) {
-        // 더 할 게 없으면 종료
-        clearInterval(mf._macro_timer);
-        mf._macro_timer = null;
-        mf._macro_running = false;
-        console.info('[macro] finished');
-        return;
-      }
-
-      let acted = false;
-      if (step.kind === 'open') {
-        acted = _visibleOpen(mf, step.x, step.y);
-      } else if (step.kind === 'markMine') {
-        acted = _visibleFlagToAnswer(mf, step.x, step.y);
-      }
-
-      // 가시 액션이 불발(이미 열림/이미 정답 깃발)하면,
-      // trace 다음 가시 액션을 즉시 찾아 1회 더 시도해
-      // "매 틱 하나는 보이게" 보장.
-      if (!acted) {
-        const tr = mf._nopick_trace || [];
-        // 현재 step 다음부터 재탐색
-        const idx = tr.indexOf(step);
-        for (let i = Math.max(0, idx+1); i<tr.length; i++){
-          const t = tr[i];
-          if (t.kind === 'open')   { acted = _visibleOpen(mf, t.x, t.y); if (acted) break; }
-          if (t.kind === 'markMine'){ acted = _visibleFlagToAnswer(mf, t.x, t.y); if (acted) break; }
-        }
-      }
-
-      // 여전히 못 했다면(예: 모두 이미 반영됨) 다음 틱에서 다시 시도
-      // 이 경우라도 다음 틱에는 다른 스텝이 발견될 가능성이 큼.
-    }, 300); // 0.3초 간격
-  };
-
-  /* ===== 플레이 버튼: 이미 정의된 핸들러는 그대로, 매크로 내부 가드가 막아줌 ===== */
-})();
-(function(){
-  // i18n helper (페이지에 이미 있음)과 동일 규칙 사용
-  function isKorean() {
-    var lang = (navigator.language || navigator.userLanguage || "").toLowerCase();
-    return lang.startsWith("ko");
-  }
-  function i18nPick(idKo, idEn) {
-    var root = document.getElementById('i18n-hint');
-    if (!root) return '';
-    var el = document.getElementById(isKorean() ? idKo : idEn);
-    return el ? (el.textContent || el.innerText || '') : '';
-  }
-  function deadMsg(){ return i18nPick('i18n-dead','i18n-dead-en') || 'you already dead'; }
-
-  /* --- 힌트 오버라이드: 죽은 판이면 번역된 경고 --- */
-  if (typeof window.provide_nopick_hint === 'function') {
-    const _orig = window.provide_nopick_hint;
-    window.provide_nopick_hint = function(){
-      const mf = window.minefield;
-      if (mf && mf.game_status === -1) {
-        const msg = deadMsg();
-        console.warn(msg);
-        alert(msg);
-        return;
-      }
-      return _orig.apply(this, arguments);
-    };
-  }
-
-  /* --- 자동재생: 시작/진행 가드도 번역 경고 사용 --- */
-  if (window.Minefield && window.Minefield.prototype && typeof window.Minefield.prototype.nopick_debug_macro === 'function') {
-    const _origMacro = window.Minefield.prototype.nopick_debug_macro;
-    window.Minefield.prototype.nopick_debug_macro = function(){
-      if (this.game_status === -1) {
-        const msg = deadMsg();
-        console.warn(msg);
-        alert(msg);
-        return;
-      }
-      // 실행 중에도 죽거나 보드 바뀌면 멈출 때 콘솔 메시지 일관화
-      const _self = this;
-      const oldSetInterval = window.setInterval;
-      const oldClearInterval = window.clearInterval;
-      const TIMER_KEY = '_macro_timer';
-
-      // 한 번만 래핑: 내부 tick에서 멈출 때 메시지 통일
-      if (!_self._macro_stop_hooked) {
-        _self._macro_stop_hooked = true;
-        const stopIfNeeded = function(){
-          if (_self.game_status === -1) {
-            console.warn(deadMsg());
-          }
-        };
-        const _origClear = function(id){ oldClearInterval(id); stopIfNeeded(); };
-        window.clearInterval = function(id){
-          // 우리가 만든 타이머만 후킹
-          if (id === _self[TIMER_KEY]) { _origClear(id); }
-          else { oldClearInterval(id); }
-        };
-      }
-      return _origMacro.apply(this, arguments);
-    };
-  }
 })();
 </script>
 
