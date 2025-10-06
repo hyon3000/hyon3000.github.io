@@ -1400,35 +1400,67 @@ Minefield.prototype.init_mines_nopick = function (firstX, firstY) {
   const Trace = [];
   function pushTrace(kind, payload) { Trace.push({ kind, ...payload }); }
   function dumpTraceToConsole() {
-    console.groupCollapsed("[Minesweeper] 추론 근거 트리");
-    for (let i=0;i<Trace.length;i++){
-      const t=Trace[i];
-      if (t.kind==="open") {
-        console.log(`OPEN (${t.x},${t.y}) - ${t.reason}`);
-      } else if (t.kind==="flood") {
-        console.log(`FLOOD from (${t.x},${t.y})`);
-      } else if (t.kind==="ruleA") {
-        console.log(`RULE A: N==F → 안전 open ${t.cells.map(c=>`(${c[0]},${c[1]})`).join(", ")}`);
-      } else if (t.kind==="ruleB") {
-        console.log(`RULE B: N==F+U → 지뢰 확정(참고용) ${t.cells.map(c=>`(${c[0]},${c[1]})`).join(", ")}`);
-      } else if (t.kind==="subset") {
-        console.log(`SUBSET: Δ=${t.delta} → 안전 ${t.open?.map(c=>`(${c[0]},${c[1]})`).join(", ")||"없음"} / 강제값 ${t.force?.map(c=>`(${c[0]},${c[1]})`).join(", ")||"없음"}`);
-      } else if (t.kind==="exist") {
-        console.log(`EXISTENCE: 항상 안전 → open (${t.x},${t.y})`);
-      } else if (t.kind==="markMine") {
-        console.log(`FLAG (${t.x},${t.y}) - ${t.reason}`);
-      } else if (t.kind==="done") {
-        console.log(`DONE: 총 ${t.opens}칸 open (안전칸 모두 열림)`);
-      }
+  const BATCH_SIZE = 30; // 30줄씩 묶어 출력
+  const total = Trace.length;
+  if (total === 0) return;
+
+  console.groupCollapsed(`[Minesweeper] 추론 근거 트리 (${total} entries)`);
+
+  let buffer = [];
+  const flush = () => {
+    if (buffer.length > 0) {
+      console.log(buffer.join(" | ")); // 한 줄로 묶어 출력
+      buffer.length = 0;
     }
-    console.groupEnd();
+  };
+
+  for (let i = 0; i < total; i++) {
+    const t = Trace[i];
+    let msg = "";
+    switch (t.kind) {
+      case "open":
+        msg = `OPEN(${t.x},${t.y})-${t.reason}`; break;
+      case "flood":
+        msg = `FLOOD(${t.x},${t.y})`; break;
+      case "ruleA":
+        msg = `RuleA→${t.cells.map(c=>`(${c[0]},${c[1]})`).join(",")}`; break;
+      case "ruleB":
+        msg = `RuleB→${t.cells.map(c=>`(${c[0]},${c[1]})`).join(",")}`; break;
+      case "subset":
+        msg = `SubsetΔ${t.delta} open:${t.open?.length||0} force:${t.force?.length||0}`; break;
+      case "exist":
+        msg = `Exist→(${t.x},${t.y})`; break;
+      case "markMine":
+        msg = `FLAG(${t.x},${t.y})-${t.reason}`; break;
+      case "done":
+        msg = `DONE opens=${t.opens}`; break;
+      default:
+        msg = JSON.stringify(t);
+    }
+    buffer.push(msg);
+    if (buffer.length >= BATCH_SIZE) flush();
   }
+  flush(); // 남은 것 출력
+  console.groupEnd();
+}
+
 
   // ===== 경량 솔버(노게스) =====
   function solveNoGuessFast(firstX, firstY, deadlineMs) {
     function timeUp(){ return Date.now() > deadlineMs; }
     // 컴포 캐시(요약 결과 저장)
     const compCache = new Map();
+  // === [ADD] 빠른-포기 휴리스틱 상태/상수 ===
+  let stallRounds = 0;                         // 연속 무진전 라운드 수
+  const STALL_LIMIT = 2;                       // 연속 2회 무진전이면 포기 후보
+
+  const UNDECIDED_RATIO_HARD = 0.85;           // 미결정 비율 임계(강)
+  const UNDECIDED_RATIO_SOFT = 0.70;           // 미결정 비율 임계(완화)
+  const MAX_FRONTIER_VARS_HARD = 220;          // 프런티어 변수가 이 이상이고 무진전이면 즉시 포기
+
+  // 동적 시간 상한(보드 크기 기반)
+  const DYNAMIC_TIME_BUDGET_MS = Math.min(1500, 450 + W * H * 1.5);
+  const hardDeadline = Date.now() + DYNAMIC_TIME_BUDGET_MS;
 
     rebuildParts();                         // near 갱신
     if ((this.near_mines[firstX][firstY]|0) !== 0) return false; // 첫칸은 반드시 진짜 0
@@ -2016,6 +2048,14 @@ if (!r.ok) {
     // 메인 루프
     let guard = W*H*8;
     while(!done() && !timeUp()&& guard-- > 0){
+        // === [ADD] 동적 시간 초과시 즉시 포기
+  if (Date.now() > hardDeadline) return false;
+
+  // === [ADD] 라운드 전 opened/fixed 스냅샷
+  const openedBefore = openedCount;
+  let fixedBefore = 0;
+  for (let i = 0; i < fixedKnown.length; i++) fixedBefore += fixedKnown[i];
+
 const { vars, cons } = collectFrontier.call(this);
 if (!vars.length || !cons.length) return false;
 
@@ -2162,7 +2202,55 @@ if (progressedLocal){
 }
       }
 
-      if (!progressed) return false; // 이번 스텝에 '열기'도 '지뢰확정'도 없으면 포기
+            // === [REPLACE] 빠른-포기 휴리스틱: 무진전/대형 프런티어/미결정 비율 기반
+      const openedAfter = openedCount;
+      let fixedAfter = 0;
+      for (let i = 0; i < fixedKnown.length; i++) fixedAfter += fixedKnown[i];
+
+      const openedDelta = openedAfter - openedBefore;
+      const fixedDelta  = fixedAfter  - fixedBefore;
+      const madeProgress = (openedDelta > 0) || (fixedDelta > 0);
+
+      // 프런티어/미결정 비율 계산(최신 상태 재수집)
+      const frontierNow = collectFrontier.call(this);
+      const U = frontierNow.vars.length | 0;
+
+      let undecided = 0;
+      for (let id = 0; id < U; id++) {
+        const [vx, vy] = frontierNow.vars[id];
+        const fx = getFixed(vx, vy);
+        if (fx == null) undecided++;
+      }
+      const undecidedRatio = (U > 0 ? (undecided / U) : 0);
+
+      // 컴포넌트 수/평균 변수 수
+      const compsNow = splitComponents(frontierNow.vars, frontierNow.cons);
+      let sumVar = 0;
+      for (let i = 0; i < compsNow.length; i++) sumVar += compsNow[i].vIdx.length;
+      const avgVar = (compsNow.length > 0 ? sumVar / compsNow.length : 0);
+
+      if (!madeProgress) {
+        stallRounds++;
+
+        // (1) 프런티어가 큰데 무진전 → 바로 포기
+        if (U >= MAX_FRONTIER_VARS_HARD) return false;
+
+        // (2) 연속 무진전 + 미결정 비율 높음 → 포기
+        if (stallRounds >= STALL_LIMIT) {
+          if (undecidedRatio >= UNDECIDED_RATIO_HARD) return false;
+
+          // (3) 컴포가 많고 평균 크기도 큰데(난해) 미결정 비율 높음 → 완화 임계로 포기
+          if (compsNow.length >= 6 && avgVar >= 8 && undecidedRatio >= UNDECIDED_RATIO_SOFT) {
+            return false;
+          }
+        }
+
+        // 계속 시도(루프 지속)
+      } else {
+        // 진전했으면 정지 카운터 리셋
+        stallRounds = 0;
+      }
+
     }
 if (timeUp()) return false;
     if (done()){
