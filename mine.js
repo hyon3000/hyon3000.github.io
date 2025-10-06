@@ -2624,14 +2624,21 @@ Minefield.prototype.near_positions = function (x, y) {
           else { // cur==bMax
             if (wMax > 0) { next = -1; }
             else if(this.question===true) { next = 0; } // 흰 없으면 ? 로
-            else {this.set_class(x, y, null);
-        this.flags[x][y] = 0;
-        return; }
+            else {
+              this.set_class(x, y, null);
+              this.flags[x][y] = 0;
+              return; 
+            }
           }
         } else if (cur < 0) {
           var abs = -cur;
           if (abs < wMax) next = -(abs + 1);
-          else next = 0; // ? 로
+          else if(this.question===true) { next = 0; } // 흰 없으면 ? 로
+          else {
+              this.set_class(x, y, null);
+              this.flags[x][y] = 0;
+              return; 
+          } // ? 로
         } else {
           next = 1;
         }
