@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="google-site-verification" content="sVA6QJSCCEozZiu7jjWZHOHMoLK4c4JN6ecoNAuG4bg" />
+  <title>Minesweeper</title>
+  <meta charset="utf-8" />
+  <link href="mine.css" media="screen" rel="stylesheet" type="text/css" />
+  <link href="win98.css" media="screen" rel="stylesheet" type="text/css" />
+  <link href="mine-win98.css" media="screen" rel="stylesheet" type="text/css" />
+  <style>
+    /* 가로 스크롤 허용 */
+    html, body { overflow-x: auto; }
+
+    .windows { position: relative; overflow: visible; width: max-content; min-width: 100%; }
+    .mine-window { position: relative; display: inline-block; }
+
+    /* 이중 카운터용 컨테이너(아이콘+세그먼트 두 줄) */
+    .mine-counters-dual { display: inline-flex; flex-direction: column; gap: 2px; }
+    .counter-row { display: flex; align-items: center; gap: 4px; }
+
+    /* 깃발 아이콘 (mine.png는 160x256 스케일 기준) */
+    .counter-icon {
+      width: 16px; height: 16px;
+      background-image: url(mine.png);
+      background-size: 160px 256px;
+      image-rendering: pixelated;
+      flex: 0 0 16px;
+    }
+    /* (검은지뢰깃발) 원본(288,288~320,320) → 절반 좌표(-144px,-144px) */
+    .icon-flag-black { background-position: -144px -144px; }
+    /* (하얀지뢰깃발) 원본(0,288~32,320) → 절반 좌표(0,-144px) */
+    .icon-flag-white { background-position: 0px -144px; }
+    .notice {
+    margin: 10px 0 14px;
+    padding: 10px 12px;
+    border: 1px solid #b5b5b5;
+    background: #fcfcfc;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .notice h3 {
+    margin: 0 0 6px;
+    font-size: 14px;
+  }
+  .notice ul { margin: 6px 0 0 18px; padding: 0; }
+  .notice li { margin: 2px 0; }
+  .notice .warn {
+    display: inline-block;
+    padding: 0 6px;
+    border-radius: 3px;
+    background: #fff3cd;
+    border: 1px solid #ffe69c;
+  }
+
+  /* --- Console 미러 패널 --- */
+  .console-panel {
+    margin: 10px 0 18px;
+    border: 1px solid #b5b5b5;
+    background: #ffffff;
+  }
+  .console-panel .console-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: #f2f2f2;
+    border-bottom: 1px solid #d0d0d0;
+    font-size: 13px;
+  }
+  .console-panel .console-head .title { font-weight: 600; margin-right: auto; }
+  .console-panel .console-head button,
+  .console-panel .console-head label {
+    font-size: 12px;
+  }
+  .console-panel .console-body {
+    max-height: 220px;
+    overflow: auto;
+    background: #ffffff;
+    font: 12px/1.5 monospace;
+    padding: 8px;
+    white-space: pre-wrap;
+  }
+  .console-line { padding: 1px 0; }
+  .console-time { color: #888; }
+  .console-lvl-log   { color: #222; }
+  .console-lvl-info  { color: #146c94; }
+  .console-lvl-warn  { color: #a46c00; }
+  .console-lvl-error { color: #b00020; }
+
+  </style>
+</head>
+
+<body>
+  <div id="hscroll-guard" style="height:1px;width:0;overflow:hidden;"></div>
+
+  <script>
+    function updateHScrollGuard() {
+      const win = document.querySelector('.mine-window');
+      const guard = document.getElementById('hscroll-guard');
+      if (win && guard) guard.style.width = (win.offsetWidth + 32) + 'px';
+    }
+    window.addEventListener('resize', updateHScrollGuard);
+
+    /* ===== 공통 유틸: 숫자/클램프/상한 계산 ===== */
+    function toInt(v, d=0){ v=parseInt(v); return isNaN(v)?d:v; }
+    function clamp(v, lo, hi){ return Math.min(hi, Math.max(lo, v)); }
+
+    // capBlackTotal = (cells-1)*maxBlackPerCell
+    // capWhiteTotal = capBlackTotal - blackTotal(최종값), 음수면 0
+function calcCaps(cols, rows, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 0) {
+  // 1) 전체 칸수 및 검은지뢰 총 수용량
+  const C = Math.max(3, cols | 0);
+  const R = Math.max(1, rows | 0);
+  const cells = C * R;
+
+  const capBlackPerCell = Math.max(1, maxBlackPerCell | 0);
+  const capBlackTotal   = Math.max(0, (cells - 1) * capBlackPerCell);
+
+  // 2) 검은지뢰가 최소로 점유해야 하는 칸 수
+  const blackUsed = Math.min(Math.max(0, blackTotalNow | 0), capBlackTotal);
+  const minBlackCells = Math.ceil(blackUsed / capBlackPerCell);
+
+  // 3) 흰지뢰를 넣을 수 있는 칸 수
+  const whitePlaceableCells = Math.max(0, (cells - 1) - minBlackCells);
+
+  // 4) 칸당 흰지뢰 수용량을 곱해 최대 흰지뢰 총량
+  const capWhitePerCell = Math.max(0, maxWhitePerCell | 0);
+  const capWhiteTotal   = whitePlaceableCells * capWhitePerCell;
+
+  return { capBlackTotal, capWhiteTotal };
+}
+
+    // 폼 입력에 실시간 적용: 상호 의존 상한 보정
+     function applyFormCaps(){
+    const cols = toInt(x.value, 3);
+    const rows = toInt(y.value, 1);
+
+    // 1) 칸당 최대 검은지뢰수 (1~6)
+    let maxBlackPerCell = clamp(toInt(m.value, 1), 1, 6);
+    if(toInt(m.value, 1)<0 || toInt(m.value, 1)>6) m.value = maxBlackPerCell;
+
+    // 2) 칸당 최대 흰지뢰수 (0~6)  ← id는 wm 이 맞습니다.
+    let maxWhitePerCell = clamp(toInt(wm.value, 0), 0, 6);
+    if(toInt(wm.value, 0)<0 || toInt(wm.value, 0)>6) wm.value = maxWhitePerCell;
+
+    // 3) 검은 총수 보정
+    let k = Math.max(1, toInt(t.value, 1));
+    let caps = calcCaps(cols, rows, maxBlackPerCell, k, maxWhitePerCell);
+    if (k > caps.capBlackTotal) k = caps.capBlackTotal;
+    if(toInt(t.value, 1)<0 || toInt(t.value, 1)>k) t.value = k;
+
+    // 4) 흰 총수 보정 (검은 확정치 사용)
+    caps = calcCaps(cols, rows, maxBlackPerCell, k, maxWhitePerCell);
+    let whiteTotal = Math.max(0, toInt(wt.value, 0));
+    if (whiteTotal > caps.capWhiteTotal) whiteTotal = caps.capWhiteTotal;
+    wt.value = whiteTotal;
+
+    // 5) max 힌트 동기화
+    t.max  = String(caps.capBlackTotal);
+    wt.max = String(caps.capWhiteTotal);
+  }
+
+    /* ---------- 실행 함수 (흰색 지뢰 지원) ---------- */
+var execute = function(i, j, k, l = 1, whiteTotal = 0, whiteMax = 0, aiLevel = null) {
+  // 1) 입력 정규화
+  i = Math.max(3,toInt(i, 3)); j = toInt(j, 1); k = toInt(k, 1); l = clamp(toInt(l, 1), 1, 6);
+  whiteTotal = Math.max(0, toInt(whiteTotal, 0));
+  whiteMax   = clamp(toInt(whiteMax, 0), 0, 6);
+
+  // 1-1) 지능형 생성 수준 확정 (기본값 0)
+  if (aiLevel === null || typeof aiLevel === "undefined") {
+    aiLevel = toInt(document.getElementById('ai')?.value, 0);
+  } else {
+    aiLevel = toInt(aiLevel, 0);
+  }
+
+      // 2) 상한 보정(모든 경로에서 동일하게 강제)
+      //    2-1) 검은지뢰 총수 k 보정
+      let caps = calcCaps(i, j, l, k,whiteMax);
+      if (k > caps.capBlackTotal) k = caps.capBlackTotal;
+
+      //    2-2) 흰지뢰 총수 whiteTotal 보정 (검은 확정치 사용)
+      caps = calcCaps(i, j, l, k,whiteMax);
+      if (whiteTotal > caps.capWhiteTotal) whiteTotal = caps.capWhiteTotal;
+  // 3) 폼 값 반영 + 폼 max 힌트 반영
+  x.value  = i; y.value  = j; m.value  = l; t.value  = k;
+  wm.value = whiteMax; wt.value = whiteTotal;
+  const aiSel = document.getElementById('ai');
+  if (aiSel) aiSel.value = String(aiLevel);
+
+      t.max  = String(caps.capBlackTotal);
+      wt.max = String(caps.capWhiteTotal);
+
+
+      /* 보드 생성 (mine.js가 6인자 지원 시 그대로 전달) */
+
+  
+    
+    minefield.init_board(i, j, k, l, whiteTotal, whiteMax, aiLevel);
+   
+    
+  
+      // ▼ 노픽 모드일 때만 콘솔 미러 표시
+const cp = document.getElementById('console-panel');
+if (cp) {
+  if (aiLevel === 2) {
+    cp.style.display = '';
+  } else {
+    cp.style.display = 'none';
+    // 선택: 숨길 때 로그도 깔끔하게 비우기
+    const bodyEl = document.getElementById('console-body');
+    if (bodyEl) bodyEl.textContent = '';
+  }
+}
+
+
+      /* 레이아웃: 이중 카운터면 헤더 높이/창 높이를 키움 */
+      const hasWhite = whiteTotal > 0;
+      const head = document.querySelector('.window-content .mine-head-area');
+      if (head) head.style.height = hasWhite ? '58px' : '38px';
+
+      const extraHead = hasWhite ? 20 : 0; // 58-38
+      $(".mine-window").css({ "width": 22 + i*16, "height": (107 + extraHead) + j*16 });
+      $(".window-content .mine-head-area ").css({ "width": 2 + i*16 });
+      $(".window-content .mine-area").css({ "width": i*16, "height": j*16 });
+      $(".inner").css({ "width": i*16, "height": j*16 });
+      if(hasWhite) $(".window-content .mine-head-area .mine-reset-button").css({ "left": -4 + 8*i });
+      else $(".window-content .mine-head-area .mine-reset-button").css({ "left": -11 + 8*i });
+      $(".windows").css({ "height": (112 + extraHead) + j*16 });
+
+      renderCounters(hasWhite);
+      update_all_mine_counters();
+      updateHScrollGuard();
+    };
+  </script>
+
+  <div class="windows windows-98" style="height:365px;">
+    <div class="window has-menu mine-window">
+      <div class="title-bar">
+        <div class="title-icon"></div>
+        <div class="title">Minesweeper</div>
+        <div class="title-button-group">
+          <div class="title-button minimize"></div>
+          <div class="title-button maximize disabled"></div>
+          <div class="title-button close"></div>
+        </div>
+      </div>
+
+      <ul class="menu-bar">
+  <li>
+    게임
+    <ul class="menu">
+      <li onclick="minefield.reset_board()">새 게임</li>
+      <li class="separator"></li>
+
+          <li class="menu1"  onclick="execute(9, 9, 10, 1, 0, 0, 2)">초급</li>
+          <li class="menu2"  onclick="execute(16, 16, 40, 1, 0, 0, 2)">중급</li>
+          <li class="menu3"  onclick="execute(30, 16, 99, 1, 0, 0, 2)">고급</li>
+          <li class="menu4"  onclick="execute(30, 16, 120, 2, 0, 0, 2)">초고급</li>
+          <li class="menu5"  onclick="execute(30, 16, 160, 3, 0, 0, 2)">😱</li>
+          <li class="menu6"  onclick="execute(30, 16, 220, 4, 0, 0, 2)">💀</li>
+          <li class="menu7"  onclick="execute(30, 16, 420, 4, 0, 0, 0)">☠️</li>
+          <li class="menu8"  onclick="execute(30, 16, 530, 5, 0, 0, 0)">☠️☠️</li>
+          <li class="menu9"  onclick="execute(30, 16, 680, 6, 0, 0, 0)">3☠️</li>
+          <li class="menu10" onclick="execute(30, 16, 35, 1, 15, 1, 2)">음수지뢰</li>
+          <li class="menu11" onclick="execute(118, 58, 1412, 1, 0, 0, 0)">대형</li>
+          <li class="menu12" onclick="execute(640, 480, 63300, 1, 0, 0, 0)">초대형</li>
+          <li class="menu13" onclick="execute(1280, 720, 192000, 1, 0, 0, 0)">특대형</li>
+   
+      <li class="separator"></li>
+      
+      <!-- ?표시(Question marks) 토글 -->
+      <li id="opt-qmark" class="checkable" onclick="toggleQuestionMarks()">
+        ✓ ? 표시 사용
+      </li>
+</ul>
+</li>
+  <li>
+    도움말
+    <ul class="menu">
+      <li onclick="alert('Minesweeper (Win98 테마)')">정보</li>
+      <li onclick="alert('난이도는 게임→난이도에서 선택하세요.\n?표시는 옵션에서 토글합니다.')">도움말</li>
+    </ul>
+  </li>
+</ul>
+
+
+      <div class="window-content">
+        <div class="mine-head-area" style="height:38px;">
+          <!-- 단일 카운터(기본) : 절대배치 그대로 사용 -->
+          <div id="counters-single" class="counters-single" style="">
+            <div class="mine-counter" id="mine-counter-single">
+              <div class="digit digit-0"></div>
+              <div class="digit digit-0"></div>
+              <div class="digit digit-0"></div>
+            </div>
+          </div>
+
+          <!-- 이중 카운터: 컨테이너만 절대배치, 내부 카운터는 flex로 폭 자동 -->
+          <div id="counters-dual" class="mine-counters-dual"
+               style="display:none; position:absolute; top:4px; left:1px;">
+            <div id="counter-row-black" class="counter-row" style="min-height:23px;">
+              <div class="counter-icon icon-flag-black" title="검은 지뢰"></div>
+              <div class="mine-counter" id="mine-counter-black"
+                   style="position:static; width:auto; height:23px; display:flex;">
+                <div class="digit digit-0"></div>
+                <div class="digit digit-0"></div>
+                <div class="digit digit-0"></div>
+              </div>
+            </div>
+            <div id="counter-row-white" class="counter-row" style="min-height:23px;">
+              <div class="counter-icon icon-flag-white" title="하얀(음수) 지뢰"></div>
+              <div class="mine-counter" id="mine-counter-white"
+                   style="position:static; width:auto; height:23px; display:flex;">
+                <div class="digit digit-0"></div>
+                <div class="digit digit-0"></div>
+                <div class="digit digit-0"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mine-reset-button" onclick="minefield.reset_board()">
+            <div class="mine-reset-button-inner"></div>
+          </div>
+
+          <div class="mine-timer">
+            <div class="digit digit-0"></div>
+            <div class="digit digit-0"></div>
+            <div class="digit digit-0"></div>
+          </div>
+        </div>
+
+        <div id="mine-area" class="mine-area"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="userctrl" class="userctrl" style="margin:0">
+    <form oninput="applyFormCaps()">
+      주문제작:가로
+      <input type="number" id="x"  min="3" max="9999" step="1" style="width:60px;" value="30">
+      세로
+      <input type="number" id="y"  min="1" max="9999" step="1" style="width:60px;" value="16">
+      1칸당 최대 지뢰 수
+      <input type="number" id="m"  min="1" max="6"    step="1" style="width:60px;" value="1">
+      전체 지뢰 수
+      <input type="number" id="t"  min="1" step="1"   style="width:80px;" value="99">
+
+      <!-- ▼ 추가: 하얀 지뢰 입력(0 허용) -->
+      1칸당 최대 음수지뢰 수
+      <input type="number" id="wm" min="0" max="6" step="1" style="width:60px;" value="0">
+      전체 음수지뢰 수
+      <input type="number" id="wt" min="0" step="1" style="width:80px;" value="0">
+      지능형 생성
+      <select id="ai" style="width:220px;" value="2">
+        <option value="0">0: 찍기 패턴 발생 허용 + 최소 구제</option>
+        <option value="1">1: 찍기 패턴 발생 허용 + 첫 클릭 오프닝 보장 + 무제한 구제</option>
+        <option value="2" selected>2: 찍기 패턴 발생 차단 + 자동 지뢰 풀이(매우 느림)</option>
+      </select>
+      <input type="button"
+        onclick="execute(
+          document.getElementById('x').value,
+          document.getElementById('y').value,
+          document.getElementById('t').value,
+          document.getElementById('m').value,
+          document.getElementById('wt').value,
+          document.getElementById('wm').value,
+          document.getElementById('ai').value
+        )"
+        value="생성">
+      <input type="button" onclick="hideViaURL()" value="문구 숨기기">
+    </form>
+  </div>
+<div id="heavy-notice" class="notice">
+  <h3>안내 / 성능 주의</h3>
+  <ul>
+    <li>첫 클릭 직후 <span class="warn">판 생성</span>에 시간이 걸릴 수 있습니다. (지뢰 수↑, 판 크기↑일수록 증가)</li>
+    <ul>
+      <li>초대형과 특대형 판은 초기화에 약 5~10초가 소요됩니다</li>
+    </ul>
+    <li><strong>찍기 패턴 발생 허용의 구제 기능 관련</strong>
+      <ul>
+        <li>복수해가 존재하여 찍기 상황이 발생하였고, 사용자가 지뢰칸을 선택했더라도 사용자의 입력이 이미 공개된 정보에 모순을 만들지 않는다면 그 칸에 지뢰가 없도록 판을 수정합니다</li>
+        <li>하지만 무제한 구제는 난이도를 심각하게 낮춥니다</li>
+      </ul>
+    </li>
+    <li><strong>찍기 패턴 발생 차단</strong> 모드 성능 주의:
+      <ul>
+        <li>음수지뢰가 있으면 매우 느립니다. (중급 크기의 판 이상에서 비권장)</li>
+        <li>1칸당 최대 지뢰 수가 4 이상이면 매우 느립니다.</li>
+        <li>대형 이상의 큰 판에서는 매우 느립니다.</li>
+        <li>해당 모드는 “찍기 없는 풀이 순서”를 항상 보장하며, 자동 풀기와 힌트 제공 기능은 찍기 패턴 발생 차단 모드에서만 사용 가능합니다.</li>
+      </ul>
+    </li>
+    
+  </ul>
+  <div id="console-panel" class="console-panel" style="display:none">
+  <div class="console-head">
+    <span class="title">실시간 로그 (Console mirror)</span>
+    <label><input type="checkbox" id="console-autoscroll" checked> 자동 스크롤</label>
+    <button type="button" id="console-play">지뢰 자동으로 풀기</button>
+    <button type="button" id="console-hint">힌트 제공</button>
+    <button type="button" id="console-pause">콘솔 일시정지</button>
+    <button type="button" id="console-clear">콘솔 비우기</button>
+    <button type="button" id="console-copy">콘솔 내용 복사</button>
+
+  </div>
+  <div class="console-body" id="console-body" aria-live="polite"></div>
+</div>
+</div>
+
+  <script src="vendor/jquery.min.js"></script>
+  <script src="vendor/jquery-ui.min.js"></script>
+  <script src="jquery.mswin.js"></script>
+  <script src="jquery.mswin.listview.js"></script>
+  <script src="jquery.mswin.menu.js"></script>
+  <script src="mine.js"></script>
+<script>
+  // 메뉴의 체크 모양을 단순 텍스트(✓)로 표현
+  function updateQuestionMenuVisual() {
+    const li = document.getElementById('opt-qmark');
+    if (!li) return;
+    const on = !!(window.minefield && window.minefield.question);
+    li.textContent = (on ? '✓ ' : '  ') + '? 표시 사용';
+    // 접근성 힌트
+    li.setAttribute('aria-checked', String(on));
+  }
+
+  // ?표시 토글 → minefield.question true/false
+  function toggleQuestionMarks() {
+    if (!window.minefield) return;
+    // 존재하지 않으면 속성 추가, 있으면 단순 토글
+    if (typeof window.minefield.question === 'undefined') {
+      window.minefield.question = true;
+    } else {
+      window.minefield.question = !window.minefield.question;
+    }
+    updateQuestionMenuVisual();
+  }
+
+  // 초기 상태(원하면 기본값을 true로 시작)
+  document.addEventListener('DOMContentLoaded', function () {
+    if (window.minefield && typeof window.minefield.question === 'undefined') {
+      window.minefield.question = true;  // 기본 ON (원하면 false로 바꾸세요)
+    }
+    updateQuestionMenuVisual();
+    // 기존 메뉴 시스템 활성화(이미 사용 중이면 무시)
+    if ($('.menu-bar').length) $('.menu-bar').menubar();
+  });
+</script>
+
+  <script>
+    /* GET 파서 */
+    function getQueryParams() {
+      const p = new URLSearchParams(window.location.search);
+      return {
+        rows: p.get('rows'),
+        cols: p.get('cols'),
+        minespercell: p.get('minespercell'),
+        mines: p.get('mines'),
+        whiteminespercell: p.get('whiteminespercell'),
+        whitemines: p.get('whitemines'),
+        logic: p.get('logic'),
+        hide: p.get('hide'),
+      };
+    }
+    function hasCoreParams(q) {
+      return q.rows !== null && q.cols !== null && q.minespercell !== null && q.mines !== null;
+    }
+    function getQueryDefault0(v){ const n = parseInt(v); return isNaN(n)?0:n; }
+
+    /* 하단 입력 숨기기 */
+    function hideUserInputs() {
+      const u = document.getElementById('userctrl');
+      if (u) u.style.display = 'none';
+      const n = document.getElementById('heavy-notice');
+      if (n) n.style.display = 'none';
+    }
+
+    /* GET 리다이렉트(보내기 전에 상한 보정) */
+    function hideViaURL() {
+      let cols = clamp(toInt(x.value,3), 3, 999999);
+      let rows = clamp(toInt(y.value,1), 1, 999999);
+      let mpc  = clamp(toInt(m.value,1), 1, 6);
+      let mines= Math.max(1, toInt(t.value,1));
+      let wmpc = clamp(toInt(wm.value,0), 0, 6);
+      let wmines = Math.max(0, toInt(wt.value,0));
+
+      // 보정 1: 검은 총수
+      let caps = calcCaps(cols, rows, mpc, mines,wmpc);
+      if (mines > caps.capBlackTotal) mines = caps.capBlackTotal;
+
+      // 보정 2: 흰 총수(검은 확정치 반영)
+      caps = calcCaps(cols, rows, mpc, mines,wmpc);
+      if (wmines > caps.capWhiteTotal) wmines = caps.capWhiteTotal;
+
+      // 폼에도 반영(시각적 피드백)
+      x.value=cols; y.value=rows; m.value=mpc; t.value=mines;
+      wm.value=wmpc; wt.value=wmines;
+      t.max  = String(caps.capBlackTotal);
+      wt.max = String(caps.capWhiteTotal);
+
+      const u = new URL(window.location.href);
+      u.searchParams.set('cols', cols);
+      u.searchParams.set('rows', rows);
+      u.searchParams.set('minespercell', mpc);
+      u.searchParams.set('mines', mines);
+      u.searchParams.set('whiteminespercell', wmpc);
+      u.searchParams.set('whitemines', wmines);
+      // 지능형 생성 수준 포함(기본 0)
+      let logic = toInt(document.getElementById('ai')?.value, 0);
+      u.searchParams.set('logic', logic);
+      // 숨김 플래그 & 캐시 방지용 타임스탬프
+      u.searchParams.set('hide', '1');
+      u.searchParams.set('ts', String(Date.now()));
+
+      // 뒤로가기 히스토리를 남기지 않고, 강제 새로고침 효과
+      window.location.replace(u.pathname + '?' + u.searchParams.toString());
+    }
+
+    /* 유틸: digit DOM 수 맞추기 */
+    function ensure_digits(counter, count) {
+      const cur = counter.children().length;
+      if (cur < count) {
+        for (let i = 0; i < count - cur; i++) counter.append('<div class="digit digit-0"></div>');
+      } else if (cur > count) {
+        for (let i = 0; i < cur - count; i++) $(counter.children()[0]).remove();
+      }
+    }
+    /* 타이머(3자리 고정) */
+    function update_counter_timer(val, counter) {
+      if (val > 999) val = 999; if (val < 0) val = 0;
+      ensure_digits(counter, 3);
+      const digits = [ Math.floor(val/100), Math.floor(val/10)%10, val%10 ];
+      for (let i=0;i<3;i++){
+        const d = digits[i];
+        const child = $(counter.children()[i]);
+        child.removeClass(); child.addClass("digit digit-" + d);
+      }
+    }
+    /* 숫자 카운터(자릿수 고정 지원) */
+    function update_counter_generic(val, counter, totalForWidth, fixedDigits) {
+      let N = fixedDigits || Math.max(3, String(Math.abs(totalForWidth || val || 0)).length);
+      ensure_digits(counter, N);
+      const isNeg = val < 0;
+      if (isNeg) {
+        const slots = N - 1;
+        const maxAbs = Math.pow(10, slots) - 1;
+        let absVal = Math.abs(val);
+        if (absVal > maxAbs) absVal = maxAbs;
+        let child = $(counter.children()[0]);
+        child.removeClass().addClass("digit digit-10");
+        const padded = String(absVal).padStart(slots, "0");
+        for (let i = 0; i < slots; i++) {
+          const d = padded.charCodeAt(i) - 48;
+          child = $(counter.children()[i + 1]);
+          child.removeClass().addClass("digit digit-" + d);
+        }
+      } else {
+        const padded = String(val).padStart(N, "0");
+        for (let i = 0; i < N; i++) {
+          const d = padded.charCodeAt(i) - 48;
+          const child = $(counter.children()[i]);
+          child.removeClass().addClass("digit digit-" + d);
+        }
+      }
+      counter.css({ width: (N * 13) + "px", display: "flex", whiteSpace: "nowrap", height: "23px" });
+    }
+
+    /* 모듈 전환 */
+    function renderCounters(hasWhite) {
+      const single = document.getElementById('counters-single');
+      const dual   = document.getElementById('counters-dual');
+      if (!single || !dual) return;
+      if (hasWhite) { 
+        single.style.display = 'none'; dual.style.display = '';
+        //div class가 mint-timer인 것과 mine-reset-button인 것의 style의 top을 16px로 설정
+        const timer = document.querySelector('.mine-timer');
+        if (timer) timer.style.top = '16px';
+        const resetBtn = document.querySelector('.mine-reset-button');
+        if (resetBtn) resetBtn.style.top = '16px';
+       }
+      else { 
+        single.style.display = '';    dual.style.display   = 'none'; 
+        //div class가 mint-timer인 것과 mine-reset-button인 것의 style의 top을 6px로 설정
+        const timer = document.querySelector('.mine-timer');
+        if (timer) timer.style.top = '6px';
+        const resetBtn = document.querySelector('.mine-reset-button');
+        if (resetBtn) resetBtn.style.top = '6px';
+      }
+    }
+
+    /* 모든 카운터 갱신 */
+    function update_all_mine_counters() {
+      const hasWhite = (minefield.white_total || minefield.num_mines_white || 0) > 0;
+      if (hasWhite) {
+        const bTotal = (minefield.num_mines || 0);
+        const wTotal = (minefield.white_total || minefield.num_mines_white || 0);
+        const maxTotalAbs = Math.max(Math.abs(bTotal), Math.abs(wTotal));
+        const N = Math.max(3, String(maxTotalAbs).length);
+        const blackRemain = bTotal - (minefield.num_flags || 0);
+        const whiteRemain = wTotal - (minefield.num_flags_white || 0);
+        update_counter_generic(blackRemain, $("#mine-counter-black"), bTotal, N);
+        update_counter_generic(whiteRemain, $("#mine-counter-white"), wTotal, N);
+      } else {
+        const remain = (minefield.num_mines || 0) - (minefield.num_flags || 0);
+        update_counter_generic(remain, $("#mine-counter-single"), minefield.num_mines || 0);
+      }
+    }
+
+    /* 윈도우/메뉴 초기화 — 요소가 있을 때만 안전하게 실행 */
+    if ($('.window').length) $('.window').window();
+    if ($('.listview').length) $('.listview').listview();
+    if ($('.desktop-listview').length) $('.desktop-listview').listview();
+    if ($('.menu-bar').length) $('.menu-bar').menubar();
+    if ($('.taskbar ul.start').length) {
+      $('.taskbar ul.start').menubar({ position_toplevel: { my: "left bottom", at: "left top" } });
+    }
+
+    /* 타이머 */
+    var timer_val = 0, timer_id = null;
+    var update_timer = function(){ timer_val += 1; update_counter_timer(timer_val, $(".mine-timer")); };
+
+    /* Minefield 인스턴스 */
+    var mine_area = document.getElementById("mine-area");
+    var minefield = new window.Minefield(
+      mine_area,
+      function(status) {
+        var smile = $(".mine-reset-button .mine-reset-button-inner");
+        var bg = "0 0"; if (status === -1) bg = "-17px 0"; if (status === -2) bg = "-51px 0"; if (status === 2) bg = "-34px 0";
+        smile.css({"background-position": bg});
+
+        if (status === 0) timer_id = window.setInterval(update_timer, 1000);
+        if (status < 0 || status === 1) {
+          window.clearInterval(timer_id);
+          if (status === 1) {
+            const hasWhite = (minefield.white_total || minefield.num_mines_white || 0) > 0;
+            renderCounters(hasWhite);
+            const head = document.querySelector('.window-content .mine-head-area');
+            if (head) head.style.height = hasWhite ? '58px' : '38px';
+            update_all_mine_counters();
+            timer_val = 0; timer_id = null; update_counter_timer(0, $(".mine-timer"));
+          }
+          if (status === -2) update_all_mine_counters();
+        }
+      },
+      function(status) {
+  // ★ 게임이 끝난 상태(-1: 패배, -2: 클리어)에서는 덮어쓰지 않음
+  if (minefield.game_status < 0) return;
+
+  var smile = $(".mine-reset-button .mine-reset-button-inner");
+
+        smile.css({"background-position": (status === 1) ? "-34px 0" : "0 0"});
+      }
+    );
+
+    /* 깃발 우클릭 시 카운터 갱신 */
+    minefield.on_rclick_func = function(){ update_all_mine_counters(); };
+
+
+
+    /* GET 인자 자동 적용 (로드 시에도 상한 보정 강제) */
+    document.addEventListener('DOMContentLoaded', function() {
+      const q = getQueryParams();
+      if (hasCoreParams(q)) {
+        let cols = Math.max(3, toInt(q.cols, 30));
+        let rows = toInt(q.rows, 16);
+        let mpc  = clamp(toInt(q.minespercell, 1), 1, 6);
+        let mines= Math.max(1, toInt(q.mines, 99));
+        let wmpc = clamp(getQueryDefault0(q.whiteminespercell), 0, 6);
+        let wmines = Math.max(0, getQueryDefault0(q.whitemines));
+        let logic = (q.logic !== null) ? clamp(toInt(q.logic, 0), 0, 2) : 0;
+        // 보정 1: 검은 총수
+        let caps = calcCaps(cols, rows, mpc, mines,wmpc);
+        if (mines > caps.capBlackTotal) mines = caps.capBlackTotal;
+
+        // 보정 2: 흰 총수
+        caps = calcCaps(cols, rows, mpc, mines,wmpc);
+        if (wmines > caps.capWhiteTotal) wmines = caps.capWhiteTotal;
+
+        execute(cols, rows, mines, mpc, wmines, wmpc, logic);
+
+        // 폼과 max 힌트도 동기화
+        x.value=cols; y.value=rows; m.value=mpc; t.value=mines;
+        wm.value=wmpc; wt.value=wmines;
+        t.max  = String(caps.capBlackTotal);
+        wt.max = String(caps.capWhiteTotal);
+        const aiSel = document.getElementById('ai');
+        if (aiSel) aiSel.value = String(logic);
+        hideUserInputs();
+      }
+      else if (q.hide === '1') {
+        // 핵심 파라미터가 없더라도, hide=1이면 설명/폼을 무조건 숨김
+        hideUserInputs();
+      }
+else execute(30, 16, 99, 1, 0, 0, 2);
+    });
+/* ===== Console Mirror ===== */
+(function setupConsoleMirror(){
+  const bodyEl   = document.getElementById('console-body');
+const btnPlay  = document.getElementById('console-play');
+  const btnPause = document.getElementById('console-pause');
+  const btnClear = document.getElementById('console-clear');
+  const btnCopy  = document.getElementById('console-copy');
+  const cbAuto   = document.getElementById('console-autoscroll');
+
+  if (!bodyEl) return; // 안전가드
+
+  let paused = false;
+  function ts() {
+    const d = new Date();
+    const pad = (n)=> String(n).padStart(2,'0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3,'0')}`;
+  }
+  function print(level, args) {
+    if (paused) return;
+    const line = document.createElement('div');
+    line.className = `console-line console-lvl-${level}`;
+    const t = document.createElement('span');
+    t.className = 'console-time';
+    t.textContent = `[${ts()}] `;
+    line.appendChild(t);
+
+    const content = Array.from(args).map(v => {
+      try {
+        if (typeof v === 'string') return v;
+        return JSON.stringify(v);
+      } catch(_) {
+        return String(v);
+      }
+    }).join(' ');
+    line.appendChild(document.createTextNode(content));
+    bodyEl.appendChild(line);
+
+    if (cbAuto && cbAuto.checked) {
+      bodyEl.scrollTop = bodyEl.scrollHeight;
+    }
+  }
+
+  // 원본 보존
+  const orig = {
+    log:   console.log.bind(console),
+    info:  console.info?.bind(console)  || function(){},
+    warn:  console.warn?.bind(console)  || function(){},
+    error: console.error?.bind(console) || function(){},
+  };
+
+  // 후킹
+  console.log  = function(){ print('log', arguments);  orig.log.apply(console, arguments); };
+  console.info = function(){ print('info', arguments); orig.info.apply(console, arguments); };
+  console.warn = function(){ print('warn', arguments); orig.warn.apply(console, arguments); };
+  console.error= function(){ print('error', arguments);orig.error.apply(console, arguments); };
+
+  // 컨트롤
+  if (btnPause) {
+    btnPause.addEventListener('click', function(){
+      paused = !paused;
+      btnPause.textContent = paused ? '재개' : '일시정지';
+    });
+  }
+  if (btnClear) {
+    btnClear.addEventListener('click', function(){
+      bodyEl.textContent = '';
+    });
+  }
+  if (btnCopy) {
+    btnCopy.addEventListener('click', async function(){
+      const text = Array.from(bodyEl.querySelectorAll('.console-line'))
+        .map(el => el.textContent).join('\n');
+      try { await navigator.clipboard.writeText(text); } catch(_) {}
+    });
+  }
+
+  // 시작 메시지
+  console.info('[Console mirror started]');
+})();
+
+/* ===== Runtime i18n: if not Korean, switch UI texts to English ===== */
+(function () {
+  function isKorean() {
+    var lang = (navigator.language || navigator.userLanguage || "").toLowerCase();
+    return lang.startsWith("ko");
+  }
+
+  function setText(el, txt) { if (el) el.textContent = txt; }
+  function setHTML(el, html){ if (el) el.innerHTML = html; }
+
+  function localizeToEnglish() {
+    document.documentElement.setAttribute("lang", "en");
+
+    /* 1) Menu labels */
+    const menuText = {
+      ".menu1":  "Beginner",
+      ".menu2":  "Intermediate",
+      ".menu3":  "Expert",
+      ".menu4":  "Ultra",
+      ".menu5":  "😱",
+      ".menu6":  "💀",
+      ".menu7":  "☠️",
+      ".menu8":  "☠️☠️",
+      ".menu9":  "3☠️",
+      ".menu10": "AntiMine",
+      ".menu11": "Large",
+      ".menu12": "XLarge",
+      ".menu13": "XXLarge"
+    };
+    Object.keys(menuText).forEach(sel => {
+      const el = document.querySelector(sel);
+      setText(el, menuText[sel]);
+    });
+
+    /* 2) Counter icon tooltips */
+    const blackIcon = document.querySelector(".icon-flag-black");
+    if (blackIcon) blackIcon.setAttribute("title", "Black mine");
+    const whiteIcon = document.querySelector(".icon-flag-white");
+    if (whiteIcon) whiteIcon.setAttribute("title", "Anti-mine");
+
+    /* 3) Form labels / buttons */
+    const form = document.querySelector("#userctrl form");
+    if (form) {
+      // 라벨은 정적인 한국어 텍스트를 치환
+      let html = form.innerHTML;
+      html = html.replace("주문제작:가로", "Custom: cols")
+                 .replace("세로", "rows")
+                 .replace("1칸당 최대 지뢰 수", "Max mines / cell")
+                 .replace("전체 지뢰 수", "Total mines")
+                 .replace("1칸당 최대 음수지뢰 수", "Max anti-mines / cell")
+                 .replace("전체 음수지뢰 수", "Total anti-mines")
+                 .replace("지능형 생성", "Generation mode")
+                 .replace("생성", "Create")
+                 .replace("문구 숨기기", "Hide controls");
+      form.innerHTML = html;
+
+      // 셀렉트 옵션도 영문화
+      const aiSel = document.getElementById('ai');
+      if (aiSel) {
+        const opt = aiSel.options;
+        if (opt[0]) opt[0].text = "0: allow guesses + minimal rescue";
+        if (opt[1]) opt[1].text = "1: allow guesses + guaranteed first click opening +unlimited rescue";
+        if (opt[2]) opt[2].text = "2: strict no-guess + auto-solve (slow)";
+      }
+    }
+
+    /* 4) Heavy notice(제목/문구만 부분 치환, DOM은 보존) */
+    const notice = document.getElementById("heavy-notice");
+    if (notice) {
+      const h3 = notice.querySelector("h3");
+      setText(h3, "Notice / Performance Tips");
+
+      // 한국어 리스트 항목을 안전하게 교체 (있는 경우에만)
+      // 첫 번째 큰 <ul> 안의 한국어 문구들을 찾아 영어로 바꿉니다.
+      // 이미 영어라면 그대로 둡니다.
+      const list = notice.querySelector("ul");
+      if (list) {
+        let html = list.innerHTML;
+        html = html
+          .replace(/첫 클릭 직후 .*?증가\)<\/li>/, 'Right after the first click, <span class="warn">board generation</span> may take a while. (More mines & larger boards take longer.)</li>')
+          .replace(/초대형과 특대형 판은 초기화에 약 .*?<\/li>/, 'XLarge and XXLarge boards take about 5–10 seconds to initialize.</li>')
+          .replace(/<li><strong>찍기 패턴 발생 허용의 구제 기능 관련<\/strong>/, '<li><strong>About the rescue feature when guesses are allowed</strong>')
+          .replace(/복수해가 .*?수정합니다<\/li>/, 'If multiple solutions exist and a guess situation occurs, and you click a mine cell without contradicting revealed info, the board will be modified so that there is no mine in that cell.</li>')
+          .replace(/하지만 무제한 구제는 난이도를 심각하게 낮춥니다<\/li>/, 'However, unlimited rescues significantly reduce the difficulty.</li>')
+          .replace(/<li><strong>찍기 패턴 발생 차단<\/strong> 모드 성능 주의:/, '<li><strong>Strict no-guess</strong> mode performance caveats:')
+          .replace(/음수지뢰가 있으면 매우 느립니다.*?<\/li>/, 'Very slow when anti-mines are used (not recommended for ≥ Intermediate).</li>')
+          .replace(/1칸당 최대 지뢰 수가 4 이상이면 매우 느립니다\.<\/li>/, 'Very slow if max mines per cell ≥ 4.</li>')
+          .replace(/대형 이상의 큰 판에서는 매우 느립니다\.<\/li>/, 'Very slow on large boards (≥ Large).</li>')
+          .replace(/해당 모드는 “찍기 없는 풀이 순서”를 항상 보장하며, 자동 풀기와 힌트 제공 기능은 찍기 패턴 발생 차단 모드에서만 사용 가능합니다\.<\/li>/,'This mode guarantees a guess-free solution order, and the auto-solving and hint features are only available in strict no-guess mode.</li>' )
+
+
+        setHTML(list, html);
+      }
+    }
+
+    /* 5) Console panel 헤더/버튼 */
+    const cp = document.getElementById("console-panel");
+    if (cp) {
+      const titleEl = cp.querySelector('.console-head .title');
+      const pauseEl = document.getElementById('console-pause');
+      const playEl  = document.getElementById('console-play');
+      const hintEl  = document.getElementById('console-hint');   // ← 누락됐던 부분 추가
+      const clearEl = document.getElementById('console-clear');
+      const copyEl  = document.getElementById('console-copy');
+      const autoLbl = cp.querySelector('.console-head label');
+
+      setText(titleEl, 'Live Log (Console mirror)');
+      setText(playEl,  'Solve Minesweeper Automatically');
+      setText(hintEl,  'Hint From Log');              // ← “힌트 제공” 번역
+      setText(pauseEl, 'Pause Console');
+      setText(clearEl, 'Clear Console');
+      setText(copyEl,  'Copy Console');
+      if (autoLbl) setHTML(autoLbl, '<input type="checkbox" id="console-autoscroll" checked> Auto scroll');
+
+      // 일시정지 버튼 토글 텍스트도 영어로
+      pauseEl?.addEventListener('click', function(){
+        const isResume = pauseEl.textContent.includes('Resume');
+        pauseEl.textContent = isResume ? 'Pause' : 'Resume';
+      });
+    }
+  }
+
+  if (!isKorean()) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", localizeToEnglish);
+    } else {
+      localizeToEnglish();
+    }
+  }
+})();
+
+
+</script>
+<div id="i18n-hint" style="display:none">
+  <!-- 잘못 마킹한 칸 알림 -->
+  <span id="i18n-wrong-flag">잘못 마킹한 칸이 있습니다: ({x}, {y}). 먼저 이 칸을 수정하세요.</span>
+  <span id="i18n-wrong-flag-en">You mis-flagged a cell: ({x}, {y}). Please fix this first.</span>
+
+  <!-- 노픽 힌트가 불가한 경우 -->
+  <span id="i18n-not-nopick">이 기능은 ‘찍기 없음’ 보드에서만 사용할 수 있습니다.</span>
+  <span id="i18n-not-nopick-en">Hints are available only on a “no-pick” board.</span>
+
+  <!-- 더 줄 힌트가 없을 때 -->
+  <span id="i18n-no-next">더 이상 제공할 힌트가 없습니다.</span>
+  <span id="i18n-no-next-en">No further hints.</span>
+
+  <!-- 다음 액션 안내(열기/깃발) -->
+  <span id="i18n-next-open">다음으로 열어야 하는 안전한 칸: ({x}, {y}). 근거: {reason}</span>
+  <span id="i18n-next-open-en">Next safe cell to open: ({x}, {y}). Rationale: {reason}</span>
+
+  <span id="i18n-next-flag-black">다음 위치에 지뢰 깃발 {n}개: ({x}, {y}). 근거: {reason}</span>
+  <span id="i18n-next-flag-black-en">Place {n} mine flag(s) at ({x}, {y}). Rationale: {reason}</span>
+
+  <span id="i18n-next-flag-white">다음 위치에 음수 지뢰 깃발 {n}개: ({x}, {y}). 근거: {reason}</span>
+  <span id="i18n-next-flag-white-en">Place {n} anti-mine flag(s) at ({x}, {y}). Rationale: {reason}</span>
+
+  <span id="i18n-dead">이미 죽었습니다</span>
+<span id="i18n-dead-en">Already dead</span>
+</div>
+<script>
+/* ===== 작은 i18n 헬퍼 ===== */
+const _isKO = () => (navigator.language||'').toLowerCase().startsWith('ko');
+function _msg(idKo,idEn, map={}) {
+  const root = document.getElementById('i18n-hint');
+  const el = root?.querySelector('#'+(_isKO()?idKo:idEn));
+  let s = el ? (el.textContent||'') : '';
+  return s.replace(/\{(\w+)\}/g, (_,k)=> (map[k]??''));
+}
+const _deadMsg = () => _msg('i18n-dead','i18n-dead-en') || 'you already dead';
+
+/* ===== 공통 유틸(깃발/열기) ===== */
+function _isFlagUI(mf,x,y){ const c=mf.get_class(x,y); return !!(c && /^flag-/.test(c)); }
+function _removeFlagFully(mf,x,y){ let g=24; while(_isFlagUI(mf,x,y)&&g--) mf.on_rclick(x,y); }
+function _ensureFlagExactly(mf,x,y,target){ if((mf.flags[x][y]||0)===target) return false; let g=24; while((mf.flags[x][y]||0)!==target&&g--) mf.on_rclick(x,y); return true; }
+function _openWithUnflag(mf,x,y){ if (_isFlagUI(mf,x,y)) _removeFlagFully(mf,x,y); if (mf.is_opened(x,y)) return false; mf.on_click(x,y); return true; }
+
+/* ===== trace 진행상태 유틸 ===== */
+function _done(mf,t){
+  if(!t) return true;
+  if(t.kind==='open') return mf.is_opened(t.x,t.y);
+  if(t.kind==='markMine') return ((mf.flags[t.x][t.y]||0)===(mf.mines[t.x][t.y]|0));
+  return true; // rule/subset/flood 등은 힌트/매크로 관점에서 소비된 것으로 간주
+}
+function _nextVisible(mf){
+  const tr=mf._nopick_trace||[]; let i=0;
+  while(i<tr.length && _done(mf,tr[i])) i++;
+  for(; i<tr.length; i++){ const t=tr[i]; if(t.kind==='open'||t.kind==='markMine') return t; }
+  return null;
+}
+function humanizeReason(raw) {
+  if (!raw) return "";
+  const KO = (navigator.language||"").toLowerCase().startsWith("ko");
+
+  // 규칙별 정규식 매핑 (위에서부터 우선적용)
+  const table = [
+    // Rule A
+    [/^RuleA N==0\b/i, () => KO
+      ? "숫자칸의 남은 지뢰 수 N이 0 → 주변 닫힌 칸은 모두 안전"
+      : "Remaining mines N is 0 → all adjacent closed cells are safe"],
+    [/^RuleA N==F\b/i, () => KO
+      ? "인접 깃발 수 F가 요구 지뢰 수 N과 같음 → 나머지 인접 칸은 모두 안전"
+      : "Flags F equals required mines N → all other adjacent cells are safe"],
+
+    // Rule B
+    [/^RuleB U==1 exact count=(\d+)/i, (m) => KO
+      ? `주변 닫힌 칸 U가 1개이고 남은 지뢰가 ${m[1]}개 → 그 1칸이 전부 지뢰`
+      : `Only 1 closed neighbor (U=1) and ${m[1]} mine(s) remaining → that cell must be a mine`],
+    [/^RuleB cap count=(\d+)/i, (m) => KO
+      ? `인접 제약(최대 수용)으로 지뢰 ${m[1]}개가 강제`
+      : `Capacity bounds force ${m[1]} mine(s)`],
+
+    // SUBSET
+    [/^subset single exact count=(\d+)/i, (m) => KO
+      ? `부분집합 추론으로 해당 칸(묶음)에 지뢰 ${m[1]}개가 정확히 필요`
+      : `Subset logic forces exactly ${m[1]} mine(s) in the cell set`],
+    [/^subset Δ=0\b/i, () => KO
+      ? "부분집합 추론 결과 Δ=0 → 비교된 나머지 칸은 모두 안전"
+      : "Subset logic Δ=0 → remaining compared cells are all safe"],
+    [/^subset Δ=\|S\|\*cap\b/i, () => KO
+      ? "부분집합 S의 크기×칸당 최대지뢰(cap)만큼 채워야 함 → S가 모두 지뢰"
+      : "Subset size × per-cell cap must be filled → S is all mines"],
+
+    // EXISTENCE
+    [/^exist\(range==\{0\}\)/i, () => KO
+      ? "모든 가능한 배치에서 주변 지뢰 수가 0 → 항상 안전"
+      : "In all placements neighbors count is 0 → always safe"],
+    [/^exist\(range==\{(\d+)\}\)/i, (m) => KO
+      ? `가능한 배치에서 주변 지뢰 수가 ${m[1]}으로만 일치`
+      : `Across all placements the neighbor count is always ${m[1]}`],
+
+    // BOUNDS
+    [/^bounds exact count=(\d+)/i, (m) => KO
+      ? `상·하한 경계 계산으로 정확히 지뢰 ${m[1]}개 필요`
+      : `Lower/upper bounds force exactly ${m[1]} mine(s)`],
+    [/^bounds chord N==minSum\b/i, () => KO
+      ? "최소 합이 이미 채워져 더 이상 지뢰 불가 → 나머지는 안전"
+      : "Minimum sum already satisfied → remaining cells are safe"],
+
+    // 기타 자주 보이는 로그 꼬리표
+    [/^flood-neighbor\b/i, () => KO
+      ? "0칸 연쇄 공개로 인접 안전칸 자동 공개"
+      : "Auto-reveal from zero-cell flood"],
+    [/^seed\b/i, () => KO
+      ? "첫 클릭으로 시작한 안전 오픈"
+      : "Safe open triggered by the first click"],
+
+    [/^RuleB\s+N==U\s+count=(\d+)/i, (m) => KO
+      ? `숫자칸에서 남은 지뢰 수 N이 미정 칸 수 U와 같음 → 그 U칸이 모두 지뢰 (총 ${m[1]}개)`
+      : `Remaining mines N equals number of unknown cells U → all U cells are mines (total ${m[1]})`],
+
+  ];
+
+  for (const [re, make] of table) {
+    const m = re.exec(raw);
+    if (m) {
+      const explain = make(m);
+      // 원문도 함께 보여 주되, 사람이 읽는 설명을 뒤에 덧붙임
+      return `${raw} — ${explain}`;
+    }
+  }
+  // 매칭 실패 시 원문 그대로
+  return raw;
+}
+/* ===== 힌트: wrong-flag 우선 알림+즉시수정 → 다음 스텝 1회 실행+근거 alert ===== */
+window.provide_nopick_hint = function(){
+  const mf = window.minefield;
+  if (!mf || !mf.use_nopick || !Array.isArray(mf._nopick_trace) || !mf._nopick_trace.length) {
+    alert(_msg('i18n-not-nopick','i18n-not-nopick-en')); return;
+  }
+  if (mf.game_status === -1){ alert(_deadMsg()); console.warn('you already dead'); return; }
+
+  const W=mf.columns|0,H=mf.rows|0, wrong=[];
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+    const f=mf.flags[x][y]||0; if(!f) continue;
+    const ans=mf.mines[x][y]|0; if(f!==ans) wrong.push([x,y,ans]);
+  }
+  if (wrong.length){
+    const [x,y,ans]=wrong[(Math.random()*wrong.length)|0];
+    alert(_msg('i18n-wrong-flag','i18n-wrong-flag-en',{x,y}));
+    if (ans===0) _removeFlagFully(mf,x,y); else _ensureFlagExactly(mf,x,y,ans);
+    return;
+  }
+
+  const t = _nextVisible(mf); if(!t){ alert(_msg('i18n-no-next','i18n-no-next-en')); return; }
+  const reason = (t.reason??(t.kind==='flood'?'인접 칸 자동 공개':'auto'));
+  if (t.kind==='open'){
+    if (_openWithUnflag(mf,t.x,t.y)) {
+      const nice = humanizeReason(reason);
+      alert(_msg('i18n-next-open','i18n-next-open-en',{x:t.x,y:t.y,reason:nice}));
+    }
+    else alert(_msg('i18n-no-next','i18n-no-next-en'));
+  } else {
+    const want = mf.mines[t.x][t.y]|0; if (!want) { alert(_msg('i18n-no-next','i18n-no-next-en')); return; }
+    if (_ensureFlagExactly(mf,t.x,t.y,want)){
+      const nice = humanizeReason(reason);
+      alert(_msg(want<0?'i18n-next-flag-white':'i18n-next-flag-black',
+      want<0?'i18n-next-flag-white-en':'i18n-next-flag-black-en',
+      {x:t.x,y:t.y,n:Math.abs(want),reason:nice}));
+    }
+      
+    else alert(_msg('i18n-no-next','i18n-no-next-en'));
+  }
+};
+
+/* ===== 보드 UID: init_mines_nopick 성공시 증가 ===== */
+(function(){
+  const orig = window.Minefield?.prototype?.init_mines_nopick;
+  if (orig && !window.Minefield.prototype.__uidWrapped){
+    window.Minefield.prototype.__uidWrapped = true;
+    window.Minefield.prototype.init_mines_nopick = function(fx,fy){
+      const r = orig.call(this,fx,fy); if (r===1) this._nopick_board_uid=(this._nopick_board_uid||0)+1; return r;
+    };
+  }
+})();
+
+/* ===== 자동재생: 0.3s, 보드교체/사망 정지, 버튼 토글(일시정지/재개) ===== */
+(function(){
+  const btn = document.getElementById('console-play');
+  const labelPlay  = () => _isKO() ? '지뢰 자동으로 풀기' : 'Solve Minesweeper Automatically';
+  const labelPause = () => _isKO() ? '자동 풀기 일시 중지' : 'Pause Auto-solve';
+
+  function startOrResume(mf){
+    if (!mf.use_nopick || !Array.isArray(mf._nopick_trace) || !mf._nopick_trace.length) { console.warn('[macro] no-pick trace unavailable.'); return; }
+    if (mf.game_status === -1){ alert(_deadMsg()); console.warn('you already dead'); return; }
+
+    if (mf._macro_timer && mf._macro_running && mf._macro_paused){ mf._macro_paused=false; btn&&(btn.textContent=labelPause()); return; }
+    if (mf._macro_timer && mf._macro_running && !mf._macro_paused){ mf._macro_paused=true;  btn&&(btn.textContent=labelPlay());  return; }
+
+    if (mf._macro_timer) clearInterval(mf._macro_timer);
+    mf._macro_running=true; mf._macro_paused=false;
+    const startUID = mf._nopick_board_uid||0;
+
+    mf._macro_timer = setInterval(function(){
+      if (!mf._macro_running) { stop('manual'); return; }
+      if (mf._macro_paused) return;
+      if ((mf._nopick_board_uid||0)!==startUID){ stop('board changed'); return; }
+      if (mf.game_status === -1){ stop('dead'); console.warn('you already dead'); alert(_deadMsg()); return; }
+
+      const step = _nextVisible(mf); if (!step){ stop('done'); return; }
+      if (step.kind==='open') _openWithUnflag(mf,step.x,step.y);
+      else _ensureFlagExactly(mf,step.x,step.y,(mf.mines[step.x][step.y]|0));
+      // 1틱당 1개만 수행
+    }, 40);
+
+    function stop(reason){
+      clearInterval(mf._macro_timer); mf._macro_timer=null;
+      mf._macro_running=false; mf._macro_paused=false;
+      btn&&(btn.textContent=labelPlay());
+      if (reason) console.info('[macro] stopped:', reason);
+    }
+    btn&&(btn.textContent=labelPause());
+  }
+
+  // Minefield 메서드로도 접근 가능하게
+  if (window.Minefield && !window.Minefield.prototype.nopick_debug_macro)
+    window.Minefield.prototype.nopick_debug_macro = function(){ startOrResume(this); };
+
+  // 버튼 클릭 핸들러
+  document.addEventListener('DOMContentLoaded', ()=>{
+    if (!btn) return;
+    btn.textContent = labelPlay();
+    btn.addEventListener('click', ()=>{ const mf=window.minefield; if (mf) startOrResume(mf); });
+    const hintBtn=document.getElementById('console-hint');
+    hintBtn&&hintBtn.addEventListener('click', ()=>{ try{ window.provide_nopick_hint(); }catch(e){ console.error(e); } });
+  });
+})();
+</script>
+
+</body>
+</html>
