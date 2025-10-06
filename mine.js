@@ -208,14 +208,28 @@ Minefield.prototype._relocateFirstClick = function (x, y) {
     };
 
     // 흰/검 인접 체크
-    Minefield.prototype.has_neighbor_mine = function (x, y) {
-      var adj = this.near_positions(x, y);
-      for (var i = 0; i < adj.length; i++) {
-        var nx = adj[i][0], ny = adj[i][1];
-        if (Math.abs(this.mines[nx][ny]) > 0) return true;
-      }
-      return false;
-    };
+    Minefield.prototype.has_neighbor_mine = function (x, y, signNeg) {
+  var adj = this.near_positions(x, y);
+
+  var wantSign = signNeg ? -1 : +1; // 우리가 놓으려는 지뢰의 부호
+  var hasSame = false;
+
+  for (var i = 0; i < adj.length; i++) {
+    var nx = adj[i][0], ny = adj[i][1];
+    var v = this.mines[nx][ny] | 0;
+    if (v === 0) continue;
+    var s = (v > 0) ? +1 : -1;
+
+    // 1) 다른 색 발견 → 즉시 false
+    if (s !== wantSign) return false;
+
+    // 2) 같은 색 기록
+    hasSame = true;
+  }
+
+  // 2,3 규칙 통합: 같은 색 있으면 true, 아니면 false
+  return hasSame;
+};
 
     /* ---------- 기본 테이블 유틸 ---------- */
     Minefield.prototype.new_table = function () {
@@ -869,7 +883,7 @@ Minefield.prototype.init_mines = function () {
                  n === 5 ? 0.5 :
                  n === 6 ? 0.5 : 0);
         if (Math.random() < p) {
-          if (!this.has_neighbor_mine(x, y)) {
+          if (!this.has_neighbor_mine(x, y,signNeg)) {
             stall++; continue;
           }
         }
@@ -1132,6 +1146,216 @@ Minefield.prototype.init_mines = function () {
 //  - solvable 보드가 나오면, 추론 근거 트리를 console에 로그로 출력
 //  - 음수지뢰 존재하면 일부규칙(delta) 사용불가(1인 칸이 2검은지뢰+1하얀지뢰 가능)
 // ★ 붙여넣기용: "no-pick(찍기 없음) 보드" 생성기 (빠른판)
+/* =========================
+ * [NEW] 서명 있는 정수 도메인 전파 (GAC via bitset DP)
+ *  - vars: [ [x,y], ... ]
+ *  - cons: [ { vars:[idx...], target:int, isAbs:bool }, ... ]
+ *  - capB, capW: 각 색 최대치
+ * 반환: { progressed, decided: [{x,y,type:"open"|"fix", val:0|k}] }
+ * ========================= */
+Minefield.prototype._enforceGACSigned = function (vars, cons, capB, capW) {
+  if (!vars.length || !cons.length) return { progressed:false, decided:[] };
+
+  const n = vars.length;
+  const OFF = capW;                  // 음수 오프셋
+  const MINV = -capW, MAXV = capB;   // 값 범위
+  const RANGE = MAXV - MINV + 1;     // 도메인 길이
+
+  // 도메인: 각 변수의 값 가능여부를 불리언 배열로
+  const dom = Array.from({length:n}, ()=> new Uint8Array(RANGE).fill(1));
+
+  // 초기 도메인(이미 확정된 게 있으면 반영)
+  // - 이 블록은 안전: 없으면 그대로 둡니다.
+  // - 필요 시 외부 fixedKnown/fixedVal를 참고하려면 훅 연결
+  //   (여기서는 solve 루프가 setFixed로 반영하므로, dom은 full로 시작)
+  let changed = false;
+
+  // 비트셋 DP 유틸
+  function dpAchievableSum(varIds, excludeIdx) {
+    // 결과: { any: Uint8Array, allZero: Uint8Array }
+    // any[s+SHIFT] = 나머지 합 s 가능(어떤 값이든)
+    // allZero[...] = 나머지 변수 전부 0만 써서 합 s 가능 (즉 s==0인 원소만 true일 수 있음)
+    const SHIFT = OFF * (varIds.length - (excludeIdx>=0?1:0));
+    const width = (capB * (varIds.length - (excludeIdx>=0?1:0))) + (capW * (varIds.length - (excludeIdx>=0?1:0))) + 1;
+    const any = new Uint8Array(width);
+    const zro = new Uint8Array(width);
+    any[OFF*(varIds.length - (excludeIdx>=0?1:0))] = 1; // 합 0
+    zro[OFF*(varIds.length - (excludeIdx>=0?1:0))] = 1; // 모두 0일 때 합 0
+
+    function convolveAdd(dst, src, valMask) {
+      // 값 마스크를 한 번에 밀어넣기 (작은 도메인 범위이므로 단순 이중루프가 충분히 빠름)
+      const W = dst.length;
+      const tmp = new Uint8Array(W);
+      for (let v = MINV; v <= MAXV; v++) {
+        if (!valMask[v - MINV]) continue;
+        const sh = v;
+        for (let i = 0; i < W; i++) {
+          const j = i + sh;
+          if (j>=0 && j<W && src[i]) tmp[j] = 1;
+        }
+      }
+      for (let i = 0; i < W; i++) dst[i] = tmp[i];
+    }
+
+    let idxPos = 0;
+    for (let k = 0; k < varIds.length; k++) {
+      if (k === excludeIdx) continue;
+      const id = varIds[k];
+      // any
+      const any2 = new Uint8Array(any.length);
+      convolveAdd(any2, any, dom[id]);
+      any.set(any2);
+
+      // allZero(=모두 0만 허용) 업데이트: 해당 변수가 0을 허용할 때만 유지
+      const allowsZero = !!dom[id][-MINV]; // v==0 → index -MINV
+      if (!allowsZero) {
+        zro.fill(0);
+      } else {
+        // 0 더하기는 그대로 유지(합 이동 없음)
+        // zro 그대로
+      }
+      idxPos++;
+    }
+    return { any, allZero: zro };
+  }
+
+  // 제약마다 prefix/suffix로 others 합을 빠르게 계산
+  function pruneByConstraint(c) {
+    const ids = c.vars, m = ids.length;
+    if (!m) return false;
+    let localChanged = false;
+
+    // prefix/suffix DP: any/allZero 둘 다 유지
+    const prefAny = new Array(m+1), prefZ = new Array(m+1);
+    const sufAny  = new Array(m+1), sufZ  = new Array(m+1);
+
+    // 시작(공집합): 합0만 가능
+    const baseLen = capB * m + capW * m + 1;
+    const baseShift = capW * m;
+    prefAny[0] = new Uint8Array(baseLen); prefAny[0][baseShift] = 1;
+    prefZ[0]   = new Uint8Array(baseLen); prefZ[0][baseShift]   = 1;
+
+    for (let i=0;i<m;i++){
+      const dstA = new Uint8Array(baseLen), dstZ = new Uint8Array(baseLen);
+      const mask = dom[ids[i]];
+
+      // any
+      for (let v=MINV; v<=MAXV; v++){
+        if (!mask[v-MINV]) continue;
+        const sh=v;
+        for (let s=0;s<baseLen;s++){
+          const t=s+sh; if (t>=0 && t<baseLen && prefAny[i][s]) dstA[t]=1;
+        }
+      }
+      // allZero (값 0만 허용)
+      const allowsZero = !!mask[-MINV];
+      if (allowsZero) {
+        for (let s=0;s<baseLen;s++) if (prefZ[i][s]) dstZ[s]=1;
+      } // else → 전부 0은 불가(전부 0 경로 소멸)
+
+      prefAny[i+1]=dstA; prefZ[i+1]=dstZ;
+    }
+
+    sufAny[m] = new Uint8Array(baseLen); sufAny[m][baseShift] = 1;
+    sufZ[m]   = new Uint8Array(baseLen); sufZ[m][baseShift]   = 1;
+    for (let i=m-1;i>=0;i--){
+      const dstA = new Uint8Array(baseLen), dstZ = new Uint8Array(baseLen);
+      const mask = dom[ids[i]];
+      for (let v=MINV; v<=MAXV; v++){
+        if (!mask[v-MINV]) continue;
+        const sh=v;
+        for (let s=0;s<baseLen;s++){
+          const t=s+sh; if (t>=0 && t<baseLen && sufAny[i+1][s]) dstA[t]=1;
+        }
+      }
+      const allowsZero = !!mask[-MINV];
+      if (allowsZero) {
+        for (let s=0;s<baseLen;s++) if (sufZ[i+1][s]) dstZ[s]=1;
+      }
+      sufAny[i]=dstA; sufZ[i]=dstZ;
+    }
+
+    // 각 변수별로 “나머지 합의 가능집합”을 얻고, 값별로 생존성 체크
+    const T = c.target|0;
+    for (let i=0;i<m;i++){
+      const id = ids[i];
+      const cur = dom[id];
+      if (!cur) continue;
+
+      // others = prefix(i) * suffix(i+1)
+      const W = baseLen;
+      const othersAny = new Uint8Array(W);
+      const othersZ   = new Uint8Array(W);
+      // 합성: 간단히 둘 다 & 로 교차(동일 길이, 같은 기준)
+      for (let s=0;s<W;s++){
+        if (prefAny[i][s] && sufAny[i+1][s]) othersAny[s]=1;
+        if (prefZ[i][s]   && sufZ[i+1][s])   othersZ[s]=1;
+      }
+
+      // 값별 생존성 확인
+      for (let v=MINV; v<=MAXV; v++){
+        const idx = v - MINV;
+        if (!cur[idx]) continue; // 이미 배제됨
+        const need = T - v;
+        const pos  = need + baseShift;
+        let ok = false;
+
+        if (pos>=0 && pos<W) {
+          if (!c.isAbs) {
+            // abs 제약 없음 → othersAny 에 있으면 됨
+            ok = !!othersAny[pos];
+          } else {
+            // abs>0 → (v!=0 && othersAny) || (v==0 && othersAny && !othersZ)
+            if (v !== 0) {
+              ok = !!othersAny[pos];
+            } else {
+              ok = !!(othersAny[pos] && !othersZ[pos]);
+            }
+          }
+        }
+
+        if (!ok) { cur[idx]=0; localChanged = true; }
+      }
+
+      // 도메인이 전부 날아가면 이 제약에서 fail → 상위 루프에서 처리
+      let anyLeft=false; for (let t=0;t<RANGE;t++) if (cur[t]) { anyLeft=true; break; }
+      if (!anyLeft) return { fail:true };
+    }
+
+    return localChanged;
+  }
+
+  // 고정점까지 반복
+  for (let iter=0; iter<12; iter++){
+    let any=false;
+    for (let ci=0; ci<cons.length; ci++){
+      const r = pruneByConstraint(cons[ci]);
+      if (r && r.fail) return { progressed:false, decided:[], fail:true };
+      if (r) any = any || r;
+    }
+    if (!any) break;
+    changed = changed || any;
+  }
+
+  // 결론 적용
+  const decided = [];
+  for (let id=0; id<n; id++){
+    let cnt=0, last=-9999;
+    for (let i=0;i<RANGE;i++) if (dom[id][i]) { cnt++; last=i; }
+    if (cnt===0) return { progressed:false, decided:[], fail:true };
+    if (cnt===1){
+      const v = (last + MINV)|0;
+      const [x,y] = vars[id];
+      if (v===0){
+        decided.push({ x,y, type:"open", val:0 });
+      } else {
+        decided.push({ x,y, type:"fix", val:v });
+      }
+    }
+  }
+
+  return { progressed:changed || decided.length>0, decided };
+};
 
 Minefield.prototype.init_mines_nopick = function (firstX, firstY) {
   const hasWhites = ((this.num_mines_white|0) > 0);  // 흰지뢰 존재 여부
@@ -1201,7 +1425,8 @@ Minefield.prototype.init_mines_nopick = function (firstX, firstY) {
   }
 
   // ===== 경량 솔버(노게스) =====
-  function solveNoGuessFast(firstX, firstY) {
+  function solveNoGuessFast(firstX, firstY, deadlineMs) {
+    function timeUp(){ return Date.now() > deadlineMs; }
     // 컴포 캐시(요약 결과 저장)
     const compCache = new Map();
 
@@ -1486,19 +1711,39 @@ function applyBoundsNoWhite(vars, cons) {
     const U = vs.length;
     const minSum = vs.reduce((s,id)=>s+vmin[id],0);
     const maxSum = vs.reduce((s,id)=>s+vmax[id],0);
-    if (N===minSum){ // 나머지는 전부 0
-      for (const id of vs){ if (vmin[id]===0 && vmax[id]===0) continue;
-        const [x,y]=vars[id];
+// --- 보너스: 제약 단위 chord (수정판) ---
+for (let ci=0; ci<cons.length; ci++){
+  const {vars:vs, target, isAbs} = cons[ci];
+  if (isAbs) continue; // 흰지뢰 없음 경로이므로 거의 false지만, safety
+
+  const N = target|0;
+  const minSum = vs.reduce((s,id)=>s+vmin[id],0);
+  const maxSum = vs.reduce((s,id)=>s+vmax[id],0);
+
+  if (N === minSum){
+    // 모든 변수는 "자신의 최소값"으로 확정
+    for (const id of vs){
+      const [x,y] = vars[id];
+      if (vmin[id] === 0){
         if (!opened[idx(x,y)]){ openCell(x,y,"bounds chord N==minSum"); progressed=true; }
-      }
-    } else if (N===maxSum){ // 나머지는 전부 cap(=vmax)
-      for (const id of vs){
-        const [x,y]=vars[id];
-        if (vmin[id]!==vmax[id] && vmax[id]===cap){
-          if (setFixed(x,y,cap,"bounds chord N==maxSum")) progressed=true;
-        }
+      } else {
+        // vmin>0 → 지뢰 수치 vmin 확정
+        if (setFixed(x,y, vmin[id], "bounds chord N==minSum (fix to min)")) progressed=true;
       }
     }
+  } else if (N === maxSum){
+    // 모든 변수는 "자신의 최대값"으로 확정
+    for (const id of vs){
+      const [x,y] = vars[id];
+      if (vmax[id] === 0){
+        if (!opened[idx(x,y)]){ openCell(x,y,"bounds chord N==maxSum (0)"); progressed=true; }
+      } else {
+        if (setFixed(x,y, vmax[id], "bounds chord N==maxSum (fix to max)")) progressed=true;
+      }
+    }
+  }
+}
+
   }
 
   if (progressed){
@@ -1741,9 +1986,7 @@ function makeComponentKey(vars, cons){
     }
     dfs(0);
     if (timedOut){
-      // 여유 한 번 더
-      node=0; timedOut=false;
-      dfs(0);
+      return { ok:false };
     }
     if (!found) return {ok:false};
     return {ok:true, min:minV, max:maxV};
@@ -1755,20 +1998,24 @@ function makeComponentKey(vars, cons){
 
   for (let v=0; v<subVars.length; v++){
     const r = computeMinMaxForVar(v);
-    if (!r.ok){ // 캐파 초과 등 → 보수적 처리
-      minVals[v] = -capW; maxVals[v]= capB; alwaysZero[v]=0;
-    } else {
-      minVals[v] = r.min|0;
-      maxVals[v] = r.max|0;
-      alwaysZero[v] = (r.min===0 && r.max===0) ? 1 : 0;
-    }
+if (!r.ok) {
+  // 부분 탐색 → 신뢰 금지: 범위를 느슨하게
+  minVals[v] = -capW; 
+  maxVals[v] =  capB; 
+  alwaysZero[v] = 0;
+} else {
+  // 완전탐색 성공 시의 결과만 신뢰
+  minVals[v] = r.min|0;
+  maxVals[v] = r.max|0;
+  alwaysZero[v] = (r.min===0 && r.max===0) ? 1 : 0;
+}
   }
   return {minVals, maxVals, alwaysZero};
 }
 
     // 메인 루프
     let guard = W*H*8;
-    while(!done() && guard-- > 0){
+    while(!done() && !timeUp()&& guard-- > 0){
 const { vars, cons } = collectFrontier.call(this);
 if (!vars.length || !cons.length) return false;
 
@@ -1783,6 +2030,57 @@ if (!hasWhites){
   if (applyBoundsNoWhite.call(this, vars, cons)) continue;
 } else {
   if (applyBoundsGeneral.call(this, vars, cons)) continue;
+}
+// ★★★ [삽입] 서명 정수 GAC 비트셋 전파 (흰지뢰 포함에서 효과 큼)
+{
+  let progressedGAC = false;
+
+  // 연결요소 단위로 돌려야 빠름 (변수/제약 분리)
+  const comps = splitComponents(vars, cons);
+  for (let i=0; i<comps.length; i++){
+    const { vIdx, cIdx } = comps[i];
+    if (!vIdx.length) continue;
+
+    const subVars = vIdx.map(id=>vars[id]);
+    const idMap = new Map(vIdx.map((old,i)=>[old,i]));
+    const subCons = cIdx.map(ci=>{
+      const c = cons[ci];
+      const vsNew = c.vars.map(v=>idMap.get(v)).filter(v=>v!=null);
+      return { vars:vsNew, target:c.target, isAbs:c.isAbs };
+    });
+
+    // 너무 큰 컴포는 패스(기존 경량 규칙/범위전파/요약으로 처리)
+    const COMP_CAP = 48; // 충분히 큼. 필요시 32~48로 줄일 수도 있음
+    if (subVars.length > COMP_CAP) continue;
+
+    const r = this._enforceGACSigned(subVars, subCons, capB, capW);
+    if (r && r.fail) return false; // 모순 → 이 보드 실패
+
+    if (r && r.progressed){
+      progressedGAC = true;
+
+      // 결과 반영
+      let changedLocal = false;
+      for (const d of r.decided){
+        if (d.type === "open"){
+          if (!opened[idx(d.x,d.y)]){ openCell(d.x,d.y,"GAC domain=={0}"); changedLocal=true; }
+        } else {
+          if (setFixed(d.x,d.y,d.val,"GAC singleton")) changedLocal=true;
+        }
+      }
+
+      // 방금 열린 0칸들 flood
+      if (changedLocal){
+        for (const d of r.decided){
+          if (d.type==="open" && (this.near_mines[d.x][d.y]|0)===0){
+            floodFrom.call(this, d.x, d.y);
+          }
+        }
+      }
+    }
+  }
+
+  if (progressedGAC) continue; // 다음 루프
 }
 
 // (4) 남으면 기존 컴포넌트 존재성 요약(요건 그대로 유지)
@@ -1866,7 +2164,7 @@ if (progressedLocal){
 
       if (!progressed) return false; // 이번 스텝에 '열기'도 '지뢰확정'도 없으면 포기
     }
-
+if (timeUp()) return false;
     if (done()){
       pushTrace("done",{opens:openedCount});
       return true;
@@ -1886,9 +2184,9 @@ if (progressedLocal){
 
     // 추론 로그 초기화
     Trace.length = 0;
-
+    const deadline = Date.now() + 2000; // 2초
     // 빠른 결정 솔버
-    if (solveNoGuessFast.call(this, firstX, firstY)) {
+    if (solveNoGuessFast.call(this, firstX, firstY, deadline)) {
       // 상태 보정
       this.remaining = W*H;
       for (let y=0;y<H;y++) for (let x=0;x<W;x++) if ((this.mines[x][y]|0)!==0) this.remaining--;

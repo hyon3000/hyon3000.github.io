@@ -274,7 +274,7 @@ if (cp) {
         <li class="menu7"  onclick="execute(30, 16, 420, 4, 0, 0,0)">☠️</li>
         <li class="menu8"  onclick="execute(30, 16, 530, 5, 0, 0,0)">☠️☠️</li>
         <li class="menu9"  onclick="execute(30, 16, 680, 6, 0, 0,0)">3☠️</li>
-        <li class="menu10" onclick="execute(30, 16, 70, 1, 30, 1,0)">음수지뢰</li>
+        <li class="menu10" onclick="execute(30, 16, 35, 1, 15, 1,2)">음수지뢰</li>
         <li class="menu11" onclick="execute(118, 58, 1412, 1, 0, 0,0)">대형</li>
         <li class="menu12" onclick="execute(640, 480, 63300, 1, 0, 0,0)" style="display:none">초대형</li>
         <li class="menu13" onclick="execute(1280, 720, 192000, 1, 0, 0,0)" style="display:none">특대형</li>
@@ -1065,7 +1065,7 @@ window.provide_nopick_hint = function(){
       if (step.kind==='open') _openWithUnflag(mf,step.x,step.y);
       else _ensureFlagExactly(mf,step.x,step.y,(mf.mines[step.x][step.y]|0));
       // 1틱당 1개만 수행
-    }, 80);
+    }, 40);
 
     function stop(reason){
       clearInterval(mf._macro_timer); mf._macro_timer=null;
