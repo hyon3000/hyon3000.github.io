@@ -5,7 +5,7 @@
   Minefield = (function () {
     function Minefield(window, game_status_changed_func, game_status_changed_func2) {
       this.window = window;
-
+      this.question = true;
       this.game_status_changed_func = game_status_changed_func != null ? game_status_changed_func : null;
       this.game_status_changed_func2 = game_status_changed_func2 != null ? game_status_changed_func2 : null;
       this.game_status = -1;
@@ -2622,7 +2622,11 @@ Minefield.prototype.near_positions = function (x, y) {
         if (cur > 0) {
           if (cur < bMax) { next = cur + 1; }
           else { // cur==bMax
-            if (wMax > 0) { next = -1; } else { next = 0; } // 흰 없으면 ? 로
+            if (wMax > 0) { next = -1; }
+            else if(this.question===true) { next = 0; } // 흰 없으면 ? 로
+            else {this.set_class(x, y, null);
+        this.flags[x][y] = 0;
+        return; }
           }
         } else if (cur < 0) {
           var abs = -cur;
