@@ -16,20 +16,20 @@
 
     /* 이중 카운터용 컨테이너(아이콘+세그먼트 두 줄) */
     .mine-counters-dual { display: inline-flex; flex-direction: column; gap: 2px; }
-    .counter-row { display: flex; align-items: center; gap: 6px; }
+    .counter-row { display: flex; align-items: center; gap: 4px; }
 
     /* 깃발 아이콘 (mine.png는 160x256 스케일 기준) */
     .counter-icon {
-      width: 12px; height: 14px;
+      width: 16px; height: 16px;
       background-image: url(mine.png);
       background-size: 160px 256px;
       image-rendering: pixelated;
-      flex: 0 0 12px;
+      flex: 0 0 16px;
     }
     /* (검은지뢰깃발) 원본(288,288~320,320) → 절반 좌표(-144px,-144px) */
-    .icon-flag-black { background-position: -145px -145px; }
+    .icon-flag-black { background-position: -144px -144px; }
     /* (하얀지뢰깃발) 원본(0,288~32,320) → 절반 좌표(0,-144px) */
-    .icon-flag-white { background-position: -1px -145px; }
+    .icon-flag-white { background-position: 0px -144px; }
     .notice {
     margin: 10px 0 14px;
     padding: 10px 12px;
@@ -238,7 +238,7 @@ if (cp) {
       $(".window-content .mine-head-area ").css({ "width": 2 + i*16 });
       $(".window-content .mine-area").css({ "width": i*16, "height": j*16 });
       $(".inner").css({ "width": i*16, "height": j*16 });
-      if(hasWhite) $(".window-content .mine-head-area .mine-reset-button").css({ "left": -5 + 8*i });
+      if(hasWhite) $(".window-content .mine-head-area .mine-reset-button").css({ "left": -4 + 8*i });
       else $(".window-content .mine-head-area .mine-reset-button").css({ "left": -11 + 8*i });
       $(".windows").css({ "height": (112 + extraHead) + j*16 });
 
