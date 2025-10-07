@@ -427,6 +427,64 @@ if (cp) {
   li.setAttribute('aria-checked', String(on));
 }
 
+(function () {
+  const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+  if (!isTouch) return; // 터치 기기에서만 동작
+
+  const $bar = $('.menu-bar');
+  if (!$bar.length) return;
+
+  // 탭으로 상위 메뉴 열기/토글
+  $bar.on('touchstart', '> li > a', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const $li = $(this).parent('li');
+    const isOpen = $li.hasClass('ui-state-open');
+
+    // 다른 것 닫기
+    $bar.find('> li.ui-state-open').removeClass('ui-state-open')
+        .children('ul.menu').hide();
+
+    if (!isOpen) {
+      // 열기
+      $li.addClass('ui-state-open');
+
+      // 위젯의 _open 사용 (위젯이 있으면)
+      const widget = $bar.data('mswin-menubar');
+      const $submenu = $li.children('ul.menu');
+      if (widget && $submenu.length) {
+        widget.active = $li;            // 포커스 기준 지정
+        widget._open($submenu);         // 위치/표시 처리
+      } else {
+        $submenu.show();
+      }
+    }
+  });
+
+  // 서브메뉴 항목은 탭 한 번에 실행
+  $bar.on('touchstart', 'ul.menu > li > a', function (e) {
+    // 기본 클릭 행동을 사용하되, 이중 탭 발생 방지
+    e.stopPropagation();
+  });
+
+  // 바깥 탭하면 닫기
+  $(document).on('touchstart', function (e) {
+    if ($(e.target).closest('.menu-bar').length === 0) {
+      $bar.find('> li.ui-state-open').removeClass('ui-state-open')
+          .children('ul.menu').hide();
+    }
+  });
+
+  // 스크롤 오작동 방지(메뉴 안에서 드래그 시 페이지 스크롤 억제)
+  $bar.on('touchmove', 'ul.menu', function (e) {
+    // 필요시 주석 해제
+    // e.preventDefault();
+  });
+})();
+
+
 
   // ?표시 토글 → minefield.question true/false
   function toggleQuestionMarks() {
