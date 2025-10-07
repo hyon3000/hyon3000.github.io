@@ -245,44 +245,45 @@ if (cp) {
           <div class="title-button close"></div>
         </div>
       </div>
-
-      <ul class="menu-bar">
+<ul class="menu-bar">
   <li>
-    게임
+    <a href="#" data-access-key="g">게임</a>
     <ul class="menu">
-      <li onclick="minefield.reset_board()">새 게임</li>
+      <li><a href="#" onclick="minefield.reset_board(); return false;">새 게임</a></li>
       <li class="separator"></li>
 
-          <li class="menu1"  onclick="execute(9, 9, 10, 1, 0, 0, 2)">초급</li>
-          <li class="menu2"  onclick="execute(16, 16, 40, 1, 0, 0, 2)">중급</li>
-          <li class="menu3"  onclick="execute(30, 16, 99, 1, 0, 0, 2)">고급</li>
-          <li class="menu4"  onclick="execute(30, 16, 120, 2, 0, 0, 2)">초고급</li>
-          <li class="menu5"  onclick="execute(30, 16, 160, 3, 0, 0, 2)">😱</li>
-          <li class="menu6"  onclick="execute(30, 16, 220, 4, 0, 0, 2)">💀</li>
-          <li class="menu7"  onclick="execute(30, 16, 420, 4, 0, 0, 0)">☠️</li>
-          <li class="menu8"  onclick="execute(30, 16, 530, 5, 0, 0, 0)">☠️☠️</li>
-          <li class="menu9"  onclick="execute(30, 16, 680, 6, 0, 0, 0)">3☠️</li>
-          <li class="menu10" onclick="execute(30, 16, 35, 1, 15, 1, 2)">음수지뢰</li>
-          <li class="menu11" onclick="execute(118, 58, 1412, 1, 0, 0, 0)">대형</li>
-          <li class="menu12" onclick="execute(640, 480, 63300, 1, 0, 0, 0)">초대형</li>
-          <li class="menu13" onclick="execute(1280, 720, 192000, 1, 0, 0, 0)">특대형</li>
-   
+      <li class="menu1"><a href="#" onclick="execute(9, 9, 10, 1, 0, 0, 2); return false;">초급</a></li>
+      <li class="menu2"><a href="#" onclick="execute(16, 16, 40, 1, 0, 0, 2); return false;">중급</a></li>
+      <li class="menu3"><a href="#" onclick="execute(30, 16, 99, 1, 0, 0, 2); return false;">고급</a></li>
+      <li class="menu4"><a href="#" onclick="execute(30, 16, 120, 2, 0, 0, 2); return false;">초고급</a></li>
+      <li class="menu5"><a href="#" onclick="execute(30, 16, 160, 3, 0, 0, 2); return false;">😱</a></li>
+      <li class="menu6"><a href="#" onclick="execute(30, 16, 220, 4, 0, 0, 2); return false;">💀</a></li>
+      <li class="menu7"><a href="#" onclick="execute(30, 16, 420, 4, 0, 0, 0); return false;">☠️</a></li>
+      <li class="menu8"><a href="#" onclick="execute(30, 16, 530, 5, 0, 0, 0); return false;">☠️☠️</a></li>
+      <li class="menu9"><a href="#" onclick="execute(30, 16, 680, 6, 0, 0, 0); return false;">3☠️</a></li>
+      <li class="menu10"><a href="#" onclick="execute(30, 16, 35, 1, 15, 1, 2); return false;">음수지뢰</a></li>
+      <li class="menu11"><a href="#" onclick="execute(118, 58, 1412, 1, 0, 0, 0); return false;">대형</a></li>
+      <li class="menu12" style="display:none"><a href="#" onclick="execute(640, 480, 63300, 1, 0, 0, 0); return false;">초대형</a></li>
+      <li class="menu13" style="display:none"><a href="#" onclick="execute(1280, 720, 192000, 1, 0, 0, 0); return false;">특대형</a></li>
+
       <li class="separator"></li>
-      
+
       <!-- ?표시(Question marks) 토글 -->
-      <li id="opt-qmark" class="checkable" onclick="toggleQuestionMarks()">
-        ✓ ? 표시 사용
+      <li id="opt-qmark" class="checkable">
+        <a href="#" onclick="toggleQuestionMarks(); return false;">✓ ? 표시 사용</a>
       </li>
-</ul>
-</li>
+    </ul>
+  </li>
+
   <li>
-    도움말
+    <a href="#" data-access-key="h">도움말</a>
     <ul class="menu">
-      <li onclick="alert('Minesweeper (Win98 테마)')">정보</li>
-      <li onclick="alert('난이도는 게임→난이도에서 선택하세요.\n?표시는 옵션에서 토글합니다.')">도움말</li>
+      <li><a href="#" onclick="alert('Minesweeper (Win98 테마)'); return false;">정보</a></li>
+      <li><a href="#" onclick="alert('난이도는 게임→난이도에서 선택하세요.\n?표시는 옵션에서 토글합니다.'); return false;">도움말</a></li>
     </ul>
   </li>
 </ul>
+
 
 
       <div class="window-content">
@@ -418,13 +419,14 @@ if (cp) {
 <script>
   // 메뉴의 체크 모양을 단순 텍스트(✓)로 표현
   function updateQuestionMenuVisual() {
-    const li = document.getElementById('opt-qmark');
-    if (!li) return;
-    const on = !!(window.minefield && window.minefield.question);
-    li.textContent = (on ? '✓ ' : '  ') + '? 표시 사용';
-    // 접근성 힌트
-    li.setAttribute('aria-checked', String(on));
-  }
+  const li = document.getElementById('opt-qmark');
+  if (!li) return;
+  const a = li.querySelector('a') || li; // 안전가드
+  const on = !!(window.minefield && window.minefield.question);
+  a.textContent = (on ? '✓ ' : '  ') + '? 표시 사용';
+  li.setAttribute('aria-checked', String(on));
+}
+
 
   // ?표시 토글 → minefield.question true/false
   function toggleQuestionMarks() {
