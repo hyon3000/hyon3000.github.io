@@ -273,12 +273,15 @@ if (cp) {
       <li class="separator"></li>
 
       <!-- ?표시(Question marks) 토글 -->
-      <li id="opt-qmark" class="checkable" onclick="return runMenu(() => toggleQuestionMarks());">
-        <a href="#">✓ ? 표시(M)</a>
-      </li>
+      <li id="opt-qmark" class="checkable" onclick="return runMenu(() => toggleQuestionMarks());"><a href="#">✓ ? 표시(M)</a></li>
+      
+      <!-- Color 토글 -->
+      <li id="opt-color" class="checkable" onclick="return runMenu(() => toggleColorMode());"><a href="#">✓ 컬러로 표시(L)</a></li>
       <!--onclick시 runMenu에서 window has-menu mine-window ui-resizable ui-draggable의 visible을 none으로한다-->
       <li class="separator"></li>
-      <li id="opt-qmark" class="menuclose" onclick="return runMenu(() => { $('.has-menu.mine-window.ui-resizable.ui-draggable').css('visibility', 'hidden'); });">
+      <li class="besttimes" onclick="return runMenu(() => printBestTimes());"><a href="#">　최고 기록(T)...</a></li>
+      <li class="separator"></li>
+      <li class="menuclose" onclick="return runMenu(() => { $('.has-menu.mine-window.ui-resizable.ui-draggable').css('visibility', 'hidden'); });">
         <a href="#">　끝내기(X)</a>
       </li>
     </ul>
@@ -398,6 +401,26 @@ if (cp) {
     </form>
   </div>
 </div>
+
+<!-- Best Times Dialog -->
+<div id="besttimes-win" class="window mine-window customdialog" >
+  <div class="title-bar">
+    <div class="title-icon"></div>
+    <div class="title" id="besttimestitle">지뢰 찾기 최고 기록</div>
+    <div class="title-button-group">
+      <div class="title-button close" onclick="closeBestTimes()"></div>
+    </div>
+  </div>
+  <div class="window-content" style="padding:12px;">
+    <div id="besttimes-content" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;">
+      <!-- Best times will be populated here dynamically -->
+    </div>
+    <div style="display:flex; gap:8px; justify-content:center;">
+      <button type="button" class="title-button" onclick="resetBestTimes()" style="padding:4px 16px;">원래대로(R)</button>
+      <button type="button" class="title-button" onclick="closeBestTimes()" style="padding:4px 16px;">확인</button>
+    </div>
+  </div>
+</div>
   </div>
 
   <div id="userctrl" class="userctrl" style="margin:0">
@@ -489,9 +512,19 @@ if (cp) {
   const on = !!(window.minefield && window.minefield.question);
   //언어가 영어일떄와 한국어일때가 다름
 
-  a.textContent = (on ? '✓ ' : '  ') + (isKorean() ? '? 표시(M)' : 'Marks (?)');
+  a.textContent = (on ? '✓ ' : '　') + (isKorean() ? '? 표시(M)' : 'Marks (?)');
   li.setAttribute('aria-checked', String(on));
 }
+
+  // Color 메뉴 비주얼 업데이트
+  function updateColorMenuVisual() {
+    const li = document.getElementById('opt-color');
+    if (!li) return;
+    const a = li.querySelector('a') || li;
+    const on = !!(window.minefield && window.minefield.useColor);
+    a.textContent = (on ? '✓ ' : '　') + (isKorean() ? '컬러로 표시(L)' : 'Color');
+    li.setAttribute('aria-checked', String(on));
+  }
 
 
 
@@ -508,12 +541,198 @@ if (cp) {
     updateQuestionMenuVisual();
   }
 
+  // Color 토글 → 이미지 파일 전환
+  function toggleColorMode() {
+    // minefield 객체가 없으면 생성
+    if (!window.minefield) {
+      window.minefield = {};
+    }
+    
+    // 존재하지 않으면 속성 추가, 있으면 단순 토글
+    if (typeof window.minefield.useColor === 'undefined') {
+      window.minefield.useColor = false; // 현재 true라고 가정하고 false로 토글
+    } else {
+      window.minefield.useColor = !window.minefield.useColor;
+    }
+    
+    // CSS 이미지 참조 전환
+    updateImageReferences(window.minefield.useColor);
+    updateColorMenuVisual();
+    
+    console.log('Color mode toggled:', window.minefield.useColor);
+  }
+
+  // 모든 이미지 참조를 변경하는 함수 (CSS 클래스 추가 방식)
+  function updateImageReferences(useColor) {
+    const suffix = useColor ? '' : 'b'; // 컬러: mine.png, 흑백: mineb.png
+    
+    // 기존 스타일 태그가 있으면 제거
+    const oldStyle = document.getElementById('color-mode-override');
+    if (oldStyle) {
+      oldStyle.remove();
+    }
+    
+    // 새로운 스타일 태그 생성
+    const styleTag = document.createElement('style');
+    styleTag.id = 'color-mode-override';
+    
+    // 모든 CSS 규칙을 !important로 덮어쓰기
+    styleTag.textContent = `
+      /* Dynamic color mode override - ${useColor ? 'COLOR' : 'BLACK & WHITE'} */
+      
+      /* 지뢰판 테이블 셀 */
+      table.minetable td,
+      table.minetable td:active,
+      table.minetable td.mine-wrong1,
+      table.minetable td.mine-wrong1:active,
+      table.minetable td.mine-wrong2,
+      table.minetable td.mine-wrong2:active,
+      table.minetable td.mine-wrong3,
+      table.minetable td.mine-wrong3:active,
+      table.minetable td.mine-wrong4,
+      table.minetable td.mine-wrong4:active,
+      table.minetable td.mine-wrong5,
+      table.minetable td.mine-wrong5:active,
+      table.minetable td.mine-wrong6,
+      table.minetable td.mine-wrong6:active,
+      table.minetable td.mine-1,
+      table.minetable td.mine-1:active,
+      table.minetable td.mine-2,
+      table.minetable td.mine-2:active,
+      table.minetable td.mine-3,
+      table.minetable td.mine-3:active,
+      table.minetable td.mine-4,
+      table.minetable td.mine-4:active,
+      table.minetable td.mine-5,
+      table.minetable td.mine-5:active,
+      table.minetable td.mine-6,
+      table.minetable td.mine-6:active,
+      table.minetable td.flag-0,
+      table.minetable td.flag-0:active,
+      table.minetable td.flag-1,
+      table.minetable td.flag-1:active,
+      table.minetable td.flag-2,
+      table.minetable td.flag-2:active,
+      table.minetable td.flag-3,
+      table.minetable td.flag-3:active,
+      table.minetable td.flag-4,
+      table.minetable td.flag-4:active,
+      table.minetable td.flag-5,
+      table.minetable td.flag-5:active,
+      table.minetable td.flag-6,
+      table.minetable td.flag-6:active,
+      table.minetable td.flag-m1,
+      table.minetable td.flag-m1:active,
+      table.minetable td.flag-m2,
+      table.minetable td.flag-m2:active,
+      table.minetable td.flag-m3,
+      table.minetable td.flag-m3:active,
+      table.minetable td.flag-m4,
+      table.minetable td.flag-m4:active,
+      table.minetable td.flag-m5,
+      table.minetable td.flag-m5:active,
+      table.minetable td.flag-m6,
+      table.minetable td.flag-m6:active,
+      table.minetable td.mine-m1,
+      table.minetable td.mine-m1:active,
+      table.minetable td.mine-m2,
+      table.minetable td.mine-m2:active,
+      table.minetable td.mine-m3,
+      table.minetable td.mine-m3:active,
+      table.minetable td.mine-m4,
+      table.minetable td.mine-m4:active,
+      table.minetable td.mine-m5,
+      table.minetable td.mine-m5:active,
+      table.minetable td.mine-m6,
+      table.minetable td.mine-m6:active,
+      table.minetable td.mine-exploded1,
+      table.minetable td.mine-exploded1:active,
+      table.minetable td.mine-exploded2,
+      table.minetable td.mine-exploded2:active,
+      table.minetable td.mine-exploded3,
+      table.minetable td.mine-exploded3:active,
+      table.minetable td.mine-exploded4,
+      table.minetable td.mine-exploded4:active,
+      table.minetable td.mine-exploded5,
+      table.minetable td.mine-exploded5:active,
+      table.minetable td.mine-exploded6,
+      table.minetable td.mine-exploded6:active,
+      table.minetable td.mine-exploded-m1,
+      table.minetable td.mine-exploded-m1:active,
+      table.minetable td.mine-exploded-m2,
+      table.minetable td.mine-exploded-m2:active,
+      table.minetable td.mine-exploded-m3,
+      table.minetable td.mine-exploded-m3:active,
+      table.minetable td.mine-exploded-m4,
+      table.minetable td.mine-exploded-m4:active,
+      table.minetable td.mine-exploded-m5,
+      table.minetable td.mine-exploded-m5:active,
+      table.minetable td.mine-exploded-m6,
+      table.minetable td.mine-exploded-m6:active,
+      table.minetable td.mine-wrong-m1,
+      table.minetable td.mine-wrong-m1:active,
+      table.minetable td.mine-wrong-m2,
+      table.minetable td.mine-wrong-m2:active,
+      table.minetable td.mine-wrong-m3,
+      table.minetable td.mine-wrong-m3:active,
+      table.minetable td.mine-wrong-m4,
+      table.minetable td.mine-wrong-m4:active,
+      table.minetable td.mine-wrong-m5,
+      table.minetable td.mine-wrong-m5:active,
+      table.minetable td.mine-wrong-m6,
+      table.minetable td.mine-wrong-m6:active,
+      table.minetable td.empty,
+      table.minetable td.empty:active,
+      table.minetable td.near-0,
+      table.minetable td.near-0:active,
+      table.minetable td[class*="near-"],
+      table.minetable td[class*="near-"]:active {
+        background-image: url(mine${suffix}.png) !important;
+      }
+      
+      /* 카운터 아이콘 */
+      .counter-icon {
+        background-image: url(mine${suffix}.png) !important;
+      }
+      
+      /* 숫자 디스플레이 (카운터, 타이머) */
+      .window-content .mine-head-area .mine-counter .digit,
+      .window-content .mine-head-area .mine-timer .digit,
+      .digit {
+        background-image: url(digit${suffix}.png) !important;
+      }
+      
+      /* 리셋 버튼 (얼굴) */
+      .window-content .mine-head-area .mine-reset-button .mine-reset-button-inner {
+        background-image: url(face${suffix}.png) !important;
+      }
+    `;
+    
+    // head에 추가
+    document.head.appendChild(styleTag);
+    
+    console.log(`✓ Color mode: ${useColor ? 'ON (color)' : 'OFF (black & white)'}`);
+    console.log(`✓ Using images: mine${suffix}.png, digit${suffix}.png, face${suffix}.png`);
+  }
+
   // 초기 상태(원하면 기본값을 true로 시작)
   document.addEventListener('DOMContentLoaded', function () {
-    if (window.minefield && typeof window.minefield.question === 'undefined') {
+    // minefield 객체 초기화 (없으면 생성)
+    if (!window.minefield) {
+      window.minefield = {};
+    }
+    
+    if (typeof window.minefield.question === 'undefined') {
       window.minefield.question = true;  // 기본 ON (원하면 false로 바꾸세요)
     }
+    if (typeof window.minefield.useColor === 'undefined') {
+      window.minefield.useColor = true;  // 기본 컬러 모드 ON
+    }
+    
     updateQuestionMenuVisual();
+    updateColorMenuVisual();
+    updateImageReferences(window.minefield.useColor);
+    updateWindowTitle(); // 타이틀 업데이트
     // 기존 메뉴 시스템 활성화(이미 사용 중이면 무시)
     if ($('.menu-bar').length) $('.menu-bar').menubar();
   });
@@ -697,7 +916,7 @@ if (cp) {
       mine_area,
       function(status) {
         var smile = $(".mine-reset-button .mine-reset-button-inner");
-        var bg = "0 0"; if (status === -1) bg = "-17px 0"; if (status === -2) bg = "-51px 0"; if (status === 2) bg = "-34px 0";
+        var bg = "0 0"; if (status === -1) bg = "-21px 0"; if (status === -2) bg = "-63px 0"; if (status === 2) bg = "-42px 0";
         smile.css({"background-position": bg});
 
         if (status === 0) timer_id = window.setInterval(update_timer, 1000);
@@ -711,7 +930,18 @@ if (cp) {
             update_all_mine_counters();
             timer_val = 0; timer_id = null; update_counter_timer(0, $(".mine-timer"));
           }
-          if (status === -2) update_all_mine_counters();
+          if (status === -2) {
+            update_all_mine_counters();
+            // Save best time if this is a tracked difficulty level
+            if (DIFFICULTY_LEVELS[currentDifficultyLevel]) {
+              const level = DIFFICULTY_LEVELS[currentDifficultyLevel];
+              const currentTime = timer_val;
+              const bestTime = getBestTime(level);
+              if (currentTime < bestTime) {
+                setBestTime(level, currentTime);
+              }
+            }
+          }
         }
       },
       function(status) {
@@ -720,7 +950,7 @@ if (cp) {
 
   var smile = $(".mine-reset-button .mine-reset-button-inner");
 
-        smile.css({"background-position": (status === 1) ? "-34px 0" : "0 0"});
+        smile.css({"background-position": (status === 1) ? "-42px 0" : "0 0"});
       }
     );
 
@@ -852,6 +1082,14 @@ function isKorean() {
     var lang = (navigator.language || navigator.userLanguage || "").toLowerCase();
     return lang.startsWith("ko");
   }
+
+  // 타이틀 업데이트 함수
+  function updateWindowTitle() {
+    const titleEl = document.querySelector('.mine-window .title-bar .title');
+    if (titleEl) {
+      titleEl.textContent = isKorean() ? '지뢰 찾기' : 'Minesweeper';
+    }
+  }
   //pressreset 함수는 minefield.reset_board();를 실행
   function pressreset() {
     if (window.minefield) {
@@ -885,7 +1123,7 @@ function isKorean() {
       ".menu12": "　XLarge",
       ".menu13": "　XXLarge",
       ".menu14": "　Custom...",
-      ".checkable": "✓ Marks (?)",
+      ".besttimes": "　Best Times...",
       ".menuclose":"　Exit",
       ".menu100": "　Search for Help on...",
       ".menu101": "　About Minesweeper...",
@@ -896,6 +1134,15 @@ function isKorean() {
       const el = document.querySelector(sel);
       setText(el, menuText[sel]);
     });
+
+    /* 1-1) Update menu items that need special handling */
+    // Question marks and Color menus are updated by their own functions
+    updateQuestionMenuVisual();
+    updateColorMenuVisual();
+
+    /* 1-2) Title update */
+    const titleEl = document.querySelector('.mine-window .title-bar .title');
+    if (titleEl) titleEl.textContent = 'Minesweeper';
 
     /* 2) Counter icon tooltips */
     const blackIcon = document.querySelector(".icon-flag-black");
@@ -1032,6 +1279,13 @@ if (custdialtitle) {
       document.addEventListener("DOMContentLoaded", localizeToEnglish);
     } else {
       localizeToEnglish();
+    }
+  } else {
+    // 한국어인 경우에도 타이틀 업데이트
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", updateWindowTitle);
+    } else {
+      updateWindowTitle();
     }
   }
 })();
@@ -1389,6 +1643,7 @@ const dialog = document.getElementById('custom-win');
       dialog.style.width = '356px';
       dialog.style.height = '230px';
     }
+
   });
   //customdialog의 display:none;를 js코드로 동적으로 지정
   document.addEventListener('DOMContentLoaded', function() {
@@ -1399,6 +1654,166 @@ const dialog = document.getElementById('custom-win');
   });
   
 </script>
+
+<script>
+  // ===== Best Times Management =====
+  // Difficulty level mapping: menu index -> level name
+  const DIFFICULTY_LEVELS = {
+    1: 'beginner',      // 초급
+    2: 'intermediate',  // 중급
+    3: 'expert',        // 고급
+    4: 'ultra',         // 초고급
+    5: 'level5',        // 😱
+    6: 'level6',        // 💀
+    7: 'level7',        // ☠️
+    8: 'level8',        // ☠️☠️
+    9: 'level9',        // ☠️☠️☠️
+    11: 'large',        // 대형
+    12: 'xlarge',       // 초대형
+    13: 'xxlarge'       // 특대형
+  };
+
+  const DIFFICULTY_NAMES_KO = {
+    beginner: '초급',
+    intermediate: '중급',
+    expert: '고급',
+    ultra: '초고급',
+    level5: '😱',
+    level6: '💀',
+    level7: '☠️',
+    level8: '☠️☠️',
+    level9: '☠️☠️☠️',
+    large: '대형',
+    xlarge: '초대형',
+    xxlarge: '특대형'
+  };
+
+  const DIFFICULTY_NAMES_EN = {
+    beginner: 'Beginner',
+    intermediate: 'Intermediate',
+    expert: 'Expert',
+    ultra: 'Ultra',
+    level5: '😱',
+    level6: '💀',
+    level7: '☠️',
+    level8: '☠️☠️',
+    level9: '☠️☠️☠️',
+    large: 'Large',
+    xlarge: 'XLarge',
+    xxlarge: 'XXLarge'
+  };
+
+  // Current active difficulty (set when user selects a difficulty)
+  let currentDifficultyLevel = 3; // Default to Expert
+
+  // Get best time for a difficulty level
+  function getBestTime(level) {
+    try {
+      const stored = localStorage.getItem('minesweeper_best_' + level);
+      return stored ? parseInt(stored, 10) : 999;
+    } catch (e) {
+      return 999;
+    }
+  }
+
+  // Set best time for a difficulty level
+  function setBestTime(level, time) {
+    try {
+      localStorage.setItem('minesweeper_best_' + level, String(time));
+    } catch (e) {
+      console.error('Failed to save best time:', e);
+    }
+  }
+
+  // Reset all best times
+  function resetAllBestTimes() {
+    Object.values(DIFFICULTY_LEVELS).forEach(level => {
+      try {
+        localStorage.removeItem('minesweeper_best_' + level);
+      } catch (e) {}
+    });
+  }
+
+  // Open best times dialog
+  function openBestTimes() {
+    const $w = $('#besttimes-win');
+    if (!$w.data('mswin-window')) $w.window();
+
+    // Update dialog content
+    const content = document.getElementById('besttimes-content');
+    if (!content) return;
+
+    const isKO = isKorean();
+    const names = isKO ? DIFFICULTY_NAMES_KO : DIFFICULTY_NAMES_EN;
+    const secondsText = isKO ? '초' : ' seconds';
+
+    // Build the content
+    let html = '';
+    Object.keys(DIFFICULTY_LEVELS).sort((a, b) => parseInt(a) - parseInt(b)).forEach(key => {
+      const level = DIFFICULTY_LEVELS[key];
+      const name = names[level]+':';
+      const time = getBestTime(level);
+      const timeStr = time === 999 ? '999' : String(time);
+      
+      html += `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 8px; ">
+        <span style="flex:0 0 70px;">${name}</span>
+        <span style="flex:0 0 80px; ">${timeStr}${secondsText}</span>
+        <span style="flex:1; ">Anonymous</span>
+      </div>`;
+    });
+    
+    content.innerHTML = html;
+
+    // Update dialog title
+    const title = document.getElementById('besttimestitle');
+    if (title) {
+      title.textContent = isKO ? '지뢰 찾기 최고 기록' : 'Fastest Mine Sweepers';
+    }
+
+    // Update button labels
+    const buttons = $w.find('button');
+    if (buttons.length >= 2) {
+      buttons.eq(0).text(isKO ? '원래대로(R)' : 'Reset Scores');
+      buttons.eq(1).text(isKO ? '확인' : 'OK');
+    }
+
+    // Position and show (best times dialog specific)
+    $w.css({
+      display: '',
+      position: 'absolute',
+      left: '10px',
+      top: '10px',
+      'z-index': 1100,
+      width: '250px',
+      height: 'auto'
+    });
+  }
+
+  function closeBestTimes() {
+    $('#besttimes-win').hide();
+  }
+
+  function resetBestTimes() {
+
+     
+      resetAllBestTimes();
+      openBestTimes(); // Refresh the dialog
+    
+  }
+
+  function printBestTimes() {
+    openBestTimes();
+  }
+
+  // Initialize besttimes dialog on load
+  document.addEventListener('DOMContentLoaded', function() {
+    const dialog = document.getElementById('besttimes-win');
+    if (dialog) {
+      dialog.style.display = 'none';
+    }
+  });
+</script>
+
 <script>
   function runMenu(fn) {
     // 메뉴 접기는 바로, 실행은 다음 틱에
@@ -1414,6 +1829,11 @@ const dialog = document.getElementById('custom-win');
     return false;        // a# href="#" 기본 내비 막기
   }
   function setActiveDifficulty(idx) {
+  // Update current difficulty level for best times tracking
+  if (typeof currentDifficultyLevel !== 'undefined') {
+    currentDifficultyLevel = idx;
+  }
+
   const KO = isKorean();
 
   // 난이도 메뉴 번호: Beginner~Custom (menu1~menu14)

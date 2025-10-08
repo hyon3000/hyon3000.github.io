@@ -78,9 +78,9 @@
     border-bottom: 2px solid gray;
     border-right: 2px solid gray;
     position: absolute;
-    width: 17px;
-    height: 17px;
-    padding: 2px;
+    width: 21px;
+    height: 21px;
+    padding: 0px;
     top: 8px;
     left: 232px; }
     .window-content .mine-head-area .mine-reset-button:active {
@@ -89,8 +89,8 @@
       border-bottom: 2px solid white;
       border-right: 2px solid white; }
     .window-content .mine-head-area .mine-reset-button .mine-reset-button-inner {
-      width: 17px;
-      height: 17px;
+      width: 21px;
+      height: 21px;
       background-image: url(face.png);
       background-position: 0 0; }
 
