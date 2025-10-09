@@ -277,6 +277,9 @@ if (cp) {
       
       <!-- Color 토글 -->
       <li id="opt-color" class="checkable" onclick="return runMenu(() => toggleColorMode());"><a href="#">✓ 컬러로 표시(L)</a></li>
+      
+      <!-- Sound 토글 -->
+      <li id="opt-sound" class="checkable" onclick="return runMenu(() => toggleSound());"><a href="#">　소리(S)</a></li>
       <!--onclick시 runMenu에서 window has-menu mine-window ui-resizable ui-draggable의 visible을 none으로한다-->
       <li class="separator"></li>
       <li class="besttimes" onclick="return runMenu(() => printBestTimes());"><a href="#">　최고 기록(T)...</a></li>
@@ -360,44 +363,43 @@ if (cp) {
   </div>
   <div class="window-content" style="padding:8px;">
     <form id="custom-form" onsubmit="submitCustomDialog(); return false;">
-        <div id="customdial2" style="display:grid; grid-template-columns: 120px 1fr; gap:6px 8px; align-items:center;">
-          <label>가로(열)</label>
-          <input type="number" id="c-cols" min="3" max="9999" step="1" value="30" style="width:80px;">
-
-          <label>세로(행)</label>
-          <input type="number" id="c-rows" min="1" max="9999" step="1" value="16" style="width:80px;">
-
-          <label>1칸당 최대 지뢰</label>
-          <input type="number" id="c-max"  min="1" max="6" step="1" value="1" style="width:80px;">
-
-          <label>전체 지뢰 수</label>
-          <input type="number" id="c-total" min="1" step="1" value="99" style="width:80px;">
-
-          <label>1칸당 최대 음수지뢰</label>
-          <input type="number" id="c-wmax" min="0" max="6" step="1" value="0" style="width:80px;">
-
-          <label>전체 음수지뢰 수</label>
-          <input type="number" id="c-wtotal" min="0" step="1" value="0" style="width:80px;">
-
+      <div id="customdial2" style="display:flex; flex-direction:column; gap:8px;">
+        <!-- 상단: 입력창들 + 버튼들 -->
+        <div style="display:flex; gap:8px;">
+          <!-- 왼쪽: 높이~최대음수지뢰 입력창들 -->
+          <div style="display:grid; grid-template-columns: 100px 1fr; gap:6px 8px; align-items:center;">
+            <label>높이(H)</label>
+            <input type="number" id="c-rows" min="1" max="9999" step="1" value="16" style="width:30px;">
+            <label>너비(W)</label>
+            <input type="number" id="c-cols" min="3" max="9999" step="1" value="30" style="width:30px;">
+            <label>지뢰 수(M)</label>
+            <input type="number" id="c-total" min="1" step="1" value="99" style="width:30px;">
+            <label>최대지뢰/1칸</label>
+            <input type="number" id="c-max"  min="1" max="6" step="1" value="1" style="width:30px;">
+            <label>음수지뢰 수</label>
+            <input type="number" id="c-wtotal" min="0" step="1" value="0" style="width:30px;">
+            <label>최대음수지뢰/1칸</label>
+            <input type="number" id="c-wmax" min="0" max="6" step="1" value="0" style="width:30px;">
+          </div>
+          
+          <!-- 오른쪽: 버튼들 (세로 배치) -->
+          <div style="display:flex; flex-direction:column; gap:8px; justify-content:center;">
+            <button type="submit" class="title-button" style="padding:2px 10px;">확인</button>
+            <div style="height:10px"> </div>
+            <button type="button" class="title-button" onclick="closeCustomDialog()" style="padding:2px 10px;">취소</button>
+          </div>
+        </div>
+        
+        <!-- 하단: 지능형 생성 -->
+        <div style="display:grid; grid-template-columns: 100px 1fr; gap:6px 8px; align-items:center;">
           <label>지능형 생성</label>
-          <select id="c-ai" style="width:210px;">
+          <select id="c-ai" style="width:90px;">
             <option value="0">0: 찍기 허용 + 최소 구제</option>
             <option value="1">1: 찍기 허용 + 첫클릭 오프닝 + 무제한 구제</option>
             <option value="2" selected>2: 찍기 차단 + 자동 풀이(느림)</option>
           </select>
-          <label> </label>
-<div >
-        
-          <button type="submit" class="title-button" style="padding:2px 10px;">확인</button>
-        
-        
-          <button type="button" class="title-button" onclick="closeCustomDialog()" style="padding:2px 10px;">취소</button>
-        
-      </div>
         </div>
-
-
-      
+      </div>
     </form>
   </div>
 </div>
@@ -526,6 +528,16 @@ if (cp) {
     li.setAttribute('aria-checked', String(on));
   }
 
+  // Sound 메뉴 비주얼 업데이트
+  function updateSoundMenuVisual() {
+    const li = document.getElementById('opt-sound');
+    if (!li) return;
+    const a = li.querySelector('a') || li;
+    const on = !!(window.minefield && window.minefield.soundEnabled);
+    a.textContent = (on ? '✓ ' : '　') + (isKorean() ? '소리(S)' : 'Sound');
+    li.setAttribute('aria-checked', String(on));
+  }
+
 
 
 
@@ -560,6 +572,36 @@ if (cp) {
     updateColorMenuVisual();
     
     console.log('Color mode toggled:', window.minefield.useColor);
+  }
+
+  // Sound 토글
+  function toggleSound() {
+    // minefield 객체가 없으면 생성
+    if (!window.minefield) {
+      window.minefield = {};
+    }
+    
+    // 존재하지 않으면 속성 추가, 있으면 단순 토글
+    if (typeof window.minefield.soundEnabled === 'undefined') {
+      window.minefield.soundEnabled = true; // 처음 클릭시 true로 설정
+    } else {
+      window.minefield.soundEnabled = !window.minefield.soundEnabled;
+    }
+    
+    updateSoundMenuVisual();
+    console.log('Sound mode toggled:', window.minefield.soundEnabled);
+  }
+
+  // 사운드 재생 함수
+  function playSound(soundFile) {
+    if (!window.minefield || !window.minefield.soundEnabled) return;
+    
+    try {
+      const audio = new Audio(soundFile);
+      audio.play().catch(err => console.warn('Sound playback failed:', err));
+    } catch (err) {
+      console.warn('Sound creation failed:', err);
+    }
   }
 
   // 모든 이미지 참조를 변경하는 함수 (CSS 클래스 추가 방식)
@@ -728,9 +770,13 @@ if (cp) {
     if (typeof window.minefield.useColor === 'undefined') {
       window.minefield.useColor = true;  // 기본 컬러 모드 ON
     }
+    if (typeof window.minefield.soundEnabled === 'undefined') {
+      window.minefield.soundEnabled = false;  // 기본적으로 해제
+    }
     
     updateQuestionMenuVisual();
     updateColorMenuVisual();
+    updateSoundMenuVisual();
     updateImageReferences(window.minefield.useColor);
     updateWindowTitle(); // 타이틀 업데이트
     // 기존 메뉴 시스템 활성화(이미 사용 중이면 무시)
@@ -908,7 +954,12 @@ if (cp) {
 
     /* 타이머 */
     var timer_val = 0, timer_id = null;
-    var update_timer = function(){ timer_val += 1; update_counter_timer(timer_val, $(".mine-timer")); };
+    var update_timer = function(){ 
+      timer_val += 1; 
+      update_counter_timer(timer_val, $(".mine-timer"));
+      // 타이머가 증가할 때 소리 재생
+      playSound('timer.wav');
+    };
 
     /* Minefield 인스턴스 */
     var mine_area = document.getElementById("mine-area");
@@ -930,8 +981,14 @@ if (cp) {
             update_all_mine_counters();
             timer_val = 0; timer_id = null; update_counter_timer(0, $(".mine-timer"));
           }
+          if (status === -1) {
+            // 게임 실패 시 (지뢰를 밟았을 때) gameover.wav 재생
+            playSound('gameover.wav');
+          }
           if (status === -2) {
             update_all_mine_counters();
+            // 게임 클리어 시 clear.wav 재생
+            playSound('clear.wav');
             // Save best time if this is a tracked difficulty level
             if (DIFFICULTY_LEVELS[currentDifficultyLevel]) {
               const level = DIFFICULTY_LEVELS[currentDifficultyLevel];
@@ -1136,9 +1193,10 @@ function isKorean() {
     });
 
     /* 1-1) Update menu items that need special handling */
-    // Question marks and Color menus are updated by their own functions
+    // Question marks, Color and Sound menus are updated by their own functions
     updateQuestionMenuVisual();
     updateColorMenuVisual();
+    updateSoundMenuVisual();
 
     /* 1-2) Title update */
     const titleEl = document.querySelector('.mine-window .title-bar .title');
@@ -1214,14 +1272,13 @@ if (form2) {
   html = html
     // "주문제작:가로" 및 공백 변형
     // 가로/세로(행) 라벨(괄호 유무 모두)
-    .replace(/가로\s*\(열\)/g, "cols")
-    .replace(/세로\s*\(행\)/g, "rows")
-    .replace(/세로(?!\s*\()/g, "rows")
+    .replace(/너비\s*\(W\)*/g, "Width")
+    .replace(/높이\s*\(H\)*/g, "Height")
     // 지뢰/음수지뢰(= anti-mine) 항목
-    .replace(/1칸당\s*최대\s*지뢰/g, "Max mines / cell")
-    .replace(/전체\s*지뢰\s*수/g, "Total mines")
-    .replace(/1칸당\s*최대\s*음수지뢰/g, "Max anti-mines / cell")
-    .replace(/전체\s*음수지뢰\s*수/g, "Total anti-mines")
+    .replace(/최대지뢰\/1칸/g, "Max mines/cell")
+    .replace(/지뢰\s*수\s*\(M\)*/g, "Mines")
+    .replace(/최대음수지뢰\/1칸/g, "Max antiMines/cell")
+    .replace(/음수지뢰\s*수/g, "antiMines")
     // 생성 모드
     .replace(/지능형\s*생성/g, "Generation mode")
     // 버튼들
@@ -1586,8 +1643,8 @@ if (Number.isNaN(ai)) ai = 2;   // NaN일 때만 2로 대체 (0은 살림)
       });
 const dialog = document.getElementById('custom-win');
     if (dialog) {
-      dialog.style.width = '356px';
-      dialog.style.height = '220px';
+      dialog.style.width = '225px';
+      dialog.style.height = '200px';
       //이 다이얼로그를 가장 앞으로
       dialog.style.zIndex = 1000;
     }
@@ -1635,16 +1692,7 @@ const dialog = document.getElementById('custom-win');
 
     closeCustomDialog();
   }
-  //div id가 customdialog인것의 width: 356px; height: 230px;로 지정
-  //js코드로 동적으로지정
-  document.addEventListener('DOMContentLoaded', function() {
-    const dialog = document.getElementById('custom-win');
-    if (dialog) {
-      dialog.style.width = '356px';
-      dialog.style.height = '230px';
-    }
 
-  });
   //customdialog의 display:none;를 js코드로 동적으로 지정
   document.addEventListener('DOMContentLoaded', function() {
     const dialog = document.getElementById('custom-win');
