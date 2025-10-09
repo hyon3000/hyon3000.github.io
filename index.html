@@ -225,12 +225,13 @@ if (cp) {
       if (head) head.style.height = hasWhite ? '58px' : '38px';
 
       const extraHead = hasWhite ? 20 : 0; // 58-38
-      $(".mine-window").css({ "width": 22 + i*16, "height": (107 + extraHead) + j*16 });
-      $(".window-content .mine-head-area ").css({ "width": 2 + i*16 });
-      $(".window-content .mine-area").css({ "width": i*16, "height": j*16 });
+      // 메인 지뢰찾기 창만 크기 조정 (사용자지정 창, 최고기록 창 제외)
+      $(".mine-window").not("#custom-win, #besttimes-win").css({ "width": 22 + i*16, "height": (107 + extraHead) + j*16 });
+      $(".mine-window").not("#custom-win, #besttimes-win").find(".window-content .mine-head-area").css({ "width": 2 + i*16 });
+      $(".mine-window").not("#custom-win, #besttimes-win").find(".window-content .mine-area").css({ "width": i*16, "height": j*16 });
       $(".inner").css({ "width": i*16, "height": j*16 });
-      if(hasWhite) $(".window-content .mine-head-area .mine-reset-button").css({ "left": -4 + 8*i });
-      else $(".window-content .mine-head-area .mine-reset-button").css({ "left": -11 + 8*i });
+      if(hasWhite) $(".mine-window").not("#custom-win, #besttimes-win").find(".window-content .mine-head-area .mine-reset-button").css({ "left": -4 + 8*i });
+      else $(".mine-window").not("#custom-win, #besttimes-win").find(".window-content .mine-head-area .mine-reset-button").css({ "left": -11 + 8*i });
       $(".windows").css({ "height": (112 + extraHead) + j*16 });
 
       renderCounters(hasWhite);
