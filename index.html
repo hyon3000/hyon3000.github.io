@@ -1224,11 +1224,112 @@ function isKorean() {
     }
   }
 
-  // F2 키를 눌러도 새 게임 시작
+  // 키보드 단축키 처리 (F2 + 메뉴 단축키)
   document.addEventListener('keydown', function(e) {
+    const key = e.key.toUpperCase();
+    
+    // F2 키: 항상 새 게임
     if (e.key === 'F2') {
-      e.preventDefault(); // 브라우저 기본 동작 방지
+      e.preventDefault();
       pressreset();
+      return;
+    }
+    
+    // 서브메뉴가 열려있는지 확인
+    const gameSubMenu = document.querySelector('.menu-bar > li:first-child > .menu');
+    const helpSubMenu = document.querySelector('.menu-bar > li:nth-child(2) > .menu');
+    
+    const isGameMenuVisible = gameSubMenu && (
+      gameSubMenu.style.display === 'block' || 
+      window.getComputedStyle(gameSubMenu).display === 'block'
+    );
+    
+    const isHelpMenuVisible = helpSubMenu && (
+      helpSubMenu.style.display === 'block' || 
+      window.getComputedStyle(helpSubMenu).display === 'block'
+    );
+    
+    // 게임 메뉴가 열려있을 때
+    if (isGameMenuVisible) {
+      let handled = false;
+      
+      if (key === 'N') {
+        e.preventDefault();
+        pressreset();
+        handled = true;
+      } else if (key === 'B') {
+        e.preventDefault();
+        execute(9, 9, 10, 1, 0, 0, 2);
+        setActiveDifficulty(1);
+        handled = true;
+      } else if (key === 'I') {
+        e.preventDefault();
+        execute(16, 16, 40, 1, 0, 0, 2);
+        setActiveDifficulty(2);
+        handled = true;
+      } else if (key === 'E') {
+        e.preventDefault();
+        execute(30, 16, 99, 1, 0, 0, 2);
+        setActiveDifficulty(3);
+        handled = true;
+      } else if (key === 'C') {
+        e.preventDefault();
+        openCustomDialog();
+        setActiveDifficulty(14);
+        handled = true;
+      } else if (key === 'M') {
+        e.preventDefault();
+        toggleQuestionMarks();
+        handled = true;
+      } else if (key === 'L') {
+        e.preventDefault();
+        toggleColorMode();
+        handled = true;
+      } else if (key === 'S') {
+        e.preventDefault();
+        toggleSound();
+        handled = true;
+      } else if (key === 'T') {
+        e.preventDefault();
+        printBestTimes();
+        handled = true;
+      } else if (key === 'X') {
+        e.preventDefault();
+        $('.has-menu.mine-window.ui-resizable.ui-draggable').css('visibility', 'hidden');
+        handled = true;
+      }
+      
+      if (handled) {
+        closeMenus();
+      }
+    }
+    
+    // 도움말 메뉴가 열려있을 때
+    if (isHelpMenuVisible) {
+      let handled = false;
+      const alertMsg = isKorean() ? '도움말은 아래에 있습니다' : 'Help is below';
+      
+      if (key === 'C') {
+        e.preventDefault();
+        alert(alertMsg);
+        handled = true;
+      } else if (key === 'S') {
+        e.preventDefault();
+        alert(alertMsg);
+        handled = true;
+      } else if (key === 'H') {
+        e.preventDefault();
+        // 도움말 사용 (기능 없음)
+        handled = true;
+      } else if (key === 'A') {
+        e.preventDefault();
+        alert('Minesweeper');
+        handled = true;
+      }
+      
+      if (handled) {
+        closeMenus();
+      }
     }
   });
 /* ===== Runtime i18n: if not Korean, switch UI texts to English ===== */
