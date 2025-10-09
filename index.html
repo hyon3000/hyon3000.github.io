@@ -255,7 +255,7 @@ if (cp) {
   <li>
     <a href="#" data-access-key="g" class="menu201">게임</a>
     <ul class="menu">
-      <li class="menu0" onclick="return runMenu(() => {pressreset();});"><a href="#">　새 게임(N)</a></li>
+      <li class="menu0" onclick="return runMenu(() => {pressreset();});"><a href="#">　새 게임(N)　　　　　F2</a></li>
       <li class="separator"></li>
       <li class="menu1" onclick="return runMenu(() => {execute(9, 9, 10, 1, 0, 0, 2);setActiveDifficulty(1);  });"><a href="#">　초급(B)</a></li>
       <li class="menu2" onclick="return runMenu(() => {execute(16, 16, 40, 1, 0, 0, 2);setActiveDifficulty(2);  });"><a href="#">　중급(I)</a></li>
@@ -294,8 +294,9 @@ if (cp) {
   <li>
     <a href="#" data-access-key="h" class="menu202">도움말</a>
     <ul class="menu">
-
+      <li class="menu102" onclick="return runMenu(() =>  alert(isKorean() ? '도움말은 아래에 있습니다' : 'Help is below'))"><a href="#">　목차(C)　　　　 　　F1</a></li>
       <li class="menu100" onclick="return runMenu(() =>  alert(isKorean() ? '도움말은 아래에 있습니다' : 'Help is below'))"><a href="#">　도움말 검색(S)...</a></li>
+      <li class="menu103" onclick=""><a href="#">　도움말 사용(H)</a></li>
       <li class="separator"></li>
       <li class="menu101" onclick="return runMenu(() => alert('Minesweeper'));"><a href="#">　지뢰 찾기 정보(A)...</a></li>
 
@@ -1222,6 +1223,14 @@ function isKorean() {
       minefield.reset_board();
     }
   }
+
+  // F2 키를 눌러도 새 게임 시작
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'F2') {
+      e.preventDefault(); // 브라우저 기본 동작 방지
+      pressreset();
+    }
+  });
 /* ===== Runtime i18n: if not Korean, switch UI texts to English ===== */
 (function () {
   
@@ -1234,7 +1243,7 @@ function isKorean() {
 
     /* 1) Menu labels */
     const menuText = {
-      ".menu0":  "　New",
+      ".menu0":  "　New　　　　　　　　F2",
       ".menu1":  "　Beginner",
       ".menu2":  "　Intermediate",
       ".menu3":  "　Expert",
@@ -1253,6 +1262,8 @@ function isKorean() {
       ".menuclose":"　Exit",
       ".menu100": "　Search for Help on...",
       ".menu101": "　About Minesweeper...",
+      ".menu102": "　Contents　　　　 　　F1",
+      ".menu103": "　Using Help",
       ".menu201":"Game",
       ".menu202":"Help",
     };
@@ -1955,11 +1966,11 @@ const dialog = document.getElementById('custom-win');
 
   // 난이도 메뉴 번호: Beginner~Custom (menu1~menu14)
   const menuLabelsKO = [
-    "새 게임(N)", "초급(B)", "중급(I)", "고급(E)", "초고급", "😱", "💀", "☠️", "☠️☠️",
+    "새 게임(N)　　　　　F2", "초급(B)", "중급(I)", "고급(E)", "초고급", "😱", "💀", "☠️", "☠️☠️",
     "☠️☠️☠️", "음수지뢰", "대형", "초대형", "특대형", "사용자 지정(C)..."
   ];
   const menuLabelsEN = [
-    "New", "Beginner", "Intermediate", "Expert", "Ultra", "😱", "💀", "☠️", "☠️☠️",
+    "New　　　　　　　　F2", "Beginner", "Intermediate", "Expert", "Ultra", "😱", "💀", "☠️", "☠️☠️",
     "☠️☠️☠️", "AntiMine", "Large", "XLarge", "XXLarge", "Custom..."
   ];
 
