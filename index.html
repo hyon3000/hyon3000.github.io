@@ -622,6 +622,44 @@ if (cp) {
     styleTag.textContent = `
       /* Dynamic color mode override - ${useColor ? 'COLOR' : 'BLACK & WHITE'} */
       
+      /* 보더 색상 조정 - 흑백 모드에서 더 진하게 (두께는 유지, 색상만 변경) */
+      ${!useColor ? `
+      /* 헤더 영역 - Win98 스타일 유지, 색상만 진하게 */
+      .window-content .mine-head-area {
+        border-top-color: #000000 !important;
+        border-left-color: #000000 !important;
+
+      }
+      
+      /* 카운터와 타이머 */
+      .window-content .mine-head-area .mine-counter,
+      .window-content .mine-head-area .mine-timer {
+        border-top-color: #000000 !important;
+        border-left-color: #000000 !important;
+
+      }
+      
+      /* 리셋 버튼 - Win98 입체 효과 유지 */
+      .window-content .mine-head-area .mine-reset-button {
+        border-top-color: #000000 !important;
+        border-left-color: #000000 !important;
+        border-bottom: 1px solid #000000 !important;
+        border-right: 1px solid #000000 !important;
+      }
+      .window-content .mine-head-area .mine-reset-button:active {
+        border-top-color: #000000 !important;
+        border-left-color: #000000 !important;
+
+      }
+      
+      /* 지뢰 영역 */
+      .window-content .mine-area {
+        border-top-color: #000000 !important;
+        border-left-color: #000000 !important;
+
+      }
+      ` : ''}
+      
       /* 지뢰판 테이블 셀 */
       table.minetable td,
       table.minetable td:active,
@@ -744,9 +782,15 @@ if (cp) {
         background-image: url(digit${suffix}.png) !important;
       }
       
-      /* 리셋 버튼 (얼굴) */
+      /* 리셋 버튼 (얼굴) - 105*21 크기로 업데이트 */
       .window-content .mine-head-area .mine-reset-button .mine-reset-button-inner {
         background-image: url(face${suffix}.png) !important;
+        background-size: 105px 21px !important;
+      }
+      
+      /* 얼굴 버튼 자체가 눌린 상태 (active) - 5번째 얼굴 (보더 강화) */
+      .window-content .mine-head-area .mine-reset-button:active .mine-reset-button-inner {
+        background-position: -84px 0 !important;
       }
     `;
     
@@ -967,6 +1011,7 @@ if (cp) {
       mine_area,
       function(status) {
         var smile = $(".mine-reset-button .mine-reset-button-inner");
+        // 얼굴 위치: 0=평상시, -21px=죽음, -42px=생각중, -63px=승리, -84px=눌림(강조)
         var bg = "0 0"; if (status === -1) bg = "-21px 0"; if (status === -2) bg = "-63px 0"; if (status === 2) bg = "-42px 0";
         smile.css({"background-position": bg});
 
@@ -1007,6 +1052,9 @@ if (cp) {
 
   var smile = $(".mine-reset-button .mine-reset-button-inner");
 
+        // status === 1: 셀 버튼 눌림 → 3번째 얼굴(-42px, thinking face)
+        // status === 0: 정상 → 1번째 얼굴(0)
+        // 5번째 얼굴(-84px)은 CSS :active로 얼굴 버튼 자체가 눌렸을 때 표시
         smile.css({"background-position": (status === 1) ? "-42px 0" : "0 0"});
       }
     );
