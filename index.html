@@ -462,6 +462,8 @@ if (cp) {
       <input type="button" onclick="hideViaURL()" value="문구 숨기기">
     </form>
   </div>
+  <!-- Placeholder div to maintain draggable area height when text is hidden -->
+  <div id="userctrl-placeholder" style="display:none; visibility:hidden; height:0; overflow:hidden;"></div>
 <div id="heavy-notice" class="notice">
   <h3>안내 / 성능 주의</h3>
   <ul>
@@ -852,9 +854,27 @@ if (cp) {
     /* 하단 입력 숨기기 */
     function hideUserInputs() {
       const u = document.getElementById('userctrl');
-      if (u) u.style.display = 'none';
       const n = document.getElementById('heavy-notice');
+      const placeholder = document.getElementById('userctrl-placeholder');
+      
+      // Calculate combined height before hiding
+      let totalHeight = 0;
+      if (u) {
+        totalHeight += u.offsetHeight;
+      }
+      if (n) {
+        totalHeight += n.offsetHeight;
+      }
+      
+      // Hide the actual elements
+      if (u) u.style.display = 'none';
       if (n) n.style.display = 'none';
+      
+      // Show placeholder with the same height to maintain draggable area
+      if (placeholder && totalHeight > 0) {
+        placeholder.style.display = 'block';
+        placeholder.style.height = totalHeight + 'px';
+      }
     }
 
     /* GET 리다이렉트(보내기 전에 상한 보정) */
