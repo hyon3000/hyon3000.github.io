@@ -1,8 +1,10 @@
 klutzy 지뢰찾기 기반의 로컬에서 동작하는 웹 버전 지뢰찾기 
 
 <img src="/a1.png" alt="a">
-<img src="/a3.png" alt="a">
 <img src="/a2.png" alt="a">
+<img src="/a5.png" alt="a">
+<img src="/a3.png" alt="a">
+<img src="/a4.png" alt="a">
 
 * <del>매우 많은</del>약간의 버그 수정함
    
@@ -15,6 +17,8 @@ klutzy 지뢰찾기 기반의 로컬에서 동작하는 웹 버전 지뢰찾기
 
 * 최대 지뢰 수 6개, 음수 지뢰 추가(-1~-6), ? 기능 추가
 
+* 그 외 winxp 지뢰찾기를 그대로 배낌
+  
 ////////////////////////////////////////
 
 See [index.html](index.html) or [Demo][] for usage.
