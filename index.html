@@ -225,13 +225,13 @@ if (cp) {
       if (head) head.style.height = hasWhite ? '58px' : '38px';
 
       const extraHead = hasWhite ? 20 : 0; // 58-38
-      // 메인 지뢰찾기 창만 크기 조정 (사용자지정 창, 최고기록 창 제외)
-      $(".mine-window").not("#custom-win, #besttimes-win").css({ "width": 22 + i*16, "height": (107 + extraHead) + j*16 });
-      $(".mine-window").not("#custom-win, #besttimes-win").find(".window-content .mine-head-area").css({ "width": 2 + i*16 });
-      $(".mine-window").not("#custom-win, #besttimes-win").find(".window-content .mine-area").css({ "width": i*16, "height": j*16 });
+      // 메인 지뢰찾기 창만 크기 조정 (사용자지정 창, 최고기록 창, 이름입력 창 제외)
+      $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").css({ "width": 22 + i*16, "height": (107 + extraHead) + j*16 });
+      $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").find(".window-content .mine-head-area").css({ "width": 2 + i*16 });
+      $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").find(".window-content .mine-area").css({ "width": i*16, "height": j*16 });
       $(".inner").css({ "width": i*16, "height": j*16 });
-      if(hasWhite) $(".mine-window").not("#custom-win, #besttimes-win").find(".window-content .mine-head-area .mine-reset-button").css({ "left": -4 + 8*i });
-      else $(".mine-window").not("#custom-win, #besttimes-win").find(".window-content .mine-head-area .mine-reset-button").css({ "left": -11 + 8*i });
+      if(hasWhite) $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").find(".window-content .mine-head-area .mine-reset-button").css({ "left": -4 + 8*i });
+      else $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").find(".window-content .mine-head-area .mine-reset-button").css({ "left": -11 + 8*i });
       $(".windows").css({ "height": (112 + extraHead) + j*16 });
 
       renderCounters(hasWhite);
@@ -423,6 +423,15 @@ if (cp) {
       <button type="button" class="title-button" onclick="resetBestTimes()" style="padding:4px 16px;">원래대로(R)</button>
       <button type="button" class="title-button" onclick="closeBestTimes()" style="padding:4px 16px;">확인</button>
     </div>
+  </div>
+</div>
+
+<!-- Name Input Dialog (No Title Bar) -->
+<div id="nameinput-win" class="mine-window" style="display:none; position:absolute; z-index:1200; background:#c0c0c0; border:2px outset #c0c0c0; padding:4px; width:100px; height:70px; box-sizing:border-box;">
+  <div style="text-align:center; align-items:center; height:100%; display:flex; flex-direction:column; justify-content:space-between;">
+    <div id="nameinput-message" style="font-size:7px; line-height:1.1; margin:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; max-width:110px;"></div>
+    <input type="text" id="nameinput-field" style="width:80px; padding:0; font-size:7px; margin:1px 0; border:1px solid #808080;" maxlength="20" />
+    <button type="button" onclick="submitNameInput()" style="width:30px; padding:0; font-size:7px; margin:0; border:1px outset #c0c0c0;">OK</button>
   </div>
 </div>
   </div>
@@ -1062,7 +1071,8 @@ if (cp) {
               const currentTime = timer_val;
               const bestTime = getBestTime(level);
               if (currentTime < bestTime) {
-                setBestTime(level, currentTime);
+                // 새로운 기록이므로 이름 입력 창을 띄움
+                showNameInputDialog(level, currentTime);
               }
             }
           }
@@ -1122,8 +1132,8 @@ if (cp) {
       }
 else {
   // li class="menu1"를 누르는 명령을 한번 준다
-  const menu3 = document.querySelector('li.menu3');
-  if (menu3) menu3.click();
+  const menu1 = document.querySelector('li.menu1');
+  if (menu1) menu1.click();
 }
     });
 /* ===== Console Mirror ===== */
@@ -1304,6 +1314,22 @@ function isKorean() {
       }
     }
     
+    // Best Times 다이얼로그가 열려있는지 확인
+    const bestTimesDialog = document.getElementById('besttimes-win');
+    const isBestTimesVisible = bestTimesDialog && (
+      bestTimesDialog.style.display === 'block' || 
+      (bestTimesDialog.style.display !== 'none' && window.getComputedStyle(bestTimesDialog).display === 'block')
+    );
+    
+    // Best Times 다이얼로그가 열려있을 때
+    if (isBestTimesVisible) {
+      if (key === 'R') {
+        e.preventDefault();
+        resetBestTimes();
+        return;
+      }
+    }
+
     // 도움말 메뉴가 열려있을 때
     if (isHelpMenuVisible) {
       let handled = false;
@@ -1945,10 +1971,28 @@ const dialog = document.getElementById('custom-win');
     }
   }
 
+  // Get best time record (time + name) for a difficulty level
+  function getBestRecord(level) {
+    try {
+      const timeStored = localStorage.getItem('minesweeper_best_' + level);
+      const nameStored = localStorage.getItem('minesweeper_name_' + level);
+      const time = timeStored ? parseInt(timeStored, 10) : 999;
+      const defaultName = isKorean() ? '익명' : 'Anonymous';
+      const name = nameStored || defaultName;
+      return { time, name };
+    } catch (e) {
+      const defaultName = isKorean() ? '익명' : 'Anonymous';
+      return { time: 999, name: defaultName };
+    }
+  }
+
   // Set best time for a difficulty level
-  function setBestTime(level, time) {
+  function setBestTime(level, time, playerName = null) {
     try {
       localStorage.setItem('minesweeper_best_' + level, String(time));
+      if (playerName) {
+        localStorage.setItem('minesweeper_name_' + level, playerName);
+      }
     } catch (e) {
       console.error('Failed to save best time:', e);
     }
@@ -1959,6 +2003,7 @@ const dialog = document.getElementById('custom-win');
     Object.values(DIFFICULTY_LEVELS).forEach(level => {
       try {
         localStorage.removeItem('minesweeper_best_' + level);
+        localStorage.removeItem('minesweeper_name_' + level);
       } catch (e) {}
     });
   }
@@ -1981,13 +2026,13 @@ const dialog = document.getElementById('custom-win');
     Object.keys(DIFFICULTY_LEVELS).sort((a, b) => parseInt(a) - parseInt(b)).forEach(key => {
       const level = DIFFICULTY_LEVELS[key];
       const name = names[level]+':';
-      const time = getBestTime(level);
-      const timeStr = time === 999 ? '999' : String(time);
+      const record = getBestRecord(level);
+      const timeStr = record.time === 999 ? '999' : String(record.time);
       
       html += `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 8px; ">
         <span style="flex:0 0 70px;">${name}</span>
         <span style="flex:0 0 80px; ">${timeStr}${secondsText}</span>
-        <span style="flex:1; ">Anonymous</span>
+        <span style="flex:1; ">${record.name}</span>
       </div>`;
     });
     
@@ -2039,6 +2084,91 @@ const dialog = document.getElementById('custom-win');
     const dialog = document.getElementById('besttimes-win');
     if (dialog) {
       dialog.style.display = 'none';
+    }
+    
+    // Initialize name input dialog
+    const nameDialog = document.getElementById('nameinput-win');
+    if (nameDialog) {
+      nameDialog.style.display = 'none';
+    }
+  });
+
+  // Variables to store current record info
+  let currentRecordLevel = null;
+  let currentRecordTime = null;
+
+  // Show name input dialog for new record
+  function showNameInputDialog(level, time) {
+    currentRecordLevel = level;
+    currentRecordTime = time;
+    
+    const dialog = document.getElementById('nameinput-win');
+    const messageEl = document.getElementById('nameinput-message');
+    const inputEl = document.getElementById('nameinput-field');
+    
+    if (!dialog || !messageEl || !inputEl) return;
+    
+    // Set language-appropriate message
+    const isKO = isKorean();
+    const levelNames = isKO ? DIFFICULTY_NAMES_KO : DIFFICULTY_NAMES_EN;
+    const levelName = levelNames[level] || level;
+    
+    const message = isKO 
+      ? `${levelName} 수준에서는 최고 기록입니다.\n이름을 입력하십시오.`
+      : `You have the fastest time for ${levelName} level.\nPlease enter your name.`;
+    
+    messageEl.style.whiteSpace = 'pre-line';
+    messageEl.textContent = message;
+    
+    // Set default name
+    const defaultName = isKO ? '익명' : 'Anonymous';
+    inputEl.value = defaultName;
+    
+    // Update button text
+    const button = dialog.querySelector('button');
+    if (button) {
+      button.textContent = isKO ? '확인' : 'OK';
+    }
+    
+    // Position dialog at (10,10)
+    dialog.style.display = 'block';
+    dialog.style.left = '10px';
+    dialog.style.top = '10px';
+    dialog.style.transform = 'none';
+    
+    // Focus and select input text
+    setTimeout(() => {
+      inputEl.focus();
+      inputEl.select();
+    }, 100);
+  }
+
+  // Submit name input and save record
+  function submitNameInput() {
+    const inputEl = document.getElementById('nameinput-field');
+    const dialog = document.getElementById('nameinput-win');
+    
+    if (!inputEl || !dialog || !currentRecordLevel || currentRecordTime === null) return;
+    
+    const playerName = inputEl.value.trim() || (isKorean() ? '익명' : 'Anonymous');
+    
+    // Save the record with player name
+    setBestTime(currentRecordLevel, currentRecordTime, playerName);
+    
+    // Hide dialog
+    dialog.style.display = 'none';
+    
+    // Clear current record info
+    currentRecordLevel = null;
+    currentRecordTime = null;
+  }
+
+  // Handle Enter key in name input
+  document.addEventListener('keydown', function(e) {
+    const dialog = document.getElementById('nameinput-win');
+    if (dialog && dialog.style.display === 'block' && e.key === 'Enter') {
+      e.preventDefault();
+      submitNameInput();
     }
   });
 </script>
