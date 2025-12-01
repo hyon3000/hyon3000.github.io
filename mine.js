@@ -1436,7 +1436,151 @@ Minefield.prototype._enforceGACSigned = function (vars, cons, capB, capW) {
 
   return { progressed:changed || decided.length>0, decided };
 };
+Minefield.prototype.init_mines_nopick = function (firstX, firstY) {
+    const W = this.columns | 0, H = this.rows | 0;
 
+    // 첫 3x3이 전부 0(지뢰 없음)인지 확인하는 헬퍼
+    const first3x3AllZero = (X, Y) => {
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+            const x = X + dx, y = Y + dy;
+            if (x >= 0 && x < W && y >= 0 && y < H) {
+                if ((this.mines[x][y] | 0) !== 0) return false;
+            }
+        }
+        return true;
+    };
+
+    // ★ 수리(Repair) 함수: 안 열린 칸들끼리 지뢰를 교환하여 셔플
+    const repairBoard = (openedMask) => {
+        // 교환 후보군: 아직 열리지 않은 칸들 (지뢰여부 상관없음)
+        const candidates = [];
+        for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+                // 열린 칸(openedMask=1)은 건드리면 안 됨 (안전지대 보존)
+                if (!openedMask[y * W + x]) {
+                    candidates.push([x, y]);
+                }
+            }
+        }
+
+        // 후보가 너무 적으면 수리 불가
+        if (candidates.length < 2) return false;
+
+        // 전체 안 열린 칸의 약 5% ~ 10% 정도를 랜덤 스왑 (판을 흔들어줌)
+        // 또는 최소 10쌍 이상 교환
+        const swapCount = Math.max(10, Math.floor(candidates.length * 0.05));
+        
+        for (let i = 0; i < swapCount; i++) {
+            const idx1 = Math.floor(Math.random() * candidates.length);
+            const idx2 = Math.floor(Math.random() * candidates.length);
+            if (idx1 === idx2) continue;
+
+            const [x1, y1] = candidates[idx1];
+            const [x2, y2] = candidates[idx2];
+
+            // 값 교환
+            const temp = this.mines[x1][y1];
+            this.mines[x1][y1] = this.mines[x2][y2];
+            this.mines[x2][y2] = temp;
+        }
+
+        // 지뢰 위치가 바뀌었으므로 숫자(near_mines) 재계산 필수
+        this._refresh_parts_from_mines();
+        return true;
+    };
+
+    // ====== 메인 생성 루프 (Retry & Repair) ======
+    // 최대 시도 횟수 (너무 오래 걸리면 브라우저 멈춤 방지)
+    let MAX_FULL_RETRIES=50;
+    let MAX_REPAIRS=30;
+    let RELOC_TIME_LIMIT_MS=1500;
+    if(Math.max(0, this.num_mines | 0) +
+      Math.max(0, this.num_mines_white | 0)>500){ 
+      MAX_REPAIRS = 50; // 한 보드당 수리 시도 횟수
+      RELOC_TIME_LIMIT_MS = 5000;
+    }
+    if(Math.max(0, this.num_mines_white | 0)!=0){
+        MAX_REPAIRS = 30; // 한 보드당 수리 시도 횟수
+      RELOC_TIME_LIMIT_MS = 3000;
+    }
+    for (let attempt = 1; attempt <= MAX_FULL_RETRIES; attempt++) {
+        // 1. 초기 무작위 배치
+        this.init_mines();
+
+        // 2. 첫 클릭 3x3 안전 확보 (안 되면 바로 폐기)
+        if (!first3x3AllZero(firstX, firstY)) continue;
+        this._refresh_parts_from_mines();
+        if ((this.near_mines[firstX][firstY] | 0) !== 0) continue;
+// ★ 이 보드에서 “지뢰 옮기기+재시도”에 쓸 수 있는 최댓값 시간
+        const relocDeadline = Date.now() + RELOC_TIME_LIMIT_MS;
+        // 3. 풀이 시도 및 수리 반복
+        let solved = false;
+        
+        // 수리 루프
+        for (let repair = 0; repair <= MAX_REPAIRS; repair++) {
+          // ★ 3초 타임리밋 체크: 시간이 다 되면 이 보드는 포기하고 새 보드로
+            if (Date.now() > relocDeadline) {
+                // 현재 보드 포기 → 바깥 for 루프가 다음 attempt 로 새 맵 생성
+                break;
+            }
+            // 솔버 실행 (2초 제한)
+            const perSolveLimit = 2000;
+            const solveDeadline = Math.min(relocDeadline, Date.now() + perSolveLimit);
+
+            const result = this.solveNoGuessFast(firstX, firstY, solveDeadline);
+
+            if (result.ok) {
+                // 성공!
+                this._nopick_trace = []; // 필요 시 트레이스 저장
+                
+                // 남은 지뢰 개수 등 상태 동기화
+                this.remaining = W * H;
+                for (let y = 0; y < H; y++) 
+                    for (let x = 0; x < W; x++) 
+                        if ((this.mines[x][y] | 0) !== 0) this.remaining--;
+                
+                this.total_safe = this.remaining;
+                this.game_status = 1;
+                return 1;
+            }
+
+            // 실패했지만, 수리 기회가 남았다면 '열리지 않은 구역'을 흔들어준다.
+            if (repair < MAX_REPAIRS && result.opened && Date.now() <= relocDeadline) {
+                const changed = repairBoard(result.opened);
+                if (!changed) break; // 더 이상 바꿀 수 없으면 이 보드는 포기
+            } else {
+                // 수리 못 하거나 시간 부족 → 이 보드는 종료
+                break;
+            }
+        }
+        // 수리해도 안 되면 다음 무작위 시드로 넘어감
+    }
+
+    // 여기까지 오면 생성 실패 (보통 발생하지 않음)
+    alert("Failed to generate a logic-solvable board.");
+    return 0;
+};
+Minefield.prototype._refresh_parts_from_mines = function() {
+    this._near_black = this.new_table();
+    this._near_white = this.new_table();
+    const W = this.columns, H = this.rows;
+    
+    for (let x = 0; x < W; x++) {
+        for (let y = 0; y < H; y++) {
+            const v = this.mines[x][y];
+            if (v === 0) continue;
+            const addB = v > 0 ? v : 0;
+            const addW = v < 0 ? -v : 0;
+            const adj = this.near_positions(x, y);
+            for (let k = 0; k < adj.length; k++) {
+                const nx = adj[k][0], ny = adj[k][1];
+                this._near_black[nx][ny] += addB;
+                this._near_white[nx][ny] += addW;
+            }
+        }
+    }
+    this._rebuild_near_from_parts();
+};
 Minefield.prototype.init_mines_nopick = function (firstX, firstY) {
   const hasWhites = ((this.num_mines_white|0) > 0);  // 흰지뢰 존재 여부
   const W = this.columns|0, H = this.rows|0;
@@ -1527,36 +1671,31 @@ Minefield.prototype.init_mines_nopick = function (firstX, firstY) {
 
   // ===== 경량 솔버(노게스) =====
   function solveNoGuessFast(firstX, firstY, deadlineMs) {
+ 
     function timeUp(){ return Date.now() > deadlineMs; }
     // 컴포 캐시(요약 결과 저장)
     const compCache = new Map();
-  // === [ADD] 빠른-포기 휴리스틱 상태/상수 ===
-  let stallRounds = 0;                         // 연속 무진전 라운드 수
-  const STALL_LIMIT = 2;                       // 연속 2회 무진전이면 포기 후보
+    let stallRounds = 0;
+    const STALL_LIMIT = 2;
 
-  const UNDECIDED_RATIO_HARD = 0.85;           // 미결정 비율 임계(강)
-  const UNDECIDED_RATIO_SOFT = 0.70;           // 미결정 비율 임계(완화)
-  const MAX_FRONTIER_VARS_HARD = 220;          // 프런티어 변수가 이 이상이고 무진전이면 즉시 포기
+    const UNDECIDED_RATIO_HARD = 0.85;
+    const UNDECIDED_RATIO_SOFT = 0.70;
+    const MAX_FRONTIER_VARS_HARD = 220;
 
-  // 동적 시간 상한(보드 크기 기반)
-  const DYNAMIC_TIME_BUDGET_MS = Math.min(1500, 450 + W * H * 1.5);
-  const hardDeadline = Date.now() + DYNAMIC_TIME_BUDGET_MS;
+    // 동적 시간 상한
+    const DYNAMIC_TIME_BUDGET_MS = Math.min(1500, 450 + this.columns * this.rows * 1.5);
+    const hardDeadline = Date.now() + DYNAMIC_TIME_BUDGET_MS;
 
-    rebuildParts();                         // near 갱신
-    if ((this.near_mines[firstX][firstY]|0) !== 0) return false; // 첫칸은 반드시 진짜 0
+    this._rebuild_near_from_parts(); // near 갱신
+    if ((this.near_mines[firstX][firstY]|0) !== 0) return { ok: false, opened: null }; // 첫칸 실패
 
-    // 열린(안전) 상태 및 확정 지뢰 상태
-    const opened = new Uint8Array(W*H);     // 0/1
-    const confirmedMine = new Int8Array(W*H); // classic: 0/1
+    const W = this.columns, H = this.rows;
+    // 열린(안전) 상태
+    const opened = new Uint8Array(W*H);
     let openedCount = 0, totalSafe = 0;
     for (let y=0;y<H;y++) for (let x=0;x<W;x++) if ((this.mines[x][y]|0)===0) totalSafe++;
 
-    function openCell(x,y, reason) {
-      const k=idx(x,y);
-      if (opened[k]) return;
-      opened[k]=1; openedCount++;
-      pushTrace("open", {x,y,reason});
-    }
+
     // === 확정 값(해당 칸에 지뢰가 정확히 k개) 추적 ===
 const fixedKnown = new Uint8Array(W*H);   // 0/1
 const fixedVal   = new Int16Array(W*H);   // k (일반화: 음수일 수도)
@@ -1581,22 +1720,29 @@ function setFixed(x,y,val,reason){
       pushTrace("markMine", {x,y,reason});
       return true;
     }
-    function floodFrom(x0,y0) {
-      // 진짜 0만 퍼짐(상쇄0(1000)은 퍼지지 않음)
-      const stack=[[x0,y0]];
-      pushTrace("flood",{x:x0,y:y0});
-      while(stack.length){
-        const [x,y]=stack.pop();
-        const adj=this.near_positions(x,y);
-        for (let i=0;i<adj.length;i++){
-          const ax=adj[i][0], ay=adj[i][1];
-          const ak=idx(ax,ay);
-          if (opened[ak]) continue;
-          openCell(ax,ay,"flood-neighbor");
-          if ((this.near_mines[ax][ay]|0)===0) stack.push([ax,ay]);
-        }
-      }
+function idx(x, y) { return y * W + x; }
+    function openCell(x,y, reason) {
+        const k=idx(x,y);
+        if (opened[k]) return;
+        opened[k]=1; openedCount++;
+         pushTrace("open", {x,y,reason}); // 필요 시 주석 해제
     }
+    
+    function floodFrom(x0,y0) {
+        const stack=[[x0,y0]];
+        while(stack.length){
+            const [x,y]=stack.pop();
+            const adj=this.near_positions(x,y);
+            for (let i=0;i<adj.length;i++){
+                const ax=adj[i][0], ay=adj[i][1];
+                const ak=idx(ax,ay);
+                if (opened[ak]) continue;
+                openCell(ax,ay,"flood-neighbor");
+                if ((this.near_mines[ax][ay]|0)===0) stack.push([ax,ay]);
+            }
+        }
+    }
+    
     openCell(firstX, firstY, "seed");
     floodFrom.call(this, firstX, firstY);
 
@@ -2129,15 +2275,16 @@ if (!r.ok) {
     let guard = W*H*8;
     while(!done() && !timeUp()&& guard-- > 0){
         // === [ADD] 동적 시간 초과시 즉시 포기
-  if (Date.now() > hardDeadline) return false;
+  if (Date.now() > hardDeadline) return { ok: false, opened: opened };
 
   // === [ADD] 라운드 전 opened/fixed 스냅샷
-  const openedBefore = openedCount;
-  let fixedBefore = 0;
-  for (let i = 0; i < fixedKnown.length; i++) fixedBefore += fixedKnown[i];
+const openedBefore = openedCount;
+        let fixedBefore = 0;
+        for(let i=0;i<fixedKnown.length;i++) fixedBefore+=fixedKnown[i];
 
-const { vars, cons } = collectFrontier.call(this);
-if (!vars.length || !cons.length) return false;
+const frontierRes = collectFrontier.call(this); 
+        const { vars, cons } = frontierRes;
+if (!vars.length || !cons.length) return { ok: false, opened: opened };
 
 // (1) 빠른 결정식: RuleA/B (티어별)
 if (applyRuleAB_Tiered.call(this, vars, cons)) continue;
@@ -2334,7 +2481,6 @@ if (progressedLocal){
     }
 if (timeUp()) return false;
     if (done()){
-      pushTrace("done",{opens:openedCount});
       return true;
     }
     return false;
@@ -2354,19 +2500,52 @@ if (timeUp()) return false;
     Trace.length = 0;
     const deadline = Date.now() + 2000; // 2초
     // 빠른 결정 솔버
-    if (solveNoGuessFast.call(this, firstX, firstY, deadline)) {
+        if (solveNoGuessFast.call(this, firstX, firstY, deadline)) {
       // 상태 보정
       this.remaining = W*H;
       for (let y=0;y<H;y++) for (let x=0;x<W;x++) if ((this.mines[x][y]|0)!==0) this.remaining--;
       this.total_safe = this.remaining;
       this.game_status = 1;
 
-      // 추론 근거 트리 출력
+      // ★ Trace 에 없는 '지뢰 없는 칸'을 모두 open 으로 강제로 추가
+      (function fillAllSafeCellsToTrace(self) {
+        // 1) 이미 Trace 에 기록된 open 위치들
+        const openedByTrace = self.new_table();  // 숫자 0/1 로만 사용
+        for (let i = 0; i < Trace.length; i++) {
+          const t = Trace[i];
+          if (!t || t.kind !== "open") continue;
+          const x = t.x|0, y = t.y|0;
+          if (x >= 0 && x < W && y >= 0 && y < H) {
+            openedByTrace[x][y] = 1;
+          }
+        }
+
+        // 2) mines 상에서 지뢰가 없고(==0), 아직 한번도 open 으로 나온 적 없는 칸들
+        //    → Trace 맨 뒤에 open 으로 추가한다.
+        for (let y = 0; y < H; y++) {
+          for (let x = 0; x < W; x++) {
+            if ((self.mines[x][y] | 0) === 0 && !openedByTrace[x][y]) {
+              pushTrace("open", { x, y, reason: "post-fill" });
+            }
+          }
+        }
+
+        // 3) 최종 완료 로그를 Trace 제일 끝에 한 번만 찍어 둔다.
+        let openCount = 0;
+        for (let i = 0; i < Trace.length; i++) {
+          if (Trace[i] && Trace[i].kind === "open") openCount++;
+        }
+        pushTrace("done", { opens: openCount });
+      })(this);
+
+      // 추론 근거 트리 출력 (이 시점에서 Trace 는 이미 'post-fill' + 'done'까지 포함)
       try { dumpTraceToConsole(); } catch (e) {}
-// ★ 추론 로그를 인스턴스에 보관해 매크로가 그대로 재생할 수 있게 한다
-    this._nopick_trace = Trace.slice();
+
+      // ★ 추론 로그를 인스턴스에 보관해 매크로가 그대로 재생할 수 있게 한다
+      this._nopick_trace = Trace.slice();
       return 1; // 성공
     }
+
     //alert("regenerating");
     // 실패 시 다음 보드 계속 시도(무한)
   }
