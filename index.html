@@ -479,6 +479,7 @@ if (cp) {
 <div id="heavy-notice" class="notice">
   <h3>안내 / 성능 주의</h3>
   <ul>
+    <li> 모바일에서 조작:짧게 눌러 좌클릭, 길게 눌러 우클릭, 열린칸을 더블터치해서 chording.</li>
     <li>첫 클릭 직후 <span class="warn">판 생성</span>에 시간이 걸릴 수 있습니다. (지뢰 수↑, 판 크기↑일수록 증가)</li>
     <ul>
       <li>초대형과 특대형 판은 초기화에 약 5~10초가 소요됩니다</li>
@@ -1458,6 +1459,7 @@ function isKorean() {
       if (list) {
         let html = list.innerHTML;
         html = html
+          .replace(/모바일에서 조작:짧게 눌러 좌클릭, 길게 눌러 우클릭, 열린칸을 더블터치해서 chording.<\/li>/,'Controls on mobile: Short press to left-click, long press to right-click, double-tap an open space to chord.</li>' )
           .replace(/첫 클릭 직후 .*?증가\)<\/li>/, 'Right after the first click, <span class="warn">board generation</span> may take a while. (More mines & larger boards take longer.)</li>')
           .replace(/초대형과 특대형 판은 초기화에 약 .*?<\/li>/, 'XLarge and XXLarge boards take about 5–10 seconds to initialize.</li>')
           .replace(/<li><strong>찍기 패턴 발생 허용의 구제 기능 관련<\/strong>/, '<li><strong>About the rescue feature when guesses are allowed</strong>')
