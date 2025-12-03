@@ -298,6 +298,8 @@ if (cp) {
       <li class="menu100" onclick="return runMenu(() =>  alert(isKorean() ? '도움말은 아래에 있습니다' : 'Help is below'))"><a href="#">　도움말 검색(S)...</a></li>
       <li class="menu103" onclick=""><a href="#">　도움말 사용(H)</a></li>
       <li class="separator"></li>
+      <li class="menu-autosolve" onclick="return runMenu(() => document.getElementById('console-play').click());"><a href="#">　지뢰 자동으로 풀기</a></li>
+      <li class="menu-hint" onclick="return runMenu(() => document.getElementById('console-hint').click());"><a href="#">　힌트 제공</a></li>
       <li class="menu101" onclick="return runMenu(() => alert('Minesweeper'));"><a href="#">　지뢰 찾기 정보(A)...</a></li>
 
     </ul>
@@ -1391,6 +1393,8 @@ function isKorean() {
       ".menu101": "　About Minesweeper...",
       ".menu102": "　Contents　　　　 　　F1",
       ".menu103": "　Using Help",
+      ".menu-autosolve": "　Solve Automatically",
+      ".menu-hint": "　Hint",
       ".menu201":"Game",
       ".menu202":"Help",
     };
@@ -1745,7 +1749,8 @@ window.provide_nopick_hint = function(){
   const labelPause = () => _isKO() ? '자동 풀기 일시 중지' : 'Pause Auto-solve';
 
   function startOrResume(mf){
-    if (!mf.use_nopick || !Array.isArray(mf._nopick_trace) || !mf._nopick_trace.length) { console.warn('[macro] no-pick trace unavailable.'); return; }
+  
+    if (!mf.use_nopick || !Array.isArray(mf._nopick_trace) || !mf._nopick_trace.length) { alert(_msg('i18n-not-nopick','i18n-not-nopick-en')); console.warn('[macro] no-pick trace unavailable.'); return; }
     if (mf.game_status === -1){ alert(_deadMsg()); console.warn('you already dead'); return; }
 
     if (mf._macro_timer && mf._macro_running && mf._macro_paused){ mf._macro_paused=false; btn&&(btn.textContent=labelPause()); return; }

@@ -599,3 +599,7 @@ table.minetable td.near-m48 { background-image: url(mine.png); background-positi
 table.minetable td.near-0 { background-image: url(mine.png); background-position: 0px -160px; }
 table.minetable td.near-0:active { background-image: url(mine.png); background-position: 0px -160px; }
 
+table.minetable td.pressed {
+  background-image: url(mine.png);
+  background-position: 0px -32px; 
+}

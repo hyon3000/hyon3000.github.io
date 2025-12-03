@@ -354,73 +354,278 @@ Minefield.prototype._relocateFirstClick = function (x, y, clearNeighbors /*=fals
       }
     };
 
-    Minefield.prototype._attachDelegatedEvents = function () {
-      if (!this.table) return;
-      const tbl  = this.table;
-      const self = this;
+// ★ [수정] Chording 프리뷰 표시 (안 열린 칸에서도 시각적 효과 발생)
+  Minefield.prototype.preview_chord = function (x, y) {
+    this.clear_chord_preview(); 
+    
+    // 대상: 주변 8칸 + 자기 자신 = 총 9칸
+    // concat을 사용하여 중심 좌표 [x,y]를 포함시킵니다.
+    var targets = this.near_positions(x, y).concat([[x, y]]);
 
-      if (this._delegated) this._detachDelegatedEvents();
+    for (var i = 0; i < targets.length; i++) {
+      var tx = targets[i][0], ty = targets[i][1];
 
-      function getXYFrom(td) {
-        const x = td && td.dataset ? parseInt(td.dataset.x, 10) : NaN;
-        const y = td && td.dataset ? parseInt(td.dataset.y, 10) : NaN;
-        return [x, y];
+      // "안 열린" 칸이면서 "깃발이 없는" 경우에만 눌린 모양(.pressed) 적용
+      if (!this.is_opened(tx, ty)) {
+        var cls = this.get_class(tx, ty);
+        // 깃발(flag-*)이 아닌 경우에만 (null은 닫힌 빈칸, flag-0은 물음표)
+        // 깃발이 꽂혀있다면 눌린 모습으로 변하지 않음
+        if (cls === null || cls === "flag-0") { 
+           this.tds[tx][ty].classList.add("pressed");
+           this._chord_preview_cells.push([tx, ty]);
+        }
+      }
+    }
+  };
+
+  // ★ [추가] Chording 프리뷰 해제
+  Minefield.prototype.clear_chord_preview = function () {
+    if (!this._chord_preview_cells) this._chord_preview_cells = [];
+    while (this._chord_preview_cells.length > 0) {
+      var pos = this._chord_preview_cells.pop();
+      var td = this.tds[pos[0]][pos[1]];
+      if (td) td.classList.remove("pressed");
+    }
+  };
+
+  // ★ [수정] Chording 실행 (로직은 그대로두되, 안 열린 칸 방어 코드 확인)
+  Minefield.prototype.execute_chord = function (x, y) {
+    this.clear_chord_preview(); // 프리뷰 해제 (눌린 모양 복구)
+
+    // 1. 중심이 열린 칸이어야만 기능 동작 (안 열린 칸에서 떼면 여기서 리턴되어 아무 일도 없음)
+    if (!this.is_opened(x, y)) return;
+
+    // 2. 주변 깃발 개수 계산 (검은:+1, 흰:-1)
+    var flagSum = 0;
+    var anyFlag = false; 
+    var adj = this.near_positions(x, y);
+    
+    for (var i = 0; i < adj.length; i++) {
+      var nx = adj[i][0], ny = adj[i][1];
+      var f = this.flags[nx][ny] || 0;
+      if (f !== 0) {
+        anyFlag = true;
+        flagSum += f;
+      }
+    }
+
+    // 3. 중심 숫자(near_mines)와 비교
+    var centerVal = this.near_mines[x][y];
+    var target = (centerVal === 1000) ? 0 : centerVal;
+
+    var match = (flagSum === target);
+    if (centerVal === 1000 && !anyFlag) match = false;
+
+    if (match) {
+      // 주변 모두 열기
+      for (var i = 0; i < adj.length; i++) {
+        var nx = adj[i][0], ny = adj[i][1];
+        if ((this.flags[nx][ny] || 0) !== 0) continue;
+        if (!this.is_opened(nx, ny)) {
+          if (this.expand(nx, ny) < 0) {
+             this.gameover(nx, ny); 
+             break; 
+          }
+        }
+      }
+      if (this.remaining === 0) this.gameclear();
+    }
+  };
+
+  // ★ [교체] 이벤트 핸들러 로직 전면 재작성
+  Minefield.prototype._attachDelegatedEvents = function () {
+    if (!this.table) return;
+    var tbl = this.table;
+    var self = this;
+
+    if (this._delegated) this._detachDelegatedEvents();
+
+    function getXYFrom(td) {
+      var x = td && td.dataset ? parseInt(td.dataset.x, 10) : NaN;
+      var y = td && td.dataset ? parseInt(td.dataset.y, 10) : NaN;
+      return [x, y];
+    }
+
+    var mouseState = 0; // 1:Left, 2:Right, 4:Middle
+    var isChording = false;
+    
+    // ★ [추가됨] 우클릭 딜레이 처리를 위한 타이머 변수
+    var rightClickTimer = null;
+
+    var touchTimer = null;
+    var lastTapTime = 0;
+    var lastTapPos = null;
+    var touchStartPos = null;
+    var isLongPress = false;
+
+    // --- 마우스 이벤트 핸들러 ---
+
+    var onMouseDown = function (e) {
+      if (e.button === 1) {
+        e.preventDefault();
       }
 
-      const onClick = function (e) {
-        if (e.button !== 0) return;
-        const td = e.target.closest('td');
-        if (!td || !tbl.contains(td)) return;
-        const [x, y] = getXYFrom(td);
-        if (Number.isNaN(x) || Number.isNaN(y)) return;
-        self.on_click(x, y);
-        e.preventDefault();
-      };
+      var td = e.target.closest('td');
+      if (!td || !tbl.contains(td)) return;
+      var pos = getXYFrom(td);
+      var x = pos[0], y = pos[1];
+      if (Number.isNaN(x)) return;
 
-      const onContextMenu = function (e) {
-        const td = e.target.closest('td');
-        if (!td || !tbl.contains(td)) return;
-        const [x, y] = getXYFrom(td);
-        if (Number.isNaN(x) || Number.isNaN(y)) return;
+      // 버튼 상태 업데이트
+      if (e.button === 0) mouseState |= 1; // Left
+      if (e.button === 2) mouseState |= 2; // Right
+      if (e.button === 1) mouseState |= 4; // Middle
+
+      // ★ [수정됨] 1. 우클릭 Press 처리 (50ms 딜레이 추가)
+      if (e.button === 2) {
+        // 좌클릭이 이미 눌려있다면(mouseState & 1), 깃발 동작 자체를 스킵
+        if (!(mouseState & 1)) {
+           // 즉시 실행하지 않고 50ms 대기
+           rightClickTimer = setTimeout(function() {
+             self.on_rclick(x, y); 
+             rightClickTimer = null; // 실행 후 타이머 초기화
+           }, 50);
+        }
+      }
+
+      // ★ [수정됨] 2. 좌클릭 Press 처리 (우클릭 딜레이 취소 로직)
+      if (e.button === 0) {
+        // 만약 대기 중인 우클릭 타이머가 있다면 취소! (동시 클릭 의도로 간주)
+        if (rightClickTimer !== null) {
+          clearTimeout(rightClickTimer);
+          rightClickTimer = null;
+          // 여기서 우클릭 깃발 꽂기는 취소되지만, 
+          // mouseState에는 이미 Left(1)와 Right(2)가 모두 들어있으므로
+          // 아래 로직에서 자연스럽게 Chording으로 넘어갑니다.
+        }
+      }
+
+      // 3. Chording 조건 체크
+      if ((mouseState & 1 && mouseState & 2) || (mouseState & 4)) {
+        isChording = true;
+        self.preview_chord(x, y);
+      } else if (mouseState === 1) {
+        // 좌클릭만 누른 경우
+      }
+      
+      self.on_down(x, y);
+    };
+
+    var onMouseUp = function (e) {
+      if (e.button === 1) e.preventDefault();
+
+      var td = e.target.closest('td');
+      var pos = td ? getXYFrom(td) : [-1, -1];
+      var x = pos[0], y = pos[1];
+
+      // 코딩 실행 조건: "좌+우 눌린 상태에서 하나라도 뗌" 또는 "중클릭 뗌"
+      
+      if (isChording) {
+        if (x !== -1) self.execute_chord(x, y);
+        self.clear_chord_preview();
+        isChording = false; 
+      } 
+      else {
+        // 일반 클릭 처리 (좌클릭 release)
+        if (x !== -1) {
+          if (e.button === 0 && !(mouseState & 2)) {
+             self.on_click(x, y);
+          }
+        }
+      }
+
+      // 상태 비트 해제
+      if (e.button === 0) mouseState &= ~1;
+      if (e.button === 2) mouseState &= ~2;
+      if (e.button === 1) mouseState &= ~4;
+
+      self.on_up(x, y);
+    };
+
+    var onMouseOut = function(e) {
+       self.clear_chord_preview();
+    };
+
+    var onContextMenu = function (e) { e.preventDefault(); };
+
+    // --- 터치 이벤트 핸들러 (기존 유지) ---
+    var onTouchStart = function (e) {
+      if (e.touches.length > 1) return;
+      var td = e.target.closest('td');
+      if (!td) return;
+      var pos = getXYFrom(td);
+      var x = pos[0], y = pos[1];
+      
+      touchStartPos = [x, y];
+      isLongPress = false;
+      
+      self.on_down(x, y);
+
+      touchTimer = setTimeout(function() {
+        isLongPress = true;
+        if (navigator.vibrate) navigator.vibrate(50);
         self.on_rclick(x, y);
+      }, 500);
+    };
+
+    var onTouchEnd = function (e) {
+      if (touchTimer) clearTimeout(touchTimer);
+      self.on_up();
+
+      var td = document.elementFromPoint(e.changedTouches[0].clientX, e.changedTouches[0].clientY).closest('td');
+      if (!td || !tbl.contains(td)) return;
+      var pos = getXYFrom(td);
+      var x = pos[0], y = pos[1];
+
+      if (!touchStartPos || touchStartPos[0] !== x || touchStartPos[1] !== y) return;
+
+      if (isLongPress) {
         e.preventDefault();
-      };
+        return;
+      }
 
-      const onMouseDown = function (e) {
-        if (e.button === 1) return;
-        const td = e.target.closest('td');
-        if (!td || !tbl.contains(td)) return;
-        const [x, y] = getXYFrom(td);
-        if (Number.isNaN(x) || Number.isNaN(y)) return;
-        self.on_down(x, y);
-      };
+      var currentTime = new Date().getTime();
+      var tapLength = currentTime - lastTapTime;
 
-      const onMouseUp = function (e) {
-        if (e.button === 1) return;
-        const td = e.target.closest('td');
-        if (!td || !tbl.contains(td)) return;
-        const [x, y] = getXYFrom(td);
-        if (Number.isNaN(x) || Number.isNaN(y)) return;
-        self.on_up(x, y);
-      };
-
-      tbl.addEventListener('click', onClick);
-      tbl.addEventListener('contextmenu', onContextMenu);
-      tbl.addEventListener('mousedown', onMouseDown);
-      tbl.addEventListener('mouseup', onMouseUp);
-
-      this._delegated = { onClick, onContextMenu, onMouseDown, onMouseUp };
+      if (lastTapPos && lastTapPos[0] === x && lastTapPos[1] === y && tapLength < 300 && tapLength > 0) {
+        if (self.is_opened(x, y)) {
+           self.execute_chord(x, y);
+        } else {
+           self.on_click(x, y);
+        }
+        lastTapTime = 0; 
+      } else {
+        if (!self.is_opened(x, y)) {
+           self.on_click(x, y);
+        }
+        lastTapTime = currentTime;
+        lastTapPos = [x, y];
+      }
+      e.preventDefault();
     };
 
-    Minefield.prototype._detachDelegatedEvents = function () {
-      if (!this.table || !this._delegated) return;
-      const { onClick, onContextMenu, onMouseDown, onMouseUp } = this._delegated;
-      this.table.removeEventListener('click', onClick);
-      this.table.removeEventListener('contextmenu', onContextMenu);
-      this.table.removeEventListener('mousedown', onMouseDown);
-      this.table.removeEventListener('mouseup', onMouseUp);
-      this._delegated = null;
-    };
+    tbl.addEventListener('mousedown', onMouseDown);
+    tbl.addEventListener('mouseup', onMouseUp);
+    tbl.addEventListener('mouseout', onMouseOut);
+    tbl.addEventListener('contextmenu', onContextMenu);
+    
+    tbl.addEventListener('touchstart', onTouchStart, {passive: false});
+    tbl.addEventListener('touchend', onTouchEnd, {passive: false});
+
+    this._delegated = { onMouseDown, onMouseUp, onContextMenu, onTouchStart, onTouchEnd };
+  };
+
+  Minefield.prototype._detachDelegatedEvents = function () {
+    if (!this.table || !this._delegated) return;
+    var d = this._delegated;
+    this.table.removeEventListener('mousedown', d.onMouseDown);
+    this.table.removeEventListener('mouseup', d.onMouseUp);
+    this.table.removeEventListener('mouseout', d.onMouseOut); // 추가됨
+    this.table.removeEventListener('contextmenu', d.onContextMenu);
+    this.table.removeEventListener('touchstart', d.onTouchStart);
+    this.table.removeEventListener('touchend', d.onTouchEnd);
+    this._delegated = null;
+  };
 
     // 점진적 테이블 생성
     Minefield.prototype._buildTableIncrementally = function(done) {
@@ -534,9 +739,10 @@ Minefield.prototype._relocateFirstClick = function (x, y, clearNeighbors /*=fals
         }
 
         this.on_game_status_changed();
+        this._attachDelegatedEvents();
       }.bind(this));
 
-      this._attachDelegatedEvents();
+      
     };
 
     /* ---------- 상태 체크 ---------- */
