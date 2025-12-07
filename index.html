@@ -1963,7 +1963,7 @@ if (Number.isNaN(ai)) ai = 2;   // NaN일 때만 2로 대체 (0은 살림)
 const dialog = document.getElementById('custom-win');
     if (dialog) {
       dialog.style.width = '225px';
-      dialog.style.height = '200px';
+      dialog.style.height = 'max-content';
       //이 다이얼로그를 가장 앞으로
       dialog.style.zIndex = 1000;
     }
@@ -2174,7 +2174,7 @@ const dialog = document.getElementById('custom-win');
       top: '10px',
       'z-index': 1100,
       width: '250px',
-      height: 'auto'
+      height: 'max-content'
     });
   }
 
