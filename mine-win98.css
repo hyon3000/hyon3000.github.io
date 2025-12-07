@@ -27,6 +27,8 @@
     width: 39px;
     height: 23px; }
     .window-content .mine-head-area .mine-counter .digit, .window-content .mine-head-area .mine-timer .digit {
+      image-rendering: pixelated;
+image-rendering: crisp-edges;
       background-image: url(digit.png);
       width: 13px;
       height: 23px;
@@ -69,28 +71,28 @@
     top: 6px;
     left: 6px; }
   .window-content .mine-head-area .mine-timer {
+    image-rendering: pixelated;
+image-rendering: crisp-edges;
     position: absolute;
     top: 6px;
     right: 6px; }
   .window-content .mine-head-area .mine-reset-button {
-    border-top: 2px solid white;
-    border-left: 2px solid white;
-    border-bottom: 2px solid gray;
-    border-right: 2px solid gray;
+
     position: absolute;
-    width: 21px;
-    height: 21px;
+    width: 24px;
+    height: 24px;
     padding: 0px;
     top: 8px;
     left: 232px; }
-    .window-content .mine-head-area .mine-reset-button:active {
-      border-top: 2px solid gray;
-      border-left: 2px solid gray;
-      border-bottom: 2px solid white;
-      border-right: 2px solid white; }
     .window-content .mine-head-area .mine-reset-button .mine-reset-button-inner {
-      width: 21px;
-      height: 21px;
+      width: 24px;
+      height: 24px;
+          border-top: 2px solid gray;
+    border-left: 2px solid gray;
+    border-bottom: 2px solid gray;
+    border-right: 2px solid gray;
+    image-rendering: pixelated;
+image-rendering: crisp-edges;
       background-image: url(face.png);
       background-position: 0 0; }
 

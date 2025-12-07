@@ -2768,9 +2768,9 @@ Minefield.prototype.on_click = function (x, y) {
       clickedTd.classList.add("pressed");
     }
 
-    // 얼굴: 눌린 표정(-42px) 강제 적용
+    // 얼굴: 눌린 표정(-48px) 강제 적용
     if (faceIcon) {
-      faceIcon.style.setProperty("background-position", "-42px 0", "important");
+      faceIcon.style.setProperty("background-position", "-48px 0", "important");
     }
 
     var self = this;
@@ -2779,7 +2779,7 @@ Minefield.prototype.on_click = function (x, y) {
     setTimeout(function () {
       try {
         // 혹시 모르니 한 번 더 강제
-        if (faceIcon) faceIcon.style.setProperty("background-position", "-42px 0", "important");
+        if (faceIcon) faceIcon.style.setProperty("background-position", "-48px 0", "important");
         
         self.start(x, y); // 무거운 연산 (브라우저 프리징 구간)
 

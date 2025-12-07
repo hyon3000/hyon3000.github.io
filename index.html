@@ -135,11 +135,11 @@
       // 게임 객체가 없거나, 게임 종료 상태(-1:패배, -2:승리)라면 반응하지 않음 (진행중 1, 대기 0)
       if (!window.minefield || window.minefield.game_status < 0) return;
 
-      // 얼굴 아이콘을 찾아 강제로 'O' 표정(-42px) 적용
+      // 얼굴 아이콘을 찾아 강제로 'O' 표정(-48px) 적용
       var faceIcon = document.querySelector(".mine-reset-button .mine-reset-button-inner");
       if (faceIcon) {
         // 기존 CSS(:active)를 덮어쓰기 위해 !important 사용
-        faceIcon.style.setProperty("background-position", "-42px 0", "important");
+        faceIcon.style.setProperty("background-position", "-48px 0", "important");
       }
     }, true); // true: 캡처링
 
@@ -716,6 +716,10 @@ if (cp) {
       
       /* 보더 색상 조정 - 흑백 모드에서 더 진하게 (두께는 유지, 색상만 변경) */
       ${!useColor ? `
+      
+      .window-content .mine-head-area .mine-reset-button .mine-reset-button-inner {
+        border-color: #000000 !important;
+      }
       /* 헤더 영역 - Win98 스타일 유지, 색상만 진하게 */
       .window-content .mine-head-area {
         border-top-color: #000000 !important;
@@ -874,15 +878,15 @@ if (cp) {
         background-image: url(digit${suffix}.png) !important;
       }
       
-      /* 리셋 버튼 (얼굴) - 105*21 크기로 업데이트 */
+      /* 리셋 버튼 (얼굴) - 120*24 크기로 업데이트 */
       .window-content .mine-head-area .mine-reset-button .mine-reset-button-inner {
         background-image: url(face${suffix}.png) !important;
-        background-size: 105px 21px !important;
+        background-size: 120px 24px !important;
       }
       
       /* 얼굴 버튼 자체가 눌린 상태 (active) - 5번째 얼굴 (보더 강화) */
       .window-content .mine-head-area .mine-reset-button:active .mine-reset-button-inner {
-        background-position: -84px 0 !important;
+        background-position: -96px 0 !important;
       }
     `;
     
@@ -1121,8 +1125,8 @@ if (cp) {
       mine_area,
       function(status) {
         var smile = $(".mine-reset-button .mine-reset-button-inner");
-        // 얼굴 위치: 0=평상시, -21px=죽음, -42px=생각중, -63px=승리, -84px=눌림(강조)
-        var bg = "0 0"; if (status === -1) bg = "-21px 0"; if (status === -2) bg = "-63px 0"; if (status === 2) bg = "-42px 0";
+        // 얼굴 위치: 0=평상시, -24px=죽음, -48px=생각중, -72px=승리, -96px=눌림(강조)
+        var bg = "0 0"; if (status === -1) bg = "-24px 0"; if (status === -2) bg = "-72px 0"; if (status === 2) bg = "-48px 0";
         smile.css({"background-position": bg});
 
         if (status === 0) timer_id = window.setInterval(update_timer, 1000);
@@ -1163,10 +1167,10 @@ if (cp) {
 
   var smile = $(".mine-reset-button .mine-reset-button-inner");
 
-        // status === 1: 셀 버튼 눌림 → 3번째 얼굴(-42px, thinking face)
+        // status === 1: 셀 버튼 눌림 → 3번째 얼굴(-48px, thinking face)
         // status === 0: 정상 → 1번째 얼굴(0)
-        // 5번째 얼굴(-84px)은 CSS :active로 얼굴 버튼 자체가 눌렸을 때 표시
-        smile.css({"background-position": (status === 1) ? "-42px 0" : "0 0"});
+        // 5번째 얼굴(-96px)은 CSS :active로 얼굴 버튼 자체가 눌렸을 때 표시
+        smile.css({"background-position": (status === 1) ? "-48px 0" : "0 0"});
       }
     );
 
