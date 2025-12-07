@@ -428,7 +428,7 @@ Minefield.prototype._relocateFirstClick = function (x, y, clearNeighbors /*=fals
           }
         }
       }
-      if (this.remaining === 0) this.gameclear();
+      if (this.remaining === 1) this.gameclear();
     }
   };
 
@@ -667,6 +667,11 @@ Minefield.prototype._relocateFirstClick = function (x, y, clearNeighbors /*=fals
 
     // reset_board
     Minefield.prototype.reset_board = function() {
+      // ▼▼▼ [추가] 리셋 시 이전 자동 풀이 데이터와 매크로 상태를 강제 초기화 ▼▼▼
+      this._nopick_trace = null;      // 이전 풀이 경로 삭제
+      this._macro_running = false;    // 자동 풀기 매크로 중지
+      if (this._macro_timer) { clearInterval(this._macro_timer); this._macro_timer = null; }
+      // ▲▲▲▲▲▲
       this.opened_cells = 0;
       this.reloc_used   = 0;
       this.opened_safe  = 0;
@@ -751,6 +756,7 @@ Minefield.prototype._relocateFirstClick = function (x, y, clearNeighbors /*=fals
       if (c === null) return false;
       if (/^flag/.test(c)) return false;
       if (c === "empty") return true;
+      if (c === "pressed") return true;
       if (/^near-/.test(c)) return true;
       return false;
     };
@@ -1642,130 +1648,7 @@ Minefield.prototype._enforceGACSigned = function (vars, cons, capB, capW) {
 
   return { progressed:changed || decided.length>0, decided };
 };
-Minefield.prototype.init_mines_nopick = function (firstX, firstY) {
-    const W = this.columns | 0, H = this.rows | 0;
 
-    // 첫 3x3이 전부 0(지뢰 없음)인지 확인하는 헬퍼
-    const first3x3AllZero = (X, Y) => {
-        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-            const x = X + dx, y = Y + dy;
-            if (x >= 0 && x < W && y >= 0 && y < H) {
-                if ((this.mines[x][y] | 0) !== 0) return false;
-            }
-        }
-        return true;
-    };
-
-    // ★ 수리(Repair) 함수: 안 열린 칸들끼리 지뢰를 교환하여 셔플
-    const repairBoard = (openedMask) => {
-        // 교환 후보군: 아직 열리지 않은 칸들 (지뢰여부 상관없음)
-        const candidates = [];
-        for (let y = 0; y < H; y++) {
-            for (let x = 0; x < W; x++) {
-                // 열린 칸(openedMask=1)은 건드리면 안 됨 (안전지대 보존)
-                if (!openedMask[y * W + x]) {
-                    candidates.push([x, y]);
-                }
-            }
-        }
-
-        // 후보가 너무 적으면 수리 불가
-        if (candidates.length < 2) return false;
-
-        // 전체 안 열린 칸의 약 5% ~ 10% 정도를 랜덤 스왑 (판을 흔들어줌)
-        // 또는 최소 10쌍 이상 교환
-        const swapCount = Math.max(10, Math.floor(candidates.length * 0.05));
-        
-        for (let i = 0; i < swapCount; i++) {
-            const idx1 = Math.floor(Math.random() * candidates.length);
-            const idx2 = Math.floor(Math.random() * candidates.length);
-            if (idx1 === idx2) continue;
-
-            const [x1, y1] = candidates[idx1];
-            const [x2, y2] = candidates[idx2];
-
-            // 값 교환
-            const temp = this.mines[x1][y1];
-            this.mines[x1][y1] = this.mines[x2][y2];
-            this.mines[x2][y2] = temp;
-        }
-
-        // 지뢰 위치가 바뀌었으므로 숫자(near_mines) 재계산 필수
-        this._refresh_parts_from_mines();
-        return true;
-    };
-
-    // ====== 메인 생성 루프 (Retry & Repair) ======
-    // 최대 시도 횟수 (너무 오래 걸리면 브라우저 멈춤 방지)
-    let MAX_FULL_RETRIES=50;
-    let MAX_REPAIRS=30;
-    let RELOC_TIME_LIMIT_MS=1500;
-    if(Math.max(0, this.num_mines | 0) +
-      Math.max(0, this.num_mines_white | 0)>500){ 
-      MAX_REPAIRS = 50; // 한 보드당 수리 시도 횟수
-      RELOC_TIME_LIMIT_MS = 5000;
-    }
-    if(Math.max(0, this.num_mines_white | 0)!=0){
-        MAX_REPAIRS = 30; // 한 보드당 수리 시도 횟수
-      RELOC_TIME_LIMIT_MS = 3000;
-    }
-    for (let attempt = 1; attempt <= MAX_FULL_RETRIES; attempt++) {
-        // 1. 초기 무작위 배치
-        this.init_mines();
-
-        // 2. 첫 클릭 3x3 안전 확보 (안 되면 바로 폐기)
-        if (!first3x3AllZero(firstX, firstY)) continue;
-        this._refresh_parts_from_mines();
-        if ((this.near_mines[firstX][firstY] | 0) !== 0) continue;
-// ★ 이 보드에서 “지뢰 옮기기+재시도”에 쓸 수 있는 최댓값 시간
-        const relocDeadline = Date.now() + RELOC_TIME_LIMIT_MS;
-        // 3. 풀이 시도 및 수리 반복
-        let solved = false;
-        
-        // 수리 루프
-        for (let repair = 0; repair <= MAX_REPAIRS; repair++) {
-          // ★ 3초 타임리밋 체크: 시간이 다 되면 이 보드는 포기하고 새 보드로
-            if (Date.now() > relocDeadline) {
-                // 현재 보드 포기 → 바깥 for 루프가 다음 attempt 로 새 맵 생성
-                break;
-            }
-            // 솔버 실행 (2초 제한)
-            const perSolveLimit = 2000;
-            const solveDeadline = Math.min(relocDeadline, Date.now() + perSolveLimit);
-
-            const result = this.solveNoGuessFast(firstX, firstY, solveDeadline);
-
-            if (result.ok) {
-                // 성공!
-                this._nopick_trace = []; // 필요 시 트레이스 저장
-                
-                // 남은 지뢰 개수 등 상태 동기화
-                this.remaining = W * H;
-                for (let y = 0; y < H; y++) 
-                    for (let x = 0; x < W; x++) 
-                        if ((this.mines[x][y] | 0) !== 0) this.remaining--;
-                
-                this.total_safe = this.remaining;
-                this.game_status = 1;
-                return 1;
-            }
-
-            // 실패했지만, 수리 기회가 남았다면 '열리지 않은 구역'을 흔들어준다.
-            if (repair < MAX_REPAIRS && result.opened && Date.now() <= relocDeadline) {
-                const changed = repairBoard(result.opened);
-                if (!changed) break; // 더 이상 바꿀 수 없으면 이 보드는 포기
-            } else {
-                // 수리 못 하거나 시간 부족 → 이 보드는 종료
-                break;
-            }
-        }
-        // 수리해도 안 되면 다음 무작위 시드로 넘어감
-    }
-
-    // 여기까지 오면 생성 실패 (보통 발생하지 않음)
-    alert("Failed to generate a logic-solvable board.");
-    return 0;
-};
 Minefield.prototype._refresh_parts_from_mines = function() {
     this._near_black = this.new_table();
     this._near_white = this.new_table();
@@ -2901,7 +2784,7 @@ Minefield.prototype.on_click = function (x, y) {
         self.start(x, y); // 무거운 연산 (브라우저 프리징 구간)
 
         if (self.expand(x, y) < 0) self.gameover(x, y);
-        if (self.remaining === 0) self.gameclear();
+        if (self.remaining === 1) self.gameclear();
 
         if (self.on_click_func) self.on_click_func(x, y);
         if (old_game_status !== self.game_status) self.on_game_status_changed();
@@ -2935,7 +2818,8 @@ Minefield.prototype.on_click = function (x, y) {
   // --- 기존 동기 처리 (가벼운 클릭) ---
   if (this.game_status === 1) this.start(x, y);
   if (this.expand(x, y) < 0) this.gameover(x, y);
-  if (this.remaining === 0) this.gameclear();
+  if (this.remaining === 1) 
+    this.gameclear();
   if (this.on_click_func) this.on_click_func(x, y);
   if (old_game_status !== this.game_status) return this.on_game_status_changed();
 };

@@ -328,6 +328,9 @@ if (cp) {
       <li class="menu1" onclick="return runMenu(() => {execute(9, 9, 10, 1, 0, 0, 2);setActiveDifficulty(1);  });"><a href="#">　초급(B)</a></li>
       <li class="menu2" onclick="return runMenu(() => {execute(16, 16, 40, 1, 0, 0, 2);setActiveDifficulty(2);  });"><a href="#">　중급(I)</a></li>
       <li class="menu3" onclick="return runMenu(() => {execute(30, 16, 99, 1, 0, 0, 2);setActiveDifficulty(3);  });"><a href="#">✓ 고급(E)</a></li>
+      <li class="menu_4" onclick="event.preventDefault(); event.stopPropagation(); return false;" style="cursor: default;">
+        <a href="#" onclick="event.preventDefault(); event.stopPropagation(); return false;" style="cursor: default;">　기타...</a>
+    <ul class="menu">
       <li class="menu4" onclick="return runMenu(() => {execute(30, 16, 120, 2, 0, 0, 2);setActiveDifficulty(4);  });"><a href="#">　초고급</a></li>
       <li class="menu5" onclick="return runMenu(() => {execute(30, 16, 160, 3, 0, 0, 2);setActiveDifficulty(5);  });"><a href="#">　😱</a></li>
       <li class="menu6" onclick="return runMenu(() => {execute(30, 16, 220, 4, 0, 0, 2);setActiveDifficulty(6); });"><a href="#">　💀</a></li>
@@ -338,6 +341,7 @@ if (cp) {
       <li class="menu11" onclick="return runMenu(() => {execute(118, 58, 1412, 1, 0, 0, 0);setActiveDifficulty(11);  });"><a href="#">　대형</a></li>
       <li class="menu12" onclick="return runMenu(() => {execute(640, 480, 63300, 1, 0, 0, 0);setActiveDifficulty(12);  });"><a href="#">　초대형</a></li>
       <li class="menu13" onclick="return runMenu(() => {execute(1280, 720, 192000, 1, 0, 0, 0);setActiveDifficulty(13);  });"><a href="#">　특대형</a></li>
+      </ul></li>
       <li class="menu14" onclick="return runMenu(() => { openCustomDialog();setActiveDifficulty(14);});"><a href="#">　사용자 지정(C)...</a></li>
       <li class="separator"></li>
 
@@ -366,8 +370,12 @@ if (cp) {
       <li class="menu100" onclick="return runMenu(() =>  alert(isKorean() ? '도움말은 아래에 있습니다' : 'Help is below'))"><a href="#">　도움말 검색(S)...</a></li>
       <li class="menu103" onclick=""><a href="#">　도움말 사용(H)</a></li>
       <li class="separator"></li>
+      <li class="menu_cheat" onclick="event.preventDefault(); event.stopPropagation(); return false;" style="cursor: default;">
+        <a href="#" onclick="event.preventDefault(); event.stopPropagation(); return false;" style="cursor: default;">　치트...</a>
+      <ul class="menu">
       <li class="menu-autosolve" onclick="return runMenu(() => document.getElementById('console-play').click());"><a href="#">　지뢰 자동으로 풀기</a></li>
       <li class="menu-hint" onclick="return runMenu(() => document.getElementById('console-hint').click());"><a href="#">　힌트 제공</a></li>
+     </ul></li>
       <li class="menu101" onclick="return runMenu(() => alert('Minesweeper'));"><a href="#">　지뢰 찾기 정보(A)...</a></li>
 
     </ul>
@@ -1445,6 +1453,7 @@ function isKorean() {
       ".menu1":  "　Beginner",
       ".menu2":  "　Intermediate",
       ".menu3":  "　Expert",
+      ".menu_4":  "　Others...",
       ".menu4":  "　Ultra",
       ".menu5":  "　😱",
       ".menu6":  "　💀",
@@ -1462,6 +1471,7 @@ function isKorean() {
       ".menu101": "　About Minesweeper...",
       ".menu102": "　Contents　　　　 　　F1",
       ".menu103": "　Using Help",
+      ".menu_cheat":  "Cheat...",
       ".menu-autosolve": "　Solve Automatically",
       ".menu-hint": "　Hint",
       ".menu201":"Game",
@@ -1469,7 +1479,16 @@ function isKorean() {
     };
     Object.keys(menuText).forEach(sel => {
       const el = document.querySelector(sel);
-      setText(el, menuText[sel]);
+      if (!el) return;
+
+      // 요소 안에 <a> 태그가 있다면 <a> 태그의 텍스트만 변경 (서브메뉴 <ul> 보존을 위해)
+      const link = el.querySelector('a');
+      if (link) {
+        link.textContent = menuText[sel];
+      } else {
+        // <a> 태그가 없으면 기존 방식대로 처리
+        setText(el, menuText[sel]);
+      }
     });
 
     /* 1-1) Update menu items that need special handling */
@@ -1501,7 +1520,8 @@ function isKorean() {
                  .replace("전체 음수지뢰 수", "Total anti-mines")
                  .replace("지능형 생성", "Generation mode")
                  .replace("생성", "Create")
-                 .replace("문구 숨기기", "Hide controls");
+                 .replace("문구 숨기기", "Hide controls")
+                 
       form.innerHTML = html;
 
       // 셀렉트 옵션도 영문화
@@ -1636,8 +1656,8 @@ if (custdialtitle) {
   <span id="i18n-wrong-flag-en">You mis-flagged a cell: ({x}, {y}). Please fix this first.</span>
 
   <!-- 노픽 힌트가 불가한 경우 -->
-  <span id="i18n-not-nopick">이 기능은 ‘찍기 없음’ 보드에서만 사용할 수 있습니다.</span>
-  <span id="i18n-not-nopick-en">Hints are available only on a “no-pick” board.</span>
+  <span id="i18n-not-nopick">이 기능은 ‘찍기 없음’ 보드에서만 사용할 수 있습니다. ‘찍기 없음’ 모드라면, 적어도 한 칸을 여세요. </span>
+  <span id="i18n-not-nopick-en">Hints are available only on a “no-pick” board. If it’s already “no-pick” mode, please open at least one cell. </span>
 
   <!-- 더 줄 힌트가 없을 때 -->
   <span id="i18n-no-next">더 이상 제공할 힌트가 없습니다.</span>
@@ -1676,14 +1696,21 @@ function _openWithUnflag(mf,x,y){ if (_isFlagUI(mf,x,y)) _removeFlagFully(mf,x,y
 /* ===== trace 진행상태 유틸 ===== */
 function _done(mf,t){
   if(!t) return true;
-  if(t.kind==='open') return mf.is_opened(t.x,t.y);
-  if(t.kind==='markMine') return ((mf.flags[t.x][t.y]||0)===(mf.mines[t.x][t.y]|0));
+  if(t.kind==='open') 
+    return mf.is_opened(t.x,t.y);
+  if(t.kind==='markMine') 
+    return ((mf.flags[t.x][t.y]||0)===(mf.mines[t.x][t.y]|0));
   return true; // rule/subset/flood 등은 힌트/매크로 관점에서 소비된 것으로 간주
 }
 function _nextVisible(mf){
   const tr=mf._nopick_trace||[]; let i=0;
-  while(i<tr.length && _done(mf,tr[i])) i++;
-  for(; i<tr.length; i++){ const t=tr[i]; if(t.kind==='open'||t.kind==='markMine') return t; }
+  while(i<tr.length &&
+    _done(mf,tr[i])) 
+   i++;
+  for(; i<tr.length; i++){ 
+    const t=tr[i]; if(t.kind==='open'||t.kind==='markMine') 
+      return t; 
+  }
   return null;
 }
 function humanizeReason(raw) {

@@ -12,12 +12,26 @@ $.widget( "mswin.menubar", $.ui.menu, {
 
     _create: function() {
         $.ui.menu.prototype._create.call(this);
+        
+        // --- [수정됨] 마우스 이탈로 인한 닫힘 방지 코드 시작 ---
+        
+        // 1. 상속받은 blur 이벤트 제거 (포커스 잃을 때 닫힘 방지 제어)
         this._off(this.element, "blur");
-        this.element.undelegate(".ui-menu-item", "mouseenter");  // TODO: report jQuery UI's bug in $.widget._off()
         
-        // 기존 click 핸들러 제거
+        // 2. 상속받은 mouseenter 제거 (기존 코드 유지)
+        this.element.undelegate(".ui-menu-item", "mouseenter"); 
+        
+        // 3. 상속받은 click 핸들러 제거 (기존 코드 유지)
         this._off(this.element, "click .ui-menu-item");
+
+        // 4. ★ 핵심: 마우스가 메뉴 밖으로 나갈 때(mouseleave) 닫히는 기능 강제 제거 ★
+        // 상위 위젯($.ui.menu)이 바인딩한 이벤트를 모두 해제합니다.
+        this._off(this.element, "mouseleave");
+        this.element.unbind("mouseleave");
+        this.element.undelegate(".ui-menu-item", "mouseleave");
         
+        // --- [수정됨] 끝 ---
+
         this._on({
             "click .ui-menu-item": function( event ) {
                 var target = $( event.currentTarget );
@@ -50,8 +64,13 @@ $.widget( "mswin.menubar", $.ui.menu, {
                         }
                     }
                 }
-                // 서브메뉴 항목(하위 메뉴 없음)은 바로 실행
-                else if ( !target.has( "ul" ).length ) {
+                // "기타"와 같이 최상위는 아니지만 하위 메뉴가 있는 경우 처리 (클릭 시 열림 유지)
+                else if ( target.has( "ul" ).length ) {
+                    this.focus( event, target );
+                    this.expand( event );
+                }
+                // 최종 항목(하위 메뉴 없음)은 실행 후 닫기
+                else {
                     this.focus( event, target );
                     this.select( event );
                     
@@ -72,9 +91,9 @@ $.widget( "mswin.menubar", $.ui.menu, {
                 var target = $( event.currentTarget );
                 var isTopLevel = target.is(this.element.find("> li"));
                 
-                // 최상위 메뉴는 호버로 열지 않음
+                // 최상위 메뉴는 호버로 열지 않음 (클릭해야 열림)
                 if ( isTopLevel ) {
-                    // 하지만 이미 다른 메뉴가 열려있으면, 호버시 전환
+                    // 하지만 이미 다른 메뉴가 열려있으면, 호버시 전환 (Windows 98 스타일)
                     if ( target.siblings( ".ui-state-open" ).length > 0 && target.has( "ul" ).length ) {
                         // 다른 메뉴 닫기
                         target.siblings( ".ui-state-open" ).removeClass( "ui-state-open" );
@@ -88,10 +107,16 @@ $.widget( "mswin.menubar", $.ui.menu, {
                     return;
                 }
                 
-                // 서브메뉴 내에서는 호버로 포커스만 이동
+                // 서브메뉴 내에서는 호버로 포커스만 이동 (닫지 않음)
                 target.siblings().children( ".ui-state-active" ).removeClass( "ui-state-active" );
                 this.focus( event, target );
+                
+                // 하위 메뉴가 있다면 호버 시 자동으로 펼침
+                if ( target.has("ul").length ) {
+                    this.expand( event );
+                }
             },
+            // blur: 포커스를 잃었을 때(외부 클릭 등)만 닫힘
             blur: function( event ) {
                 if ( !$.contains( this.element[0], this.document[0].activeElement ) ) {
                     this.element.find( ".ui-state-open" ).removeClass( "ui-state-open" );
