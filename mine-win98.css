@@ -110,7 +110,11 @@ image-rendering: crisp-edges;
   border-right: 3px solid white; }
 
 .mine-window .title-bar .title-icon {
-  background-image: url(mine_icon.png); }
+  background-image: url(mine_icon.png);
+    image-rendering: pixelated !important;
+    image-rendering: -moz-crisp-edges !important;
+    image-rendering: crisp-edge !important;
+}
 
 .inner {
   width: 480px;
