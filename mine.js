@@ -436,7 +436,7 @@ if (this.game_status === 1) {
           }
         }
       }
-      if (this.remaining === 1) this.gameclear();
+      if (this.remaining === 0) this.gameclear();
     }
   };
 
@@ -2748,6 +2748,7 @@ Minefield.prototype.on_click = function (x, y) {
   // 깃발 처리 등 기존 로직 유지...
   var td_class = this.get_class(x, y);
   var is_flagged = (td_class !== null && td_class !== "flag-0" && /^flag-/.test(td_class));
+  var is_qmark = (td_class === "flag-0");
   if (is_flagged) {
     this.cycle_flag_leftclick(x, y);
     if (this.on_rclick_func) this.on_rclick_func(x, y);
@@ -2774,6 +2775,8 @@ Minefield.prototype.on_click = function (x, y) {
 
     // 클릭한 셀 눌린 모양 유지
     if (clickedTd && !is_flagged) {
+      if (is_qmark) clickedTd.classList.remove("flag-0");
+      
       clickedTd.classList.add("pressed");
     }
 
@@ -2793,7 +2796,7 @@ Minefield.prototype.on_click = function (x, y) {
         self.start(x, y); // 무거운 연산 (브라우저 프리징 구간)
         if(!is_flagged){
         if (self.expand(x, y) < 0) self.gameover(x, y);
-        if (self.remaining === 1) self.gameclear();
+        if (self.remaining === 0) self.gameclear();
 
         
         }
@@ -2828,7 +2831,7 @@ Minefield.prototype.on_click = function (x, y) {
   // --- 기존 동기 처리 (가벼운 클릭) ---
   if (this.game_status === 1) this.start(x, y);
   if (this.expand(x, y) < 0) this.gameover(x, y);
-  if (this.remaining === 1) 
+  if (this.remaining === 0) 
     this.gameclear();
   if (this.on_click_func) this.on_click_func(x, y);
   if (old_game_status !== this.game_status) return this.on_game_status_changed();
@@ -3026,7 +3029,7 @@ Minefield.prototype.on_click = function (x, y) {
     Minefield.prototype.press = function (x, y) {
       if (this.mines[x][y] !== 0) {
         return -1;
-      } else if (this.get_class(x, y) !== null && this.get_class(x, y) !== "flag-0") {
+      } else if (this.get_class(x, y) !== null && this.get_class(x, y) !== "flag-0" && this.get_class(x,y) !== "pressed") {
         return 1;
       }
 
@@ -3116,7 +3119,8 @@ Minefield.prototype.on_click = function (x, y) {
       for (var i = 0; i < neighbors.length; i++) {
         var nx = neighbors[i][0], ny = neighbors[i][1];
         var c = this.get_class(nx, ny);
-        if (c === null || c === "flag-0") {
+        
+        if (c === null || c === "flag-0" || c === "pressed") {
           if (this.press(nx, ny) < 0) return -1;
           if (!isVisited(nx, ny)) {
             qx[tail] = nx; qy[tail] = ny; tail++;

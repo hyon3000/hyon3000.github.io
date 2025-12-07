@@ -125,7 +125,14 @@
       // 클릭된 요소가 지뢰찾기 윈도우(.mine-window) 내부에 있는지 확인
       var targetWin = e.target.closest('.mine-window');
       if (!targetWin) return;
-
+      if (e.button === 1 ||e.button === 2) {
+        e.preventDefault();
+        // preventDefault를 해도 JS 이벤트 전파는 계속되므로 게임 로직(Chording)은 정상 작동함
+      }
+      if (e.target.closest('.menu-bar') || e.target.closest('.title-bar')) {
+        return;
+      }
+      
       // ★ [수정] 클릭된 요소가 '얼굴 버튼' 자신이라면 여기서 중단!
       // 얼굴 버튼을 눌렀을 때는 'O' 표정이 아니라, CSS의 :active 효과(버튼 눌림)가 나와야 함
       if (e.target.closest('.mine-reset-button')) {
@@ -315,7 +322,7 @@ if (cp) {
         <div class="title">Minesweeper</div>
         <div class="title-button-group">
           <div class="title-button minimize"></div>
-          <div class="title-button maximize disabled"></div>
+          <div class="title-button maximize disabled"onclick="event.preventDefault(); event.stopPropagation(); return false;"></div>
           <div class="title-button close"></div>
         </div>
       </div>
