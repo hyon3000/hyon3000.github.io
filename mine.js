@@ -2826,7 +2826,7 @@ Minefield.prototype.on_click = function (x, y) {
     Minefield.prototype.on_rclick = function (x, y) {
       var old_game_status = this.game_status;
       if (this.game_status < 0) return;
-      if (this.game_status === 1) this.game_status = 0;
+      //if (this.game_status === 1) this.game_status = 0;
       this.flag(x, y);
       if (this.on_rclick_func) this.on_rclick_func(x, y);
       if (old_game_status !== this.game_status) return this.on_game_status_changed();
