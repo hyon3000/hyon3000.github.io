@@ -508,7 +508,7 @@ Minefield.prototype._relocateFirstClick = function (x, y, clearNeighbors /*=fals
         // 좌클릭만 누른 경우
       }
       
-      self.on_down(x, y);
+      self.on_down(x, y,e.button===2);
     };
 
     var onMouseUp = function (e) {
@@ -559,7 +559,7 @@ Minefield.prototype._relocateFirstClick = function (x, y, clearNeighbors /*=fals
       touchStartPos = [x, y];
       isLongPress = false;
       
-      self.on_down(x, y);
+      self.on_down(x, y,false);
 
       touchTimer = setTimeout(function() {
         isLongPress = true;
@@ -2837,29 +2837,108 @@ Minefield.prototype.near_positions = function (x, y) {
   this._ensureAdjCache();
   return this._adj[x][y];
 };
-    /* ---------- 입력 ---------- */
-    Minefield.prototype.on_click = function (x, y) {
-      var old_game_status = this.game_status;
-      if (this.game_status < 0) return;
+    /* mine.js 파일 내용 중 해당 함수들을 찾아 교체하거나 수정하세요 */
 
-      // 깃발이면 좌클릭 사이클(검/흰 지원), 보드 열지 않음
-      var td_class = this.get_class(x, y);
-      if (td_class !== null && td_class !== "flag-0" && /^flag-/.test(td_class)) {
-        this.cycle_flag_leftclick(x, y);
-        if (this.on_rclick_func) this.on_rclick_func(x, y);
-        return;
+// 1. on_up 수정: 생성 중(_is_generating)일 때는 상태 변경(얼굴 리셋)을 막음
+Minefield.prototype.on_up = function (x, y) {
+  // ★ [수정] 생성 중이라면 상태를 리셋하지 않고 유지
+  if (this._is_generating) return;
+
+  this.game_status2 = 0;
+  this.on_game_status_changed2();
+  return 0;
+};
+
+// 2. on_click 수정: 비동기 처리 로직 개선
+Minefield.prototype.on_click = function (x, y) {
+  var old_game_status = this.game_status;
+  if (this.game_status < 0) return;
+
+  // 깃발 처리 등 기존 로직 유지...
+  var td_class = this.get_class(x, y);
+  if (td_class !== null && td_class !== "flag-0" && /^flag-/.test(td_class)) {
+    this.cycle_flag_leftclick(x, y);
+    if (this.on_rclick_func) this.on_rclick_func(x, y);
+    return;
+  }
+
+  // ★ [수정] 무거운 연산(첫 클릭) 비동기 처리 로직
+  if (this.game_status === 1 && (this.use_nopick || (this.max_mines_white | 0) + (this.max_mines | 0) > 500)) {
+    var overlay = document.getElementById('loading-overlay');
+    var clickedTd = this.tds[x][y];
+    var faceIcon = document.querySelector(".mine-reset-button .mine-reset-button-inner");
+
+    // 1. 생성 상태 플래그 설정 (on_up 방어용)
+    this._is_generating = true;
+
+    // 2. 시각적 피드백
+    if (overlay) {
+      overlay.style.display = 'block';
+      // ★ [수정] delayed-show 클래스를 '추가'해야 CSS delay(1s)가 적용됨.
+      // 1초 미만으로 끝나면 opacity:0 인 상태에서 display:none이 되므로 안 보임.
+      overlay.classList.add('delayed-show'); 
+      overlay.style.opacity = ''; // CSS 애니메이션에 맡김
+    }
+
+    // 클릭한 셀 눌린 모양 유지
+    if (clickedTd) {
+      clickedTd.classList.add("pressed");
+    }
+
+    // 얼굴: 눌린 표정(-42px) 강제 적용
+    if (faceIcon) {
+      faceIcon.style.setProperty("background-position", "-42px 0", "important");
+    }
+
+    var self = this;
+    
+    // 3. UI 렌더링 확보 후 연산 시작
+    setTimeout(function () {
+      try {
+        // 혹시 모르니 한 번 더 강제
+        if (faceIcon) faceIcon.style.setProperty("background-position", "-42px 0", "important");
+        
+        self.start(x, y); // 무거운 연산 (브라우저 프리징 구간)
+
+        if (self.expand(x, y) < 0) self.gameover(x, y);
+        if (self.remaining === 0) self.gameclear();
+
+        if (self.on_click_func) self.on_click_func(x, y);
+        if (old_game_status !== self.game_status) self.on_game_status_changed();
+
+      } catch (e) {
+        console.error(e);
+        alert("오류: " + e);
+      } finally {
+        // 4. 연산 종료 후 복구
+        self._is_generating = false; // 플래그 해제
+
+        if (overlay) {
+          overlay.style.display = 'none';
+          overlay.classList.remove('delayed-show'); // 다음을 위해 초기화
+        }
+
+        // 얼굴 표정 복구 (게임이 끝나지 않았다면 기본 얼굴로)
+        if (faceIcon && self.game_status >= 0) {
+           // setTimeout을 써서 on_up 처리 이후에 확실히 덮어씌우도록 함
+           faceIcon.style.removeProperty("background-position");
+           // self.on_up()을 수동 호출하여 상태 동기화
+           self.game_status2 = 0;
+           self.on_game_status_changed2();
+        }
       }
+    }, 50);
 
-      if (this.game_status === 1) this.start(x, y);
+    return; // 비동기 분기 종료
+  }
 
-      if (this.expand(x, y) < 0) this.gameover(x, y);
-
-      if (this.remaining === 0) this.gameclear();
-
-      if (this.on_click_func) this.on_click_func(x, y);
-      if (old_game_status !== this.game_status) return this.on_game_status_changed();
-    };
-
+  // --- 기존 동기 처리 (가벼운 클릭) ---
+  if (this.game_status === 1) this.start(x, y);
+  if (this.expand(x, y) < 0) this.gameover(x, y);
+  if (this.remaining === 0) this.gameclear();
+  if (this.on_click_func) this.on_click_func(x, y);
+  if (old_game_status !== this.game_status) return this.on_game_status_changed();
+};
     Minefield.prototype.on_rclick = function (x, y) {
       var old_game_status = this.game_status;
       if (this.game_status < 0) return;
@@ -3289,16 +3368,12 @@ Minefield.prototype.near_positions = function (x, y) {
     };
 
     /* ---------- 마우스 프레스 표시 ---------- */
-    Minefield.prototype.on_down = function () {
+    Minefield.prototype.on_down = function (x,y,isRightClick) {
       this.game_status2 = 1;
-      this.on_game_status_changed2();
+      if(!isRightClick) this.on_game_status_changed2();
       return 1;
     };
-    Minefield.prototype.on_up = function () {
-      this.game_status2 = 0;
-      this.on_game_status_changed2();
-      return 0;
-    };
+
 
     /* ---------- 디버그 ---------- */
     Minefield.prototype.stringify = function () {
