@@ -391,6 +391,14 @@ Minefield.prototype._relocateFirstClick = function (x, y, clearNeighbors /*=fals
   // ★ [수정] Chording 실행 (로직은 그대로두되, 안 열린 칸 방어 코드 확인)
   Minefield.prototype.execute_chord = function (x, y) {
     this.clear_chord_preview(); // 프리뷰 해제 (눌린 모양 복구)
+if (this.game_status === 1) {
+    // 맵 생성 (status가 0으로 변경됨)
+    this.start(x, y);
+    // 상태 변경 알림 (타이머 시작)
+    this.on_game_status_changed();
+    // 맵만 생성하고 타이머만 올린 뒤 실제 칸은 열지 않고 종료
+    return;
+  }
 
     // 1. 중심이 열린 칸이어야만 기능 동작 (안 열린 칸에서 떼면 여기서 리턴되어 아무 일도 없음)
     if (!this.is_opened(x, y)) return;
@@ -2739,10 +2747,11 @@ Minefield.prototype.on_click = function (x, y) {
 
   // 깃발 처리 등 기존 로직 유지...
   var td_class = this.get_class(x, y);
-  if (td_class !== null && td_class !== "flag-0" && /^flag-/.test(td_class)) {
+  var is_flagged = (td_class !== null && td_class !== "flag-0" && /^flag-/.test(td_class));
+  if (is_flagged) {
     this.cycle_flag_leftclick(x, y);
     if (this.on_rclick_func) this.on_rclick_func(x, y);
-    return;
+    if(this.game_status!=1) return;
   }
 
   // ★ [수정] 무거운 연산(첫 클릭) 비동기 처리 로직
@@ -2764,7 +2773,7 @@ Minefield.prototype.on_click = function (x, y) {
     }
 
     // 클릭한 셀 눌린 모양 유지
-    if (clickedTd) {
+    if (clickedTd && !is_flagged) {
       clickedTd.classList.add("pressed");
     }
 
@@ -2782,13 +2791,14 @@ Minefield.prototype.on_click = function (x, y) {
         if (faceIcon) faceIcon.style.setProperty("background-position", "-48px 0", "important");
         
         self.start(x, y); // 무거운 연산 (브라우저 프리징 구간)
-
+        if(!is_flagged){
         if (self.expand(x, y) < 0) self.gameover(x, y);
         if (self.remaining === 1) self.gameclear();
 
+        
+        }
         if (self.on_click_func) self.on_click_func(x, y);
         if (old_game_status !== self.game_status) self.on_game_status_changed();
-
       } catch (e) {
         console.error(e);
         alert("오류: " + e);

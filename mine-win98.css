@@ -30,6 +30,9 @@
       image-rendering: pixelated;
 image-rendering: crisp-edges;
       background-image: url(digit.png);
+    image-rendering: pixelated !important;
+    image-rendering: -moz-crisp-edges !important;
+    image-rendering: crisp-edge !important;
       width: 13px;
       height: 23px;
       float: left; }
@@ -91,8 +94,9 @@ image-rendering: crisp-edges;
     border-left: 2px solid gray;
     border-bottom: 2px solid gray;
     border-right: 2px solid gray;
-    image-rendering: pixelated;
-image-rendering: crisp-edges;
+    image-rendering: pixelated !important;
+    image-rendering: -moz-crisp-edges !important;
+    image-rendering: crisp-edge !important;
       background-image: url(face.png);
       background-position: 0 0; }
 
