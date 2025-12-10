@@ -2480,7 +2480,34 @@
       }
     }
   </script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  // Windows 98 테마 전체에서 우클릭 메뉴 비활성화
+  const win98 = document.querySelectorAll('.windows-98');
 
+  win98.forEach(el => {
+    el.addEventListener('contextmenu', function (e) {
+      e.preventDefault();   // 브라우저 기본 메뉴만 차단
+      // stopPropagation() 은 절대 쓰지 마세요 — 우클릭 로직이 막힙니다.
+    });
+	 el.addEventListener('mousedown', function (e) {
+      if (e.button !== 1) return; // middle 버튼만 관심
+
+      // ▶ 지뢰판(#mine-area) 위 중클릭은 그대로 두기
+      //   - 여기서 preventDefault()를 안 해야
+      //     mine.js / Minefield의 중클릭(chording 등) 로직이 온전히 동작
+      if (e.target.closest('#mine-area')) {
+        return;
+      }
+
+      // 그 외 Win98 영역에서는 중클릭 자동 스크롤 기본동작만 차단
+      e.preventDefault();
+      // 절대 stopPropagation() 쓰지 마세요.
+      // 이벤트는 그대로 위/아래로 흘러야 기존 코드가 작동합니다.
+    });
+  });
+});
+</script>
 </body>
 
 </html>
