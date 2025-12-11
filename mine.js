@@ -465,6 +465,9 @@
       var lastTapPos = null;
       var touchStartPos = null;
       var isLongPress = false;
+      // ★ [추가] 스와이프 감지 변수
+      var isSwipe = false;
+      var SWIPE_THRESHOLD_PX = 12;
 
       // --- 마우스 이벤트 핸들러 ---
 
@@ -565,22 +568,56 @@
         var x = pos[0], y = pos[1];
 
         touchStartPos = [x, y];
+        // 화면 좌표 저장(스와이프 판별용)
+        var t = e.touches[0];
+        self.__touchStartClient = { x: t.clientX, y: t.clientY };
         isLongPress = false;
+        isSwipe = false;
 
         self.on_down(x, y, false);
 
         touchTimer = setTimeout(function () {
+          // 스와이프가 아니면 길게 눌러 깃발
+          if (isSwipe) return;
           isLongPress = true;
           if (navigator.vibrate) navigator.vibrate(50);
           self.on_rclick(x, y);
         }, 500);
       };
 
+      // ★ [추가] 터치 이동: 스와이프 판별
+      var onTouchMove = function (e) {
+        if (!touchStartPos || e.touches.length !== 1) return;
+        var t = e.touches[0];
+        if (!self.__touchStartClient) return;
+        var dx = t.clientX - self.__touchStartClient.x;
+        var dy = t.clientY - self.__touchStartClient.y;
+        var dist2 = dx * dx + dy * dy;
+        if (!isSwipe && dist2 >= SWIPE_THRESHOLD_PX * SWIPE_THRESHOLD_PX) {
+          isSwipe = true;
+          // 길게 누름 예약 취소(깃발 방지)
+          if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
+          // 프리뷰 해제
+          try { self.clear_chord_preview(); } catch (_) {}
+        }
+      };
+
       var onTouchEnd = function (e) {
         if (touchTimer) clearTimeout(touchTimer);
+        touchTimer = null;
         self.on_up();
 
-        var td = document.elementFromPoint(e.changedTouches[0].clientX, e.changedTouches[0].clientY).closest('td');
+        // 스와이프면 아무 것도 하지 않음
+        if (isSwipe) {
+          isSwipe = false;
+          touchStartPos = null;
+          self.__touchStartClient = null;
+          e.preventDefault();
+          return;
+        }
+
+        var el = document.elementFromPoint(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+        var td = el && el.closest ? el.closest('td') : null;
         if (!td || !tbl.contains(td)) return;
         var pos = getXYFrom(td);
         var x = pos[0], y = pos[1];
@@ -610,6 +647,9 @@
           lastTapPos = [x, y];
         }
         e.preventDefault();
+        // 초기화
+        touchStartPos = null;
+        self.__touchStartClient = null;
       };
 
       tbl.addEventListener('mousedown', onMouseDown);
@@ -618,9 +658,10 @@
       tbl.addEventListener('contextmenu', onContextMenu);
 
       tbl.addEventListener('touchstart', onTouchStart, { passive: false });
+      tbl.addEventListener('touchmove', onTouchMove, { passive: false }); // ★ [추가]
       tbl.addEventListener('touchend', onTouchEnd, { passive: false });
 
-      this._delegated = { onMouseDown, onMouseUp, onContextMenu, onTouchStart, onTouchEnd };
+      this._delegated = { onMouseDown, onMouseUp, onContextMenu, onTouchStart, onTouchMove, onTouchEnd };
     };
 
     Minefield.prototype._detachDelegatedEvents = function () {
@@ -631,6 +672,8 @@
       this.table.removeEventListener('mouseout', d.onMouseOut); // 추가됨
       this.table.removeEventListener('contextmenu', d.onContextMenu);
       this.table.removeEventListener('touchstart', d.onTouchStart);
+      // ★ [추가] 이동 리스너 제거
+      this.table.removeEventListener('touchmove', d.onTouchMove);
       this.table.removeEventListener('touchend', d.onTouchEnd);
       this._delegated = null;
     };
