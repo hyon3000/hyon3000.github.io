@@ -441,242 +441,271 @@
     };
 
     // ★ [교체] 이벤트 핸들러 로직 전면 재작성
-    Minefield.prototype._attachDelegatedEvents = function () {
-      if (!this.table) return;
-      var tbl = this.table;
-      var self = this;
+// ★ [교체] 이벤트 핸들러 로직 전면 재작성
+Minefield.prototype._attachDelegatedEvents = function () {
+  if (!this.table) return;
+  var tbl = this.table;
+  var self = this;
 
-      if (this._delegated) this._detachDelegatedEvents();
+  if (this._delegated) this._detachDelegatedEvents();
 
-      function getXYFrom(td) {
-        var x = td && td.dataset ? parseInt(td.dataset.x, 10) : NaN;
-        var y = td && td.dataset ? parseInt(td.dataset.y, 10) : NaN;
-        return [x, y];
-      }
+  function getXYFrom(td) {
+    var x = td && td.dataset ? parseInt(td.dataset.x, 10) : NaN;
+    var y = td && td.dataset ? parseInt(td.dataset.y, 10) : NaN;
+    return [x, y];
+  }
 
-      var mouseState = 0; // 1:Left, 2:Right, 4:Middle
-      var isChording = false;
+  var mouseState = 0; // 1:Left, 2:Right, 4:Middle
+  var isChording = false;
 
-      // ★ [추가됨] 우클릭 딜레이 처리를 위한 타이머 변수
-      var rightClickTimer = null;
+  // ★ [추가됨] 우클릭 딜레이 처리를 위한 타이머 변수
+  var rightClickTimer = null;
 
-      var touchTimer = null;
-      var lastTapTime = 0;
-      var lastTapPos = null;
-      var touchStartPos = null;
-      var isLongPress = false;
-      // ★ [추가] 스와이프 감지 변수
-      var isSwipe = false;
-      var SWIPE_THRESHOLD_PX = 12;
+  // --- 터치 관련 상태 ---
+  var touchTimer = null;
+  var lastTapTime = 0;
+  var lastTapPos = null;
+  var touchStartPos = null;
+  var isLongPress = false;
 
-      // --- 마우스 이벤트 핸들러 ---
+  // ★ 이동 취소용 상태
+  var touchStartClient = null;
+  var touchMovedTooFar = false;
+  var MOVE_CANCEL_DIST = 10; // px 이상 움직이면 클릭/깃발 취소
 
-      var onMouseDown = function (e) {
-        if (e.button === 1) {
-          e.preventDefault();
-        }
+  // --- 마우스 이벤트 핸들러 ---
 
-        var td = e.target.closest('td');
-        if (!td || !tbl.contains(td)) return;
-        var pos = getXYFrom(td);
-        var x = pos[0], y = pos[1];
-        if (Number.isNaN(x)) return;
+  var onMouseDown = function (e) {
+    if (e.button === 1) {
+      e.preventDefault();
+    }
 
-        // 버튼 상태 업데이트
-        if (e.button === 0) mouseState |= 1; // Left
-        if (e.button === 2) mouseState |= 2; // Right
-        if (e.button === 1) mouseState |= 4; // Middle
+    var td = e.target.closest('td');
+    if (!td || !tbl.contains(td)) return;
+    var pos = getXYFrom(td);
+    var x = pos[0], y = pos[1];
+    if (Number.isNaN(x)) return;
 
-        // ★ [수정됨] 1. 우클릭 Press 처리 (50ms 딜레이 추가)
-        if (e.button === 2) {
-          // 좌클릭이 이미 눌려있다면(mouseState & 1), 깃발 동작 자체를 스킵
-          if (!(mouseState & 1)) {
-            // 즉시 실행하지 않고 50ms 대기
-            rightClickTimer = setTimeout(function () {
-              self.on_rclick(x, y);
-              rightClickTimer = null; // 실행 후 타이머 초기화
-            }, 50);
-          }
-        }
+    // 버튼 상태 업데이트
+    if (e.button === 0) mouseState |= 1; // Left
+    if (e.button === 2) mouseState |= 2; // Right
+    if (e.button === 1) mouseState |= 4; // Middle
 
-        // ★ [수정됨] 2. 좌클릭 Press 처리 (우클릭 딜레이 취소 로직)
-        if (e.button === 0) {
-          // 만약 대기 중인 우클릭 타이머가 있다면 취소! (동시 클릭 의도로 간주)
-          if (rightClickTimer !== null) {
-            clearTimeout(rightClickTimer);
-            rightClickTimer = null;
-            // 여기서 우클릭 깃발 꽂기는 취소되지만, 
-            // mouseState에는 이미 Left(1)와 Right(2)가 모두 들어있으므로
-            // 아래 로직에서 자연스럽게 Chording으로 넘어갑니다.
-          }
-        }
-
-        // 3. Chording 조건 체크
-        if ((mouseState & 1 && mouseState & 2) || (mouseState & 4)) {
-          isChording = true;
-          self.preview_chord(x, y);
-        } else if (mouseState === 1) {
-          // 좌클릭만 누른 경우
-        }
-
-        self.on_down(x, y, e.button === 2);
-      };
-
-      var onMouseUp = function (e) {
-        if (e.button === 1) e.preventDefault();
-
-        var td = e.target.closest('td');
-        var pos = td ? getXYFrom(td) : [-1, -1];
-        var x = pos[0], y = pos[1];
-
-        // 코딩 실행 조건: "좌+우 눌린 상태에서 하나라도 뗌" 또는 "중클릭 뗌"
-
-        if (isChording) {
-          if (x !== -1) self.execute_chord(x, y);
-          self.clear_chord_preview();
-          isChording = false;
-        }
-        else {
-          // 일반 클릭 처리 (좌클릭 release)
-          if (x !== -1) {
-            if (e.button === 0 && !(mouseState & 2)) {
-              self.on_click(x, y);
-            }
-          }
-        }
-
-        // 상태 비트 해제
-        if (e.button === 0) mouseState &= ~1;
-        if (e.button === 2) mouseState &= ~2;
-        if (e.button === 1) mouseState &= ~4;
-
-        self.on_up(x, y);
-      };
-
-      var onMouseOut = function (e) {
-        self.clear_chord_preview();
-      };
-
-      var onContextMenu = function (e) { e.preventDefault(); };
-
-      // --- 터치 이벤트 핸들러 (기존 유지) ---
-      var onTouchStart = function (e) {
-        if (e.touches.length > 1) return;
-        var td = e.target.closest('td');
-        if (!td) return;
-        var pos = getXYFrom(td);
-        var x = pos[0], y = pos[1];
-
-        touchStartPos = [x, y];
-        // 화면 좌표 저장(스와이프 판별용)
-        var t = e.touches[0];
-        self.__touchStartClient = { x: t.clientX, y: t.clientY };
-        isLongPress = false;
-        isSwipe = false;
-
-        self.on_down(x, y, false);
-
-        touchTimer = setTimeout(function () {
-          // 스와이프가 아니면 길게 눌러 깃발
-          if (isSwipe) return;
-          isLongPress = true;
-          if (navigator.vibrate) navigator.vibrate(50);
+    // ★ [수정됨] 1. 우클릭 Press 처리 (50ms 딜레이 추가)
+    if (e.button === 2) {
+      // 좌클릭이 이미 눌려있다면(mouseState & 1), 깃발 동작 자체를 스킵
+      if (!(mouseState & 1)) {
+        // 즉시 실행하지 않고 50ms 대기
+        rightClickTimer = setTimeout(function () {
           self.on_rclick(x, y);
-        }, 500);
-      };
+          rightClickTimer = null; // 실행 후 타이머 초기화
+        }, 50);
+      }
+    }
 
-      // ★ [추가] 터치 이동: 스와이프 판별
-      var onTouchMove = function (e) {
-        if (!touchStartPos || e.touches.length !== 1) return;
-        var t = e.touches[0];
-        if (!self.__touchStartClient) return;
-        var dx = t.clientX - self.__touchStartClient.x;
-        var dy = t.clientY - self.__touchStartClient.y;
-        var dist2 = dx * dx + dy * dy;
-        if (!isSwipe && dist2 >= SWIPE_THRESHOLD_PX * SWIPE_THRESHOLD_PX) {
-          isSwipe = true;
-          // 길게 누름 예약 취소(깃발 방지)
-          if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
-          // 프리뷰 해제
-          try { self.clear_chord_preview(); } catch (_) {}
+    // ★ [수정됨] 2. 좌클릭 Press 처리 (우클릭 딜레이 취소 로직)
+    if (e.button === 0) {
+      // 만약 대기 중인 우클릭 타이머가 있다면 취소! (동시 클릭 의도로 간주)
+      if (rightClickTimer !== null) {
+        clearTimeout(rightClickTimer);
+        rightClickTimer = null;
+        // 여기서 우클릭 깃발 꽂기는 취소되지만, 
+        // mouseState에는 이미 Left(1)와 Right(2)가 모두 들어있으므로
+        // 아래 로직에서 자연스럽게 Chording으로 넘어갑니다.
+      }
+    }
+
+    // 3. Chording 조건 체크
+    if ((mouseState & 1 && mouseState & 2) || (mouseState & 4)) {
+      isChording = true;
+      self.preview_chord(x, y);
+    } else if (mouseState === 1) {
+      // 좌클릭만 누른 경우
+    }
+
+    self.on_down(x, y, e.button === 2);
+  };
+
+  var onMouseUp = function (e) {
+    if (e.button === 1) e.preventDefault();
+
+    var td = e.target.closest('td');
+    var pos = td ? getXYFrom(td) : [-1, -1];
+    var x = pos[0], y = pos[1];
+
+    // 코딩 실행 조건: "좌+우 눌린 상태에서 하나라도 뗌" 또는 "중클릭 뗌"
+    if (isChording) {
+      if (x !== -1) self.execute_chord(x, y);
+      self.clear_chord_preview();
+      isChording = false;
+    }
+    else {
+      // 일반 클릭 처리 (좌클릭 release)
+      if (x !== -1) {
+        if (e.button === 0 && !(mouseState & 2)) {
+          self.on_click(x, y);
         }
-      };
+      }
+    }
 
-      var onTouchEnd = function (e) {
-        if (touchTimer) clearTimeout(touchTimer);
+    // 상태 비트 해제
+    if (e.button === 0) mouseState &= ~1;
+    if (e.button === 2) mouseState &= ~2;
+    if (e.button === 1) mouseState &= ~4;
+
+    self.on_up(x, y);
+  };
+
+  var onMouseOut = function (e) {
+    self.clear_chord_preview();
+  };
+
+  var onContextMenu = function (e) { e.preventDefault(); };
+
+  // --- 터치 이벤트 핸들러 ---
+
+  var onTouchStart = function (e) {
+    if (e.touches.length > 1) return;
+    var td = e.target.closest('td');
+    if (!td) return;
+    var pos = getXYFrom(td);
+    var x = pos[0], y = pos[1];
+
+    touchStartPos = [x, y];
+    isLongPress = false;
+
+    // ★ 처음 터치한 화면 좌표 저장 (드래그 감지용)
+    var t = e.touches[0];
+    touchStartClient = { x: t.clientX, y: t.clientY };
+    touchMovedTooFar = false;
+
+    self.on_down(x, y, false);
+
+    touchTimer = setTimeout(function () {
+      // ★ 이동이 이미 너무 멀어졌으면 롱프레스도 무시
+      if (touchMovedTooFar) return;
+
+      isLongPress = true;
+      if (navigator.vibrate) navigator.vibrate(50);
+     // self.on_rclick(x, y);
+    }, 500);
+  };
+
+  // ★ 새로 추가: 이동 중 거리 체크 (드래그 시 클릭/깃발 취소)
+  var onTouchMove = function (e) {
+    if (!touchStartClient || e.touches.length !== 1) return;
+
+    var t = e.touches[0];
+    var dx = t.clientX - touchStartClient.x;
+    var dy = t.clientY - touchStartClient.y;
+    var dist2 = dx * dx + dy * dy;
+
+    if (!touchMovedTooFar && dist2 > MOVE_CANCEL_DIST * MOVE_CANCEL_DIST) {
+      // 임계값 넘어가면 이 제스처는 "스크롤/드래그"로 취급
+      touchMovedTooFar = true;
+
+      // 롱프레스 취소
+      if (touchTimer) {
+        clearTimeout(touchTimer);
         touchTimer = null;
-        self.on_up();
+      }
+      isLongPress = false;
 
-        // 스와이프면 아무 것도 하지 않음
-        if (isSwipe) {
-          isSwipe = false;
-          touchStartPos = null;
-          self.__touchStartClient = null;
-          e.preventDefault();
-          return;
-        }
+      // 눌림 상태 해제
+      self.on_up();
+    }
+  };
 
-        var el = document.elementFromPoint(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
-        var td = el && el.closest ? el.closest('td') : null;
-        if (!td || !tbl.contains(td)) return;
-        var pos = getXYFrom(td);
-        var x = pos[0], y = pos[1];
+  var onTouchEnd = function (e) {
+    if (touchTimer) {
+      clearTimeout(touchTimer);
+      touchTimer = null;
+    }
 
-        if (!touchStartPos || touchStartPos[0] !== x || touchStartPos[1] !== y) return;
+    // ★ 이동이 너무 많았으면 이 터치는 게임판에 아무 영향도 주지 않음
+    if (touchMovedTooFar) {
+      touchStartPos = null;
+      touchStartClient = null;
+      touchMovedTooFar = false;
+      isLongPress = false;
+      self.on_up();
+      return;
+    }
 
-        if (isLongPress) {
-          e.preventDefault();
-          return;
-        }
+    self.on_up();
 
-        var currentTime = new Date().getTime();
-        var tapLength = currentTime - lastTapTime;
+    var td = document.elementFromPoint(
+      e.changedTouches[0].clientX,
+      e.changedTouches[0].clientY
+    );
+    if (!td) return;
+    td = td.closest('td');
+    if (!td || !tbl.contains(td)) return;
 
-        if (lastTapPos && lastTapPos[0] === x && lastTapPos[1] === y && tapLength < 300 && tapLength > 0) {
-          if (self.is_opened(x, y)) {
-            self.execute_chord(x, y);
-          } else {
-            self.on_click(x, y);
-          }
-          lastTapTime = 0;
-        } else {
-          if (!self.is_opened(x, y)) {
-            self.on_click(x, y);
-          }
-          lastTapTime = currentTime;
-          lastTapPos = [x, y];
-        }
-        e.preventDefault();
-        // 초기화
-        touchStartPos = null;
-        self.__touchStartClient = null;
-      };
+    var pos = getXYFrom(td);
+    var x = pos[0], y = pos[1];
 
-      tbl.addEventListener('mousedown', onMouseDown);
-      tbl.addEventListener('mouseup', onMouseUp);
-      tbl.addEventListener('mouseout', onMouseOut);
-      tbl.addEventListener('contextmenu', onContextMenu);
+    if (!touchStartPos || touchStartPos[0] !== x || touchStartPos[1] !== y) return;
 
-      tbl.addEventListener('touchstart', onTouchStart, { passive: false });
-      tbl.addEventListener('touchmove', onTouchMove, { passive: false }); // ★ [추가]
-      tbl.addEventListener('touchend', onTouchEnd, { passive: false });
+    if (isLongPress) {
+      self.on_rclick(x, y);
+      e.preventDefault();
+      return;
+    }
 
-      this._delegated = { onMouseDown, onMouseUp, onContextMenu, onTouchStart, onTouchMove, onTouchEnd };
-    };
+    var currentTime = new Date().getTime();
+    var tapLength = currentTime - lastTapTime;
 
-    Minefield.prototype._detachDelegatedEvents = function () {
-      if (!this.table || !this._delegated) return;
-      var d = this._delegated;
-      this.table.removeEventListener('mousedown', d.onMouseDown);
-      this.table.removeEventListener('mouseup', d.onMouseUp);
-      this.table.removeEventListener('mouseout', d.onMouseOut); // 추가됨
-      this.table.removeEventListener('contextmenu', d.onContextMenu);
-      this.table.removeEventListener('touchstart', d.onTouchStart);
-      // ★ [추가] 이동 리스너 제거
-      this.table.removeEventListener('touchmove', d.onTouchMove);
-      this.table.removeEventListener('touchend', d.onTouchEnd);
-      this._delegated = null;
-    };
+    if (lastTapPos && lastTapPos[0] === x && lastTapPos[1] === y && tapLength < 300 && tapLength > 0) {
+      if (self.is_opened(x, y)) {
+        self.execute_chord(x, y);
+      } else {
+        self.on_click(x, y);
+      }
+      lastTapTime = 0;
+    } else {
+      if (!self.is_opened(x, y)) {
+        self.on_click(x, y);
+      }
+      lastTapTime = currentTime;
+      lastTapPos = [x, y];
+    }
+
+    e.preventDefault();
+  };
+
+  tbl.addEventListener('mousedown', onMouseDown);
+  tbl.addEventListener('mouseup', onMouseUp);
+  tbl.addEventListener('mouseout', onMouseOut);
+  tbl.addEventListener('contextmenu', onContextMenu);
+
+  tbl.addEventListener('touchstart', onTouchStart, { passive: false });
+  tbl.addEventListener('touchmove', onTouchMove, { passive: false });
+  tbl.addEventListener('touchend', onTouchEnd, { passive: false });
+
+  this._delegated = {
+    onMouseDown,
+    onMouseUp,
+    onMouseOut,
+    onContextMenu,
+    onTouchStart,
+    onTouchMove,
+    onTouchEnd
+  };
+};
+
+Minefield.prototype._detachDelegatedEvents = function () {
+  if (!this.table || !this._delegated) return;
+  var d = this._delegated;
+  this.table.removeEventListener('mousedown', d.onMouseDown);
+  this.table.removeEventListener('mouseup', d.onMouseUp);
+  this.table.removeEventListener('mouseout', d.onMouseOut);
+  this.table.removeEventListener('contextmenu', d.onContextMenu);
+  this.table.removeEventListener('touchstart', d.onTouchStart);
+  this.table.removeEventListener('touchmove', d.onTouchMove);
+  this.table.removeEventListener('touchend', d.onTouchEnd);
+  this._delegated = null;
+};
 
     // 점진적 테이블 생성
     Minefield.prototype._buildTableIncrementally = function (done) {
