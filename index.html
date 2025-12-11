@@ -315,7 +315,7 @@
 
     /* ---------- 실행 함수 (흰색 지뢰 지원) ---------- */
     var execute = function (i, j, k, l = 1, whiteTotal = 0, whiteMax = 0, aiLevel = null) {
-      setActiveDifficulty(14);
+      setActiveDifficulty(15);
       // 1) 입력 정규화
       i = Math.max(3, toInt(i, 3)); j = toInt(j, 1); k = toInt(k, 1); l = clamp(toInt(l, 1), 1, 6);
       whiteTotal = Math.max(0, toInt(whiteTotal, 0));
@@ -403,7 +403,7 @@
       </div>
       <ul class="menu-bar">
         <li>
-          <a href="#" data-access-key="g" class="menu201">게임</a>
+          <a href="#" data-access-key="g" class="menu151">게임</a>
           <ul class="menu">
             <li class="menu0" onclick="return runMenu(() => {pressreset();});"><a href="#">　새 게임(N)　　　　　F2</a></li>
             <li class="separator"></li>
@@ -443,18 +443,21 @@
                   onclick="return runMenu(() => {execute(30, 16, 40, 1, 20, 1, 2);setActiveDifficulty(10);  });"><a
                     href="#">　음수지뢰</a></li>
                 <li class="menu11"
-                  onclick="return runMenu(() => {execute(118, 58, 1412, 1, 0, 0, 0);setActiveDifficulty(11);  });"><a
-                    href="#">　대형</a></li>
+                  onclick="return runMenu(() => {execute(30, 16, 130, 4, 30, 2, 2);setActiveDifficulty(11);  });"><a
+                    href="#">　음수 고급</a></li>
                 <li class="menu12"
-                  onclick="return runMenu(() => {execute(640, 480, 63300, 1, 0, 0, 0);setActiveDifficulty(12);  });"><a
-                    href="#">　초대형</a></li>
+                  onclick="return runMenu(() => {execute(118, 58, 1412, 1, 0, 0, 0);setActiveDifficulty(12);  });"><a
+                    href="#">　대형</a></li>
                 <li class="menu13"
-                  onclick="return runMenu(() => {execute(1280, 720, 192000, 1, 0, 0, 0);setActiveDifficulty(13);  });">
+                  onclick="return runMenu(() => {execute(640, 480, 63300, 1, 0, 0, 0);setActiveDifficulty(13);  });"><a
+                    href="#">　초대형</a></li>
+                <li class="menu14"
+                  onclick="return runMenu(() => {execute(1280, 720, 192000, 1, 0, 0, 0);setActiveDifficulty(14);  });">
                   <a href="#">　특대형</a>
                 </li>
               </ul>
             </li>
-            <li class="menu14" onclick="return runMenu(() => { openCustomDialog();setActiveDifficulty(14);});"><a
+            <li class="menu15" onclick="return runMenu(() => { openCustomDialog();setActiveDifficulty(15);});"><a
                 href="#">　사용자 지정(C)...</a></li>
             <li class="separator"></li>
 
@@ -481,7 +484,7 @@
         </li>
 
         <li>
-          <a href="#" data-access-key="h" class="menu202">도움말</a>
+          <a href="#" data-access-key="h" class="menu152">도움말</a>
           <ul class="menu">
             <li class="menu102" onclick="return runMenu(() =>  alert(isKorean() ? '도움말은 아래에 있습니다' : 'Help is below'))">
               <a href="#">　목차(C)　　　 　　F1</a>
@@ -1509,7 +1512,7 @@
         } else if (key === 'C') {
           e.preventDefault();
           openCustomDialog();
-          setActiveDifficulty(14);
+          setActiveDifficulty(15);
           handled = true;
         } else if (key === 'M') {
           e.preventDefault();
@@ -1606,10 +1609,11 @@
           ".menu8": "　☠️☠️",
           ".menu9": "　☠️☠️☠️",
           ".menu10": "　AntiMine",
-          ".menu11": "　Large",
-          ".menu12": "　XLarge",
-          ".menu13": "　XXLarge",
-          ".menu14": "　Custom...",
+          ".menu11": "　AntiHard",
+          ".menu12": "　Large",
+          ".menu13": "　XLarge",
+          ".menu14": "　XXLarge",
+          ".menu15": "　Custom...",
           ".besttimes": "　Best Times...",
           ".menuclose": "　Exit",
           ".menu100": "　Search for Help on...",
@@ -1619,8 +1623,8 @@
           ".menu_cheat": "Cheat...",
           ".menu-autosolve": "　Solve Automatically",
           ".menu-hint": "　Hint",
-          ".menu201": "Game",
-          ".menu202": "Help",
+          ".menu151": "Game",
+          ".menu152": "Help",
         };
         Object.keys(menuText).forEach(sel => {
           const el = document.querySelector(sel);
@@ -2172,9 +2176,10 @@
       8: 'level8',        // ☠️☠️
       9: 'level9',        // ☠️☠️☠️
       10: 'antimine',     // 음수지뢰
-      11: 'large',        // 대형
-      12: 'xlarge',       // 초대형
-      13: 'xxlarge'       // 특대형
+      11: 'antimine2',     // 음수지뢰
+      12: 'large',        // 대형
+      13: 'xlarge',       // 초대형
+      14: 'xxlarge'       // 특대형
     };
 
     const DIFFICULTY_NAMES_KO = {
@@ -2188,6 +2193,7 @@
       level8: '☠️☠️',
       level9: '☠️☠️☠️',
       antimine: '음수지뢰',
+      antimine2: '음수 고급',
       large: '대형',
       xlarge: '초대형',
       xxlarge: '특대형'
@@ -2204,6 +2210,7 @@
       level8: '☠️☠️',
       level9: '☠️☠️☠️',
       antimine: 'AntiMine',
+      antimine2: 'Anti Hard',
       large: 'Large',
       xlarge: 'XLarge',
       xxlarge: 'XXLarge'
@@ -2447,18 +2454,18 @@
 
       const KO = isKorean();
 
-      // 난이도 메뉴 번호: Beginner~Custom (menu1~menu14)
+      // 난이도 메뉴 번호: Beginner~Custom (menu1~menu11)
       const menuLabelsKO = [
         "새 게임(N)　　　　F2", "초급(B)", "중급(I)", "고급(E)", "초고급", "😱", "💀", "☠️", "☠️☠️",
-        "☠️☠️☠️", "음수지뢰", "대형", "초대형", "특대형", "사용자 지정(C)..."
+        "☠️☠️☠️", "음수지뢰", "음수 고급","대형", "초대형", "특대형", "사용자 지정(C)..."
       ];
       const menuLabelsEN = [
         "New　　　　　　　F2", "Beginner", "Intermediate", "Expert", "Ultra", "😱", "💀", "☠️", "☠️☠️",
-        "☠️☠️☠️", "AntiMine", "Large", "XLarge", "XXLarge", "Custom..."
+        "☠️☠️☠️", "AntiMine", "Anti Hard", "Large", "XLarge", "XXLarge", "Custom..."
       ];
 
       // 메뉴 텍스트를 전부 초기화
-      for (let i = 0; i <= 14; i++) {
+      for (let i = 0; i <= 15; i++) {
         const li = document.querySelector(`.menu${i}`);
         if (!li) continue;
         const a = li.querySelector("a");
