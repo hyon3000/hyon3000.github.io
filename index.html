@@ -443,7 +443,7 @@
                   onclick="return runMenu(() => {execute(30, 16, 40, 1, 20, 1, 2);setActiveDifficulty(10);  });"><a
                     href="#">　음수지뢰</a></li>
                 <li class="menu11"
-                  onclick="return runMenu(() => {execute(30, 16, 130, 4, 30, 2, 2);setActiveDifficulty(11);  });"><a
+                  onclick="return runMenu(() => {execute(30, 16, 110, 4, 30, 2, 2);setActiveDifficulty(11);  });"><a
                     href="#">　음수 고급</a></li>
                 <li class="menu12"
                   onclick="return runMenu(() => {execute(118, 58, 1412, 1, 0, 0, 0);setActiveDifficulty(12);  });"><a
@@ -472,6 +472,19 @@
             <!-- Sound 토글 -->
             <li id="opt-sound" class="checkable" onclick="return runMenu(() => toggleSound());"><a href="#">　소리(S)</a>
             </li>
+
+            <!-- Theme 메뉴 추가 -->
+            <li class="menu_theme" onclick="event.preventDefault(); event.stopPropagation(); return false;"
+              style="cursor: default;">
+              <a href="#" onclick="event.preventDefault(); event.stopPropagation(); return false;"
+                style="cursor: default;">　테마...</a>
+              <ul class="menu">
+                <li class="theme-minesweeper" onclick="return runMenu(() => setTheme('minesweeper'));"><a href="#">✓ Minesweeper</a></li>
+                <li class="theme-prato-xp" onclick="return runMenu(() => setTheme('prato-xp'));"><a href="#">　Prato fiorito (XP)</a></li>
+                <li class="theme-prato-2000" onclick="return runMenu(() => setTheme('prato-2000'));"><a href="#">　Prato fiorito (2000)</a></li>
+              </ul>
+            </li>
+
             <!--onclick시 runMenu에서 window has-menu mine-window ui-resizable ui-draggable의 visible을 none으로한다-->
             <li class="separator"></li>
             <li class="besttimes" onclick="return runMenu(() => printBestTimes());"><a href="#">　최고 기록(T)...</a></li>
@@ -821,13 +834,66 @@
       updateSoundMenuVisual();
       console.log('Sound mode toggled:', window.minefield.soundEnabled);
     }
+ window.currentTheme = window.currentTheme || 'minesweeper';
 
+    // 테마 메뉴 체크 표시용
+    function updateThemeMenuVisual() {
+      const current = window.currentTheme || 'minesweeper';
+
+      // 메뉴에 표시할 이름 (언어와 무관하게 영문 표기 유지)
+      const labels = {
+        'minesweeper': 'Minesweeper',
+        'prato-xp': 'Prato fiorito (XP)',
+        'prato-2000': 'Prato fiorito (2000)',
+      };
+
+      const items = [
+        { selector: '.theme-minesweeper', key: 'minesweeper' },
+        { selector: '.theme-prato-xp',    key: 'prato-xp' },
+        { selector: '.theme-prato-2000',  key: 'prato-2000' },
+      ];
+
+      items.forEach(item => {
+        const li = document.querySelector(item.selector);
+        if (!li) return;
+        const a = li.querySelector('a') || li;
+        const checked = (current === item.key);
+        a.textContent = (checked ? '✓ ' : '　') + labels[item.key];
+      });
+    }
+
+    // 실제 테마 변경 함수
+    function setTheme(theme) {
+      const allowed = ['minesweeper', 'prato-xp', 'prato-2000'];
+      if (!allowed.includes(theme)) theme = 'minesweeper';
+
+      window.currentTheme = theme;
+
+      // 메뉴 체크 반영
+      updateThemeMenuVisual();
+
+      // 이미지 / 아이콘 다시 적용 (현재 컬러모드 유지)
+      const useColor = !!(window.minefield && window.minefield.useColor);
+      updateImageReferences(useColor);
+    }
     // 사운드 재생 함수
-    function playSound(soundFile) {
+function playSound(soundFile) {
       if (!window.minefield || !window.minefield.soundEnabled) return;
 
+      // 테마에 따라 gameover.wav만 교체
+      let actualFile = soundFile;
+      const theme = window.currentTheme || 'minesweeper';
+
+      if (soundFile === 'gameover.wav') {
+        if (theme === 'prato-xp') {
+          actualFile = 'pgameover.wav';
+        } else if (theme === 'prato-2000') {
+          actualFile = 'qgameover.wav';
+        }
+      }
+
       try {
-        const audio = new Audio(soundFile);
+        const audio = new Audio(actualFile);
         audio.play().catch(err => console.warn('Sound playback failed:', err));
       } catch (err) {
         console.warn('Sound creation failed:', err);
@@ -835,8 +901,22 @@
     }
 
     // 모든 이미지 참조를 변경하는 함수 (CSS 클래스 추가 방식)
+       // 모든 이미지 참조를 변경하는 함수 (CSS 클래스 추가 방식)
     function updateImageReferences(useColor) {
-      const suffix = useColor ? '' : 'b'; // 컬러: mine.png, 흑백: mineb.png
+      const suffix = useColor ? '' : 'b'; // 컬러: mineX.png, 흑백: mineXb.png
+
+      // 테마에 따라 기본 파일 이름 결정
+      const theme = window.currentTheme || 'minesweeper';
+      let mineBase = 'mine';          // mine.png / mineb.png
+      let iconFile = 'mine_icon.png'; // 타이틀바 아이콘
+
+      if (theme === 'prato-xp') {
+        mineBase = 'pmine';           // pmine.png / pmineb.png
+        iconFile = 'pmine_icon.png';
+      } else if (theme === 'prato-2000') {
+        mineBase = 'qmine';           // qmine.png / qmineb.png
+        iconFile = 'qmine_icon.png';
+      }
 
       // 기존 스타일 태그가 있으면 제거
       const oldStyle = document.getElementById('color-mode-override');
@@ -848,32 +928,22 @@
       const styleTag = document.createElement('style');
       styleTag.id = 'color-mode-override';
 
-      // 모든 CSS 규칙을 !important로 덮어쓰기
       styleTag.textContent = `
-      /* Dynamic color mode override - ${useColor ? 'COLOR' : 'BLACK & WHITE'} */
-      
-      /* 보더 색상 조정 - 흑백 모드에서 더 진하게 (두께는 유지, 색상만 변경) */
+      /* Dynamic color/theme override - ${useColor ? 'COLOR' : 'BLACK & WHITE'} / theme=${theme} */
+
       ${!useColor ? `
-      
       .window-content .mine-head-area .mine-reset-button .mine-reset-button-inner {
         border-color: #000000 !important;
       }
-      /* 헤더 영역 - Win98 스타일 유지, 색상만 진하게 */
       .window-content .mine-head-area {
         border-top-color: #000000 !important;
         border-left-color: #000000 !important;
-
       }
-      
-      /* 카운터와 타이머 */
       .window-content .mine-head-area .mine-counter,
       .window-content .mine-head-area .mine-timer {
         border-top-color: #000000 !important;
         border-left-color: #000000 !important;
-
       }
-      
-      /* 리셋 버튼 - Win98 입체 효과 유지 */
       .window-content .mine-head-area .mine-reset-button {
         border-top-color: #000000 !important;
         border-left-color: #000000 !important;
@@ -883,18 +953,14 @@
       .window-content .mine-head-area .mine-reset-button:active {
         border-top-color: #000000 !important;
         border-left-color: #000000 !important;
-
       }
-      
-      /* 지뢰 영역 */
       .window-content .mine-area {
         border-top-color: #000000 !important;
         border-left-color: #000000 !important;
-
       }
       ` : ''}
-      
-      /* 지뢰판 테이블 셀 */
+
+      /* 지뢰판 셀 (지뢰/숫자/깃발 전부 동일 스프라이트 사용) */
       table.minetable td,
       table.minetable td:active,
       table.minetable td.mine-wrong1,
@@ -1001,38 +1067,41 @@
       table.minetable td.near-0:active,
       table.minetable td[class*="near-"],
       table.minetable td[class*="near-"]:active {
-        background-image: url(mine${suffix}.png) !important;
+        background-image: url(${mineBase}${suffix}.png) !important;
       }
-      
-      /* 카운터 아이콘 */
+
+      /* 카운터 아이콘(깃발) */
       .counter-icon {
-        background-image: url(mine${suffix}.png) !important;
+        background-image: url(${mineBase}${suffix}.png) !important;
       }
-      
-      /* 숫자 디스플레이 (카운터, 타이머) */
+
+      /* 숫자 디스플레이 (digit.png / digitb.png는 테마와 무관) */
       .window-content .mine-head-area .mine-counter .digit,
       .window-content .mine-head-area .mine-timer .digit,
       .digit {
         background-image: url(digit${suffix}.png) !important;
       }
-      
-      /* 리셋 버튼 (얼굴) - 120*24 크기로 업데이트 */
+
+      /* 리셋 버튼 (얼굴) - face.png / faceb.png도 테마와 무관 */
       .window-content .mine-head-area .mine-reset-button .mine-reset-button-inner {
         background-image: url(face${suffix}.png) !important;
         background-size: 120px 24px !important;
       }
-      
-      /* 얼굴 버튼 자체가 눌린 상태 (active) - 5번째 얼굴 (보더 강화) */
       .window-content .mine-head-area .mine-reset-button:active .mine-reset-button-inner {
         background-position: -96px 0 !important;
       }
+
+      /* 타이틀바 아이콘 */
+      .title-bar .title-icon {
+        background-image: url(${iconFile}) !important;
+        image-rendering: pixelated;
+      }
     `;
 
-      // head에 추가
       document.head.appendChild(styleTag);
 
-      console.log(`✓ Color mode: ${useColor ? 'ON (color)' : 'OFF (black & white)'}`);
-      console.log(`✓ Using images: mine${suffix}.png, digit${suffix}.png, face${suffix}.png`);
+      console.log(`✓ Theme: ${theme}, Color mode: ${useColor ? 'COLOR' : 'B/W'}`);
+      console.log(`✓ Using images: ${mineBase}${suffix}.png, digit${suffix}.png, face${suffix}.png, ${iconFile}`);
     }
 
     // 초기 상태(원하면 기본값을 true로 시작)
@@ -1055,6 +1124,7 @@
       updateQuestionMenuVisual();
       updateColorMenuVisual();
       updateSoundMenuVisual();
+      updateThemeMenuVisual(); 
       updateImageReferences(window.minefield.useColor);
       updateWindowTitle(); // 타이틀 업데이트
       // 기존 메뉴 시스템 활성화(이미 사용 중이면 무시)
@@ -1625,6 +1695,7 @@
           ".menu-hint": "　Hint",
           ".menu151": "Game",
           ".menu152": "Help",
+          ".menu_theme": "　Theme..."
         };
         Object.keys(menuText).forEach(sel => {
           const el = document.querySelector(sel);
@@ -1641,11 +1712,11 @@
         });
 
         /* 1-1) Update menu items that need special handling */
-        // Question marks, Color and Sound menus are updated by their own functions
+        // Question marks, Color, Sound and Theme menus are updated by their own functions
         updateQuestionMenuVisual();
         updateColorMenuVisual();
         updateSoundMenuVisual();
-
+        updateThemeMenuVisual();
         /* 1-2) Title update */
         const titleEl = document.querySelector('.mine-window .title-bar .title');
         if (titleEl) titleEl.textContent = 'Minesweeper';
