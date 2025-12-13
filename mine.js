@@ -756,7 +756,10 @@ Minefield.prototype._detachDelegatedEvents = function () {
       this.reloc_used = 0;
       this.opened_safe = 0;
       this.total_safe = 0;
-      this.bonus_reloc_count = (this.infinite_reloc ? 1000000 : 0);
+      // 모드1에서도 보너스는 0으로 시작 (열린 칸 수로만 허용량 증가)
+      this.bonus_reloc_count = 0;
+      // 모드1 전용: 연속 구제 횟수 제한(최대 2)
+      this._consecutive_reloc = 0;
       this.bonus_thresholds = this.compute_bonus_thresholds();
 
       this.num_flags = 0;
@@ -994,23 +997,25 @@ Minefield.prototype._detachDelegatedEvents = function () {
 
     /* ---------- 구제 규칙 ---------- */
     Minefield.prototype.get_reloc_allowed = function () {
-      var mm = Math.max(1, (this.max_mines + this.max_mines_white) || 1);
-      if (mm == 1) mm = 10000;
-      else if (mm == 2) mm = 2000;
-      else if (mm == 3) mm = 400;
-      else if (mm == 4) mm = 300;
-      else if (mm == 5) mm = 225;
-      else if (mm == 6) mm = 167;
-      else if (mm == 7) mm = 126;
-      else if (mm == 8) mm = 95;
-      else if (mm == 9) mm = 71;
-      else if (mm == 10) mm = 53;
-      else if (mm == 11) mm = 40;
-      else mm = 30;
+      // ★ 모드1(무한구제)일 때: 열린 칸 20개마다 1회 허용
+      if (this.infinite_reloc === true) {
+        var opened = this.opened_cells | 0;
+        return Math.floor(opened / 20) * 1;
+      }
+      else{
+        var mm = Math.max(1, (this.max_mines + this.max_mines_white) || 1);
+        if (mm == 1) mm = 10000;
+        else if (mm == 2) mm = 2000;
+        else if (mm == 3) mm = 400;
+        else if (mm == 4) mm = 300;
+        else if (mm == 5) mm = 225;
+        else if (mm == 6) mm = 167;
+        else mm = 126;
 
-      var base = Math.floor(this.opened_cells / mm);
-      var bonus = this.bonus_reloc_count || 0;
-      return base + bonus;
+        var base = Math.floor(this.opened_cells / mm);
+        var bonus = this.bonus_reloc_count || 0;
+        return base + bonus;
+      }
     };
 
     Minefield.prototype.compute_bonus_thresholds = function () {
@@ -3157,9 +3162,14 @@ Minefield.prototype._detachDelegatedEvents = function () {
       var pr = this.press(start_x, start_y);
       if (pr < 0) {
         var allowed = this.get_reloc_allowed();
-        if ((this.reloc_used || 0) < allowed) {
+      // 모드1이면 연속 구제 1회 제한 추가
+      var canConsecutive = (this.infinite_reloc === true) ? ((this._consecutive_reloc | 0) < 1) : true;
+      if ((this.reloc_used || 0) < allowed && canConsecutive) {
           if (this.try_relocate_from(start_x, start_y)) {
             this.reloc_used = (this.reloc_used || 0) + 1;
+            if (this.infinite_reloc === true) {
+              this._consecutive_reloc = (this._consecutive_reloc | 0) + 1; // 최대 1까지 누적
+            }
             pr = this.press(start_x, start_y);
             if (pr < 0) return -1;
           } else {
@@ -3169,7 +3179,10 @@ Minefield.prototype._detachDelegatedEvents = function () {
           return -1;
         }
       }
-
+      else {
+        // 시작 칸이 애초에 안전(구제 안함) → 연속 구제 카운터 리셋
+        if (this.infinite_reloc === true) this._consecutive_reloc = 0;
+      }
       // ★ 시작 칸이 "진짜 0"일 때만 확장 허용 (상쇄0=1000은 확장 금지)
       var v0 = this.near_mines[start_x][start_y];
       if (v0 !== 0) {
