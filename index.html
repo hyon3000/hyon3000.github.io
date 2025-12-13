@@ -285,6 +285,26 @@ li.menu_cheat > ul.menu .ui-menu-item-wrapper {
 .menu .ui-menu-item-wrapper {
   padding-right: 40px !important;
 }
+/* 타이틀바 기준점 */
+.mine-window .title-bar{
+  position: relative;
+}
+
+/* ✅ 타이틀은 아이콘과 버튼 사이 영역을 “직접 지정” */
+.mine-window .title-bar .title{
+  position: absolute;
+  left: 19.7px;   /* 아이콘(16) + 여백 대충 */
+  right: 56px;  /* 버튼 3개 폭 + 여백 (필요시 조절) */
+  top: 0;
+  bottom: 0;
+
+  display: flex;
+  align-items: center;
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
   </style>
 </head>
@@ -679,7 +699,7 @@ function setMenuText(liSelector, label, keyText = "") {
               <ul class="menu">
                 <li class="menu-autosolve"
                   onclick="return runMenu(() => document.getElementById('console-play').click());"><a href="#">
-                  <span class="mi-label">　지뢰 자동으로 풀기</span>
+                  <span class="mi-label">　자동으로 풀기</span>
               <span class="mi-key">F3</span>
                   </a></li>
                 <li class="menu-hint" onclick="return runMenu(() => document.getElementById('console-hint').click());">
@@ -691,7 +711,7 @@ function setMenuText(liSelector, label, keyText = "") {
                 </li>
               </ul>
             </li>
-            <li class="menu101" onclick="return runMenu(() => alert('Minesweeper'));"><a href="#">　지뢰 찾기 정보(A)...</a>
+            <li class="menu101" onclick="return runMenu(() => alert(window.__APPNAME_SING || 'Minesweeper'));"><a href="#">　지뢰 찾기 정보(A)...</a>
             </li>
 
           </ul>
@@ -902,7 +922,7 @@ function setMenuText(liSelector, label, keyText = "") {
       <div class="console-head">
         <span class="title">실시간 로그 (Console mirror)</span>
         <label><input type="checkbox" id="console-autoscroll" checked> 자동 스크롤</label>
-        <button type="button" id="console-play">지뢰 자동으로 풀기</button>
+        <button type="button" id="console-play">자동으로 풀기</button>
         <button type="button" id="console-hint">힌트 제공</button>
         <button type="button" id="console-pause">콘솔 일시정지</button>
         <button type="button" id="console-clear">콘솔 비우기</button>
@@ -1034,6 +1054,7 @@ function setMenuText(liSelector, label, keyText = "") {
       if (!allowed.includes(theme)) theme = 'minesweeper';
 
       window.currentTheme = theme;
+updateWindowTitle();
 
       // 메뉴 체크 반영
       updateThemeMenuVisual();
@@ -1065,6 +1086,36 @@ function playSound(soundFile) {
         console.warn('Sound creation failed:', err);
       }
     }
+function updateWindowTitle() {
+  const KO = isKorean();
+  const prato = isPratoTheme();
+
+  const nameSing = KO
+    ? (prato ? '꽃 피는 초원' : '지뢰 찾기')
+    : (prato ? 'Flowery Meadow' : 'Minesweeper');
+
+  const namePlural = KO
+    ? (prato ? '꽃 피는 초원' : '지뢰 찾기')
+    : (prato ? 'Flowery Meadows' : 'Mine Sweepers');
+
+  window.__APPNAME_SING = nameSing;
+  window.__APPNAME_PLUR = namePlural;
+
+  // ✅ 여기 추가: 타이틀바 텍스트 실제 반영
+  const titleEl = document.querySelector('.mine-window .title-bar .title');
+  if (titleEl) titleEl.textContent = nameSing;
+ document.title = nameSing;
+
+
+  // Help > About... 갱신은 기존대로 유지
+  if (typeof setMenuText === 'function') {
+    setMenuText(
+      'li.menu101',
+      KO ? `　${nameSing} 정보(A)...` : `　About ${nameSing}...`,
+      ''
+    );
+  }
+}
 
     // 모든 이미지 참조를 변경하는 함수 (CSS 클래스 추가 방식)
        // 모든 이미지 참조를 변경하는 함수 (CSS 클래스 추가 방식)
@@ -1297,7 +1348,7 @@ function playSound(soundFile) {
       if ($('.menu-bar').length) $('.menu-bar').menubar();
     });
   </script>
-
+updateWindowTitle();
   <script>
     /* GET 파서 */
     function getQueryParams() {
@@ -1678,18 +1729,16 @@ function playSound(soundFile) {
       // 시작 메시지
       console.info('[Console mirror started]');
     })();
-    function isKorean() {
-      var lang = (navigator.language || navigator.userLanguage || "").toLowerCase();
-      return lang.startsWith("ko");
-    }
+    function isPratoTheme() {
+  const t = window.currentTheme || 'minesweeper';
+  return t === 'prato-xp' || t === 'prato-2000';
+}
+
+
+    
 
     // 타이틀 업데이트 함수
-    function updateWindowTitle() {
-      const titleEl = document.querySelector('.mine-window .title-bar .title');
-      if (titleEl) {
-        titleEl.textContent = isKorean() ? '지뢰 찾기' : 'Minesweeper';
-      }
-    }
+    
     //pressreset 함수는 minefield.reset_board();를 실행
     function pressreset() {
       if (window.minefield) {
@@ -1825,7 +1874,7 @@ function playSound(soundFile) {
           handled = true;
         } else if (key === 'A') {
           e.preventDefault();
-          alert('Minesweeper');
+          alert(window.__APPNAME_SING || 'Minesweeper');
           handled = true;
         }
 
@@ -1834,6 +1883,10 @@ function playSound(soundFile) {
         }
       }
     });
+    function isKorean() {
+      var lang = (navigator.language || navigator.userLanguage || "").toLowerCase();
+      return lang.startsWith("ko");
+    }
     /* ===== Runtime i18n: if not Korean, switch UI texts to English ===== */
     (function () {
 
@@ -1887,10 +1940,140 @@ setMenuText('li.menu_theme', '　Theme...', '');
   updateColorMenuVisual();
   updateSoundMenuVisual();
   updateThemeMenuVisual();
-
+updateWindowTitle();
   // 타이틀
-  const titleEl = document.querySelector('.mine-window .title-bar .title');
-  if (titleEl) titleEl.textContent = 'Minesweeper';
+  //const titleEl = document.querySelector('.mine-window .title-bar .title');
+  //if (titleEl) titleEl.textContent = 'Minesweeper';
+  /* 2) Counter icon tooltips */
+
+        const blackIcon = document.querySelector(".icon-flag-black");
+        if (blackIcon) blackIcon.setAttribute("title", "Black mine");
+        const whiteIcon = document.querySelector(".icon-flag-white");
+        if (whiteIcon) whiteIcon.setAttribute("title", "Anti-mine");
+
+        /* 3) Form labels / buttons */
+        const form = document.querySelector("#userctrl form");
+        if (form) {
+          // 라벨은 정적인 한국어 텍스트를 치환
+          let html = form.innerHTML;
+          html = html.replace("주문제작:가로", "Custom: cols")
+            .replace("세로", "rows")
+            .replace("1칸당 최대 지뢰 수", "Max mines / cell")
+            .replace("전체 지뢰 수", "Total mines")
+            .replace("1칸당 최대 음수지뢰 수", "Max anti-mines / cell")
+            .replace("전체 음수지뢰 수", "Total anti-mines")
+            .replace("지능형 생성", "Generation mode")
+            .replace("생성", "Create")
+            .replace("문구 숨기기", "Hide controls")
+
+          form.innerHTML = html;
+
+          // 셀렉트 옵션도 영문화
+          const aiSel = document.getElementById('ai');
+          if (aiSel) {
+            const opt = aiSel.options;
+            if (opt[0]) opt[0].text = "0: allow guesses + minimal rescue";
+            if (opt[1]) opt[1].text = "1: allow guesses + guaranteed first click opening +unlimited rescue";
+            if (opt[2]) opt[2].text = "2: strict no-guess (slow)";
+          }
+        }
+
+        /* 4) Heavy notice(제목/문구만 부분 치환, DOM은 보존) */
+        const notice = document.getElementById("heavy-notice");
+        if (notice) {
+          const h3 = notice.querySelector("h3");
+          setText(h3, "Notice / Performance Tips");
+
+          // 한국어 리스트 항목을 안전하게 교체 (있는 경우에만)
+          // 첫 번째 큰 <ul> 안의 한국어 문구들을 찾아 영어로 바꿉니다.
+          // 이미 영어라면 그대로 둡니다.
+          const list = notice.querySelector("ul");
+          if (list) {
+            let html = list.innerHTML;
+            html = html
+              .replace(/모바일에서 조작:짧게 눌러 좌클릭, 길게 눌러 우클릭, 열린칸을 더블터치해서 chording.<\/li>/, 'Controls on mobile: Short press to left-click, long press to right-click, double-tap an open space to chord.</li>')
+              .replace(/첫 클릭 직후 .*?증가\)<\/li>/, 'Right after the first click, <span class="warn">board generation</span> may take a while. (More mines & larger boards take longer.)</li>')
+              .replace(/초대형과 특대형 판은 초기화에 약 .*?<\/li>/, 'XLarge and XXLarge boards take about 5–10 seconds to initialize.</li>')
+              .replace(/<li><strong>찍기 패턴 발생 허용의 구제 기능 관련<\/strong>/, '<li><strong>About the rescue feature when guesses are allowed</strong>')
+              .replace(/복수해가 .*?수정합니다<\/li>/, 'If multiple solutions exist and a guess situation occurs, and you click a mine cell without contradicting revealed info, the board will be modified so that there is no mine in that cell.</li>')
+              .replace(/하지만 무제한 구제는 난이도를 심각하게 낮춥니다<\/li>/, 'However, unlimited rescues significantly reduce the difficulty.</li>')
+              .replace(/<li><strong>찍기 패턴 발생 차단<\/strong> 모드 성능 주의:/, '<li><strong>Strict no-guess</strong> mode performance caveats:')
+              .replace(/음수지뢰가 있으면 매우 느립니다.*?<\/li>/, 'Very slow when anti-mines are used (not recommended for ≥ Intermediate).</li>')
+              .replace(/1칸당 최대 지뢰 수가 4 이상이면 매우 느립니다\.<\/li>/, 'Very slow if max mines per cell ≥ 4.</li>')
+              .replace(/대형 이상의 큰 판에서는 매우 느립니다\.<\/li>/, 'Very slow on large boards (≥ Large).</li>')
+              .replace(/해당 모드는 “찍기 없는 풀이 순서”를 항상 보장합니다\.<\/li>/, 'This mode guarantees a guess-free solution order.</li>')
+              .replace(/도움말/, 'Help')
+              .replace(/난이도는 게임에서 선택하세요.\\n?표시는 옵션에서 토글합니다./, 'Select difficulty in-game.\\nToggle question marks in options.');
+            setHTML(list, html);
+          }
+
+        }
+        const form2 = document.querySelector("#customdial2");
+        if (form2) {
+          // 라벨은 정적인 한국어 텍스트를 치환
+          let html = form2.innerHTML;
+
+          // ▼ 한–영 치환: #userctrl 폼 안에서 쓰이는 모든 한국어 라벨/버튼 텍스트 커버
+          html = html
+            // "주문제작:가로" 및 공백 변형
+            // 가로/세로(행) 라벨(괄호 유무 모두)
+            .replace(/너비\s*\(W\)*/g, "Width")
+            .replace(/높이\s*\(H\)*/g, "Height")
+            // 지뢰/음수지뢰(= anti-mine) 항목
+            .replace(/최대지뢰\/1칸/g, "Max mines/cell")
+            .replace(/지뢰\s*수\s*\(M\)*/g, "Mines")
+            .replace(/최대음수지뢰\/1칸/g, "Max antiMines/cell")
+            .replace(/음수지뢰\s*수/g, "antiMines")
+            // 생성 모드
+            .replace(/지능형\s*생성/g, "Generation mode")
+            // 버튼들
+            .replace(/확인/g, "OK")
+            .replace(/취소/g, "Cancel");
+
+          form2.innerHTML = html;
+
+          // 셀렉트 옵션(지능형 생성) 영어화는 기존 코드 그대로 유지
+          const aiSel = document.getElementById('c-ai');
+          if (aiSel) {
+            const opt = aiSel.options;
+            if (opt[0]) opt[0].text = "0: allow guesses + minimal rescue";
+            if (opt[1]) opt[1].text = "1: allow guesses + guaranteed first click opening + unlimited rescue";
+            if (opt[2]) opt[2].text = "2: strict no-guess + auto-solve (slow)";
+          }
+        }
+        //custdialtitle의 텍스트도 처리
+        const custdialtitle = document.querySelector('#custdialtitle');
+        if (custdialtitle) {
+          let html = custdialtitle.innerHTML;
+          html = html.replace(/사용자\s*지정\s*게임/g, 'Custom Field');
+          custdialtitle.innerHTML = html;
+        }
+
+        /* 5) Console panel 헤더/버튼 */
+        const cp = document.getElementById("console-panel");
+        if (cp) {
+          const titleEl = cp.querySelector('.console-head .title');
+          const pauseEl = document.getElementById('console-pause');
+          const playEl = document.getElementById('console-play');
+          const hintEl = document.getElementById('console-hint');   // ← 누락됐던 부분 추가
+          const clearEl = document.getElementById('console-clear');
+          const copyEl = document.getElementById('console-copy');
+          const autoLbl = cp.querySelector('.console-head label');
+
+          setText(titleEl, 'Live Log (Console mirror)');
+          setText(playEl, 'Solve Automatically');
+          setText(hintEl, 'Hint From Log');              // ← “힌트 제공” 번역
+          setText(pauseEl, 'Pause Console');
+          setText(clearEl, 'Clear Console');
+          setText(copyEl, 'Copy Console');
+          if (autoLbl) setHTML(autoLbl, '<input type="checkbox" id="console-autoscroll" checked> Auto scroll');
+
+          // 일시정지 버튼 토글 텍스트도 영어로
+          pauseEl?.addEventListener('click', function () {
+            const isResume = pauseEl.textContent.includes('Resume');
+            pauseEl.textContent = isResume ? 'Pause' : 'Resume';
+          });
+        }
 }
 
       if (!isKorean()) {
@@ -2295,7 +2478,7 @@ __pushSolveLog(mf, step, true); // ★ 힌트는 1스텝이므로 즉시 1줄 �
     /* ===== 자동재생: 0.3s, 보드교체/사망 정지, 버튼 토글(일시정지/재개) ===== */
 (function () {
   const btn = document.getElementById('console-play');
-  const labelPlay = () => _isKO() ? '지뢰 자동으로 풀기' : 'Solve Minesweeper Automatically';
+  const labelPlay = () => _isKO() ? '자동으로 풀기' : 'Solve Automatically';
   const labelPause = () => _isKO() ? '자동 풀기 일시 중지' : 'Pause Auto-solve';
 
   function startOrResume(mf) {
@@ -2725,7 +2908,10 @@ __pushSolveLog(mf, step, true); // ★ 힌트는 1스텝이므로 즉시 1줄 �
       // Update dialog title
       const title = document.getElementById('besttimestitle');
       if (title) {
-        title.textContent = isKO ? '지뢰 찾기 최고 기록' : 'Fastest Mine Sweepers';
+        title.textContent = isKO
+  ? ((isPratoTheme() ? '꽃 피는 초원' : '지뢰 찾기') + ' 최고 기록')
+  : ('Fastest ' + (window.__APPNAME_PLUR || 'Mine Sweepers'));
+
       }
 
       // Update button labels
