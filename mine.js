@@ -455,9 +455,20 @@ Minefield.prototype._attachDelegatedEvents = function () {
     return [x, y];
   }
 
-  var mouseState = 0; // 1:Left, 2:Right, 4:Middle
-  var isChording = false;
+  // ===== [NEW] 버튼 상태를 "물리/가상"으로 분리 =====
+  var leftDown = false;        // 물리 좌버튼
+  var rightDown = false;       // 물리 우버튼
+  var midDown = false;         // 물리 중버튼
+  var shiftMidDown = false;    // ★ Shift+좌클릭(눌림 순간 shiftKey=true) 을 "가상 중버튼"으로 취급
 
+  function midAnyDown() { return midDown || shiftMidDown; }
+  function stateBits() {
+    return (leftDown ? 1 : 0) | (rightDown ? 2 : 0) | (midAnyDown() ? 4 : 0);
+  }
+  var isChording = false;
+// ★ [NEW] 이번 제스처에서 chording이 한번이라도 실행되었는지
+  //    실행되면, 우클릭 제외(좌/중) 버튼이 모두 올라갈 때까지 좌클릭 일반클릭을 무시
+  var chordConsumed = false;
   // ★ [추가됨] 우클릭 딜레이 처리를 위한 타이머 변수
   var rightClickTimer = null;
 
@@ -487,21 +498,38 @@ Minefield.prototype._attachDelegatedEvents = function () {
     if (Number.isNaN(x)) return;
 
     // 버튼 상태 업데이트
-    if (e.button === 0) mouseState |= 1; // Left
-    if (e.button === 2) mouseState |= 2; // Right
-    if (e.button === 1) mouseState |= 4; // Middle
+    // ★ Shift+좌클릭을 "중클릭처럼" 처리하는 것은
+    //   "좌 버튼 다운 순간에 shiftKey가 true" AND "다른 버튼이 이미 눌려있지 않을 때"만.
+    //   (규칙 1,4 반영: 좌->shift는 무시, shift+우/중도 무시)
+    if (e.button === 0) {
+      // 우클릭 딜레이 취소(기존 로직 유지: 동시 클릭 의도)
+      if (rightClickTimer !== null) {
+        clearTimeout(rightClickTimer);
+        rightClickTimer = null;
+      }
 
-    // ★ [수정됨] 1. 우클릭 Press 처리 (50ms 딜레이 추가)
-    if (e.button === 2) {
-      // 좌클릭이 이미 눌려있다면(mouseState & 1), 깃발 동작 자체를 스킵
-      if (!(mouseState & 1)) {
-        // 즉시 실행하지 않고 50ms 대기
-        rightClickTimer = setTimeout(function () {
-          self.on_rclick(x, y);
-          rightClickTimer = null; // 실행 후 타이머 초기화
-        }, 50);
+      if (e.shiftKey && !leftDown && !rightDown && !midAnyDown()) {
+        // 규칙 2,3: shift->좌클릭은 가상 중클릭
+        shiftMidDown = true;
+      } else {
+        // 규칙 1: 좌클릭 먼저면 shift 무시
+        leftDown = true;
       }
     }
+    if (e.button === 2) {
+    rightDown = true;
+
+      // 좌/중(가상중 포함) 중 하나라도 이미 눌려있으면 깃발 동작 스킵(기존의 "좌 눌림이면 스킵" 확장)
+      if (!(leftDown)) {
+        // ★ [수정됨] 1. 우클릭 Press 처리 (20ms 딜레이 추가)
+        rightClickTimer = setTimeout(function () {
+          self.on_rclick(x, y);
+          rightClickTimer = null;
+        }, 20);
+      }  
+    }
+    if (e.button === 1) midDown = true;
+
 
     // ★ [수정됨] 2. 좌클릭 Press 처리 (우클릭 딜레이 취소 로직)
     if (e.button === 0) {
@@ -516,11 +544,10 @@ Minefield.prototype._attachDelegatedEvents = function () {
     }
 
     // 3. Chording 조건 체크
-    if ((mouseState & 1 && mouseState & 2) || (mouseState & 4)) {
+    var bits = stateBits();
+    if (((bits & 1) && (bits & 2)) || (bits & 4)) {
       isChording = true;
       self.preview_chord(x, y);
-    } else if (mouseState === 1) {
-      // 좌클릭만 누른 경우
     }
 
     self.on_down(x, y, e.button === 2);
@@ -532,27 +559,43 @@ Minefield.prototype._attachDelegatedEvents = function () {
     var td = e.target.closest('td');
     var pos = td ? getXYFrom(td) : [-1, -1];
     var x = pos[0], y = pos[1];
-
+    // ★ 현재 up 이벤트 전에 어떤 버튼이 눌려있었는지 스냅샷
+    var wasLeft = leftDown;
+    var wasShiftMid = shiftMidDown;
+    var wasMid = midDown;
     // 코딩 실행 조건: "좌+우 눌린 상태에서 하나라도 뗌" 또는 "중클릭 뗌"
     if (isChording) {
       if (x !== -1) self.execute_chord(x, y);
       self.clear_chord_preview();
       isChording = false;
+      chordConsumed = true;
     }
     else {
       // 일반 클릭 처리 (좌클릭 release)
       if (x !== -1) {
-        if (e.button === 0 && !(mouseState & 2)) {
-          self.on_click(x, y);
+        var isRealLeftRelease = (e.button === 0 && wasLeft && !wasShiftMid);
+        if (isRealLeftRelease && !rightDown) {
+          if (!chordConsumed) {
+            self.on_click(x, y);
+          }
         }
       }
     }
 
     // 상태 비트 해제
-    if (e.button === 0) mouseState &= ~1;
-    if (e.button === 2) mouseState &= ~2;
-    if (e.button === 1) mouseState &= ~4;
-
+    if (e.button === 0) {
+      // 좌 버튼 up가 왔을 때:
+      // - shiftMidDown이 켜져 있었다면 "가상 중버튼"을 내리는 것으로 처리 (규칙 3)
+      if (wasShiftMid) shiftMidDown = false;
+      else leftDown = false;
+    } else if (e.button === 1) {
+      midDown = false;
+    } else if (e.button === 2) {
+      rightDown = false;
+    }
+if (chordConsumed && !leftDown && !midAnyDown()) {
+      chordConsumed = false;
+    }
     self.on_up(x, y);
   };
 
@@ -3370,6 +3413,395 @@ Minefield.prototype._detachDelegatedEvents = function () {
 
     return Minefield;
   })();
+/* =========================================================
+ * solveonestep(input?)
+ *  - 한 스텝(오픈 or 깃발)만 논리적으로 100% 확정 가능한지 검사
+ *  - 확정 가능하면 "첫 번째" 동작(좌상단 우선)을 nopick-trace 타입으로 반환
+ *  - 없으면 null
+ *
+ * input(선택):
+ * {
+ *   columns, rows,
+ *   near_mines: 2D [x][y] (0, 1000, ±n),
+ *   flags: 2D [x][y] (0, ±k)  // flag-0(?)는 0으로 두면 됨
+ *   opened: 2D [x][y] boolean | 1D(Uint8Array 등) | (x,y)=>boolean
+ *   max_mines, max_mines_white,
+ *   num_mines_white
+ * }
+ * ========================================================= */
+Minefield.prototype.solveonestep = function (input) {
+  const self = this;
+
+  const W = (input && input.columns != null ? input.columns : this.columns) | 0;
+  const H = (input && input.rows != null ? input.rows : this.rows) | 0;
+
+  const near = (input && input.near_mines) ? input.near_mines : this.near_mines;
+  const flags = (input && input.flags) ? input.flags : this.flags;
+
+  const capB = (input && input.max_mines != null ? input.max_mines : this.max_mines) | 0;
+  const capW = (input && input.max_mines_white != null ? input.max_mines_white : this.max_mines_white) | 0;
+
+  const numWhite = (input && input.num_mines_white != null ? input.num_mines_white : this.num_mines_white) | 0;
+  const hasWhites = (numWhite > 0) && (capW > 0);
+  const classicMode = (!hasWhites) && (Math.max(1, capB) === 1);
+
+  const idx = (x, y) => (y * W + x) | 0;
+
+  // --- opened 판정(입력 우선, 없으면 DOM 기반 this.is_opened 사용) ---
+  let openedFn = null;
+  if (input && input.opened != null) {
+    if (typeof input.opened === "function") {
+      openedFn = input.opened;
+    } else {
+      // 2D or 1D
+      const op = input.opened;
+      if (Array.isArray(op) && Array.isArray(op[0])) {
+        openedFn = (x, y) => !!op[x][y];
+      } else {
+        // 1D typed array or flat array
+        openedFn = (x, y) => !!op[idx(x, y)];
+      }
+    }
+  } else {
+    openedFn = (x, y) => self.is_opened(x, y);
+  }
+
+  // --- flag 값(부호 포함) ---
+  function flagVal(x, y) {
+    const v = (flags && flags[x]) ? (flags[x][y] | 0) : 0;
+    return v | 0;
+  }
+
+  // --- 인접 좌표 ---
+  function neigh(x, y) {
+    // input이 별도 near_positions 제공하면 그걸 쓰고, 없으면 this.near_positions(캐시)
+    if (input && typeof input.near_positions === "function") return input.near_positions(x, y);
+    return self.near_positions(x, y);
+  }
+
+  // =========================================================
+  // 1) 제약(열린 숫자칸)에서 frontier(vars/cons) 구성
+  //    - "열린칸 또는 깃발 주변" 범위는 결국 '열린 숫자칸의 인접 미지'가 핵심
+  // =========================================================
+  const varIndex = new Map();      // "x,y" -> id
+  const vars = [];                // id -> [x,y]
+  const cons = [];                // { vars:[id...], target:int, isAbs:bool, isTrueZero:bool }
+  // isTrueZero: near_mines==0 (진짜0) → 인접은 반드시 0이어야 함 (whites 있어도 안전)
+
+  function addVar(x, y) {
+    const key = x + "," + y;
+    let id = varIndex.get(key);
+    if (id == null) { id = vars.length; varIndex.set(key, id); vars.push([x, y]); }
+    return id;
+  }
+
+  // (A) 먼저 "진짜 0(near_mines==0) 열린 칸"으로부터 즉시 안전 오픈 찾기
+  //     - near_mines==0은 abs==0이므로 흰지뢰가 있어도 인접은 전부 0 확정
+  //     - 단, 주변에 이미 nonzero flag가 꽂혀 있으면 모순 상태(사용자가 잘못 꽂은 것) → 여기선 안전 동작 없음
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (!openedFn(x, y)) continue;
+    const v0 = near[x][y] | 0;
+    if (v0 !== 0) continue; // true-zero만
+    const adj = neigh(x, y);
+
+    // fixed(nonzero flag)가 하나라도 있으면 이 정보 자체가 깨진 상태라서 "완전 타당" 오픈을 제안하지 않음
+    let bad = false;
+    for (let i = 0; i < adj.length; i++) {
+      const nx = adj[i][0], ny = adj[i][1];
+      const f = flagVal(nx, ny);
+      if (f !== 0) { bad = true; break; }
+    }
+    if (bad) continue;
+
+    // 인접 미지(열리지 않았고, nonzero flag 아님) 중 첫 번째를 오픈 제안
+    for (let i = 0; i < adj.length; i++) {
+      const nx = adj[i][0], ny = adj[i][1];
+      if (openedFn(nx, ny)) continue;
+      if (flagVal(nx, ny) !== 0) continue;
+      // "주변 열린칸/깃발 주변" 조건도 만족
+      return { kind: "open", x: nx, y: ny, reason: "RuleA N==0 (true 0)" };
+    }
+  }
+
+  // (B) 일반 숫자칸(±n 또는 1000) 제약 수집
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (!openedFn(x, y)) continue;
+
+    const raw = near[x][y] | 0;
+    if (raw === 0) continue; // true-zero는 위에서 처리
+
+    let target = (raw === 1000 ? 0 : raw) | 0;
+    let isAbs = (raw === 1000);
+    let absFixed = 0;
+
+    const adj = neigh(x, y);
+    const vs = [];
+    for (let i = 0; i < adj.length; i++) {
+      const nx = adj[i][0], ny = adj[i][1];
+      if (openedFn(nx, ny)) continue;
+
+      const f = flagVal(nx, ny);
+      if (f !== 0) {
+        target -= f;
+        absFixed += Math.abs(f);
+        continue;
+      }
+      vs.push(addVar(nx, ny));
+    }
+
+    // 1000(상쇄0)의 abs>0 조건은 "전체 이웃 중 하나라도 nonzero"인데
+    // 이미 fixed(nonzero flag)가 있으면 남은 변수는 모두 0이어도 abs>0 만족이므로 isAbs를 끈다.
+    if (isAbs && absFixed > 0) isAbs = false;
+
+    // 변수 없고 isAbs도 아니면 제약 의미 없음
+    if (vs.length > 0 || isAbs) cons.push({ vars: vs, target: target | 0, isAbs: !!isAbs });
+  }
+
+  if (vars.length === 0 || cons.length === 0) return null;
+
+  // =========================================================
+  // 2) "흰지뢰 없음"일 때 더 강한 로컬 규칙 (RuleA/B + subset + bounds)
+  // =========================================================
+  // 공통: 제약을 y,x 순서대로 스캔해서 "첫 번째" 결정만 반환(요구사항)
+  function returnFirstOpenFromList(list, reason) {
+    // list는 [varId...] 혹은 [[x,y]...]
+    for (let k = 0; k < list.length; k++) {
+      const item = list[k];
+      const x = Array.isArray(item) ? item[0] : vars[item][0];
+      const y = Array.isArray(item) ? item[1] : vars[item][1];
+      // 주변 조건(열리지 않았고 nonzero flag 아님) 재확인
+      if (openedFn(x, y)) continue;
+      if (flagVal(x, y) !== 0) continue;
+      return { kind: "open", x, y, reason };
+    }
+    return null;
+  }
+  function returnFirstFixFromList(list, val, reason) {
+    for (let k = 0; k < list.length; k++) {
+      const item = list[k];
+      const x = Array.isArray(item) ? item[0] : vars[item][0];
+      const y = Array.isArray(item) ? item[1] : vars[item][1];
+      if (openedFn(x, y)) continue;
+      if (flagVal(x, y) !== 0) continue;
+      return { kind: "markMine", x, y, reason, val: val | 0 };
+    }
+    return null;
+  }
+
+  // ---- (2-1) RuleA/B: 한 제약만으로 확정되는 것 ----
+  // - true-zero는 이미 처리됨
+  // - no-whites에서만: target==0 → 모두 0
+  // - classic: target==U → 모두 1
+  // - capB>1: target==U*capB → 모두 capB
+  // - U==1: var==target (부호 포함)
+  {
+    // y,x 순서로 가장 먼저 걸리는 제약의 가장 먼저 걸리는 var를 반환하기 위해:
+    // cons를 만든 순서(스캔 순서) 그대로 돌고, vars도 id순서(좌상단에 가까움)로 처리
+    for (let ci = 0; ci < cons.length; ci++) {
+      const c = cons[ci];
+      const vs = c.vars;
+      const U = vs.length | 0;
+      const N = c.target | 0;
+
+      if (U <= 0) continue;
+
+      // U==1: 부호 포함 정확
+      if (U === 1) {
+        const [x, y] = vars[vs[0]];
+        // 1000(상쇄0)에서 U==1,target==0 이면서 abs>0이면 모순 → 확정 move 없음
+        if (c.isAbs && N === 0) continue;
+
+        if (N === 0 && !c.isAbs) {
+          if (!openedFn(x, y) && flagVal(x, y) === 0) return { kind: "open", x, y, reason: "RuleB U==1,N==0" };
+        } else {
+          // N이 음수면 흰 확정, 양수면 검은 확정
+          if (N !== 0 && !openedFn(x, y) && flagVal(x, y) === 0) {
+            // cap 범위 밖이면 이 보드는 이미 모순 상태라서 제안 없음
+            if (N < -capW || N > capB) continue;
+            return { kind: "markMine", x, y, reason: "RuleB U==1 exact", val: N | 0 };
+          }
+        }
+      }
+
+      if (!hasWhites) {
+        // target==0 → 전부 안전
+        if (!c.isAbs && N === 0) {
+          const r = returnFirstOpenFromList(vs, "RuleA N==0");
+          if (r) return r;
+        }
+
+        // classic: target==U → 전부 1
+        if (classicMode && !c.isAbs && N === U) {
+          const r = returnFirstFixFromList(vs, 1, "RuleB N==U");
+          if (r) return r;
+        }
+
+        // capB>1: target==U*capB → 전부 capB
+        if (!classicMode && !c.isAbs && N === (U * capB)) {
+          const r = returnFirstFixFromList(vs, capB, "RuleB cap");
+          if (r) return r;
+        }
+      }
+    }
+  }
+
+  // ---- (2-2) Subset(부분집합) ----
+  // - no-whites일 때는 Δ=0 → 차집합 안전, Δ=|S|*capB → 차집합 capB
+  // - whites가 있어도 |S|==1 이면 v==Δ는 항상 성립(부호 포함) → 정확 고정 가능
+  {
+    // 작은 제약만 사용(성능/의미)
+    const small = [];
+    for (let ci = 0; ci < cons.length; ci++) {
+      const c = cons[ci];
+      if (c.isAbs) continue;           // abs 제약은 subset에 섞지 않음(안전 우선)
+      if (!c.vars || c.vars.length === 0) continue;
+      if (c.vars.length > 8) continue; // 과도하면 스킵
+      const s = new Set(c.vars);
+      small.push({ s, t: c.target | 0 });
+    }
+
+    // set 포함 체크
+    function isSubset(A, B) {
+      for (const v of A) if (!B.has(v)) return false;
+      return true;
+    }
+
+    // 반환을 "첫 번째 셀"로 맞추기 위해:
+    // 파생 결과를 좌표 순으로 정렬 후 첫 번째를 택한다.
+    function pickFirstCoord(coords) {
+      coords.sort((p, q) => (p[1] - q[1]) || (p[0] - q[0]));
+      return coords[0];
+    }
+
+    for (let i = 0; i < small.length; i++) {
+      for (let j = 0; j < small.length; j++) {
+        if (i === j) continue;
+        const A = small[i], B = small[j];
+        if (!isSubset(A.s, B.s)) continue;
+
+        // S = B \ A
+        const S = [];
+        for (const v of B.s) if (!A.s.has(v)) S.push(v);
+        if (S.length === 0) continue;
+
+        const delta = (B.t - A.t) | 0;
+
+        // |S|==1: var == delta (부호 포함) → 항상 안전한 결론
+        if (S.length === 1) {
+          const [x, y] = vars[S[0]];
+          if (openedFn(x, y) || flagVal(x, y) !== 0) continue;
+          if (delta === 0) return { kind: "open", x, y, reason: "subset single exact (0)" };
+          // cap 밖이면 모순이거나 불신 → 여기선 제안 안 함
+          if (delta < -capW || delta > capB) continue;
+          return { kind: "markMine", x, y, reason: "subset single exact", val: delta | 0 };
+        }
+
+        // no-whites에서만 다원 subset 오픈/강제
+        if (!hasWhites) {
+          if (delta === 0) {
+            const coords = S.map(id => vars[id]).filter(([x, y]) => !openedFn(x, y) && flagVal(x, y) === 0);
+            if (coords.length) {
+              const [x, y] = pickFirstCoord(coords);
+              return { kind: "open", x, y, reason: "subset Δ=0" };
+            }
+          } else if (delta === (S.length * capB)) {
+            const coords = S.map(id => vars[id]).filter(([x, y]) => !openedFn(x, y) && flagVal(x, y) === 0);
+            if (coords.length) {
+              const [x, y] = pickFirstCoord(coords);
+              return { kind: "markMine", x, y, reason: "subset Δ=|S|*cap", val: capB | 0 };
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // ---- (2-3) Bounds 전파(약식 선형 하한/상한) ----
+  // - no-whites: v in [0..capB]
+  // - whites:    v in [-capW..capB]
+  // 결과로 vmin==vmax이면 확정(0이면 open, 아니면 markMine)
+  {
+    const n = vars.length | 0;
+    if (n > 0 && cons.length > 0) {
+      const vmin = new Int16Array(n);
+      const vmax = new Int16Array(n);
+      for (let i = 0; i < n; i++) {
+        vmin[i] = hasWhites ? (-capW | 0) : 0;
+        vmax[i] = capB | 0;
+      }
+
+      // 반복 축소(고정점까지)
+      for (let iter = 0; iter < 10; iter++) {
+        let any = false;
+        for (let ci = 0; ci < cons.length; ci++) {
+          const c = cons[ci];
+          if (c.isAbs) continue; // abs 제약은 bounds로 다루기 애매하니 제외(안전 우선)
+          const vs = c.vars;
+          if (!vs || vs.length === 0) continue;
+          const N = c.target | 0;
+
+          let sumMin = 0, sumMax = 0;
+          for (let k = 0; k < vs.length; k++) { sumMin += vmin[vs[k]]; sumMax += vmax[vs[k]]; }
+
+          for (let k = 0; k < vs.length; k++) {
+            const id = vs[k];
+            const othersMin = sumMin - vmin[id];
+            const othersMax = sumMax - vmax[id];
+            const newMin = Math.max(vmin[id], N - othersMax);
+            const newMax = Math.min(vmax[id], N - othersMin);
+            if (newMin > vmin[id]) { vmin[id] = newMin; any = true; }
+            if (newMax < vmax[id]) { vmax[id] = newMax; any = true; }
+          }
+        }
+        if (!any) break;
+      }
+
+      // "첫 번째 셀" 반환: 좌표순으로 가장 먼저 확정되는 것을 반환
+      let best = null;
+      for (let id = 0; id < n; id++) {
+        if (vmin[id] !== vmax[id]) continue;
+        const [x, y] = vars[id];
+        if (openedFn(x, y) || flagVal(x, y) !== 0) continue;
+
+        const v = vmin[id] | 0;
+        const cand = (v === 0)
+          ? { kind: "open", x, y, reason: hasWhites ? "bounds (general) ==0" : "bounds min==max==0" }
+          : { kind: "markMine", x, y, reason: hasWhites ? "bounds (general) exact" : "bounds exact", val: v | 0 };
+
+        if (!best || (cand.y < best.y) || (cand.y === best.y && cand.x < best.x)) best = cand;
+      }
+      if (best) return best;
+    }
+  }
+
+  // =========================================================
+  // 3) 마지막: (가능하면) GAC(도메인 단일화)로 singleton 찾기
+  //    - 기존 nopick solver의 _enforceGACSigned 재사용
+  //    - 너무 크면 비용이 커지니 48 이하만 적용
+  // =========================================================
+  if (typeof this._enforceGACSigned === "function") {
+    const COMP_CAP = 48;
+    if (vars.length <= COMP_CAP) {
+      const r = this._enforceGACSigned(vars, cons, capB, capW);
+      if (r && !r.fail && r.decided && r.decided.length) {
+        // decided 중 좌표순 첫 번째를 반환
+        let best = null;
+        for (let i = 0; i < r.decided.length; i++) {
+          const d = r.decided[i];
+          if (openedFn(d.x, d.y) || flagVal(d.x, d.y) !== 0) continue;
+          const cand = (d.type === "open")
+            ? { kind: "open", x: d.x, y: d.y, reason: "GAC domain=={0}" }
+            : { kind: "markMine", x: d.x, y: d.y, reason: "GAC singleton", val: (d.val | 0) };
+          if (!best || (cand.y < best.y) || (cand.y === best.y && cand.x < best.x)) best = cand;
+        }
+        if (best) return best;
+      }
+    }
+  }
+
+  // 여기까지 왔으면 "완전 타당"한 1스텝이 없음 = 찍기(guess) 필요
+  return null;
+};
 
   window.Minefield = Minefield;
 }).call(this);

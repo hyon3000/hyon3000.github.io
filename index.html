@@ -446,7 +446,7 @@
                   onclick="return runMenu(() => {execute(30, 16, 110, 4, 30, 2, 2);setActiveDifficulty(11);  });"><a
                     href="#">　음수 중급</a></li>
                 <li class="menu12"
-                  onclick="return runMenu(() => {execute(30, 16,240, 6, 100, 6, 1);setActiveDifficulty(12);  });"><a
+                  onclick="return runMenu(() => {execute(30, 16, 240, 6, 100, 6, 1);setActiveDifficulty(12);  });"><a
                     href="#">　음수 고급</a></li>
                 <li class="menu13"
                   onclick="return runMenu(() => {execute(118, 58, 1412, 1, 0, 0, 0);setActiveDifficulty(13);  });"><a
@@ -502,10 +502,10 @@
         <li>
           <a href="#" data-access-key="h" class="menu152">도움말</a>
           <ul class="menu">
-            <li class="menu102" onclick="return runMenu(() =>  alert(isKorean() ? '도움말은 아래에 있습니다' : 'Help is below'))">
+            <li class="menu102" onclick="return runMenu(() => openHelpContents());">
               <a href="#">　목차(C)　　　 　　F1</a>
             </li>
-            <li class="menu100" onclick="return runMenu(() =>  alert(isKorean() ? '도움말은 아래에 있습니다' : 'Help is below'))">
+            <li class="menu100" onclick="return runMenu(() => openHelpContents());">
               <a href="#">　도움말 검색(S)...</a>
             </li>
             <li class="menu103" onclick=""><a href="#">　도움말 사용(H)</a></li>
@@ -516,10 +516,9 @@
                 style="cursor: default;">　치트...</a>
               <ul class="menu">
                 <li class="menu-autosolve"
-                  onclick="return runMenu(() => document.getElementById('console-play').click());"><a href="#">　지뢰 자동으로
-                    풀기</a></li>
+                  onclick="return runMenu(() => document.getElementById('console-play').click());"><a href="#">　지뢰 자동으로 풀기 F3</a></li>
                 <li class="menu-hint" onclick="return runMenu(() => document.getElementById('console-hint').click());">
-                  <a href="#">　힌트 제공</a>
+                  <a href="#">　힌트 제공　 　 　　F4</a>
                 </li>
               </ul>
             </li>
@@ -1537,14 +1536,27 @@ function playSound(soundFile) {
     // 키보드 단축키 처리 (F2 + 메뉴 단축키)
     document.addEventListener('keydown', function (e) {
       const key = e.key.toUpperCase();
-
+      if (e.key === 'F1') {
+        e.preventDefault();
+        openHelpContents();
+        return;
+      }
       // F2 키: 항상 새 게임
       if (e.key === 'F2') {
         e.preventDefault();
         pressreset();
         return;
       }
-
+      if (e.key === 'F3') {
+        e.preventDefault();
+        document.getElementById('console-play')?.click();
+        return;
+      }
+      if (e.key === 'F4') {
+        e.preventDefault();
+        document.getElementById('console-hint')?.click();
+        return;
+      }
       // 서브메뉴가 열려있는지 확인
       const gameSubMenu = document.querySelector('.menu-bar > li:first-child > .menu');
       const helpSubMenu = document.querySelector('.menu-bar > li:nth-child(2) > .menu');
@@ -1694,9 +1706,9 @@ function playSound(soundFile) {
           ".menu101": "　About Minesweeper...",
           ".menu102": "　Contents　　　 　　F1",
           ".menu103": "　Using Help",
-          ".menu_cheat": "Cheat...",
-          ".menu-autosolve": "　Solve Automatically",
-          ".menu-hint": "　Hint",
+          ".menu_cheat": "　Cheat...",
+          ".menu-autosolve": "　Solve Automatically F3",
+          ".menu-hint": "　Hint　 　 　 　　 　F4",
           ".menu151": "Game",
           ".menu152": "Help",
           ".menu_theme": "　Theme..."
@@ -1885,8 +1897,8 @@ function playSound(soundFile) {
       open at least one cell. </span>
 
     <!-- 더 줄 힌트가 없을 때 -->
-    <span id="i18n-no-next">더 이상 제공할 힌트가 없습니다.</span>
-    <span id="i18n-no-next-en">No further hints.</span>
+    <span id="i18n-no-next">더 이상 제공할 힌트가 없습니다. 한 칸도 열지 않았다면 적어도 한 칸을 여세요.</span>
+    <span id="i18n-no-next-en">No further hints. If you haven't opened any cells yet, open at least one cell. </span>
 
     <!-- 다음 액션 안내(열기/깃발) -->
     <span id="i18n-next-open">다음으로 열어야 하는 안전한 칸: ({x}, {y}). 근거: {reason}</span>
@@ -1898,10 +1910,106 @@ function playSound(soundFile) {
     <span id="i18n-next-flag-white">다음 위치에 음수 지뢰 깃발 {n}개: ({x}, {y}). 근거: {reason}</span>
     <span id="i18n-next-flag-white-en">Place {n} anti-mine flag(s) at ({x}, {y}). Rationale: {reason}</span>
 
+    <span id="i18n-guess-needed">찍기 불가피-한 칸의 정답을 제공</span>
+    <span id="i18n-guess-needed-en">Guess unavoidable — revealing the truth for one cell.</span>
+
     <span id="i18n-dead">이미 죽었습니다</span>
     <span id="i18n-dead-en">Already dead</span>
   </div>
   <script>
+  /* ===== (추가) trace 가능 여부 ===== */
+  function _hasTracePlayable(mf) {
+    return !!(mf && mf.use_nopick && Array.isArray(mf._nopick_trace) && mf._nopick_trace.length);
+  }
+
+  /* ===== (추가) flags를 정확히 target으로 맞추기(0 포함) ===== */
+  function _setFlagExactUI(mf, x, y, target) {
+    target = (target | 0);
+    let g = 32;
+    while (((mf.flags[x][y] || 0) | 0) !== target && g--) mf.on_rclick(x, y);
+    return (((mf.flags[x][y] || 0) | 0) === target);
+  }
+
+  /* ===== (추가) 임의 한 칸 정답 제공(찍기 불가피) ===== */
+  function _pickOneTruthCell(mf) {
+    const cand = _frontierClosedCells(mf); // ★ 인접 프론티어만 허용
+  if (!cand || !cand.length) return null;
+
+  // 기존처럼 "첫 번째"를 고르고 싶으면 그대로 [0],
+  // 임의로 고르고 싶으면 랜덤 선택
+  const [x, y] = cand[(Math.random() * cand.length) | 0];
+
+  const ans = (mf.mines[x][y] | 0);
+  if (ans === 0) return { kind: "open", x, y, reason: "찍기 불가피-한 칸의 정답을 제공" };
+  return { kind: "markMine", x, y, val: ans, reason: "찍기 불가피-한 칸의 정답을 제공" };
+}
+
+  /* ===== (추가) 요구사항 서브루틴 =====
+     mode:
+       { cause: "hint"|"auto", isFirstAuto: boolean }
+  */
+  function assistSubroutine(mf, mode) {
+    mode = mode || { cause: "hint", isFirstAuto: true };
+    if (!mf || mf.game_status < 0) return null;
+
+    // 1) 잘못 마킹된 깃발이 있으면 그 중 하나 수정
+    const W = mf.columns | 0, H = mf.rows | 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const f = (mf.flags[x][y] || 0) | 0;
+      if (f === 0) continue;
+      const ans = (mf.mines[x][y] | 0);
+      if (f !== ans) {
+        return {
+          kind: "fixFlag",
+          x, y,
+          val: ans,
+          reason: "잘못 마킹한 칸이 있습니다"
+        };
+      }
+    }
+
+    // 2) 잘못 마킹이 없으면 solveonestep 1스텝
+    if (typeof mf.solveonestep === "function") {
+      const step = mf.solveonestep();
+      if (step) return step; // solveonestep 결과(타입)를 그대로 사용
+    }
+
+    // 3) solveonestep이 null이고, 힌트이거나 자동 첫 실행이면 “정답 1칸 제공”
+    if (mode.cause === "hint" || (mode.cause === "auto" && mode.isFirstAuto)) {
+      const step = _pickOneTruthCell(mf);
+      // ★ (추가) 자동 첫 실행에서 '정답 1칸 제공'이 실제로 발생하면 경고창
+      if (step && mode.cause === "auto" && mode.isFirstAuto) {
+        alert(_msg('i18n-guess-needed', 'i18n-guess-needed-en'));
+
+      }
+      return step;
+    }
+
+    // 4) 자동 2번째 이후 null이면 null
+    return null;
+  }
+
+  /* ===== (추가) step 적용기 ===== */
+  function applyAssistStep(mf, step) {
+    if (!step) return false;
+    const x = step.x | 0, y = step.y | 0;
+
+    if (step.kind === "open") {
+      const ok = _openWithUnflag(mf, x, y);
+      if (typeof update_all_mine_counters === "function") update_all_mine_counters();
+      return ok;
+    }
+
+    if (step.kind === "fixFlag" || step.kind === "markMine") {
+      // solveonestep이 val을 주면 그걸, 아니면 실제 정답(mf.mines)으로 맞춤
+      const target = ("val" in step) ? (step.val | 0) : (mf.mines[x][y] | 0);
+      const ok = _setFlagExactUI(mf, x, y, target);
+      if (typeof update_all_mine_counters === "function") update_all_mine_counters();
+      return ok;
+    }
+
+    return false;
+  }
     /* ===== 작은 i18n 헬퍼 ===== */
     const _isKO = () => (navigator.language || '').toLowerCase().startsWith('ko');
     function _msg(idKo, idEn, map = {}) {
@@ -1917,6 +2025,35 @@ function playSound(soundFile) {
     function _removeFlagFully(mf, x, y) { let g = 24; while (_isFlagUI(mf, x, y) && g--) mf.on_rclick(x, y); }
     function _ensureFlagExactly(mf, x, y, target) { if ((mf.flags[x][y] || 0) === target) return false; let g = 24; while ((mf.flags[x][y] || 0) !== target && g--) mf.on_rclick(x, y); return true; }
     function _openWithUnflag(mf, x, y) { if (_isFlagUI(mf, x, y)) _removeFlagFully(mf, x, y); if (mf.is_opened(x, y)) return false; mf.on_click(x, y); return true; }
+// 열린칸/깃발칸에 인접한(8방향) "닫힌 & 비깃발" 칸 목록
+function _frontierClosedCells(mf) {
+  const W = mf.columns | 0, H = mf.rows | 0;
+  const set = new Set();
+  const out = [];
+
+  const inb = (x,y)=> (x>=0 && y>=0 && x<W && y<H);
+
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const opened = mf.is_opened(x, y);
+    const flagged = _isFlagUI(mf, x, y); // flag-*만 “깃발”로 본다(요구사항 문구와 일치)
+
+    if (!opened && !flagged) continue; // anchor(열림/깃발)만 기준점
+
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue;
+      const nx = x + dx, ny = y + dy;
+      if (!inb(nx, ny)) continue;
+
+      // 후보: 닫혔고(flag 포함해) 아직 표시 안 된 칸
+      if (mf.is_opened(nx, ny)) continue;
+      if (_isFlagUI(mf, nx, ny)) continue;
+
+      const key = nx + "," + ny;
+      if (!set.has(key)) { set.add(key); out.push([nx, ny]); }
+    }
+  }
+  return out;
+}
 
     /* ===== trace 진행상태 유틸 ===== */
     function _done(mf, t) {
@@ -2013,45 +2150,66 @@ function playSound(soundFile) {
       return raw;
     }
     /* ===== 힌트: wrong-flag 우선 알림+즉시수정 → 다음 스텝 1회 실행+근거 alert ===== */
-    window.provide_nopick_hint = function () {
-      const mf = window.minefield;
-      if (!mf || !mf.use_nopick || !Array.isArray(mf._nopick_trace) || !mf._nopick_trace.length) {
-        alert(_msg('i18n-not-nopick', 'i18n-not-nopick-en')); return;
-      }
-      if (mf.game_status === -1) { alert(_deadMsg()); console.warn('you already dead'); return; }
+      window.provide_nopick_hint = function () {
+    const mf = window.minefield;
+    if (!mf) return;
 
-      const W = mf.columns | 0, H = mf.rows | 0, wrong = [];
-      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-        const f = mf.flags[x][y] || 0; if (!f) continue;
-        const ans = mf.mines[x][y] | 0; if (f !== ans) wrong.push([x, y, ans]);
-      }
-      if (wrong.length) {
-        const [x, y, ans] = wrong[(Math.random() * wrong.length) | 0];
-        alert(_msg('i18n-wrong-flag', 'i18n-wrong-flag-en', { x, y }));
-        if (ans === 0) _removeFlagFully(mf, x, y); else _ensureFlagExactly(mf, x, y, ans);
-        return;
-      }
+    if (mf.game_status === -1) { alert(_deadMsg()); console.warn('you already dead'); return; }
 
-      const t = _nextVisible(mf); if (!t) { alert(_msg('i18n-no-next', 'i18n-no-next-en')); return; }
+    // A) trace 재생 가능하면: 기존 trace 기반 힌트(현재 로직 유지)
+    if (_hasTracePlayable(mf)) {
+      // ---- (기존 힌트 로직 그대로) ----
+      const t = _nextVisible(mf);
+      if (!t) { alert(_msg('i18n-no-next', 'i18n-no-next-en')); return; }
+
       const reason = (t.reason ?? (t.kind === 'flood' ? '인접 칸 자동 공개' : 'auto'));
+      const nice = humanizeReason(reason);
+
       if (t.kind === 'open') {
         if (_openWithUnflag(mf, t.x, t.y)) {
-          const nice = humanizeReason(reason);
           alert(_msg('i18n-next-open', 'i18n-next-open-en', { x: t.x, y: t.y, reason: nice }));
+        } else {
+          alert(_msg('i18n-no-next', 'i18n-no-next-en'));
         }
-        else alert(_msg('i18n-no-next', 'i18n-no-next-en'));
-      } else {
-        const want = mf.mines[t.x][t.y] | 0; if (!want) { alert(_msg('i18n-no-next', 'i18n-no-next-en')); return; }
-        if (_ensureFlagExactly(mf, t.x, t.y, want)) {
-          const nice = humanizeReason(reason);
+      } else { // markMine
+        const want = mf.mines[t.x][t.y] | 0;
+        if (!want) { alert(_msg('i18n-no-next', 'i18n-no-next-en')); return; }
+
+        if (_setFlagExactUI(mf, t.x, t.y, want)) {
           alert(_msg(want < 0 ? 'i18n-next-flag-white' : 'i18n-next-flag-black',
             want < 0 ? 'i18n-next-flag-white-en' : 'i18n-next-flag-black-en',
             { x: t.x, y: t.y, n: Math.abs(want), reason: nice }));
+        } else {
+          alert(_msg('i18n-no-next', 'i18n-no-next-en'));
         }
-
-        else alert(_msg('i18n-no-next', 'i18n-no-next-en'));
       }
-    };
+      return;
+    }
+
+    // B) trace 재생할 게 없으면: 요구사항 서브루틴 1회
+    const step = assistSubroutine(mf, { cause: "hint", isFirstAuto: true });
+    if (!step) { alert(_msg('i18n-no-next', 'i18n-no-next-en')); return; }
+
+    // step 적용
+    applyAssistStep(mf, step);
+
+    // 안내 문구(좌표+근거)
+    const reason =
+      (step.reason === "찍기 불가피-한 칸의 정답을 제공")
+        ? _msg('i18n-guess-needed', 'i18n-guess-needed-en')
+        : humanizeReason(step.reason || "");
+    if (step.kind === "open") {
+      alert(_msg('i18n-next-open', 'i18n-next-open-en', { x: step.x, y: step.y, reason }));
+    } else if (step.kind === "fixFlag") {
+      // fixFlag는 요구사항 reason 고정
+      alert(_msg('i18n-wrong-flag', 'i18n-wrong-flag-en', { x: step.x, y: step.y }) + "\n" + reason);
+    } else { // markMine
+      const v = ("val" in step) ? (step.val | 0) : (mf.mines[step.x][step.y] | 0);
+      alert(_msg(v < 0 ? 'i18n-next-flag-white' : 'i18n-next-flag-black',
+        v < 0 ? 'i18n-next-flag-white-en' : 'i18n-next-flag-black-en',
+        { x: step.x, y: step.y, n: Math.abs(v), reason }));
+    }
+  };
 
     /* ===== 보드 UID: init_mines_nopick 성공시 증가 ===== */
     (function () {
@@ -2065,57 +2223,79 @@ function playSound(soundFile) {
     })();
 
     /* ===== 자동재생: 0.3s, 보드교체/사망 정지, 버튼 토글(일시정지/재개) ===== */
-    (function () {
-      const btn = document.getElementById('console-play');
-      const labelPlay = () => _isKO() ? '지뢰 자동으로 풀기' : 'Solve Minesweeper Automatically';
-      const labelPause = () => _isKO() ? '자동 풀기 일시 중지' : 'Pause Auto-solve';
+    /* ===== 자동재생: 0.3s, 보드교체/사망 정지, 버튼 토글(일시정지/재개) ===== */
+(function () {
+  const btn = document.getElementById('console-play');
+  const labelPlay = () => _isKO() ? '지뢰 자동으로 풀기' : 'Solve Minesweeper Automatically';
+  const labelPause = () => _isKO() ? '자동 풀기 일시 중지' : 'Pause Auto-solve';
 
-      function startOrResume(mf) {
+  function startOrResume(mf) {
 
-        if (!mf.use_nopick || !Array.isArray(mf._nopick_trace) || !mf._nopick_trace.length) { alert(_msg('i18n-not-nopick', 'i18n-not-nopick-en')); console.warn('[macro] no-pick trace unavailable.'); return; }
-        if (mf.game_status === -1) { alert(_deadMsg()); console.warn('you already dead'); return; }
+    // ★ (변경) trace 강제 체크 제거: trace가 없으면 assist 모드로 동작
+    if (mf.game_status === -1) { alert(_deadMsg()); console.warn('you already dead'); return; }
 
-        if (mf._macro_timer && mf._macro_running && mf._macro_paused) { mf._macro_paused = false; btn && (btn.textContent = labelPause()); return; }
-        if (mf._macro_timer && mf._macro_running && !mf._macro_paused) { mf._macro_paused = true; btn && (btn.textContent = labelPlay()); return; }
+    // 토글(일시정지/재개) 구조는 그대로
+    if (mf._macro_timer && mf._macro_running && mf._macro_paused) { mf._macro_paused = false; btn && (btn.textContent = labelPause()); return; }
+    if (mf._macro_timer && mf._macro_running && !mf._macro_paused) { mf._macro_paused = true; btn && (btn.textContent = labelPlay()); return; }
 
-        if (mf._macro_timer) clearInterval(mf._macro_timer);
-        mf._macro_running = true; mf._macro_paused = false;
-        const startUID = mf._nopick_board_uid || 0;
+    if (mf._macro_timer) clearInterval(mf._macro_timer);
+    mf._macro_running = true; mf._macro_paused = false;
 
-        mf._macro_timer = setInterval(function () {
-          if (!mf._macro_running) { stop('manual'); return; }
-          if (mf._macro_paused) return;
-          if ((mf._nopick_board_uid || 0) !== startUID) { stop('board changed'); return; }
-          if (mf.game_status === -1) { stop('dead'); console.warn('you already dead'); alert(_deadMsg()); return; }
+    // ★ (추가) 이번 자동풀기에서 trace를 쓸지/assist를 쓸지 결정
+    const hasTrace = !!(mf.use_nopick && Array.isArray(mf._nopick_trace) && mf._nopick_trace.length);
+    const startUID = mf._nopick_board_uid || 0;       // 기존 유지
+    let firstAssist = true;                           // ★ assist 모드에서 “첫 서브루틴만 찍기 불가피 허용” 구현용
 
-          const step = _nextVisible(mf); if (!step) { stop('done'); return; }
-          if (step.kind === 'open') _openWithUnflag(mf, step.x, step.y);
-          else _ensureFlagExactly(mf, step.x, step.y, (mf.mines[step.x][step.y] | 0));
-          // 1틱당 1개만 수행
-        }, 40);
+    mf._macro_timer = setInterval(function () {
+      if (!mf._macro_running) { stop('manual'); return; }
+      if (mf._macro_paused) return;
 
-        function stop(reason) {
-          clearInterval(mf._macro_timer); mf._macro_timer = null;
-          mf._macro_running = false; mf._macro_paused = false;
-          btn && (btn.textContent = labelPlay());
-          if (reason) console.info('[macro] stopped:', reason);
-        }
-        btn && (btn.textContent = labelPause());
+      // ★ (변경) 보드 교체 체크는 trace 모드에서만 의미 있으니 그대로 두되 조건부
+      if (hasTrace && (mf._nopick_board_uid || 0) !== startUID) { stop('board changed'); return; }
+
+      if (mf.game_status === -1) { stop('dead'); console.warn('you already dead'); alert(_deadMsg()); return; }
+
+      if (hasTrace) {
+        // ===== (기존) trace 기반 1틱 1개 =====
+        const step = _nextVisible(mf); if (!step) { stop('done'); return; }
+        if (step.kind === 'open') _openWithUnflag(mf, step.x, step.y);
+        else _ensureFlagExactly(mf, step.x, step.y, (mf.mines[step.x][step.y] | 0));
+        return;
       }
 
-      // Minefield 메서드로도 접근 가능하게
-      if (window.Minefield && !window.Minefield.prototype.nopick_debug_macro)
-        window.Minefield.prototype.nopick_debug_macro = function () { startOrResume(this); };
+      // ===== ★ (추가) trace가 없으면 assist 서브루틴 반복 =====
+      const step = assistSubroutine(mf, { cause: "auto", isFirstAuto: firstAssist });
+      firstAssist = false;
 
-      // 버튼 클릭 핸들러
-      document.addEventListener('DOMContentLoaded', () => {
-        if (!btn) return;
-        btn.textContent = labelPlay();
-        btn.addEventListener('click', () => { const mf = window.minefield; if (mf) startOrResume(mf); });
-        const hintBtn = document.getElementById('console-hint');
-        hintBtn && hintBtn.addEventListener('click', () => { try { window.provide_nopick_hint(); } catch (e) { console.error(e); } });
-      });
-    })();
+      if (!step) { stop('done'); return; } // 자동풀기: 2번째 이후 null이면 종료(요구사항 4)
+
+      applyAssistStep(mf, step);
+      // 1틱당 1개만 수행 (기존 정책 유지)
+    }, 40);
+
+    function stop(reason) {
+      clearInterval(mf._macro_timer); mf._macro_timer = null;
+      mf._macro_running = false; mf._macro_paused = false;
+      btn && (btn.textContent = labelPlay());
+      if (reason) console.info('[macro] stopped:', reason);
+    }
+    btn && (btn.textContent = labelPause());
+  }
+
+  // Minefield 메서드로도 접근 가능하게 (기존 유지)
+  if (window.Minefield && !window.Minefield.prototype.nopick_debug_macro)
+    window.Minefield.prototype.nopick_debug_macro = function () { startOrResume(this); };
+
+  // 버튼 클릭 핸들러 (기존 유지)
+  document.addEventListener('DOMContentLoaded', () => {
+    if (!btn) return;
+    btn.textContent = labelPlay();
+    btn.addEventListener('click', () => { const mf = window.minefield; if (mf) startOrResume(mf); });
+    const hintBtn = document.getElementById('console-hint');
+    hintBtn && hintBtn.addEventListener('click', () => { try { window.provide_nopick_hint(); } catch (e) { console.error(e); } });
+  });
+})();
+
   </script>
   <script>
     function closeMenus() {
@@ -2605,6 +2785,19 @@ document.addEventListener('DOMContentLoaded', function () {
     overlay.style.zIndex = '9999';
   }
 });
+function openHelpContents() {
+  // “도움말은 아래에 있습니다”에 해당하는 영역으로 스크롤
+  const target = document.getElementById('heavy-notice') || document.getElementById('userctrl');
+  if (!target) return;
+
+  const st = window.getComputedStyle(target);
+  if (st.display === 'none' || st.visibility === 'hidden') {
+    alert(isKorean() ? '도움말(안내) 영역이 숨겨져 있습니다.' : 'Help area is hidden.');
+    return;
+  }
+
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 </script>
 </body>
 
