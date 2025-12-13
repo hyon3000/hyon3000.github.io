@@ -357,14 +357,9 @@
       // ▼ 노픽 모드일 때만 콘솔 미러 표시
       const cp = document.getElementById('console-panel');
       if (cp) {
-        if (aiLevel === 2) {
-          cp.style.display = '';
-        } else {
-          cp.style.display = 'none';
-          // 선택: 숨길 때 로그도 깔끔하게 비우기
-          const bodyEl = document.getElementById('console-body');
-          if (bodyEl) bodyEl.textContent = '';
-        }
+  
+        cp.style.display = '';
+        
       }
 
 
@@ -624,7 +619,7 @@
               <select id="c-ai" style="width:90px;">
                 <option value="0">0: 찍기 허용 + 최소 구제</option>
                 <option value="1">1: 찍기 허용 + 첫클릭 오프닝 + 무제한 구제</option>
-                <option value="2" selected>2: 찍기 차단 + 자동 풀이(느림)</option>
+                <option value="2" selected>2: 찍기 차단(느림)</option>
               </select>
             </div>
           </div>
@@ -724,7 +719,7 @@
           <li>음수지뢰가 있으면 매우 느립니다. (중급 크기의 판 이상에서 비권장)</li>
           <li>1칸당 최대 지뢰 수가 4 이상이면 매우 느립니다.</li>
           <li>대형 이상의 큰 판에서는 매우 느립니다.</li>
-          <li>해당 모드는 “찍기 없는 풀이 순서”를 항상 보장하며, 자동 풀기와 힌트 제공 기능은 찍기 패턴 발생 차단 모드에서만 사용 가능합니다.</li>
+          <li>해당 모드는 “찍기 없는 풀이 순서”를 항상 보장합니다.</li>
         </ul>
       </li>
 
@@ -1766,7 +1761,7 @@ function playSound(soundFile) {
             const opt = aiSel.options;
             if (opt[0]) opt[0].text = "0: allow guesses + minimal rescue";
             if (opt[1]) opt[1].text = "1: allow guesses + guaranteed first click opening +unlimited rescue";
-            if (opt[2]) opt[2].text = "2: strict no-guess + auto-solve (slow)";
+            if (opt[2]) opt[2].text = "2: strict no-guess (slow)";
           }
         }
 
@@ -1793,7 +1788,7 @@ function playSound(soundFile) {
               .replace(/음수지뢰가 있으면 매우 느립니다.*?<\/li>/, 'Very slow when anti-mines are used (not recommended for ≥ Intermediate).</li>')
               .replace(/1칸당 최대 지뢰 수가 4 이상이면 매우 느립니다\.<\/li>/, 'Very slow if max mines per cell ≥ 4.</li>')
               .replace(/대형 이상의 큰 판에서는 매우 느립니다\.<\/li>/, 'Very slow on large boards (≥ Large).</li>')
-              .replace(/해당 모드는 “찍기 없는 풀이 순서”를 항상 보장하며, 자동 풀기와 힌트 제공 기능은 찍기 패턴 발생 차단 모드에서만 사용 가능합니다\.<\/li>/, 'This mode guarantees a guess-free solution order, and the auto-solving and hint features are only available in strict no-guess mode.</li>')
+              .replace(/해당 모드는 “찍기 없는 풀이 순서”를 항상 보장합니다\.<\/li>/, 'This mode guarantees a guess-free solution order.</li>')
               .replace(/도움말/, 'Help')
               .replace(/난이도는 게임에서 선택하세요.\\n?표시는 옵션에서 토글합니다./, 'Select difficulty in-game.\\nToggle question marks in options.');
             setHTML(list, html);
@@ -2192,6 +2187,7 @@ function _frontierClosedCells(mf) {
 
     // step 적용
     applyAssistStep(mf, step);
+__pushSolveLog(mf, step, true); // ★ 힌트는 1스텝이므로 즉시 1줄 출력
 
     // 안내 문구(좌표+근거)
     const reason =
@@ -2270,12 +2266,15 @@ function _frontierClosedCells(mf) {
       if (!step) { stop('done'); return; } // 자동풀기: 2번째 이후 null이면 종료(요구사항 4)
 
       applyAssistStep(mf, step);
+      __pushSolveLog(mf, step, false); // ★ 20개씩 묶어서 출력
+
       // 1틱당 1개만 수행 (기존 정책 유지)
     }, 40);
 
     function stop(reason) {
       clearInterval(mf._macro_timer); mf._macro_timer = null;
       mf._macro_running = false; mf._macro_paused = false;
+      __flushSolveLog();
       btn && (btn.textContent = labelPlay());
       if (reason) console.info('[macro] stopped:', reason);
     }
@@ -2416,6 +2415,85 @@ function _frontierClosedCells(mf) {
     });
 
   </script>
+<script>
+/* ===== (추가) pick-mode(=trace 없음)에서도 콘솔에 근거 로그 남기기 ===== */
+(function installSolveReasonLogger(){
+  if (window.__solveReasonLoggerInstalled) return;
+  window.__solveReasonLoggerInstalled = true;
+
+  const BUF_MAX = 20;          // 20개씩 한 줄
+  const FLUSH_MS = 350;        // 너무 오래 쌓이면(실시간성) 강제 flush
+
+  const state = window.__solveLogState = window.__solveLogState || {
+    buf: [],
+    lastFlush: 0
+  };
+
+  function _safeReason(step){
+    // mine.js가 주는 reason 문자열을 그대로 쓰는 게 목표
+    // (humanizeReason() 같은 가공은 여기서 하지 않음)
+    return (step && typeof step.reason === 'string' && step.reason.trim())
+      ? step.reason.trim()
+      : 'auto';
+  }
+
+  function _formatStep(mf, step){
+    if (!step) return null;
+    const x = (step.x|0), y = (step.y|0);
+    const r = _safeReason(step);
+
+    if (step.kind === 'open') {
+      return `OPEN(${x},${y})-${r}`;
+    }
+
+    if (step.kind === 'markMine' || step.kind === 'fixFlag') {
+      // val이 있으면 그걸, 없으면 정답(mf.mines)을 참고
+      let v = 0;
+      if (step && ('val' in step)) v = (step.val|0);
+      else if (mf && mf.mines && mf.mines[x] && typeof mf.mines[x][y] !== 'undefined') v = (mf.mines[x][y]|0);
+
+      const n = Math.abs(v);
+      // 다중지뢰(한 칸에 2개 이상) 표기를 원하면 xN을 붙임 (원치 않으면 이 부분 삭제 가능)
+      const mult = (n > 1) ? `x${n}` : '';
+      return `FLAG(${x},${y})${mult}-${r}`;
+    }
+
+    // 혹시 solveonestep이 다른 kind를 줄 때를 대비(있으면 로그라도 남김)
+    if (typeof step.x !== 'undefined' && typeof step.y !== 'undefined') {
+      return `${String(step.kind||'STEP').toUpperCase()}(${x},${y})-${r}`;
+    }
+    return `${String(step.kind||'STEP').toUpperCase()}-${r}`;
+  }
+
+  window.__pushSolveLog = function(mf, step, immediate=false){
+    const msg = _formatStep(mf, step);
+    if (!msg) return;
+
+    // hint 버튼은 1스텝만 수행하니 바로 찍는 게 보기 좋음
+    if (immediate) {
+      console.info(msg);
+      return;
+    }
+
+    state.buf.push(msg);
+    const now = Date.now();
+
+    if (state.buf.length >= BUF_MAX || (now - state.lastFlush) > FLUSH_MS) {
+      console.info(state.buf.join(' | '));
+      state.buf.length = 0;
+      state.lastFlush = now;
+    }
+  };
+
+  window.__flushSolveLog = function(){
+    if (state.buf.length) {
+      console.info(state.buf.join(' | '));
+      state.buf.length = 0;
+      state.lastFlush = Date.now();
+    }
+  };
+})();
+</script>
 
   <script>
     // ===== Best Times Management =====
