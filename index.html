@@ -172,6 +172,120 @@
     .ui-resizable-handle {
       display: none !important;
     }
+    /* ✅ 메뉴 항목 링크에만 적용 (너무 넓게 잡지 않기) */
+.menu .ui-menu-item > a {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* ✅ 오른쪽 단축키는 auto margin으로 우측 고정 */
+.menu .ui-menu-item > a .mi-key {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
+  text-align: right;
+  min-width: 3ch;
+  opacity: 0.9;
+}
+
+.menu .ui-menu-item > a .mi-label { flex: 0 1 auto; }
+/* ✅ jQuery UI가 실제로 스타일을 먹이는 wrapper를 강제로 좌측정렬 + flex */
+.menu .ui-menu-item > .ui-menu-item-wrapper,
+.menu .ui-menu-item > a.ui-menu-item-wrapper {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-start !important;
+  width: 100% !important;
+  box-sizing: border-box;
+  text-align: left !important;
+}
+
+/* ✅ 라벨은 왼쪽, 단축키는 오른쪽 */
+.menu .ui-menu-item-wrapper .mi-label { 
+  flex: 1 1 auto;
+  text-align: left;
+}
+.menu .ui-menu-item-wrapper .mi-key {
+  margin-left: auto;
+  flex: 0 0 auto;
+  min-width: 3ch;
+  text-align: right;
+}
+
+/* ✅ 서브메뉴 화살표(▶)가 있는 항목도 라벨이 밀려 “오른쪽 정렬처럼” 보이지 않게 */
+.menu .ui-menu-item-wrapper {
+  position: relative;
+  padding-right: 18px; /* 화살표 자리 확보 */
+}
+.menu .ui-menu-item-wrapper .ui-menu-icon {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+/* ✅ 서브메뉴 화살표(span.ui-menu-icon)가 공간을 차지하지 않게 */
+.menu .ui-menu-item > .ui-menu-item-wrapper,
+.menu .ui-menu-item > a.ui-menu-item-wrapper {
+  position: relative;          /* absolute 기준점 */
+  padding-right: 18px !important; /* 화살표 자리만 확보 */
+}
+
+/* jQuery UI submenu arrow */
+.menu .ui-menu-icon.ui-icon {
+  position: absolute !important;   /* ✅ flow/flex에서 제거 → 공간 0 */
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  margin: 0 !important;
+  flex: 0 0 auto !important;       /* 혹시 flex로 잡혀도 영향 최소화 */
+  pointer-events: none;            /* 클릭 방해 방지(선택) */
+}
+/* ✅ (테마/치트) "서브메뉴" 폭을 내용에 맞춰 자동 확장 + 줄바꿈 금지 */
+li.menu_theme > ul.menu,
+li.menu_cheat > ul.menu {
+  width: max-content !important;   /* 내용 폭만큼 */
+  min-width: 220px !important;     /* 너무 좁아지는 것 방지(원하는 값으로) */
+}
+
+/* ✅ 메뉴 항목 텍스트 줄바꿈 방지(라벨/단축키/전체) */
+li.menu_theme > ul.menu .ui-menu-item-wrapper,
+li.menu_cheat > ul.menu .ui-menu-item-wrapper,
+li.menu_theme > ul.menu .mi-label,
+li.menu_cheat > ul.menu .mi-label,
+li.menu_theme > ul.menu .mi-key,
+li.menu_cheat > ul.menu .mi-key {
+  white-space: nowrap !important;
+}
+
+/* (선택) 키/화살표 자리 때문에 오른쪽이 답답하면 여유를 더 줌 */
+li.menu_theme > ul.menu .ui-menu-item-wrapper,
+li.menu_cheat > ul.menu .ui-menu-item-wrapper {
+  padding-right: 40px !important; /* 기존 18px보다 넉넉히 */
+}
+/* ✅ 모든 메뉴(게임/도움말/기타... 포함) 줄바꿈 금지 + 내용폭 자동 */
+.menu,
+.menu .ui-menu-item-wrapper,
+.menu .mi-label,
+.menu .mi-key {
+  white-space: nowrap !important;
+}
+
+.menu .ui-menu-item-wrapper {
+  flex-wrap: nowrap !important;
+}
+
+/* ✅ 서브메뉴 폭이 내용에 맞게 늘어나게 */
+.menu {
+  width: max-content !important;
+  min-width: 220px !important; /* 취향대로 */
+}
+
+/* ✅ 화살표 자리 때문에 답답하면 여유 */
+.menu .ui-menu-item-wrapper {
+  padding-right: 40px !important;
+}
+
   </style>
 </head>
 
@@ -186,6 +300,51 @@
 
   <div id="hscroll-guard" style="height:1px;width:0;overflow:hidden;"></div>
   <script>
+function setMenuText(liSelector, label, keyText = "") {
+  const li = document.querySelector(liSelector);
+  if (!li) return;
+
+  // jQuery UI가 wrapper를 만들면 그걸 우선 사용
+  const wrap = li.querySelector(".ui-menu-item-wrapper") || li.querySelector("a");
+  if (!wrap) return;
+
+  // ✅ "목차" 같은 잔여 텍스트 노드 제거 (submenu 화살표는 유지)
+  [...wrap.childNodes].forEach(n => {
+    if (n.nodeType === Node.TEXT_NODE) n.remove();
+    // 혹시 깨진 마크업으로 생긴 span 등도 정리 (필요 최소만)
+    if (n.nodeType === Node.ELEMENT_NODE) {
+      const el = n;
+      const keep =
+        el.classList.contains("mi-label") ||
+        el.classList.contains("mi-key") ||
+        el.classList.contains("ui-menu-icon");
+      if (!keep && el.tagName !== "A") {
+        // 일반적으로는 span만 생기므로 제거해도 안전
+        // (혹시 유지할 요소가 더 있으면 keep 조건에 추가)
+      }
+    }
+  });
+
+  let lab = wrap.querySelector(".mi-label");
+  let key = wrap.querySelector(".mi-key");
+
+  if (!lab) {
+    lab = document.createElement("span");
+    lab.className = "mi-label";
+    // 화살표가 있으면 그 앞에, 없으면 맨 앞에
+    const icon = wrap.querySelector(".ui-menu-icon");
+    wrap.insertBefore(lab, icon || wrap.firstChild);
+  }
+
+  if (!key) {
+    key = document.createElement("span");
+    key.className = "mi-key";
+    wrap.appendChild(key);
+  }
+
+  lab.textContent = label;
+  key.textContent = keyText;
+}
 
     (function () {
       console.log("★ Global Event Script Loaded");
@@ -400,7 +559,11 @@
         <li>
           <a href="#" data-access-key="g" class="menu151">게임</a>
           <ul class="menu">
-            <li class="menu0" onclick="return runMenu(() => {pressreset();});"><a href="#">　새 게임(N)　　　　　F2</a></li>
+            <li class="menu0" onclick="return runMenu(() => {pressreset();});"><a href="#">
+              <span class="mi-label">　새 게임(N)</span>
+              <span class="mi-key">F2</span>
+            
+            </a></li>
             <li class="separator"></li>
             <li class="menu1"
               onclick="return runMenu(() => {execute(9, 9, 10, 1, 0, 0, 2);setActiveDifficulty(1);  });"><a
@@ -430,10 +593,10 @@
                     href="#">　☠️</a></li>
                 <li class="menu8"
                   onclick="return runMenu(() => {execute(30, 16, 530, 5, 0, 0, 0);setActiveDifficulty(8);  });"><a
-                    href="#">　☠️☠️</a></li>
+                    href="#">　☠️×2</a></li>
                 <li class="menu9"
                   onclick="return runMenu(() => {execute(30, 16, 680, 6, 0, 0, 0);setActiveDifficulty(9);  });"><a
-                    href="#">　☠️☠️☠️</a></li>
+                    href="#">　☠️×3</a></li>
                 <li class="menu10"
                   onclick="return runMenu(() => {execute(30, 16, 40, 1, 20, 1, 2);setActiveDifficulty(10);  });"><a
                     href="#">　음수지뢰</a></li>
@@ -498,7 +661,11 @@
           <a href="#" data-access-key="h" class="menu152">도움말</a>
           <ul class="menu">
             <li class="menu102" onclick="return runMenu(() => openHelpContents());">
-              <a href="#">　목차(C)　　　 　　F1</a>
+              <a href="#">
+                <span class="mi-label">　목차(C)</span>
+              <span class="mi-key">F1</span>
+              
+              </a>
             </li>
             <li class="menu100" onclick="return runMenu(() => openHelpContents());">
               <a href="#">　도움말 검색(S)...</a>
@@ -511,9 +678,16 @@
                 style="cursor: default;">　치트...</a>
               <ul class="menu">
                 <li class="menu-autosolve"
-                  onclick="return runMenu(() => document.getElementById('console-play').click());"><a href="#">　지뢰 자동으로 풀기 F3</a></li>
+                  onclick="return runMenu(() => document.getElementById('console-play').click());"><a href="#">
+                  <span class="mi-label">　지뢰 자동으로 풀기</span>
+              <span class="mi-key">F3</span>
+                  </a></li>
                 <li class="menu-hint" onclick="return runMenu(() => document.getElementById('console-hint').click());">
-                  <a href="#">　힌트 제공　 　 　　F4</a>
+                  <a href="#">
+                    <span class="mi-label">　힌트 제공</span>
+              <span class="mi-key">F4</span>
+                  
+                  </a>
                 </li>
               </ul>
             </li>
@@ -748,35 +922,34 @@
   <script>
     // 메뉴의 체크 모양을 단순 텍스트(✓)로 표현
     function updateQuestionMenuVisual() {
-      const li = document.getElementById('opt-qmark');
-      if (!li) return;
-      const a = li.querySelector('a') || li; // 안전가드
-      const on = !!(window.minefield && window.minefield.question);
-      //언어가 영어일떄와 한국어일때가 다름
-
-      a.textContent = (on ? '✓ ' : '　') + (isKorean() ? '? 표시(M)' : 'Marks (?)');
-      li.setAttribute('aria-checked', String(on));
-    }
+  const on = !!(window.minefield && window.minefield.question);
+  setMenuText('#opt-qmark',
+    (on ? '✓ ' : '　') + (isKorean() ? '? 표시(M)' : 'Marks (?)'),
+    ''
+  );
+  document.getElementById('opt-qmark')?.setAttribute('aria-checked', String(on));
+}
 
     // Color 메뉴 비주얼 업데이트
     function updateColorMenuVisual() {
-      const li = document.getElementById('opt-color');
-      if (!li) return;
-      const a = li.querySelector('a') || li;
-      const on = !!(window.minefield && window.minefield.useColor);
-      a.textContent = (on ? '✓ ' : '　') + (isKorean() ? '컬러로 표시(L)' : 'Color');
-      li.setAttribute('aria-checked', String(on));
-    }
+  const on = !!(window.minefield && window.minefield.useColor);
+  setMenuText('#opt-color',
+    (on ? '✓ ' : '　') + (isKorean() ? '컬러로 표시(L)' : 'Color'),
+    ''
+  );
+  document.getElementById('opt-color')?.setAttribute('aria-checked', String(on));
+}
+
 
     // Sound 메뉴 비주얼 업데이트
     function updateSoundMenuVisual() {
-      const li = document.getElementById('opt-sound');
-      if (!li) return;
-      const a = li.querySelector('a') || li;
-      const on = !!(window.minefield && window.minefield.soundEnabled);
-      a.textContent = (on ? '✓ ' : '　') + (isKorean() ? '소리(S)' : 'Sound');
-      li.setAttribute('aria-checked', String(on));
-    }
+  const on = !!(window.minefield && window.minefield.soundEnabled);
+  setMenuText('#opt-sound',
+    (on ? '✓ ' : '　') + (isKorean() ? '소리(S)' : 'Sound'),
+    ''
+  );
+  document.getElementById('opt-sound')?.setAttribute('aria-checked', String(on));
+}
 
 
 
@@ -835,29 +1008,25 @@
 
     // 테마 메뉴 체크 표시용
     function updateThemeMenuVisual() {
-      const current = window.currentTheme || 'minesweeper';
+  const current = window.currentTheme || 'minesweeper';
+  const labels = {
+    'minesweeper': 'Minesweeper',
+    'prato-xp': 'Prato fiorito (XP)',
+    'prato-2000': 'Prato fiorito (2000)',
+  };
 
-      // 메뉴에 표시할 이름 (언어와 무관하게 영문 표기 유지)
-      const labels = {
-        'minesweeper': 'Minesweeper',
-        'prato-xp': 'Prato fiorito (XP)',
-        'prato-2000': 'Prato fiorito (2000)',
-      };
+  const items = [
+    { selector: 'li.theme-minesweeper', key: 'minesweeper' },
+    { selector: 'li.theme-prato-xp',    key: 'prato-xp' },
+    { selector: 'li.theme-prato-2000',  key: 'prato-2000' },
+  ];
 
-      const items = [
-        { selector: '.theme-minesweeper', key: 'minesweeper' },
-        { selector: '.theme-prato-xp',    key: 'prato-xp' },
-        { selector: '.theme-prato-2000',  key: 'prato-2000' },
-      ];
+  items.forEach(it => {
+    const checked = (current === it.key);
+    setMenuText(it.selector, (checked ? '✓ ' : '　') + labels[it.key], '');
+  });
+}
 
-      items.forEach(item => {
-        const li = document.querySelector(item.selector);
-        if (!li) return;
-        const a = li.querySelector('a') || li;
-        const checked = (current === item.key);
-        a.textContent = (checked ? '✓ ' : '　') + labels[item.key];
-      });
-    }
 
     // 실제 테마 변경 함수
     function setTheme(theme) {
@@ -1672,196 +1841,57 @@ function playSound(soundFile) {
       function setText(el, txt) { if (el) el.textContent = txt; }
       function setHTML(el, html) { if (el) el.innerHTML = html; }
 
-      function localizeToEnglish() {
-        document.documentElement.setAttribute("lang", "en");
+     function localizeToEnglish() {
+  document.documentElement.setAttribute("lang", "en");
 
-        /* 1) Menu labels */
-        const menuText = {
-          ".menu0": "　New　　　　　　　　F2",
-          ".menu1": "　Beginner",
-          ".menu2": "　Intermediate",
-          ".menu3": "　Expert",
-          ".menu_4": "　Others...",
-          ".menu4": "　Ultra",
-          ".menu5": "　😱",
-          ".menu6": "　💀",
-          ".menu7": "　☠️",
-          ".menu8": "　☠️☠️",
-          ".menu9": "　☠️☠️☠️",
-          ".menu10": "　AntiMine",
-          ".menu11": "　Anti Intermediate",
-          ".menu12": "　Anti Expert",
-          ".menu13": "　Large",
-          ".menu14": "　XLarge",
-          ".menu15": "　XXLarge",
-          ".menu16": "　Custom...",
-          ".besttimes": "　Best Times...",
-          ".menuclose": "　Exit",
-          ".menu100": "　Search for Help on...",
-          ".menu101": "　About Minesweeper...",
-          ".menu102": "　Contents　　　 　　F1",
-          ".menu103": "　Using Help",
-          ".menu_cheat": "　Cheat...",
-          ".menu-autosolve": "　Solve Automatically F3",
-          ".menu-hint": "　Hint　 　 　 　　 　F4",
-          ".menu151": "Game",
-          ".menu152": "Help",
-          ".menu_theme": "　Theme..."
-        };
-        Object.keys(menuText).forEach(sel => {
-          const el = document.querySelector(sel);
-          if (!el) return;
+  // 상단 메뉴(이건 <a class="menu151"> 형태라 setMenuText가 아니라 textContent 그대로 OK)
+  document.querySelector('.menu151') && (document.querySelector('.menu151').textContent = 'Game');
+  document.querySelector('.menu152') && (document.querySelector('.menu152').textContent = 'Help');
 
-          // 요소 안에 <a> 태그가 있다면 <a> 태그의 텍스트만 변경 (서브메뉴 <ul> 보존을 위해)
-          const link = el.querySelector('a');
-          if (link) {
-            link.textContent = menuText[sel];
-          } else {
-            // <a> 태그가 없으면 기존 방식대로 처리
-            setText(el, menuText[sel]);
-          }
-        });
+  // 게임 메뉴
+  setMenuText('li.menu0',  '　New', 'F2');
+  setMenuText('li.menu1',  '　Beginner', '');
+  setMenuText('li.menu2',  '　Intermediate', '');
+  setMenuText('li.menu3',  '　Expert', '');
+  setMenuText('li.menu_4', '　Others...', '');
+  setMenuText('li.menu4',  '　Ultra', '');
+  setMenuText('li.menu5',  '　😱', '');
+  setMenuText('li.menu6',  '　💀', '');
+  setMenuText('li.menu7',  '　☠️', '');
+  setMenuText('li.menu8',  '　☠️×2', '');
+  setMenuText('li.menu9',  '　☠️×3', '');
+  setMenuText('li.menu10', '　AntiMine', '');
+  setMenuText('li.menu11', '　Anti Intermediate', '');
+  setMenuText('li.menu12', '　Anti Expert', '');
+  setMenuText('li.menu13', '　Large', '');
+  setMenuText('li.menu14', '　XLarge', '');
+  setMenuText('li.menu15', '　XXLarge', '');
+  setMenuText('li.menu16', '　Custom...', '');
+  setMenuText('li.besttimes', '　Best Times...', '');
+  setMenuText('li.menuclose', '　Exit', '');
 
-        /* 1-1) Update menu items that need special handling */
-        // Question marks, Color, Sound and Theme menus are updated by their own functions
-        updateQuestionMenuVisual();
-        updateColorMenuVisual();
-        updateSoundMenuVisual();
-        updateThemeMenuVisual();
-        /* 1-2) Title update */
-        const titleEl = document.querySelector('.mine-window .title-bar .title');
-        if (titleEl) titleEl.textContent = 'Minesweeper';
+  // 도움말 메뉴
+  setMenuText('li.menu102', '　Contents', 'F1');
+  setMenuText('li.menu100', '　Search for Help on...', '');
+  setMenuText('li.menu103', '　Using Help', '');
+  setMenuText('li.menu101', '　About Minesweeper...', '');
 
-        /* 2) Counter icon tooltips */
-        const blackIcon = document.querySelector(".icon-flag-black");
-        if (blackIcon) blackIcon.setAttribute("title", "Black mine");
-        const whiteIcon = document.querySelector(".icon-flag-white");
-        if (whiteIcon) whiteIcon.setAttribute("title", "Anti-mine");
+  // 치트 메뉴
+  setMenuText('li.menu_cheat', '　Cheat...', '');
+  setMenuText('li.menu-autosolve', '　Solve Automatically', 'F3');
+  setMenuText('li.menu-hint', '　Hint', 'F4');
+setMenuText('li.menu_theme', '　Theme...', '');
 
-        /* 3) Form labels / buttons */
-        const form = document.querySelector("#userctrl form");
-        if (form) {
-          // 라벨은 정적인 한국어 텍스트를 치환
-          let html = form.innerHTML;
-          html = html.replace("주문제작:가로", "Custom: cols")
-            .replace("세로", "rows")
-            .replace("1칸당 최대 지뢰 수", "Max mines / cell")
-            .replace("전체 지뢰 수", "Total mines")
-            .replace("1칸당 최대 음수지뢰 수", "Max anti-mines / cell")
-            .replace("전체 음수지뢰 수", "Total anti-mines")
-            .replace("지능형 생성", "Generation mode")
-            .replace("생성", "Create")
-            .replace("문구 숨기기", "Hide controls")
+  // 옵션/테마는 기존 업데이트 함수가 setMenuText를 쓰게 바꿨으니 이것만 호출
+  updateQuestionMenuVisual();
+  updateColorMenuVisual();
+  updateSoundMenuVisual();
+  updateThemeMenuVisual();
 
-          form.innerHTML = html;
-
-          // 셀렉트 옵션도 영문화
-          const aiSel = document.getElementById('ai');
-          if (aiSel) {
-            const opt = aiSel.options;
-            if (opt[0]) opt[0].text = "0: allow guesses + minimal rescue";
-            if (opt[1]) opt[1].text = "1: allow guesses + guaranteed first click opening +unlimited rescue";
-            if (opt[2]) opt[2].text = "2: strict no-guess (slow)";
-          }
-        }
-
-        /* 4) Heavy notice(제목/문구만 부분 치환, DOM은 보존) */
-        const notice = document.getElementById("heavy-notice");
-        if (notice) {
-          const h3 = notice.querySelector("h3");
-          setText(h3, "Notice / Performance Tips");
-
-          // 한국어 리스트 항목을 안전하게 교체 (있는 경우에만)
-          // 첫 번째 큰 <ul> 안의 한국어 문구들을 찾아 영어로 바꿉니다.
-          // 이미 영어라면 그대로 둡니다.
-          const list = notice.querySelector("ul");
-          if (list) {
-            let html = list.innerHTML;
-            html = html
-              .replace(/모바일에서 조작:짧게 눌러 좌클릭, 길게 눌러 우클릭, 열린칸을 더블터치해서 chording.<\/li>/, 'Controls on mobile: Short press to left-click, long press to right-click, double-tap an open space to chord.</li>')
-              .replace(/첫 클릭 직후 .*?증가\)<\/li>/, 'Right after the first click, <span class="warn">board generation</span> may take a while. (More mines & larger boards take longer.)</li>')
-              .replace(/초대형과 특대형 판은 초기화에 약 .*?<\/li>/, 'XLarge and XXLarge boards take about 5–10 seconds to initialize.</li>')
-              .replace(/<li><strong>찍기 패턴 발생 허용의 구제 기능 관련<\/strong>/, '<li><strong>About the rescue feature when guesses are allowed</strong>')
-              .replace(/복수해가 .*?수정합니다<\/li>/, 'If multiple solutions exist and a guess situation occurs, and you click a mine cell without contradicting revealed info, the board will be modified so that there is no mine in that cell.</li>')
-              .replace(/하지만 무제한 구제는 난이도를 심각하게 낮춥니다<\/li>/, 'However, unlimited rescues significantly reduce the difficulty.</li>')
-              .replace(/<li><strong>찍기 패턴 발생 차단<\/strong> 모드 성능 주의:/, '<li><strong>Strict no-guess</strong> mode performance caveats:')
-              .replace(/음수지뢰가 있으면 매우 느립니다.*?<\/li>/, 'Very slow when anti-mines are used (not recommended for ≥ Intermediate).</li>')
-              .replace(/1칸당 최대 지뢰 수가 4 이상이면 매우 느립니다\.<\/li>/, 'Very slow if max mines per cell ≥ 4.</li>')
-              .replace(/대형 이상의 큰 판에서는 매우 느립니다\.<\/li>/, 'Very slow on large boards (≥ Large).</li>')
-              .replace(/해당 모드는 “찍기 없는 풀이 순서”를 항상 보장합니다\.<\/li>/, 'This mode guarantees a guess-free solution order.</li>')
-              .replace(/도움말/, 'Help')
-              .replace(/난이도는 게임에서 선택하세요.\\n?표시는 옵션에서 토글합니다./, 'Select difficulty in-game.\\nToggle question marks in options.');
-            setHTML(list, html);
-          }
-
-        }
-        const form2 = document.querySelector("#customdial2");
-        if (form2) {
-          // 라벨은 정적인 한국어 텍스트를 치환
-          let html = form2.innerHTML;
-
-          // ▼ 한–영 치환: #userctrl 폼 안에서 쓰이는 모든 한국어 라벨/버튼 텍스트 커버
-          html = html
-            // "주문제작:가로" 및 공백 변형
-            // 가로/세로(행) 라벨(괄호 유무 모두)
-            .replace(/너비\s*\(W\)*/g, "Width")
-            .replace(/높이\s*\(H\)*/g, "Height")
-            // 지뢰/음수지뢰(= anti-mine) 항목
-            .replace(/최대지뢰\/1칸/g, "Max mines/cell")
-            .replace(/지뢰\s*수\s*\(M\)*/g, "Mines")
-            .replace(/최대음수지뢰\/1칸/g, "Max antiMines/cell")
-            .replace(/음수지뢰\s*수/g, "antiMines")
-            // 생성 모드
-            .replace(/지능형\s*생성/g, "Generation mode")
-            // 버튼들
-            .replace(/확인/g, "OK")
-            .replace(/취소/g, "Cancel");
-
-          form2.innerHTML = html;
-
-          // 셀렉트 옵션(지능형 생성) 영어화는 기존 코드 그대로 유지
-          const aiSel = document.getElementById('c-ai');
-          if (aiSel) {
-            const opt = aiSel.options;
-            if (opt[0]) opt[0].text = "0: allow guesses + minimal rescue";
-            if (opt[1]) opt[1].text = "1: allow guesses + guaranteed first click opening + unlimited rescue";
-            if (opt[2]) opt[2].text = "2: strict no-guess + auto-solve (slow)";
-          }
-        }
-        //custdialtitle의 텍스트도 처리
-        const custdialtitle = document.querySelector('#custdialtitle');
-        if (custdialtitle) {
-          let html = custdialtitle.innerHTML;
-          html = html.replace(/사용자\s*지정\s*게임/g, 'Custom Field');
-          custdialtitle.innerHTML = html;
-        }
-
-        /* 5) Console panel 헤더/버튼 */
-        const cp = document.getElementById("console-panel");
-        if (cp) {
-          const titleEl = cp.querySelector('.console-head .title');
-          const pauseEl = document.getElementById('console-pause');
-          const playEl = document.getElementById('console-play');
-          const hintEl = document.getElementById('console-hint');   // ← 누락됐던 부분 추가
-          const clearEl = document.getElementById('console-clear');
-          const copyEl = document.getElementById('console-copy');
-          const autoLbl = cp.querySelector('.console-head label');
-
-          setText(titleEl, 'Live Log (Console mirror)');
-          setText(playEl, 'Solve Minesweeper Automatically');
-          setText(hintEl, 'Hint From Log');              // ← “힌트 제공” 번역
-          setText(pauseEl, 'Pause Console');
-          setText(clearEl, 'Clear Console');
-          setText(copyEl, 'Copy Console');
-          if (autoLbl) setHTML(autoLbl, '<input type="checkbox" id="console-autoscroll" checked> Auto scroll');
-
-          // 일시정지 버튼 토글 텍스트도 영어로
-          pauseEl?.addEventListener('click', function () {
-            const isResume = pauseEl.textContent.includes('Resume');
-            pauseEl.textContent = isResume ? 'Pause' : 'Resume';
-          });
-        }
-      }
+  // 타이틀
+  const titleEl = document.querySelector('.mine-window .title-bar .title');
+  if (titleEl) titleEl.textContent = 'Minesweeper';
+}
 
       if (!isKorean()) {
         if (document.readyState === "loading") {
@@ -1910,6 +1940,10 @@ function playSound(soundFile) {
 
     <span id="i18n-dead">이미 죽었습니다</span>
     <span id="i18n-dead-en">Already dead</span>
+
+    <span id="i18n-last-cell">마지막 남은 칸(찍기 아님)</span>
+    <span id="i18n-last-cell-en">Last remaining cell (not a guess)</span>
+
   </div>
   <script>
   /* ===== (추가) trace 가능 여부 ===== */
@@ -1937,6 +1971,20 @@ function playSound(soundFile) {
   const ans = (mf.mines[x][y] | 0);
   if (ans === 0) return { kind: "open", x, y, reason: "찍기 불가피-한 칸의 정답을 제공" };
   return { kind: "markMine", x, y, val: ans, reason: "찍기 불가피-한 칸의 정답을 제공" };
+}
+/* ===== (추가) 미오픈 칸이 유일하면 그 좌표 반환, 아니면 null ===== */
+function _onlyOneUnopenedCell(mf) {
+  const W = mf.columns | 0, H = mf.rows | 0;
+  let foundX = -1, foundY = -1, cnt = 0;
+
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (!mf.is_opened(x, y)) {
+      cnt++;
+      if (cnt > 1) return null;
+      foundX = x; foundY = y;
+    }
+  }
+  return (cnt === 1) ? { x: foundX, y: foundY } : null;
 }
 
   /* ===== (추가) 요구사항 서브루틴 =====
@@ -1968,6 +2016,31 @@ function playSound(soundFile) {
       const step = mf.solveonestep();
       if (step) return step; // solveonestep 결과(타입)를 그대로 사용
     }
+// 2.5) ★ 추가: 미오픈 칸이 유일(1개)하면 '찍기'로 취급하지 않고 확정 처리
+{
+  const last = _onlyOneUnopenedCell(mf);
+  if (last) {
+    const x = last.x | 0, y = last.y | 0;
+
+    const capB = Math.max(1, (mf.max_mines | 0));
+    const capW = Math.max(0, (mf.max_mines_white | 0));
+
+    const bRemain = ((mf.num_mines | 0) - (mf.num_flags | 0)) | 0;
+    const wTotal  = ((mf.white_total != null ? mf.white_total : mf.num_mines_white) | 0);
+    const wRemain = (wTotal - (mf.num_flags_white | 0)) | 0;
+const lastReason = _msg('i18n-last-cell', 'i18n-last-cell-en');
+    // 남은 지뢰가 있으면 -> 그 1칸이 지뢰, 없으면 -> 안전칸 오픈
+    if (bRemain > 0) {
+      const v = Math.min(capB, bRemain | 0); // 안전장치(캡 초과 방지)
+      return { kind: "markMine", x, y, val: v, reason: lastReason };
+    }
+    if (wRemain > 0) {
+      const v = -Math.min(capW, wRemain | 0); // 음수지뢰는 음수 val
+      return { kind: "markMine", x, y, val: v, reason: lastReason };
+    }
+    return { kind: "open", x, y, reason: lastReason };
+  }
+}
 
     // 3) solveonestep이 null이고, 힌트이거나 자동 첫 실행이면 “정답 1칸 제공”
     if (mode.cause === "hint" || (mode.cause === "auto" && mode.isFirstAuto)) {
@@ -2430,12 +2503,29 @@ __pushSolveLog(mf, step, true); // ★ 힌트는 1스텝이므로 즉시 1줄 �
   };
 
   function _safeReason(step){
-    // mine.js가 주는 reason 문자열을 그대로 쓰는 게 목표
-    // (humanizeReason() 같은 가공은 여기서 하지 않음)
-    return (step && typeof step.reason === 'string' && step.reason.trim())
-      ? step.reason.trim()
-      : 'auto';
+  let r = (step && typeof step.reason === 'string' && step.reason.trim())
+    ? step.reason.trim()
+    : 'auto';
+
+  // 영어 환경이면 한국어 reason을 치환
+  const isKO =
+    (typeof _isKO === 'function') ? _isKO()
+    : ((navigator.language || '').toLowerCase().startsWith('ko'));
+
+  if (!isKO) {
+    const guessEN = (typeof _msg === 'function')
+      ? _msg('i18n-guess-needed', 'i18n-guess-needed-en')
+      : 'Guess unavoidable — revealing the truth for one cell.';
+
+    // ✅ 문자열 "비교" 없이 치환만 사용
+    r = r
+      .replace(/찍기\s*불가피-한\s*칸의\s*정답을\s*제공/g, guessEN)
+      .replace(/잘못\s*마킹한\s*칸이\s*있습니다/g, 'Mis-flag detected');
   }
+
+  return r;
+}
+
 
   function _formatStep(mf, step){
     if (!step) return null;
@@ -2506,8 +2596,8 @@ __pushSolveLog(mf, step, true); // ★ 힌트는 1스텝이므로 즉시 1줄 �
       5: 'level5',        // 😱
       6: 'level6',        // 💀
       7: 'level7',        // ☠️
-      8: 'level8',        // ☠️☠️
-      9: 'level9',        // ☠️☠️☠️
+      8: 'level8',        // ☠️×2
+      9: 'level9',        // ☠️×3
       10: 'antimine',     // 음수지뢰
       11: 'antimine2',     // 음수지뢰
       12: 'antimine3',     // 음수지뢰
@@ -2524,8 +2614,8 @@ __pushSolveLog(mf, step, true); // ★ 힌트는 1스텝이므로 즉시 1줄 �
       level5: '😱',
       level6: '💀',
       level7: '☠️',
-      level8: '☠️☠️',
-      level9: '☠️☠️☠️',
+      level8: '☠️×2',
+      level9: '☠️×3',
       antimine: '음수지뢰',
       antimine2: '음수 중급',
       antimine3: '음수 고급',
@@ -2542,8 +2632,8 @@ __pushSolveLog(mf, step, true); // ★ 힌트는 1스텝이므로 즉시 1줄 �
       level5: '😱',
       level6: '💀',
       level7: '☠️',
-      level8: '☠️☠️',
-      level9: '☠️☠️☠️',
+      level8: '☠️×2',
+      level9: '☠️×3',
       antimine: 'AntiMine',
       antimine2: 'Anti Intermediate',
       antimine3: 'Anti Expert',
@@ -2791,36 +2881,28 @@ __pushSolveLog(mf, step, true); // ★ 힌트는 1스텝이므로 즉시 1줄 �
       const KO = isKorean();
 
       // 난이도 메뉴 번호: Beginner~Custom (menu1~menu11)
-      const menuLabelsKO = [
-        "새 게임(N)　　　　F2", "초급(B)", "중급(I)", "고급(E)", "초고급", "😱", "💀", "☠️", "☠️☠️",
-        "☠️☠️☠️", "음수지뢰", "음수 중급", "음수 고급","대형", "초대형", "특대형", "사용자 지정(C)..."
-      ];
-      const menuLabelsEN = [
-        "New　　　　　　　F2", "Beginner", "Intermediate", "Expert", "Ultra", "😱", "💀", "☠️", "☠️☠️",
-        "☠️☠️☠️", "AntiMine", "Anti Intermediate", "Anti Expert", "Large", "XLarge", "XXLarge", "Custom..."
-      ];
+      const labelsKO = [
+    "새 게임(N)", "초급(B)", "중급(I)", "고급(E)", "초고급", "😱", "💀", "☠️", "☠️×2",
+    "☠️×3", "음수지뢰", "음수 중급", "음수 고급", "대형", "초대형", "특대형", "사용자 지정(C)..."
+  ];
+  const labelsEN = [
+    "New", "Beginner", "Intermediate", "Expert", "Ultra", "😱", "💀", "☠️", "☠️×2",
+    "☠️×3", "AntiMine", "Anti Intermediate", "Anti Expert", "Large", "XLarge", "XXLarge", "Custom..."
+  ];
 
-      // 메뉴 텍스트를 전부 초기화
-      for (let i = 0; i <= 16; i++) {
-        const li = document.querySelector(`.menu${i}`);
-        if (!li) continue;
-        const a = li.querySelector("a");
-        if (!a) continue;
+      // 전체 초기화
+  for (let i = 0; i <= 16; i++) {
+    const label = (KO ? labelsKO[i] : labelsEN[i]) || '';
+    const key = (i === 0) ? 'F2' : '';
+    setMenuText(`li.menu${i}`, '　' + label, key);
+  }
 
-        const label = KO ? menuLabelsKO[i] : menuLabelsEN[i];
-        // "✓"를 제외하고, 전각 공백 1칸을 앞에 붙여서 정렬 유지
-        a.textContent = "　" + label;
-      }
-
-      // 선택한 항목에 체크 표시 추가
-      const active = document.querySelector(`.menu${idx}`);
-      if (active) {
-        const a = active.querySelector("a");
-        if (a) {
-          let label = KO ? menuLabelsKO[idx] : menuLabelsEN[idx];
-          a.textContent = "✓ " + label;
-        }
-      }
+  // 선택 항목 체크
+  {
+    const label = (KO ? labelsKO[idx] : labelsEN[idx]) || '';
+    const key = (idx === 0) ? 'F2' : '';
+    setMenuText(`li.menu${idx}`, '✓ ' + label, key);
+  }
     }
   </script>
 <script>
