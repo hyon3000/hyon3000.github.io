@@ -1,0 +1,2406 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ourmine</title>
+  <style>
+    html, body { margin:0; height:100%; overflow:hidden; background:#C0C0C0; }
+
+    /* 무거운 첫 클릭 때 UI 확보용 */
+    #loading-overlay{
+      position:fixed; inset:0;
+      display:none;
+      background:rgba(0,0,0,0.25);
+      backdrop-filter: blur(1px);
+      align-items:center;
+      justify-content:center;
+      color:#fff;
+      font:600 16px/1.2 system-ui, sans-serif;
+      z-index:9999;
+      opacity:0;
+      transition:opacity 200ms ease;
+    }
+    #loading-overlay.delayed-show{ opacity:1; }
+    #loading-overlay .box{
+      background:rgba(0,0,0,0.55);
+      border:1px solid rgba(255,255,255,0.18);
+      padding:14px 16px;
+      border-radius:12px;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+</head>
+<body>
+  <div id="loading-overlay"><div class="box">Generating…</div></div>
+
+  
+
+<script>
+  // 파일 상단 근처에 추가
+let __timerId = null;
+let __elapsed = 0;
+function startParentTimer(){
+  stopParentTimer();
+  __elapsed = 1;
+  __timerId = setInterval(()=>{
+    __elapsed += 1;
+    postToParent({ __mine3d:1, type:'timer', elapsed: __elapsed });
+  }, 1000);
+}
+function stopParentTimer(finalSend=true){
+  if (__timerId){
+    clearInterval(__timerId);
+    __timerId = null;
+  }
+  if (finalSend){
+    postToParent({ __mine3d:1, type:'timer', elapsed: __elapsed });
+  }
+}
+
+  // ===== 파라미터 =====
+  function getIntParam(sp, key, def) {
+    const v = sp.get(key);
+    if (v === null || v === undefined || v === "") return def;
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) ? n : def;
+  }
+  function getBoolParam(sp, key, def) {
+    const v = sp.get(key);
+    if (v === null || v === undefined || v === "") return def;
+    const s = String(v).toLowerCase();
+    if (s === "true" || s === "1" || s === "yes" || s === "y" || s === "on") return true;
+    if (s === "false" || s === "0" || s === "no" || s === "n" || s === "off") return false;
+    return def;
+  }
+  function clampInt(v,a,b){ v = Math.floor(v); return Math.max(a, Math.min(b, v)); }
+  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+
+  const sp = new URLSearchParams(location.search);
+  const CONFIG = {
+    cols: getIntParam(sp, "cols", 10),
+    rows: getIntParam(sp, "rows", 10),
+    depths: getIntParam(sp, "depths", 10),
+
+    minesPerCell: getIntParam(sp, "minespercell", 1),
+    minesTotal: getIntParam(sp, "mines", 30),
+
+    whiteMinesPerCell: getIntParam(sp, "whiteminespercell", 0),
+    whiteMinesTotal: getIntParam(sp, "whitemines", 0),
+
+    useMark: getBoolParam(sp, "usemark", true),
+    useColor: getBoolParam(sp, "usecolor", true), // 기본 true
+  };
+
+  CONFIG.cols = Math.max(1, CONFIG.cols);
+  CONFIG.rows = Math.max(1, CONFIG.rows);
+  CONFIG.depths = Math.max(1, CONFIG.depths);
+  CONFIG.minesPerCell = clampInt(CONFIG.minesPerCell, 0, 6);
+  CONFIG.whiteMinesPerCell = clampInt(CONFIG.whiteMinesPerCell, 0, 6);
+  CONFIG.minesTotal = Math.max(0, CONFIG.minesTotal);
+  CONFIG.whiteMinesTotal = Math.max(0, CONFIG.whiteMinesTotal);
+
+  const SIZE = { x: CONFIG.cols, y: CONFIG.rows, z: CONFIG.depths };
+  /* ===== 3D <-> parent bridge ===== */
+const __BRIDGE = {
+  ready: false,
+  pendingInit: null,
+  soundEnabled: false,
+};
+function countFlags3D(){
+  let pos = 0, neg = 0;
+  for (const c of cells){
+    if (c.markType === MARK_POS) pos += (c.markCount|0);
+    else if (c.markType === MARK_NEG) neg += (c.markCount|0);
+  }
+  return { pos, neg };
+}
+
+function sendCountersToParent(){
+  const { pos, neg } = countFlags3D();
+
+  // ✅ 첫 클릭 전엔 CONFIG 총량, 시작 후엔 실제 배치량(placed*) 기준
+  const blackTotal = firstOpen ? (CONFIG.minesTotal|0) : (placedBlackMines|0);
+  const whiteTotal = firstOpen ? (CONFIG.whiteMinesTotal|0) : (placedWhiteMines|0);
+
+  postToParent({
+    type: "counters",
+    payload: {
+      blackTotal,
+      whiteTotal,
+      blackRemain: blackTotal - pos,
+      whiteRemain: whiteTotal - neg,
+    }
+  });
+}
+
+function postToParent(msg){
+  if (window.parent && window.parent !== window){
+    window.parent.postMessage({ __mine3d: 1, ...msg }, "*");
+  }
+}
+
+// parent로부터 메시지 수신
+window.addEventListener("message", (e) => {
+  const m = e.data;
+  if (!m || !m.__mine3d) return;
+
+  if (m.type === "init") {
+    // init이 너무 빨리 오면(아직 scene/renderer 없음) 큐에 저장
+    if (!__BRIDGE.ready) { __BRIDGE.pendingInit = m.payload; return; }
+    applyInitFromParent(m.payload);
+    return;
+  }
+
+  if (m.type === "reset") {
+    // main의 얼굴도 기본으로 돌려달라고 요청하는 흐름을 맞추기
+    hardResetFromParent();
+    postToParent({ type: "face", status: 0 });
+    return;
+  }
+
+  if (m.type === "sound") {
+    __BRIDGE.soundEnabled = !!m.enabled;
+    return;
+  }
+  if (m.type === "config"){
+    if (typeof m.usemark  !== 'undefined') CONFIG.useMark  = !!m.usemark;
+    if (typeof m.usecolor !== 'undefined') { 
+      CONFIG.useColor = !!m.usecolor;
+      // 숫자/깃발 색 즉시 갱신
+      refreshColorsNow();
+    }
+    return;
+  }
+    if (m.type === "assist") {
+    // payload: { cause:'hint'|'auto', isFirstAuto:true|false }
+    const reqId = m.requestId || null;
+    let res = null;
+    try {
+      res = __mine3d_assist_once(m.payload || {});
+    } catch (err) {
+      res = { ok:false, error:String(err) };
+      console.error(err);
+    }
+    postToParent({ type:"assistResult", requestId:reqId, payload:res });
+    return;
+  }
+
+});
+function refreshColorsNow(){
+  // 숫자 스프라이트 캐시 초기화
+  numberSpriteCache.clear();
+
+  // 모든 열린 칸의 숫자 다시 입히기
+  for (const c of cells){
+    if (!c.isOpen) continue;
+    if (c._numberSprite){
+      c.content.remove(c._numberSprite);
+      c._numberSprite = null;
+    }
+    if (c.mineValue !== 0) continue;
+    if (c.adjValue === 0){
+      continue;
+    } else if (c.adjValue === 1000){
+      const spr = getNumberSprite("0", numberColorByRule(0));
+      spr.userData.cell = c;
+      c.content.add(spr);
+      c._numberSprite = spr;
+    } else {
+      const spr = getNumberSprite(String(c.adjValue), numberColorByRule(c.adjValue));
+      spr.userData.cell = c;
+      c.content.add(spr);
+      c._numberSprite = spr;
+    }
+  }
+
+  // 깃발 색은 applyMarkVisual에 들어 있으니,
+  // 닫힌 칸들만 한 번 돌면서 다시 칠해줌
+  for (const c of cells){
+    if (!c.isOpen && (c.markType === MARK_POS || c.markType === MARK_NEG || c.markType === MARK_Q)){
+      c.applyMarkVisual();
+    }
+  }
+    // ✅ X 색도 즉시 갱신(현재 표시 중인 것들)
+  const xHex = xColorByRule();
+  for (const c of cells){
+    if (c.xMark?.visible && c.xMark.userData?.xMat){
+      c.xMark.userData.xMat.color.setHex(xHex);
+    }
+  }
+
+}
+
+// 3D 내부에서 “소리 재생 요청”을 parent로 올림(실제 재생은 main이 함)
+function requestPlaySound(file){
+  if (!__BRIDGE.soundEnabled) return;
+  postToParent({ type: "playSound", file });
+}
+
+// parent에 얼굴 상태 보내기(0 normal, 2 thinking, -1 dead, -2 win)
+function setFace(status){
+  postToParent({ type: "face", status });
+}
+function normalizeInitPayload(p){
+  const cols  = Math.max(1, (p?.cols|0));
+  const rows  = Math.max(1, (p?.rows|0));
+  const depth = Math.max(1, (p?.depth|0));
+
+  const minesPerCell       = Math.max(0, Math.min(6, (p?.minespercell|0)));
+  const whiteMinesPerCell  = Math.max(0, Math.min(6, (p?.whiteminespercell|0)));
+
+  const minesTotal     = Math.max(0, (p?.mines|0));
+  const whiteMinesTotal= Math.max(0, (p?.whitemines|0));
+
+  return { cols, rows, depth, minesPerCell, minesTotal, whiteMinesPerCell, whiteMinesTotal };
+}
+
+function applyInitFromParent(payload){
+  const n = normalizeInitPayload(payload);
+
+  // ✅ CONFIG 갱신 (기존 CONFIG 구조 유지)
+  CONFIG.cols = n.cols;
+  CONFIG.rows = n.rows;
+  CONFIG.depths = n.depth;
+
+  CONFIG.minesPerCell = n.minesPerCell;
+  CONFIG.minesTotal   = n.minesTotal;
+
+  CONFIG.whiteMinesPerCell = n.whiteMinesPerCell;
+  CONFIG.whiteMinesTotal   = n.whiteMinesTotal;
+
+  // SIZE 갱신
+  SIZE.x = CONFIG.cols;
+  SIZE.y = CONFIG.rows;
+  SIZE.z = CONFIG.depths;
+
+  
+
+  // ✅ “보드 재구성” 호출 (아래 3)에서 구현/연결)
+  rebuildBoardAfterInit();
+}
+function markBridgeReady(){
+  __BRIDGE.ready = true;
+  postToParent({ type: "ready" });
+
+  // init이 먼저 와있었다면 지금 적용
+  if (__BRIDGE.pendingInit){
+    applyInitFromParent(__BRIDGE.pendingInit);
+    __BRIDGE.pendingInit = null;
+  }
+}
+function rebuildBoardAfterInit(){
+  if (__BRIDGE.bootTimeout){
+    clearTimeout(__BRIDGE.bootTimeout);
+    __BRIDGE.bootTimeout = null;
+  }
+  resetGame();
+  setFace(0);
+  showOverlay(false);
+}
+
+
+function hardResetFromParent(){
+  // 부모 reset 요청 → 현재 보드를 완전 리셋
+ resetGame();        // 기존 재생성
+  setFace(0);
+  stopParentTimer(false);
+  __elapsed = 0;
+  postToParent({ __mine3d:1, type:'timer', elapsed: 0 }); // 0으로 표시 맞춤
+}
+
+  // ===== 시각 =====
+  const SPACING = 1.18;
+  const OPACITY_CLOSED = 0.95;
+  const OPACITY_MARKED = 0.50;
+  const OPACITY_DIE_HIT = 0.50;
+  const OPACITY_DIE_MINE = 0.50;
+
+  // “눌림/Chord 상태”에서 요구한 70%
+  const OPACITY_PRESSED = 0.50;
+  const OPACITY_CHORD_HI = 0.50;
+// ===== GAME OVER (WinXP 스타일 공개) =====
+const DIE_OPACITY_HIT   = 0.55; // 밟은 지뢰: 붉은 반투명
+const DIE_OPACITY_OTHER = 0.45; // 나머지 지뢰/오답깃발: 흰 반투명
+const DIE_COLOR_HIT     = 0xff0000;
+const DIE_COLOR_HIT_NOCOLOR = 0xC0C0C0;
+const DIE_COLOR_OTHER   = 0xffffff;
+
+function __hideMarksVisualOnly(c){
+  // 점수/카운트(markType)는 건드리지 않고 “보이는 것만” 숨김
+  if (c.flagSlots) for (const s of c.flagSlots) s.visible = false;
+  if (c.qSprite) c.qSprite.visible = false;
+}
+
+function __setDeadCube(c, colorHex, opacity){
+  c.cube.visible = true;
+  c.cube.material.color.setHex(colorHex);
+  c.cube.material.opacity = opacity;
+  c.cube.material.emissive.setHex(0x000000);
+  c.cube.material.emissiveIntensity = 0.0;
+}
+
+function __renderNumberOnly(c){
+  // cube는 사라진 상태에서 숫자만 보이게(열린칸처럼)
+  c.content.visible = true;
+  c.mineGroup.visible = false;
+
+  __hideMarksVisualOnly(c);
+  c.showX(false);
+
+  if (c._numberSprite){
+    c.content.remove(c._numberSprite);
+    c._numberSprite = null;
+  }
+
+  // 기존 오픈 로직과 동일하게 표기:
+  // adjValue===0: 진짜 0(빈칸) -> 숫자 없음
+  // adjValue===1000: net=0 but 주변에 지뢰 존재 -> "0" 표시
+  if (c.adjValue === 0){
+    // 빈칸(숫자 없음)
+    return;
+  }
+  if (c.adjValue === 1000){
+    const spr = getNumberSprite("0", numberColorByRule(0));
+    spr.userData.cell = c;
+    c.content.add(spr);
+    c._numberSprite = spr;
+    return;
+  }
+  const spr = getNumberSprite(String(c.adjValue), numberColorByRule(c.adjValue));
+  spr.userData.cell = c;
+  c.content.add(spr);
+  c._numberSprite = spr;
+}
+
+function __showFakeMineForWrongFlag(c){
+  // "지뢰 없는 칸에 깃발" → 흰 반투명 + 지뢰 + X
+  c.content.visible = true;
+  c.mineGroup.visible = true;
+
+  // mineValue=0 이라 buildMinesVisual()이 안 켜주므로 1개를 수동으로 켬
+  for (let i=0;i<6;i++){
+    const s = c.mineSpheres[i];
+    s.visible = (i === 0);
+    if (i === 0){
+      s.material.color.setHex(0x000000);
+      s.position.set(0,0,0);
+    }
+  }
+}
+
+function revealAfterDeath_WinXP(hitCell=null){
+  for (const c of cells){
+    // hover 잔상 제거
+    c.setHover(false);
+
+    // 1) 지뢰칸: 전부 cube 보이게 + 지뢰
+    if (c.mineValue !== 0){
+      c.content.visible = true;
+      c.mineGroup.visible = true;
+      c.buildMinesVisual();
+
+      __hideMarksVisualOnly(c);
+      c.showX(false);
+
+      if (hitCell && c === hitCell){
+        // 밟은 지뢰: 붉은 반투명 + 지뢰
+        const hitColor = CONFIG.useColor ? DIE_COLOR_HIT : DIE_COLOR_HIT_NOCOLOR; // 회색(원하면 값 변경)
+        __setDeadCube(c, hitColor, DIE_OPACITY_HIT);
+      } else {
+        // 안 밟은 지뢰: 흰 반투명 + 지뢰
+        __setDeadCube(c, DIE_COLOR_OTHER, DIE_OPACITY_OTHER);
+      }
+      continue;
+    }
+
+    // 2) 이미 열려있던 칸: 숫자 유지(그대로)
+    if (c.isOpen){
+      c.cube.visible = false;
+      c.showX(false);
+      continue;
+    }
+
+    // 3) 지뢰가 없는데 깃발 꽂은 칸: 흰 반투명 + 지뢰 + X
+    if (isFlagged(c)){
+      __hideMarksVisualOnly(c);
+      __setDeadCube(c, DIE_COLOR_OTHER, DIE_OPACITY_OTHER);
+      __showFakeMineForWrongFlag(c);
+      c.showX(true);
+      continue;
+    }
+
+    // 4) 지뢰 없고 안 열린 칸: cube 사라지고 숫자(열린 것처럼)
+    c.cube.visible = false;
+    __renderNumberOnly(c);
+  }
+}
+
+  // ===== 색상 규칙 =====
+  const POS_DIGIT_COLOR = {1:"#0000ff",2:"#008000",3:"#ff0000",4:"#000080",5:"#800000",6:"#008080",7:"#000000",8:"#808080",9:"#808000",0:"#800080"};
+  const NONPOS_DIGIT_COLOR = {0:"#ffffff",1:"#E0A000",2:"#800000",3:"#00ffff",4:"#808000",5:"#008000",6:"#c08000",7:"#000000",8:"#808080",9:"#ffff00"};
+  function numberColorByRule(val){
+    if(!CONFIG.useColor) return "#000000";
+    const d = Math.abs(val) % 10;
+    return (val > 0) ? POS_DIGIT_COLOR[d] : NONPOS_DIGIT_COLOR[d];
+  }
+  const POS_FLAG_COLORS_BASE = [
+  POS_DIGIT_COLOR[3], POS_DIGIT_COLOR[2], POS_DIGIT_COLOR[6],
+  POS_DIGIT_COLOR[9], POS_DIGIT_COLOR[0], POS_DIGIT_COLOR[8]
+];
+
+const NEG_FLAG_COLORS_BASE = [
+  POS_DIGIT_COLOR[1], "#00ff00", NONPOS_DIGIT_COLOR[3],
+  NONPOS_DIGIT_COLOR[9], "#ff00ff", "#ffffff"
+];
+
+function flagColorByRule(markType, i){
+  if (!CONFIG.useColor) return "#000000";
+  const base = (markType === MARK_POS) ? POS_FLAG_COLORS_BASE : NEG_FLAG_COLORS_BASE;
+  return base[i] || "#000000";
+}
+
+  // ===== (깃발 위치 패턴) =====
+  const FLAG_LAYOUT = {
+    1: [[ 0, 0]],
+    2: [[-1, 0],[ 1, 0]],
+    3: [[-1,-1],[ 1,-1],[ 0, 1]],
+    4: [[-1,-1],[ 1,-1],[-1, 1],[ 1, 1]],
+    5: [[-1,-1],[ 1,-1],[-1, 0],[ 1, 0],[ 0, 1]],
+    6: [[-1,-1],[ 1,-1],[-1, 0],[ 1, 0],[-1, 1],[ 1, 1]],
+  };
+  const FLAG_DX = 0.20;
+  const FLAG_DZ = 0.20;
+
+  // ===== THREE =====
+  let renderer, scene, camera;
+  const raycaster = new THREE.Raycaster();
+  const mouseNDC = new THREE.Vector2();
+  const overlayEl = document.getElementById("loading-overlay");
+
+  let cells = [];
+  let cubeMeshes = [];
+  let firstOpen = true;
+  let gameState = "ready"; // ready | playing | over | win
+  let openedCount = 0;
+  let hoverCell = null;
+
+  let placedBlackMines = 0;
+  let placedWhiteMines = 0;
+
+  const numberSpriteCache = new Map();
+
+  // ===== Orbit(우클릭 드래그 회전) + Pan(중클릭 드래그) =====
+  const orbit = {
+    target: new THREE.Vector3(0,0,0),
+    radius: 26,
+    theta: 0.9,
+    phi: 1.0,
+    minRadius: 8,
+    maxRadius: 400
+  };
+  function updateCameraOrbit(){
+    const eps = 0.05;
+    orbit.phi = clamp(orbit.phi, eps, Math.PI - eps);
+    const sinPhi = Math.sin(orbit.phi);
+    const x = orbit.radius * sinPhi * Math.cos(orbit.theta);
+    const y = orbit.radius * Math.cos(orbit.phi);
+    const z = orbit.radius * sinPhi * Math.sin(orbit.theta);
+    camera.position.set(orbit.target.x + x, orbit.target.y + y, orbit.target.z + z);
+    camera.lookAt(orbit.target);
+  }
+  function panByPixels(dx, dy){
+    const panSpeed = orbit.radius * 0.0016;
+    const m = new THREE.Matrix4().extractRotation(camera.matrixWorld);
+    const right = new THREE.Vector3(1,0,0).applyMatrix4(m);
+    const up = new THREE.Vector3(0,1,0).applyMatrix4(m);
+    orbit.target.addScaledVector(right, -dx * panSpeed);
+    orbit.target.addScaledVector(up,  dy * panSpeed);
+    updateCameraOrbit();
+  }
+
+  // ===== utils =====
+  function idx(x,y,z){ return x + SIZE.x * (y + SIZE.y * z); }
+  function inBounds(x,y,z){ return x>=0 && x<SIZE.x && y>=0 && y<SIZE.y && z>=0 && z<SIZE.z; }
+  function randInt(a,b){ return (a + Math.floor(Math.random()*(b-a+1))); }
+  function neighbors26(cell){
+    const out=[];
+    for(let dz=-1; dz<=1; dz++) for(let dy=-1; dy<=1; dy++) for(let dx=-1; dx<=1; dx++){
+      if(dx===0 && dy===0 && dz===0) continue;
+      const nx=cell.x+dx, ny=cell.y+dy, nz=cell.z+dz;
+      if(inBounds(nx,ny,nz)) out.push(cells[idx(nx,ny,nz)]);
+    }
+    return out;
+  }
+
+  // ===== 숫자/물음표 =====
+  function getNumberSprite(text, color){
+    const key = text + "|" + color;
+    if(numberSpriteCache.has(key)) return numberSpriteCache.get(key).clone();
+
+    const canvas=document.createElement("canvas");
+    canvas.width=256; canvas.height=256;
+    const ctx=canvas.getContext("2d");
+    ctx.clearRect(0,0,256,256);
+
+    ctx.fillStyle = color;
+    ctx.font = "bold 140px system-ui, sans-serif";
+    ctx.textAlign="center";
+    ctx.textBaseline="middle";
+    ctx.fillText(text, 128, 132);
+
+    const tex=new THREE.CanvasTexture(canvas);
+    tex.anisotropy=4;
+
+    const mat=new THREE.SpriteMaterial({ map: tex, transparent:true });
+    const spr=new THREE.Sprite(mat);
+    spr.scale.set(0.68,0.68,0.68);
+
+    numberSpriteCache.set(key, spr);
+    return spr.clone();
+  }
+  function makeQuestionSprite(){
+    const canvas = document.createElement("canvas");
+    canvas.width = 256; canvas.height = 256;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0,0,256,256);
+    ctx.fillStyle = "#000000";
+    ctx.font = "bold 170px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("?", 128, 140);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.anisotropy = 4;
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent:true });
+    const spr = new THREE.Sprite(mat);
+    spr.scale.set(0.7,0.7,0.7);
+    return spr;
+  }
+
+  // ===== 지뢰 구 =====
+  const MINE_OFFSETS = [
+    [new THREE.Vector3(0,0,0)],
+    [new THREE.Vector3(-0.16, 0.12, 0.00), new THREE.Vector3(0.16,-0.12,0.00)],
+    [new THREE.Vector3(-0.18, 0.14, 0.00), new THREE.Vector3(0.18, 0.14,0.00), new THREE.Vector3(0,-0.18,0.00)],
+    [new THREE.Vector3(-0.18, 0.18, 0.12), new THREE.Vector3(0.18, 0.18,-0.12), new THREE.Vector3(-0.18,-0.18,-0.12), new THREE.Vector3(0.18,-0.18,0.12)],
+    [new THREE.Vector3(0,0,0), new THREE.Vector3(-0.20, 0.18,0.00), new THREE.Vector3(0.20, 0.18,0.00), new THREE.Vector3(-0.20,-0.18,0.00), new THREE.Vector3(0.20,-0.18,0.00)],
+    [new THREE.Vector3(-0.20, 0.20, 0.20), new THREE.Vector3(0.20, 0.20,-0.20), new THREE.Vector3(-0.20,-0.20,-0.20),
+     new THREE.Vector3(0.20,-0.20,0.20), new THREE.Vector3(-0.20,0.20,-0.20), new THREE.Vector3(0.20,-0.20,-0.20)]
+  ];
+
+  // ===== 마킹 =====
+  const MARK_NONE="none", MARK_POS="pos", MARK_NEG="neg", MARK_Q="q";
+  function isFlagged(cell){ return cell.markType===MARK_POS || cell.markType===MARK_NEG; }
+  function isFlaglessForChord(cell){
+    // “깃발없는 (?는 깃발없는것과같다)”
+    return (cell.markType===MARK_NONE || cell.markType===MARK_Q);
+  }
+  function flagSignedCount(cell){
+    if(cell.markType===MARK_POS) return cell.markCount;
+    if(cell.markType===MARK_NEG) return -cell.markCount;
+    return 0;
+  }
+  function flagAbsCount(cell){ return isFlagged(cell) ? cell.markCount : 0; }
+  function flagMatchesMineExactly(cell){
+    if(cell.markType===MARK_POS) return cell.mineValue === +cell.markCount;
+    if(cell.markType===MARK_NEG) return cell.mineValue === -cell.markCount;
+    return false;
+  }
+
+  // ===== 깃발 / X표 =====
+  function makeFlagMesh(triColor){
+    const g = new THREE.Group();
+    const poleGeo = new THREE.CylinderGeometry(0.03,0.03,0.75,10);
+    const poleMat = new THREE.MeshStandardMaterial({ color:0x000000, roughness:0.5 });
+    const pole = new THREE.Mesh(poleGeo, poleMat);
+    pole.position.set(0, -0.05, 0);
+    g.add(pole);
+
+    const shape = new THREE.Shape();
+    shape.moveTo(0, 0.12);
+    shape.lineTo(0.35, 0.0);
+    shape.lineTo(0, -0.12);
+    shape.lineTo(0, 0.12);
+
+    const flagGeo = new THREE.ShapeGeometry(shape);
+    const flagMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(triColor),
+      side: THREE.DoubleSide,
+      roughness: 0.35
+    });
+    const flag = new THREE.Mesh(flagGeo, flagMat);
+    flag.position.set(0.03, 0.18, 0.00); // XY(z=0) 평면
+    g.add(flag);
+
+    return g;
+  }
+
+  function makeXMarkLines(){
+  const mat = new THREE.LineBasicMaterial({ color: DIE_COLOR_HIT }); // 기본(컬러)
+  const g1 = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.5, -0.5, 0), new THREE.Vector3( 0.5,  0.5, 0)]);
+  const g2 = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.5,  0.5, 0), new THREE.Vector3( 0.5, -0.5, 0)]);
+  const grp = new THREE.Group();
+
+  const l1 = new THREE.Line(g1, mat);
+  const l2 = new THREE.Line(g2, mat);
+  grp.add(l1);
+  grp.add(l2);
+
+  // ✅ 나중에 색 바꾸기 위해 material을 보관
+  grp.userData.xMat = mat;
+
+  grp.visible = false;
+  return grp;
+}
+function xColorByRule(){
+  return CONFIG.useColor ? DIE_COLOR_HIT : 0x000000; // 흑백이면 회색
+}
+  // ===== 클릭/상태 흐름(요청 코드 구조 반영) =====
+  let _is_generating = false; // ★ on_up 방어용 (코드와 동일 개념)
+  let game_status2 = 0;       // “표정”같은 보조 상태 자리
+  function on_game_status_changed2(){
+    // 우리에겐 얼굴이 없으니, 상태 텍스트에만 반영
+    // (요청: 흐름 유지가 핵심)
+    // game_status2=0 -> 기본
+  }
+
+  function on_up_global(){
+  if (_is_generating) return;
+    // ✅ 게임 끝났으면 절대로 0(웃는얼굴)로 되돌리지 않음
+  if (gameState === "over" || gameState === "win") return;
+  game_status2 = 0;
+  on_game_status_changed2();
+
+  setFace(0); // ✅ 추가
+}
+
+
+  // ===== chord 하이라이트(전역) =====
+  let chordHighlightActive = false;
+let chordCenterCell = null;
+let chordHighlighted = new Set(); // 현재 70%로 낮춘 셀들 기록
+
+function setChordHighlight(active, centerCell = null){
+  // 먼저 이전에 낮춘 것들 원복
+  for (const c of chordHighlighted) c.syncCubeOpacity();
+  chordHighlighted.clear();
+
+  chordHighlightActive = !!active;
+  chordCenterCell = active ? centerCell : null;
+
+  if (!chordHighlightActive || !chordCenterCell) return;
+
+  // ✅ “중심 숫자 셀”의 인접(26) 중에서
+  // ✅ 안열린 + 깃발없는(= ? 포함)만 70%
+  const neigh = neighbors26(chordCenterCell);
+  for (const n of neigh){
+    if(!n.cube.visible) continue;
+    if(n.isOpen) continue;
+    if(!isFlaglessForChord(n)) continue; // MARK_NONE or MARK_Q
+
+    n.cube.material.opacity = OPACITY_CHORD_HI; // 0.70
+    chordHighlighted.add(n);
+  }
+}
+  // ===== pointer 입력 상태 =====
+  let leftDown = false;
+  let middleDown = false;
+  let rightDown = false;
+
+  let leftDownCell = null;
+  let leftDownXY = null;
+  let leftPressedApplied = false;
+
+  let chordArmed = false;      // “다운~업 동안 chord 상태”
+  let chordKind = null;        // 'middle' | 'shiftLeft' | 'lr'
+  let chordPointerId = null;
+
+  let panDown = false;
+  let panLastX=0, panLastY=0;
+
+  // 우클릭 회전
+  let rotDown=false;
+  let rotLastX=0, rotLastY=0;
+  let rotStartX=0, rotStartY=0;
+
+  const MOVE_CANCEL_PX = 8;
+let leftCanceledByChord = false;
+
+// 중클릭: 숫자 아니면 "큐브 chord 시도" + 드래그하면 pan으로 전환
+let middleStartXY = null;
+let middleMoved = false;
+
+  // ===== Cell =====
+  class Cell{
+    constructor(x,y,z, worldPos){
+      this.x=x; this.y=y; this.z=z;
+      this.mineValue=0;  // 0 / +k / -k
+      this.adjValue=0;   // net / 0 / 1000
+      this.isOpen=false;
+
+      this.markType=MARK_NONE;
+      this.markCount=0;
+
+      this.group = new THREE.Group();
+      this.group.position.copy(worldPos);
+
+      const cubeGeo=new THREE.BoxGeometry(1,1,1);
+      const cubeMat=new THREE.MeshStandardMaterial({
+        color:0xffffff, transparent:true, opacity:OPACITY_CLOSED,
+        roughness:0.25, metalness:0.0, depthWrite:false,
+        emissive:0x000000, emissiveIntensity:0.35
+      });
+      this.cube = new THREE.Mesh(cubeGeo, cubeMat);
+      this.cube.userData.cell = this;
+      this.group.add(this.cube);
+
+      this.content = new THREE.Group();
+      this.content.visible = false;
+      this.group.add(this.content);
+
+      // mines
+      this.mineGroup = new THREE.Group();
+      this.mineSpheres=[];
+      const sphereGeo=new THREE.SphereGeometry(0.17,16,16);
+      for(let i=0;i<6;i++){
+        const m=new THREE.Mesh(sphereGeo, new THREE.MeshStandardMaterial({color:0x000000, roughness:0.35}));
+        m.visible=false;
+        this.mineGroup.add(m);
+        this.mineSpheres.push(m);
+      }
+      this.mineGroup.visible=false;
+      this.content.add(this.mineGroup);
+
+      // flags (6 slots, positioned by FLAG_LAYOUT)
+      this.flagsGroup=new THREE.Group();
+      this.flagSlots=[];
+      for(let i=0;i<6;i++){
+        const slot=makeFlagMesh("#000000");
+        slot.visible=false;
+        this.flagsGroup.add(slot);
+        this.flagSlots.push(slot);
+      }
+      this.group.add(this.flagsGroup);
+
+      this.qSprite = makeQuestionSprite();
+      this.qSprite.visible=false;
+      this.group.add(this.qSprite);
+
+      this.xMark = makeXMarkLines();
+      this.group.add(this.xMark);
+
+      this._numberSprite=null;
+    }
+
+    syncCubeOpacity(){
+      if(!this.cube.visible) return;
+      // chord 하이라이트가 켜져있다면, “깃발없는”은 0.70 유지해야 함
+      
+      this.cube.material.opacity = (this.markType !== MARK_NONE) ? OPACITY_MARKED : OPACITY_CLOSED;
+    }
+
+    showX(on){
+  this.xMark.visible = !!on;
+  if (on && this.xMark.userData.xMat){
+    this.xMark.userData.xMat.color.setHex(xColorByRule());
+  }
+}
+
+
+    setMarkNone(){
+      this.markType=MARK_NONE;
+      this.markCount=0;
+      this.applyMarkVisual();
+    }
+
+    applyMarkVisual(){
+      for(const s of this.flagSlots) s.visible=false;
+      this.qSprite.visible=false;
+
+      if(this.markType===MARK_POS || this.markType===MARK_NEG){
+        const count = Math.min(6, this.markCount);
+        const layout = FLAG_LAYOUT[count] || FLAG_LAYOUT[1];
+        for(let i=0;i<count;i++){
+          const [u,v]=layout[i];
+          this.flagSlots[i].position.set(u*FLAG_DX, 0, v*FLAG_DZ);
+          const tri=this.flagSlots[i].children[1];
+          const col = flagColorByRule(this.markType, i);
+
+          tri.material.color.set(col);
+          this.flagSlots[i].visible=true;
+        }
+      } else if(this.markType===MARK_Q){
+        this.qSprite.visible=true;
+      }
+
+      this.syncCubeOpacity();
+      updateScore();
+      sendCountersToParent();
+    }
+
+    // ★ 우클릭 다운에서 즉시 적용
+    cycleMark(){
+      if(this.isOpen) return;
+      if(gameState==="over" || gameState==="win") return;
+
+      const maxPos = CONFIG.minesPerCell;
+      const maxNeg = CONFIG.whiteMinesPerCell;
+
+      const canPos = maxPos>0;
+      const canNeg = maxNeg>0;
+      const canQ = CONFIG.useMark;
+
+      if(this.markType===MARK_NONE){
+        if(canPos){ this.markType=MARK_POS; this.markCount=1; }
+        else if(canNeg){ this.markType=MARK_NEG; this.markCount=1; }
+        else if(canQ){ this.markType=MARK_Q; this.markCount=0; }
+      } else if(this.markType===MARK_POS){
+        if(this.markCount < maxPos) this.markCount++;
+        else {
+          if(canNeg){ this.markType=MARK_NEG; this.markCount=1; }
+          else if(canQ){ this.markType=MARK_Q; this.markCount=0; }
+          else { this.setMarkNone(); return; }
+        }
+      } else if(this.markType===MARK_NEG){
+        if(this.markCount < maxNeg) this.markCount++;
+        else {
+          if(canQ){ this.markType=MARK_Q; this.markCount=0; }
+          else { this.setMarkNone(); return; }
+        }
+      } else if(this.markType===MARK_Q){
+        this.setMarkNone(); return;
+      }
+
+      this.applyMarkVisual();
+    }
+
+    // 눌림 피드백(좌클릭 down 동안)
+    setPressed(on){
+      if(!this.cube.visible) return;
+      if(on){
+        this.cube.material.opacity = OPACITY_PRESSED;
+      } else {
+        this.syncCubeOpacity();
+      }
+    }
+
+    buildMinesVisual(){
+      const v=this.mineValue;
+      const count=Math.min(6, Math.abs(v));
+      const isNeg=v<0;
+      const col=isNeg?0xffffff:0x000000;
+
+      for(let i=0;i<6;i++) this.mineSpheres[i].visible=false;
+      if(count<=0) return;
+
+      const offsets=MINE_OFFSETS[count-1]||MINE_OFFSETS[0];
+      for(let i=0;i<count;i++){
+        const s=this.mineSpheres[i];
+        s.material.color.setHex(col);
+        s.position.copy(offsets[i]||new THREE.Vector3(0,0,0));
+        s.visible=true;
+      }
+    }
+
+    // 좌클릭/Chord는 “업”에서 처리하도록 외부에서 호출
+    openFromClick(){
+      if(this.isOpen) return;
+      if(gameState==="over" || gameState==="win") return;
+
+      // ?면 제거 후 열기
+      if(this.markType===MARK_Q){
+        this.setMarkNone();
+      }
+
+      // 깃발이면 좌클릭 open 금지
+      if(isFlagged(this)) return;
+
+      on_click_cell(this); // “on_click 흐름”으로 처리
+    }
+
+    openFromChord(){
+      if(this.isOpen) return;
+      if(isFlagged(this)) return;
+      if(this.markType===MARK_Q) this.setMarkNone();
+      on_click_cell(this);
+    }
+
+    // 내부 실제 open (start 이후 expand 포함)
+    _openInternal_afterStart(){
+      if(this.isOpen) return;
+      this.isOpen=true;
+      openedCount++;
+
+      this.cube.visible=false;
+      this.content.visible=true;
+
+      // 마킹/X 제거
+      this.setMarkNone();
+      this.showX(false);
+
+      // 지뢰면 게임오버
+      if(this.mineValue!==0){
+        this.mineGroup.visible=true;
+        gameOver(this);
+        return;
+      }
+
+      // 숫자/확장
+      if(this._numberSprite){
+        this.content.remove(this._numberSprite);
+        this._numberSprite=null;
+      }
+
+      if(this.adjValue===0){
+        expandTrueZerosFrom(this);
+      } else if(this.adjValue===1000){
+        const spr=getNumberSprite("0", numberColorByRule(0));
+        spr.userData.cell=this;
+        this.content.add(spr);
+        this._numberSprite=spr;
+      } else {
+        const spr=getNumberSprite(String(this.adjValue), numberColorByRule(this.adjValue));
+        spr.userData.cell=this;
+        this.content.add(spr);
+        this._numberSprite=spr;
+      }
+
+      checkWin();
+      updateScore();
+    }
+
+    setHover(on){
+      if(!this.cube.visible) return;
+      this.cube.material.emissive.setHex(on ? 0x334455 : 0x000000);
+    }
+  }
+
+  // ===== “코드 흐름”에 맞춘 on_click =====
+  function shouldAsyncGenerate(){
+    // 원본 코드: (use_nopick || max_mines_white+max_mines>500)
+    // 우리는 퍼포먼스 이슈가 실제로 생기는 조건으로 비슷하게 둠.
+    const totalCells = SIZE.x*SIZE.y*SIZE.z;
+    const totalMines = CONFIG.minesTotal + CONFIG.whiteMinesTotal;
+    return firstOpen && (totalCells > 20000 || totalMines > 5000);
+  }
+
+  function showOverlay(on){
+    if(!overlayEl) return;
+    if(on){
+      overlayEl.style.display = "flex";
+      overlayEl.classList.add("delayed-show");
+    } else {
+      overlayEl.style.display = "none";
+      overlayEl.classList.remove("delayed-show");
+    }
+  }
+
+  function startGameAt(cell){
+    // 첫 클릭에서 지뢰 배치/adj 계산/비주얼 구축
+    placeMinesAvoiding(cell);
+    computeAdjValues();
+    for(const c of cells) c.buildMinesVisual();
+    firstOpen=false;
+    gameState="playing";
+
+    startParentTimer();            // ✅ 추가
+    sendCountersToParent();
+  }
+
+  // Minefield.prototype.on_click 구조를 3D로 이식
+  function on_click_cell(cell){
+    const oldState = gameState;
+    if(gameState==="over" || gameState==="win") return;
+
+    // (원본) 깃발 처리 로직은 여기선 “좌클릭으로 깃발 순환”을 안 쓰므로 패스
+    // (요구: ? 좌클릭은 열림) -> openFromClick에서 이미 처리
+
+    if(gameState==="ready"){
+      setFace(2); // ✅ 추가: generating/thinking
+      // 첫 클릭: 무거우면 비동기 분기
+      if(shouldAsyncGenerate()){
+        _is_generating = true;         // ★ on_up 방어
+        showOverlay(true);
+
+        // 눌린 상태 유지(pressed/chord 시각 피드백 유지)
+        // (이미 down에서 적용되므로 그대로 둠)
+
+        setTimeout(()=>{
+          try{
+            startGameAt(cell);
+            cell._openInternal_afterStart();
+            if(oldState !== gameState) { /* 상태변화 */ }
+          } catch(e){
+            console.error(e);
+            alert("오류: " + e);
+          } finally {
+            _is_generating = false;
+            showOverlay(false);
+            setFace(0);
+            // 원본 finally: on_up을 수동 동기화
+            game_status2 = 0;
+            on_game_status_changed2();
+
+            // pressed/chord 해제
+            clearPressedAndChord();
+          }
+        }, 50);
+        return;
+      }
+
+      // 동기(가벼운 클릭)
+      startGameAt(cell);
+      cell._openInternal_afterStart();
+      if(oldState !== gameState) { /* 상태변화 */ }
+      return;
+    }
+
+    // playing 중 클릭(동기)
+    cell._openInternal_afterStart();
+  }
+
+  // ===== 인접값/확장/승패/게임오버 =====
+  function placeMinesAvoiding(firstCell){
+    placedBlackMines=0; placedWhiteMines=0;
+
+    const forbidden=new Set([idx(firstCell.x, firstCell.y, firstCell.z)]);
+    neighbors26(firstCell).forEach(n=>forbidden.add(idx(n.x,n.y,n.z)));
+
+    const candidates=[];
+    for(let z=0; z<SIZE.z; z++) for(let y=0; y<SIZE.y; y++) for(let x=0; x<SIZE.x; x++){
+      const id=idx(x,y,z);
+      if(!forbidden.has(id)) candidates.push(id);
+    }
+    for(let i=candidates.length-1;i>0;i--){
+      const j=(Math.random()*(i+1))|0;
+      [candidates[i],candidates[j]]=[candidates[j],candidates[i]];
+    }
+
+    let ptr=0;
+
+    let remainBlack = (CONFIG.minesPerCell>0) ? CONFIG.minesTotal : 0;
+    while(remainBlack>0 && ptr<candidates.length){
+      const c=cells[candidates[ptr++]];
+      if(c.mineValue!==0) continue;
+      const take=Math.min(remainBlack, randInt(1, Math.max(1, CONFIG.minesPerCell)));
+      c.mineValue=+take;
+      remainBlack-=take;
+      placedBlackMines+=take;
+    }
+
+    let remainWhite = (CONFIG.whiteMinesPerCell>0) ? CONFIG.whiteMinesTotal : 0;
+    while(remainWhite>0 && ptr<candidates.length){
+      const c=cells[candidates[ptr++]];
+      if(c.mineValue!==0) continue;
+      const take=Math.min(remainWhite, randInt(1, Math.max(1, CONFIG.whiteMinesPerCell)));
+      c.mineValue=-take;
+      remainWhite-=take;
+      placedWhiteMines+=take;
+    }
+  }
+
+  function computeAdjValues(){
+    for(const c of cells){
+      let net=0, absSum=0;
+      for(const n of neighbors26(c)){
+        net += n.mineValue;
+        absSum += Math.abs(n.mineValue);
+      }
+      c.adjValue = (net===0) ? ((absSum===0)?0:1000) : net;
+    }
+  }
+
+  function expandTrueZerosFrom(start){
+    const q=[start];
+    const visited=new Set([idx(start.x,start.y,start.z)]);
+    while(q.length){
+      const cur=q.shift();
+      for(const n of neighbors26(cur)){
+        const id=idx(n.x,n.y,n.z);
+        if(visited.has(id)) continue;
+        visited.add(id);
+
+        if(n.isOpen) continue;
+        if(isFlagged(n)) continue;
+        if(n.mineValue!==0) continue;
+        if(n.markType===MARK_Q) continue;
+
+        n.isOpen=true;
+        openedCount++;
+        n.cube.visible=false;
+        n.content.visible=true;
+
+        if(n._numberSprite){
+          n.content.remove(n._numberSprite);
+          n._numberSprite=null;
+        }
+
+        if(n.adjValue===0){
+          q.push(n);
+        } else if(n.adjValue===1000){
+          const spr=getNumberSprite("0", numberColorByRule(0));
+          spr.userData.cell=n;
+          n.content.add(spr);
+          n._numberSprite=spr;
+        } else {
+          const spr=getNumberSprite(String(n.adjValue), numberColorByRule(n.adjValue));
+          spr.userData.cell=n;
+          n.content.add(spr);
+          n._numberSprite=spr;
+        }
+      }
+    }
+  }
+
+  function mineCellCount(){ let m=0; for(const c of cells) if(c.mineValue!==0) m++; return m; }
+  
+
+  
+function autoFlagAllMines(){
+  for (const c of cells){
+    if (c.mineValue > 0){
+      c.markType = MARK_POS;
+      c.markCount = Math.min(6, Math.abs(c.mineValue));
+      c.applyMarkVisual();
+    } else if (c.mineValue < 0){
+      c.markType = MARK_NEG;
+      c.markCount = Math.min(6, Math.abs(c.mineValue));
+      c.applyMarkVisual();
+    }
+  }
+}
+
+function gameOver(hitCell){
+  if (gameState === "over" || gameState === "win") return;
+
+  gameState = "over";
+
+
+  setFace(-1);
+  requestPlaySound("gameover.wav");
+
+  // WinXP 스타일로 전체 공개
+  revealAfterDeath_WinXP(hitCell);
+
+  stopParentTimer();   // 타이머 정지 & 최종 전송
+  updateScore();
+}
+
+
+function checkWin(){
+  if (gameState !== "playing") return;
+
+  const totalCells = SIZE.x * SIZE.y * SIZE.z;
+
+  // ✅ “지뢰가 들어있는 칸”의 개수(양/음 모두 포함)
+  let mineCells = 0;
+  for (const c of cells) if (c.mineValue !== 0) mineCells++;
+
+  const safeCells = totalCells - mineCells;
+
+  // ✅ 승리 조건: 모든 안전칸 오픈
+  if (openedCount >= safeCells){
+    gameState = "win";
+
+
+    setFace(-2);
+    requestPlaySound("clear.wav");
+
+    // (선택) 남은 지뢰 자동 마킹
+    autoFlagAllMines();
+
+    updateScore();
+  stopParentTimer();             // ✅ 타이머 정지
+
+  }
+}
+
+
+
+function updateScore(){
+
+
+  // 실제 배치된 지뢰 “총 수”는 placedBlackMines / placedWhiteMines (숫자 합)
+  let posFlags = 0, negFlags = 0;
+  for (const c of cells){
+    if (c.markType === MARK_POS) posFlags += (c.markCount|0);
+    else if (c.markType === MARK_NEG) negFlags += (c.markCount|0);
+  }
+
+  const totalCells = SIZE.x * SIZE.y * SIZE.z;
+  let mineCells = 0;
+  for (const c of cells) if (c.mineValue !== 0) mineCells++;
+  const safeCells = totalCells - mineCells;
+
+
+      
+}
+
+  
+
+  // ===== Chord: “업”에서 실행 (정확히 숫자 스프라이트 클릭) =====
+  function getPickNumberCell(ev){
+    const rect=renderer.domElement.getBoundingClientRect();
+    mouseNDC.x=((ev.clientX-rect.left)/rect.width)*2-1;
+    mouseNDC.y=-(((ev.clientY-rect.top)/rect.height)*2-1);
+    raycaster.setFromCamera(mouseNDC, camera);
+
+    const targets=[];
+    for(const c of cells) if(c.isOpen && c._numberSprite) targets.push(c._numberSprite);
+
+    const hits = raycaster.intersectObjects(targets, false);
+    if(!hits.length) return null;
+    return hits[0].object.userData.cell || null;
+  }
+
+  function chordExecute(ev){
+    if(gameState!=="playing") return false;
+    const cell = getPickNumberCell(ev);
+    if(!cell) return false; // “정확히 숫자 텍스트 클릭” 조건
+
+    const shown = (cell.adjValue===1000) ? 0 : cell.adjValue;
+
+    let sumFlags=0, absFlags=0;
+    const neigh=neighbors26(cell);
+    for(const n of neigh){
+      sumFlags += flagSignedCount(n);
+      absFlags += flagAbsCount(n);
+    }
+
+    if(shown===0){
+      if(absFlags===0) return true;
+      if(sumFlags!==0) return true;
+      for(const n of neigh){
+        if(n.isOpen) continue;
+        if(isFlagged(n)) continue;
+        n.openFromChord(); // ? 포함
+      }
+      return true;
+    }
+
+    if(sumFlags!==shown) return true;
+
+    for(const n of neigh){
+      if(n.isOpen) continue;
+      if(isFlagged(n)) continue;
+      n.openFromChord(); // ? 포함
+    }
+    return true;
+  }
+
+  // ===== 클릭(큐브) 피킹: visible=true만 선택 (안보이는 큐브가 가로채지 못함) =====
+  function getPickCell(ev){
+    const rect=renderer.domElement.getBoundingClientRect();
+    mouseNDC.x=((ev.clientX-rect.left)/rect.width)*2-1;
+    mouseNDC.y=-(((ev.clientY-rect.top)/rect.height)*2-1);
+    raycaster.setFromCamera(mouseNDC, camera);
+
+    const hits = raycaster.intersectObjects(cubeMeshes, false);
+    if(!hits.length) return null;
+
+    for(const h of hits){
+      const obj = h.object;
+      if(obj && obj.visible){
+        return obj.userData.cell || null;
+      }
+    }
+    return null;
+  }
+
+  // ===== pressed/chord 상태 정리 =====
+  function clearPressedAndChord(){
+    if(leftDownCell && leftPressedApplied){
+      leftDownCell.setPressed(false);
+    }
+    leftDownCell = null;
+    leftPressedApplied = false;
+    setChordHighlight(false, null);
+    chordArmed = false;
+    chordKind = null;
+    chordPointerId = null;
+    leftCanceledByChord = false;
+middleStartXY = null;
+middleMoved = false;
+
+  }
+
+  // ===== init =====
+init();
+
+// iframe(부모가 존재)에서 열렸으면 init 받을 때까지 기본 보드 만들지 않음
+if (window.parent === window) {
+  // 단독 실행(직접 열기)일 땐 기존처럼 기본 보드
+  resetGame();
+} else {
+  // 임베드 실행이면: 화면 비워두고(또는 오버레이) init 기다림
+  showOverlay(true);
+  overlayEl.querySelector('.box').textContent = 'Loading…';
+
+  // 혹시 init이 안 오는 경우 대비(선택)
+  __BRIDGE.bootTimeout = setTimeout(() => {
+    // fallback: 그래도 기본 보드라도 띄우고 싶으면
+    resetGame();
+    showOverlay(false);
+  }, 800);
+}
+
+
+  function init(){
+    renderer=new THREE.WebGLRenderer({ antialias:true, alpha:true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+
+    scene=new THREE.Scene();
+    scene.fog=new THREE.Fog(0xC0C0C0, 18, 260);
+
+
+    camera=new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 900);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+    const dir=new THREE.DirectionalLight(0xffffff, 1.0);
+    dir.position.set(12,24,10);
+    scene.add(dir);
+
+    window.addEventListener("resize", onResize);
+
+    renderer.domElement.addEventListener("pointermove", onPointerMove);
+    renderer.domElement.addEventListener("pointerdown", onPointerDown);
+    renderer.domElement.addEventListener("pointerup", onPointerUp);
+    renderer.domElement.addEventListener("contextmenu", (e)=>e.preventDefault());
+    renderer.domElement.addEventListener("wheel", onWheel, { passive:false });
+// ✅ Middle-click auto-scroll(스크롤 아이콘) 방지: Chrome/Edge/Firefox 공통
+const stopMiddleAutoScroll = (e) => {
+  if (e.button === 1) {          // middle
+    e.preventDefault();
+    e.stopPropagation();
+    return false;
+  }
+};
+
+// 캡처링 + passive:false 가 중요
+renderer.domElement.addEventListener("mousedown", stopMiddleAutoScroll, { capture:true, passive:false });
+renderer.domElement.addEventListener("auxclick",  stopMiddleAutoScroll, { capture:true, passive:false });
+renderer.domElement.addEventListener("mouseup",   stopMiddleAutoScroll, { capture:true, passive:false });
+
+    updateCameraOrbit();
+    animate();
+    updateScore();
+    markBridgeReady();
+  }
+
+  function resetGame(){
+    stopParentTimer(false);
+  __elapsed = 0;
+  postToParent({ __mine3d:1, type:'timer', elapsed: 0 });
+    const old=scene.getObjectByName("BOARD");
+    if(old) scene.remove(old);
+
+    const oldGrid=scene.getObjectByName("GRID");
+    if(oldGrid) scene.remove(oldGrid);
+
+    const grid=new THREE.GridHelper(
+      Math.max(SIZE.x, SIZE.y)*SPACING*3,
+      Math.max(SIZE.x, SIZE.y)*3,
+      0x2a2a2a, 0x1f1f1f
+    );
+    grid.position.y = -SIZE.z*SPACING*0.5 - 2.2; // ✅ 깊이(SIZE.z)가 위/아래 축이 됨
+
+    grid.name="GRID";
+
+    scene.add(grid);
+
+    cells=[]; cubeMeshes=[];
+    firstOpen=true; gameState="ready";
+    openedCount=0; hoverCell=null;
+    placedBlackMines=0; placedWhiteMines=0;
+
+    _is_generating = false;
+    showOverlay(false);
+    clearPressedAndChord();
+
+    
+setFace(0); // ✅ reset은 항상 normal
+
+    const board=new THREE.Group();
+    board.name="BOARD";
+    scene.add(board);
+    const ox=-(SIZE.x-1)*SPACING*0.5; // cols -> X
+    const oy=-(SIZE.z-1)*SPACING*0.5; // depths -> Y (위로 쌓임)
+    const oz=-(SIZE.y-1)*SPACING*0.5; // rows -> Z
+
+
+    for(let z=0; z<SIZE.z; z++){
+      for(let y=0; y<SIZE.y; y++){
+        for(let x=0; x<SIZE.x; x++){
+          const pos=new THREE.Vector3(ox + x*SPACING,  oy + z*SPACING,   oz + y*SPACING   );
+          const c=new Cell(x,y,z,pos);
+          cells[idx(x,y,z)]=c;
+          board.add(c.group);
+          cubeMeshes.push(c.cube);
+        }
+      }
+    }
+
+    const span=Math.max(SIZE.x,SIZE.y,SIZE.z)*SPACING;
+    orbit.target.set(0,0,0);
+    orbit.radius=clamp(span*2.2, orbit.minRadius, orbit.maxRadius);
+    orbit.theta=0.9;
+    orbit.phi=1.0;
+    updateCameraOrbit();
+
+    updateScore();
+    sendCountersToParent();
+
+  }
+
+  function onResize(){
+    camera.aspect=innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  }
+
+  // ===== 입력 규칙(요청 반영) =====
+  function onPointerDown(ev){
+    // ✅ 좌/중 클릭이 발생하면(다운) 눌린 얼굴
+if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState === "win")) {
+  setFace(2);
+}
+
+  renderer.domElement.setPointerCapture(ev.pointerId);
+  const dead = (gameState === "over" || gameState === "win");
+
+  // ===== RIGHT DOWN: 즉시 마킹(단, chord면 마킹 금지) =====
+  if(ev.button === 2){
+    rightDown = true;
+
+    // (A) 이미 leftDown이라면: "좌->우" LR chord 시도
+    if(leftDown){
+      // 좌클릭 pressed 취소 + 좌클릭 결과(열기) 취소
+      leftCanceledByChord = true;
+      if(leftDownCell && leftPressedApplied){
+        leftDownCell.setPressed(false);
+        leftPressedApplied = false;
+      }
+
+      // 숫자면 숫자 기준, 아니면 큐브 기준으로 주변만 하이라이트
+      const numCell = (gameState==="playing") ? getPickNumberCell(ev) : null;
+      const center = numCell || getPickCell(ev) || leftDownCell;
+      if(center){
+        chordArmed = true;
+        chordKind = "lr";
+        chordPointerId = ev.pointerId;
+        setChordHighlight(true, center);
+      }
+      // chord 상황에서는 우클릭 마킹 금지 + 회전도 막음
+      rotDown = false;
+      return;
+    }
+
+    // (B) 일반 우클릭: 회전 준비 + 마킹 즉시
+    rotDown = true;
+    rotStartX = rotLastX = ev.clientX;
+    rotStartY = rotLastY = ev.clientY;
+
+    if (!dead){
+      const c = getPickCell(ev);
+      if(c) c.cycleMark(); // 살아있을 때만 마킹
+    }
+    return;
+  }
+
+  // ===== LEFT DOWN: 눌림 피드백(또는 chord 준비) =====
+  if(ev.button === 0){
+    if (dead) return; // 죽었으면 셀 클릭/pressed/chord 모두 무시
+
+    leftDown = true;
+    leftCanceledByChord = false;
+    leftDownXY = [ev.clientX, ev.clientY];
+    leftDownCell = getPickCell(ev);
+
+    // (C) 이미 rightDown이라면: "우->좌" LR chord 시도
+    if(rightDown){
+      leftCanceledByChord = true; // 좌클릭 open 취소
+      const numCell = (gameState==="playing") ? getPickNumberCell(ev) : null;
+      const center = numCell || leftDownCell;
+      if(center){
+        chordArmed = true;
+        chordKind = "lr";
+        chordPointerId = ev.pointerId;
+        setChordHighlight(true, center);
+      }
+      return; // pressed 적용 안 함
+    }
+
+    // (D) Shift+좌: chord 시도(숫자면 실행 가능 / 큐브면 “시도만”)
+    if(ev.shiftKey){
+      leftCanceledByChord = true;
+      const numCell = (gameState==="playing") ? getPickNumberCell(ev) : null;
+      const center = numCell || leftDownCell;
+      if(center){
+        chordArmed = true;
+        chordKind = "shiftLeft";
+        chordPointerId = ev.pointerId;
+        setChordHighlight(true, center);
+      }
+      return; // pressed 적용 안 함
+    }
+
+    // (E) 일반 좌클릭: down에서는 pressed만(한 칸 70%), 실제 처리는 up
+    if(leftDownCell){
+      leftDownCell.setPressed(true);
+      leftPressedApplied = true;
+    }
+    return;
+  }
+
+  // ===== MIDDLE DOWN: 숫자면 chord, 아니면 "큐브 chord 시도" + 드래그 pan 가능 =====
+  if(ev.button === 1){
+    if (dead){
+      // 죽었으면 pan만 가능 (큐브/숫자 chord는 금지)
+      panDown = true;
+      panLastX = ev.clientX;
+      panLastY = ev.clientY;
+      return;
+    }
+
+    middleDown = true;
+    middleStartXY = [ev.clientX, ev.clientY];
+    middleMoved = false;
+
+    if(gameState==="playing"){
+      const numCell = getPickNumberCell(ev);
+      if(numCell){
+        chordArmed = true;
+        chordKind = "middle";
+        chordPointerId = ev.pointerId;
+        setChordHighlight(true, numCell);
+        panDown = false;
+        return;
+      }
+    }
+
+    // 숫자 아니면: 큐브를 chord “시도”로 취급(주변만 70%),
+    // 단 드래그하면 pan으로 전환
+    const cubeCell = getPickCell(ev);
+    if(cubeCell){
+      chordArmed = true;
+      chordKind = "middleCube"; // ★ 실행은 안 함
+      chordPointerId = ev.pointerId;
+      setChordHighlight(true, cubeCell);
+    }
+    panDown = true;
+    panLastX = ev.clientX;
+    panLastY = ev.clientY;
+    return;
+  }
+}
+
+  function onPointerUp(ev){
+    // ★ on_up 흐름: 생성 중이면 리셋 금지
+    // (원본처럼, up에서 상태 리셋/pressed 해제를 막아야 함)
+        const dead = (gameState === "over" || gameState === "win");
+    if (dead){
+      // 드래그 상태만 정리하고, 셀 동작/pressed/chord는 절대 실행하지 않음
+      if (ev.button === 0){
+        leftDown = false;
+        if (leftDownCell && leftPressedApplied) leftDownCell.setPressed(false);
+      }
+      if (ev.button === 1){
+        middleDown = false;
+        panDown = false;
+      }
+      if (ev.button === 2){
+        rightDown = false;
+        rotDown = false;
+      }
+      clearPressedAndChord();
+      return;
+    }
+
+    const wasGenerating = _is_generating;
+
+    if(ev.button === 2){
+  rightDown = false;
+  rotDown = false;
+  if(!wasGenerating) on_up_global();
+
+  if(!wasGenerating && chordArmed && chordKind==="lr"){
+    setChordHighlight(false, null);
+    chordArmed = false;
+    chordKind = null;
+    chordPointerId = null;
+    leftCanceledByChord = false;
+  }
+  return;
+}
+
+if(ev.button === 1){
+  middleDown = false;
+
+  if(!wasGenerating){
+    if(chordArmed && chordKind==="middle"){
+      chordExecute(ev); // 숫자면 실행
+    }
+    // middleCube는 "시도만" 이므로 실행 없음
+
+    panDown = false;
+      if (gameState === "over" || gameState === "win"){
+    clearPressedAndChord();
+    return;
+  }
+    on_up_global();
+    clearPressedAndChord(); // 여기서 하이라이트 원복됨
+  }
+  return;
+}
+
+
+    if(ev.button === 0){
+  leftDown = false;
+
+  if(!wasGenerating && leftDownCell && leftPressedApplied){
+    leftDownCell.setPressed(false);
+  }
+  if(wasGenerating) return;
+
+  const dist = leftDownXY ? Math.hypot(ev.clientX-leftDownXY[0], ev.clientY-leftDownXY[1]) : 0;
+
+  // chord 모드(Shift/LR): 버튼을 떼는 순간 "숫자 위"면 실행, 아니면 아무 일 없음
+  if(chordArmed && (chordKind==="shiftLeft" || chordKind==="lr")){
+    chordExecute(ev);          // 숫자 아니면 false로 끝
+      if (gameState === "over" || gameState === "win"){
+    clearPressedAndChord();
+    return;
+  }
+    on_up_global();
+    clearPressedAndChord();
+    return;
+  }
+
+  // chord로 취소된 좌클릭이면 아무 것도 안 함
+  if(leftCanceledByChord){
+    on_up_global();
+    clearPressedAndChord();
+    return;
+  }
+
+  // 일반 좌클릭: up에서 처리
+  const upCell = getPickCell(ev);
+  if(dist <= MOVE_CANCEL_PX && upCell && leftDownCell && upCell === leftDownCell){
+    upCell.openFromClick();
+  }
+// ✅ openFromClick 도중 gameOver/win이 될 수 있음 → 끝났으면 0으로 덮어쓰지 않음
+if (gameState === "over" || gameState === "win"){
+  clearPressedAndChord();
+  return;
+}
+  on_up_global();
+  clearPressedAndChord();
+  return;
+}
+
+  }
+
+  function onPointerMove(ev){
+    // hover(닫힌 큐브만)
+       if (gameState === "over" || gameState === "win"){
+      if (hoverCell){ hoverCell.setHover(false); hoverCell = null; }
+    } else {
+      const c=getPickCell(ev);
+      if(c !== hoverCell){
+        if(hoverCell) hoverCell.setHover(false);
+        hoverCell = c;
+        if(hoverCell) hoverCell.setHover(true);
+      }
+    }
+
+// 중클릭: 큐브 chord 시도 상태에서 드래그가 일정 이상이면 chord 하이라이트를 끄고 pan만 수행
+if(middleDown && middleStartXY){
+  const dist = Math.hypot(ev.clientX-middleStartXY[0], ev.clientY-middleStartXY[1]);
+  if(!middleMoved && dist > MOVE_CANCEL_PX){
+    middleMoved = true;
+    if(chordArmed && chordKind === "middleCube"){
+      // pan으로 전환: chord 시도 취소
+      setChordHighlight(false, null);
+      chordArmed = false;
+      chordKind = null;
+      chordPointerId = null;
+    }
+  }
+}
+
+// pan (middle drag)
+if(panDown){
+  const dx=ev.clientX-panLastX;
+  const dy=ev.clientY-panLastY;
+  panLastX=ev.clientX;
+  panLastY=ev.clientY;
+  panByPixels(dx, dy);
+}
+
+    // pan (middle drag)
+    if(panDown){
+      const dx=ev.clientX-panLastX;
+      const dy=ev.clientY-panLastY;
+      panLastX=ev.clientX;
+      panLastY=ev.clientY;
+      panByPixels(dx, dy);
+    }
+
+    // rotate (right drag) : LR chord 중에는 회전 금지
+if(rotDown && !(chordArmed && chordKind==="lr")){
+      const dx=ev.clientX-rotLastX;
+      const dy=ev.clientY-rotLastY;
+      rotLastX=ev.clientX;
+      rotLastY=ev.clientY;
+
+      // 실제 회전
+      orbit.theta -= dx*0.006;
+      orbit.phi   -= dy*0.006;
+      updateCameraOrbit();
+    }
+
+    // 좌+우 chord: left down 상태에서 right down이 들어오면 onPointerDown에서 arm 처리
+    // 여기서는 nothing
+  }
+
+  function onWheel(ev){
+    ev.preventDefault();
+    const factor = 1 + (ev.deltaY * 0.001);
+    orbit.radius = clamp(orbit.radius * factor, orbit.minRadius, orbit.maxRadius);
+    updateCameraOrbit();
+  }
+
+  function animate(){
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+  }
+
+  // ====== 생성/보드 ======
+  function buildMinesVisualAll(){
+    for(const c of cells) c.buildMinesVisual();
+  }
+  //=====중요!자동풀이====
+  // 3D drop-in: same algorithm + same "first choice" policy as 2D (only +z dimension)
+function solveonestep3D(input) {
+  const self = this || {};
+
+  const W = (input && input.columns != null ? input.columns : (input && input.cols != null ? input.cols : (SIZE?.x ?? 0))) | 0;
+  const H = (input && input.rows    != null ? input.rows    : (input && input.rows_ != null ? input.rows_ : (SIZE?.y ?? 0))) | 0;
+  const D = (input && input.depths  != null ? input.depths  : (input && input.depth != null ? input.depth : (SIZE?.z ?? 0))) | 0;
+
+  const capB = (input && input.max_mines != null ? input.max_mines : (input && input.max_mines_black != null ? input.max_mines_black : (CONFIG?.minesPerCell ?? 1))) | 0;
+  const capW = (input && input.max_mines_white != null ? input.max_mines_white : (CONFIG?.whiteMinesPerCell ?? 0)) | 0;
+
+  const numWhite = (input && input.num_mines_white != null)
+    ? (input.num_mines_white | 0)
+    : ((typeof placedWhiteMines !== "undefined" ? placedWhiteMines : 0) | 0);
+
+  const hasWhites = (numWhite > 0) && (capW > 0);
+  const classicMode = (!hasWhites) && (Math.max(1, capB) === 1);
+
+  const idx = (x, y, z) => (x + W * (y + H * z)) | 0;
+
+  // ---------- cell getter ----------
+  function getCell(x,y,z){
+    if (input && typeof input.cellAt === "function") return input.cellAt(x,y,z);
+    // 3dmine.html 기준
+    return cells[idx(x,y,z)];
+  }
+
+  // ---------- near value ----------
+  // input.near_mines가 있으면 near[x][y][z], 없으면 cell.adjValue
+  function nearVal(x,y,z){
+    if (input && input.near_mines){
+      const near = input.near_mines;
+      return (near && near[x] && near[x][y] ? (near[x][y][z] | 0) : 0) | 0;
+    }
+    const c = getCell(x,y,z);
+    return (c ? (c.adjValue|0) : 0) | 0;
+  }
+
+  // ---------- opened 판정 ----------
+  let openedFn = null;
+  if (input && input.opened != null) {
+    if (typeof input.opened === "function") {
+      openedFn = input.opened;
+    } else {
+      const op = input.opened;
+      if (Array.isArray(op) && Array.isArray(op[0]) && Array.isArray(op[0][0])) {
+        openedFn = (x, y, z) => !!op[x][y][z];
+      } else {
+        openedFn = (x, y, z) => !!op[idx(x, y, z)];
+      }
+    }
+  } else {
+    openedFn = (x, y, z) => {
+      const c = getCell(x,y,z);
+      return !!(c && c.isOpen);
+    };
+  }
+
+  // ---------- flag 값(부호 포함) ----------
+  function flagVal(x, y, z) {
+    if (input && input.flags){
+      const flags = input.flags;
+      const v = (flags && flags[x] && flags[x][y]) ? (flags[x][y][z] | 0) : 0;
+      return v | 0;
+    }
+    // 3dmine.html의 현재 마킹 기반
+    const c = getCell(x,y,z);
+    if (!c) return 0;
+    if (c.markType === MARK_POS) return (c.markCount|0);
+    if (c.markType === MARK_NEG) return (-(c.markCount|0))|0;
+    return 0;
+  }
+
+  // ---------- 인접 좌표(26) ----------
+  function neigh(x, y, z) {
+    if (input && typeof input.near_positions === "function") return input.near_positions(x, y, z);
+    // 3dmine.html
+    const c = getCell(x,y,z);
+    const ns = neighbors26(c); // Cell[]
+    const out = new Array(ns.length);
+    for (let i=0;i<ns.length;i++) out[i] = [ns[i].x|0, ns[i].y|0, ns[i].z|0];
+    return out;
+  }
+
+  // =========================================================
+  // 1) 제약에서 frontier(vars/cons) 구성 (2D와 동일)
+  // =========================================================
+  const varIndex = new Map();      // "x,y,z" -> id
+  const vars = [];                // id -> [x,y,z]
+  const cons = [];                // { vars:[id...], target:int, isAbs:bool }
+
+  function addVar(x, y, z) {
+    const key = x + "," + y + "," + z;
+    let id = varIndex.get(key);
+    if (id == null) { id = vars.length; varIndex.set(key, id); vars.push([x, y, z]); }
+    return id;
+  }
+
+  // (A) true-zero(near==0) 열린 칸 → 인접 첫 안전 오픈
+  for (let z = 0; z < D; z++) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (!openedFn(x, y, z)) continue;
+    const v0 = nearVal(x,y,z) | 0;
+    if (v0 !== 0) continue;
+
+    const adj = neigh(x, y, z);
+
+    let bad = false;
+    for (let i = 0; i < adj.length; i++) {
+      const nx = adj[i][0], ny = adj[i][1], nz = adj[i][2];
+      const f = flagVal(nx, ny, nz);
+      if (f !== 0) { bad = true; break; }
+    }
+    if (bad) continue;
+
+    for (let i = 0; i < adj.length; i++) {
+      const nx = adj[i][0], ny = adj[i][1], nz = adj[i][2];
+      if (openedFn(nx, ny, nz)) continue;
+      if (flagVal(nx, ny, nz) !== 0) continue;
+      return { kind: "open", x: nx, y: ny, z: nz, reason: "RuleA N==0 (true 0)" };
+    }
+  }
+
+  // (B) 일반 숫자칸(±n 또는 1000) 제약 수집
+  for (let z = 0; z < D; z++) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (!openedFn(x, y, z)) continue;
+
+    const raw = nearVal(x,y,z) | 0;
+    if (raw === 0) continue;
+
+    let target = (raw === 1000 ? 0 : raw) | 0;
+    let isAbs = (raw === 1000);
+    let absFixed = 0;
+
+    const adj = neigh(x, y, z);
+    const vs = [];
+    for (let i = 0; i < adj.length; i++) {
+      const nx = adj[i][0], ny = adj[i][1], nz = adj[i][2];
+      if (openedFn(nx, ny, nz)) continue;
+
+      const f = flagVal(nx, ny, nz);
+      if (f !== 0) {
+        target -= f;
+        absFixed += Math.abs(f);
+        continue;
+      }
+      vs.push(addVar(nx, ny, nz));
+    }
+
+    if (isAbs && absFixed > 0) isAbs = false;
+
+    if (vs.length > 0 || isAbs) cons.push({ vars: vs, target: target | 0, isAbs: !!isAbs });
+  }
+
+  if (vars.length === 0 || cons.length === 0) return null;
+
+  // =========================================================
+  // 2) 로컬 규칙 (2D와 동일 구조/정책)
+  // =========================================================
+  function returnFirstOpenFromList(list, reason) {
+    for (let k = 0; k < list.length; k++) {
+      const item = list[k];
+      const x = Array.isArray(item) ? item[0] : vars[item][0];
+      const y = Array.isArray(item) ? item[1] : vars[item][1];
+      const z = Array.isArray(item) ? item[2] : vars[item][2];
+      if (openedFn(x, y, z)) continue;
+      if (flagVal(x, y, z) !== 0) continue;
+      return { kind: "open", x, y, z, reason };
+    }
+    return null;
+  }
+  function returnFirstFixFromList(list, val, reason) {
+    for (let k = 0; k < list.length; k++) {
+      const item = list[k];
+      const x = Array.isArray(item) ? item[0] : vars[item][0];
+      const y = Array.isArray(item) ? item[1] : vars[item][1];
+      const z = Array.isArray(item) ? item[2] : vars[item][2];
+      if (openedFn(x, y, z)) continue;
+      if (flagVal(x, y, z) !== 0) continue;
+      return { kind: "markMine", x, y, z, reason, val: val | 0 };
+    }
+    return null;
+  }
+
+  // ---- (2-1) RuleA/B ----
+  {
+    for (let ci = 0; ci < cons.length; ci++) {
+      const c = cons[ci];
+      const vs = c.vars;
+      const U = vs.length | 0;
+      const N = c.target | 0;
+      if (U <= 0) continue;
+
+      if (U === 1) {
+        const [x, y, z] = vars[vs[0]];
+        if (c.isAbs && N === 0) continue;
+
+        if (N === 0 && !c.isAbs) {
+          if (!openedFn(x, y, z) && flagVal(x, y, z) === 0)
+            return { kind: "open", x, y, z, reason: "RuleB U==1,N==0" };
+        } else {
+          if (N !== 0 && !openedFn(x, y, z) && flagVal(x, y, z) === 0) {
+            if (N < -capW || N > capB) continue;
+            return { kind: "markMine", x, y, z, reason: "RuleB U==1 exact", val: N | 0 };
+          }
+        }
+      }
+
+      if (!hasWhites) {
+        if (!c.isAbs && N === 0) {
+          const r = returnFirstOpenFromList(vs, "RuleA N==0");
+          if (r) return r;
+        }
+        if (classicMode && !c.isAbs && N === U) {
+          const r = returnFirstFixFromList(vs, 1, "RuleB N==U");
+          if (r) return r;
+        }
+        if (!classicMode && !c.isAbs && N === (U * capB)) {
+          const r = returnFirstFixFromList(vs, capB, "RuleB cap");
+          if (r) return r;
+        }
+      }
+    }
+  }
+
+  // ---- (2-2) Subset ----
+  {
+    const small = [];
+    for (let ci = 0; ci < cons.length; ci++) {
+      const c = cons[ci];
+      if (c.isAbs) continue;
+      if (!c.vars || c.vars.length === 0) continue;
+      if (c.vars.length > 8) continue;
+      small.push({ s: new Set(c.vars), t: c.target | 0 });
+    }
+
+    function isSubset(A, B) {
+      for (const v of A) if (!B.has(v)) return false;
+      return true;
+    }
+
+    // 2D의 (y,x) 정렬을 3D에선 (z,y,x)로 “차원만 +1” 확장
+    function pickFirstCoord(coords) {
+      coords.sort((p, q) => (p[2] - q[2]) || (p[1] - q[1]) || (p[0] - q[0]));
+      return coords[0];
+    }
+
+    for (let i = 0; i < small.length; i++) {
+      for (let j = 0; j < small.length; j++) {
+        if (i === j) continue;
+        const A = small[i], B = small[j];
+        if (!isSubset(A.s, B.s)) continue;
+
+        const S = [];
+        for (const v of B.s) if (!A.s.has(v)) S.push(v);
+        if (S.length === 0) continue;
+
+        const delta = (B.t - A.t) | 0;
+
+        if (S.length === 1) {
+          const [x, y, z] = vars[S[0]];
+          if (openedFn(x, y, z) || flagVal(x, y, z) !== 0) continue;
+          if (delta === 0) return { kind: "open", x, y, z, reason: "subset single exact (0)" };
+          if (delta < -capW || delta > capB) continue;
+          return { kind: "markMine", x, y, z, reason: "subset single exact", val: delta | 0 };
+        }
+
+        if (!hasWhites) {
+          if (delta === 0) {
+            const coords = S.map(id => vars[id]).filter(([x,y,z]) => !openedFn(x,y,z) && flagVal(x,y,z) === 0);
+            if (coords.length) {
+              const [x,y,z] = pickFirstCoord(coords);
+              return { kind: "open", x, y, z, reason: "subset Δ=0" };
+            }
+          } else if (delta === (S.length * capB)) {
+            const coords = S.map(id => vars[id]).filter(([x,y,z]) => !openedFn(x,y,z) && flagVal(x,y,z) === 0);
+            if (coords.length) {
+              const [x,y,z] = pickFirstCoord(coords);
+              return { kind: "markMine", x, y, z, reason: "subset Δ=|S|*cap", val: capB | 0 };
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // ---- (2-3) Bounds ----
+  {
+    const n = vars.length | 0;
+    if (n > 0 && cons.length > 0) {
+      const vmin = new Int16Array(n);
+      const vmax = new Int16Array(n);
+      for (let i = 0; i < n; i++) {
+        vmin[i] = hasWhites ? (-capW | 0) : 0;
+        vmax[i] = capB | 0;
+      }
+
+      for (let iter = 0; iter < 10; iter++) {
+        let any = false;
+        for (let ci = 0; ci < cons.length; ci++) {
+          const c = cons[ci];
+          if (c.isAbs) continue;
+          const vs = c.vars;
+          if (!vs || vs.length === 0) continue;
+          const N = c.target | 0;
+
+          let sumMin = 0, sumMax = 0;
+          for (let k = 0; k < vs.length; k++) { sumMin += vmin[vs[k]]; sumMax += vmax[vs[k]]; }
+
+          for (let k = 0; k < vs.length; k++) {
+            const id = vs[k];
+            const othersMin = sumMin - vmin[id];
+            const othersMax = sumMax - vmax[id];
+            const newMin = Math.max(vmin[id], N - othersMax);
+            const newMax = Math.min(vmax[id], N - othersMin);
+            if (newMin > vmin[id]) { vmin[id] = newMin; any = true; }
+            if (newMax < vmax[id]) { vmax[id] = newMax; any = true; }
+          }
+        }
+        if (!any) break;
+      }
+
+      let best = null;
+      for (let id = 0; id < n; id++) {
+        if (vmin[id] !== vmax[id]) continue;
+        const [x, y, z] = vars[id];
+        if (openedFn(x, y, z) || flagVal(x, y, z) !== 0) continue;
+
+        const v = vmin[id] | 0;
+        const cand = (v === 0)
+          ? { kind: "open", x, y, z, reason: hasWhites ? "bounds (general) ==0" : "bounds min==max==0" }
+          : { kind: "markMine", x, y, z, reason: hasWhites ? "bounds (general) exact" : "bounds exact", val: v | 0 };
+
+        // 2D의 (y,x) 비교를 3D에선 (z,y,x)로 확장
+        if (!best || (cand.z < best.z) || (cand.z === best.z && (cand.y < best.y || (cand.y === best.y && cand.x < best.x))))
+          best = cand;
+      }
+      if (best) return best;
+    }
+  }
+
+  // ---- (3) GAC 훅 (2D와 동일한 “옵션 단계”) ----
+  {
+    const gacFn = (input && typeof input._enforceGACSigned === "function")
+      ? input._enforceGACSigned
+      : (typeof self._enforceGACSigned === "function" ? self._enforceGACSigned : null);
+
+    if (gacFn) {
+      const COMP_CAP = 48;
+      if (vars.length <= COMP_CAP) {
+        const r = gacFn.call(self, vars, cons, capB, capW);
+        if (r && !r.fail && r.decided && r.decided.length) {
+          let best = null;
+          for (let i = 0; i < r.decided.length; i++) {
+            const d = r.decided[i];
+            if (openedFn(d.x, d.y, d.z) || flagVal(d.x, d.y, d.z) !== 0) continue;
+            const cand = (d.type === "open")
+              ? { kind: "open", x: d.x, y: d.y, z: d.z, reason: "GAC domain=={0}" }
+              : { kind: "markMine", x: d.x, y: d.y, z: d.z, reason: "GAC singleton", val: (d.val | 0) };
+
+            if (!best || (cand.z < best.z) || (cand.z === best.z && (cand.y < best.y || (cand.y === best.y && cand.x < best.x))))
+              best = cand;
+          }
+          if (best) return best;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+// 원하면 전역으로 노출
+window.solveonestep3D = solveonestep3D;
+// ===============================
+// 3D assist (hint/auto) - one step
+// ===============================
+function __cellAt3D(x,y,z){
+  if (!inBounds(x,y,z)) return null;
+  return cells[idx(x,y,z)];
+}
+
+function __isFlag3D(c){
+  return c && (c.markType === MARK_POS || c.markType === MARK_NEG);
+}
+
+function __flagSigned3D(c){
+  if (!c) return 0;
+  if (c.markType === MARK_POS) return (c.markCount|0);
+  if (c.markType === MARK_NEG) return (-(c.markCount|0))|0;
+  return 0;
+}
+
+function __frontierClosedCells3D(){
+  const out = [];
+  const seen = new Set();
+  for (const a of cells){
+    if (!a) continue;
+    const anchor = a.isOpen || __isFlag3D(a);
+    if (!anchor) continue;
+
+    const ns = neighbors26(a);
+    for (const n of ns){
+      if (!n) continue;
+      if (n.isOpen) continue;
+      if (__isFlag3D(n)) continue;          // 깃발은 후보 제외
+      // ?(MARK_Q)는 "깃발없음" 취급이므로 후보 포함
+      const key = `${n.x},${n.y},${n.z}`;
+      if (!seen.has(key)){
+        seen.add(key);
+        out.push(n);
+      }
+    }
+  }
+  return out;
+}
+
+// "찍기 불가피" 시: frontier 중 임의 1칸의 정답을 제공
+function __pickOneTruthCell3D(){
+  const cand = __frontierClosedCells3D();
+  if (!cand.length) return null;
+  const c = cand[(Math.random() * cand.length) | 0];
+  const ans = (c.mineValue|0);
+  if (ans === 0) return { kind:"open", x:c.x, y:c.y, z:c.z, reason:"찍기 불가피-한 칸의 정답을 제공", usedGuess:true };
+  return { kind:"markMine", x:c.x, y:c.y, z:c.z, val:ans, reason:"찍기 불가피-한 칸의 정답을 제공", usedGuess:true };
+}
+
+function __fixWrongFlag3D(){
+  for (const c of cells){
+    if (!c) continue;
+    if (!__isFlag3D(c)) continue;
+    const f = __flagSigned3D(c);
+    const ans = (c.mineValue|0);
+    if (f !== ans){
+      return { kind:"fixFlag", x:c.x, y:c.y, z:c.z, val:ans, reason:"잘못 마킹한 칸이 있습니다" };
+    }
+  }
+  return null;
+}
+
+function __applyStep3D(step){
+  if (!step) return false;
+  const c = __cellAt3D(step.x|0, step.y|0, step.z|0);
+  if (!c) return false;
+
+  if (step.kind === "open"){
+    // ?면 제거 후 열기: openFromClick 안에 이미 처리( MARK_Q 제거/깃발이면 무시 )
+    c.openFromClick();
+    return true;
+  }
+
+  if (step.kind === "fixFlag" || step.kind === "markMine"){
+    const v = ("val" in step) ? (step.val|0) : (c.mineValue|0);
+
+    // v==0이면 깃발 제거
+    if (v === 0){
+      c.setMarkNone();
+      return true;
+    }
+
+    const abs = Math.min(6, Math.max(1, Math.abs(v|0)));
+    c.markType  = (v > 0) ? MARK_POS : MARK_NEG;
+    c.markCount = abs;
+    c.applyMarkVisual();
+    return true;
+  }
+
+  return false;
+}
+
+// parent에서 호출되는 “1스텝 보조(힌트/자동)”
+// 2D 찍기있음 로직과 동일한 우선순위:
+// 1) 오답 깃발 수정
+// 2) solveonestep3D
+// 3) (hint 또는 auto 첫회) 정답 1칸 제공(찍기)
+function __mine3d_assist_once(mode){
+  mode = mode || { cause:"hint", isFirstAuto:true };
+
+  // 죽음/승리면 종료
+  if (gameState === "over" || gameState === "win"){
+    return { ok:false, done:true, gameState, step:null };
+  }
+
+  // 1) wrong flag
+  let step = __fixWrongFlag3D();
+  if (step){
+    __applyStep3D(step);
+    return { ok:true, gameState, step };
+  }
+
+  // 2) solveonestep3D
+  step = (typeof solveonestep3D === "function") ? solveonestep3D() : null;
+  if (step){
+    // solveonestep3D는 {kind, x,y,z, val?, reason}
+    __applyStep3D(step);
+    return { ok:true, gameState, step };
+  }
+
+  // 3) guess (hint or first auto only)
+  if (mode.cause === "hint" || (mode.cause === "auto" && mode.isFirstAuto)){
+    step = __pickOneTruthCell3D();
+    if (step){
+      __applyStep3D(step);
+      return { ok:true, gameState, step };
+    }
+  }
+
+  return { ok:false, gameState, step:null };
+}
+(function install3DSolverBridge(){
+  const send = (msg) => {
+    try { window.parent?.postMessage({ __mine3d: 1, ...msg }, '*'); } catch(e) {}
+  };
+
+  let timer = null;
+  let running = false;
+  let paused  = false;
+  let firstAuto = true;
+
+  function syncState(){
+    send({ type:'solverState', running, paused });
+  }
+
+  function stop(){
+    if (timer) { clearInterval(timer); timer = null; }
+    running = false;
+    paused  = false;
+    firstAuto = true;
+    syncState();
+  }
+
+  function start(){
+    if (timer) clearInterval(timer);
+    running = true;
+    paused  = false;
+    firstAuto = true;
+    syncState();
+
+    timer = setInterval(() => {
+      if (!running || paused) return;
+
+      // 1틱 1스텝
+      const r = __mine3d_assist_once({ cause:'auto', isFirstAuto: firstAuto });
+      firstAuto = false;
+
+      if (!r || !r.ok || !r.step){
+        stop();
+        return;
+      }
+
+      // (선택) 부모 콘솔에 로그 남기고 싶으면
+      send({ type:'solverStep', step: r.step });
+    }, 40);
+  }
+
+  function hint(){
+    const r = __mine3d_assist_once({ cause:'hint', isFirstAuto:true });
+    if (r && r.ok && r.step){
+      send({ type:'solverStep', step: r.step });
+    }
+  }
+
+  window.addEventListener('message', (e) => {
+    const m = e.data;
+    if (!m || !m.__mine3d) return;
+
+    // solver 명령
+    if (m.type === 'solver'){
+      switch (m.cmd){
+        case 'start':  start(); break;
+        case 'pause':  paused = true;  syncState(); break;
+        case 'resume': paused = false; syncState(); break;
+        case 'stop':   stop(); break;
+        case 'hint':   hint(); break;
+      }
+      return;
+    }
+
+    // (옵션) 리셋 명령이 오면 자동풀이도 멈춤
+    if (m.type === 'reset'){
+      stop();
+      // 여기서 3D 보드 리셋 함수가 있으면 호출
+      // resetBoard3D?.();
+      return;
+    }
+  });
+
+  // 로드 시 ready 신호 (부모가 이미 처리 중)
+  window.addEventListener('load', () => send({ type:'ready' }));
+})();
+// 3D iframe -> parent 키 전달
+(function installKeyForward(){
+  window.addEventListener('keydown', (e) => {
+    // main.html에서 쓰는 키만 전달 (필요하면 더 추가)
+    const k = (e.key || '');
+    const up = k.length === 1 ? k.toUpperCase() : k;
+
+    const allow = new Set([
+      'F1','F2','F3','F4',
+      'N','B','I','E','C','M','L','S','T','X','H','A'
+    ]);
+
+    if (!allow.has(up)) return;
+
+    e.preventDefault();
+
+    parent.postMessage({
+      __mine3d: 1,
+      type: 'key',
+      key: e.key,
+      code: e.code,
+      ctrlKey: e.ctrlKey,
+      altKey: e.altKey,
+      shiftKey: e.shiftKey,
+      metaKey: e.metaKey
+    }, '*');
+  }, true);
+})();
+
+</script>
+
+</body>
+</html>

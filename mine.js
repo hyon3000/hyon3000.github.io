@@ -3200,8 +3200,12 @@ Minefield.prototype._detachDelegatedEvents = function () {
       }
 
       var td_class = this.get_class(start_x, start_y);
-      if (td_class !== null && (td_class !== "flag-0" && /^flag/.exec(td_class))) {
+      if (td_class !== null && (td_class !== "flag-0" &&td_class !== "flag-0 flag0pressed" && td_class !== "flag0pressed flag-0" && /^flag/.exec(td_class))) {
         return 1;
+      }
+      //td_class가 flag-0이나 flag0pressed 중 하나 이상을포함하면 setclass를 모두삭제
+      if (td_class === "flag-0" || td_class === "flag-0 flag0pressed" || td_class === "flag0pressed flag-0") {
+        this.set_class(start_x, start_y, null);
       }
 
       // 첫 클릭 보호(검/흰 모두)
