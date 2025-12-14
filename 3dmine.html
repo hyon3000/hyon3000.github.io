@@ -729,6 +729,45 @@ let leftCanceledByChord = false;
 // 중클릭: 숫자 아니면 "큐브 chord 시도" + 드래그하면 pan으로 전환
 let middleStartXY = null;
 let middleMoved = false;
+// ===== 모바일(터치) 전용 제스처 =====
+const IS_MOBILE = matchMedia?.("(pointer: coarse)")?.matches || ("ontouchstart" in window);
+
+const TOUCH = {
+  active:false,
+  pointerId:null,
+  startX:0, startY:0,
+  lastX:0, lastY:0,
+  rotate:false,
+  longPressTimer:null,
+  longPressFired:false,
+  downCell:null,
+  pressedApplied:false,
+};
+
+const DOUBLE_TAP_MS = 280;
+const DOUBLE_TAP_DIST = 22;
+let lastTap = { t:0, x:0, y:0, onNumber:false };
+
+function clearLongPress(){
+  if (TOUCH.longPressTimer){
+    clearTimeout(TOUCH.longPressTimer);
+    TOUCH.longPressTimer = null;
+  }
+}
+
+function resetTouchState(){
+  clearLongPress();
+  TOUCH.active = false;
+  TOUCH.pointerId = null;
+  TOUCH.rotate = false;
+  TOUCH.longPressFired = false;
+  TOUCH.downCell = null;
+  TOUCH.pressedApplied = false;
+}
+
+function touchDist(ev){
+  return Math.hypot(ev.clientX - TOUCH.startX, ev.clientY - TOUCH.startY);
+}
 
   // ===== Cell =====
   class Cell{
@@ -1754,6 +1793,50 @@ setFace(0); // ✅ reset은 항상 normal
 
   // ===== 입력 규칙(요청 반영) =====
   function onPointerDown(ev){
+  // ===== 모바일 터치 전용 =====
+  if (IS_MOBILE && ev.pointerType === "touch") {
+    renderer.domElement.setPointerCapture(ev.pointerId);
+
+    const dead = (gameState === "over" || gameState === "win");
+
+    // 얼굴(눌림)
+    if (!dead) setFace(2);
+
+    // 터치 상태 초기화
+    resetTouchState();
+    TOUCH.active = true;
+    TOUCH.pointerId = ev.pointerId;
+    TOUCH.startX = TOUCH.lastX = ev.clientX;
+    TOUCH.startY = TOUCH.lastY = ev.clientY;
+
+    // 닫힌 큐브를 눌렀으면 pressed 피드백
+    TOUCH.downCell = dead ? null : getPickCell(ev);
+    if (TOUCH.downCell && !TOUCH.downCell.isOpen) {
+      TOUCH.downCell.setPressed(true);
+      TOUCH.pressedApplied = true;
+
+      // 길게 누르면 우클릭(마킹 순환) 처리
+      TOUCH.longPressTimer = setTimeout(() => {
+        // 아직 터치 중이고, 드래그로 회전 전환 안 되었고, 게임 살아있고, 닫힌 큐브일 때만
+        if (!TOUCH.active) return;
+        if (TOUCH.rotate) return;
+        if (gameState === "over" || gameState === "win") return;
+
+        const c = TOUCH.downCell;
+        if (!c || c.isOpen) return;
+
+        // 길게누름 = 우클릭 마킹
+        c.cycleMark();
+        TOUCH.longPressFired = true;
+
+        // pressed 해제(시각)
+        if (TOUCH.pressedApplied) c.setPressed(false);
+        TOUCH.pressedApplied = false;
+      }, 520);
+    }
+    return; // ✅ 데스크톱 로직 타지 않음
+  }
+
     // ✅ 좌/중 클릭이 발생하면(다운) 눌린 얼굴
 if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState === "win")) {
   setFace(2);
@@ -1889,6 +1972,75 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
 }
 
   function onPointerUp(ev){
+    // ===== 모바일 터치 전용 =====
+  if (IS_MOBILE && ev.pointerType === "touch") {
+    if (!TOUCH.active) return;
+
+    clearLongPress();
+
+    // pressed 해제
+    if (TOUCH.downCell && TOUCH.pressedApplied) {
+      TOUCH.downCell.setPressed(false);
+      TOUCH.pressedApplied = false;
+    }
+
+    // 회전이었다면 아무 동작 없이 종료
+    if (TOUCH.rotate) {
+      if (!(gameState === "over" || gameState === "win")) setFace(0);
+      resetTouchState();
+      return;
+    }
+
+    // 길게누름(우클릭 마킹) 발생했으면 "탭 열기"는 하지 않음
+    if (TOUCH.longPressFired) {
+      if (!(gameState === "over" || gameState === "win")) setFace(0);
+      resetTouchState();
+      return;
+    }
+
+    // ===== 탭 처리 =====
+    const now = performance.now();
+
+    // 1) 숫자 더블탭 => chording
+    if (gameState === "playing") {
+      const numCell = getPickNumberCell(ev); // (열린 숫자 스프라이트 hit)
+      if (numCell) {
+        const isDouble =
+          lastTap.onNumber &&
+          (now - lastTap.t) <= DOUBLE_TAP_MS &&
+          (Math.hypot(ev.clientX - lastTap.x, ev.clientY - lastTap.y) <= DOUBLE_TAP_DIST);
+
+        if (isDouble) {
+          chordExecute(ev); // 숫자 위에서만 실행됨(내부 조건 동일)
+          lastTap = { t:0, x:0, y:0, onNumber:false };
+          if (!(gameState === "over" || gameState === "win")) setFace(0);
+          resetTouchState();
+          return;
+        } else {
+          // 첫 탭(싱글탭)은 기록만 하고 아무 것도 안 함
+          lastTap = { t: now, x: ev.clientX, y: ev.clientY, onNumber:true };
+          if (!(gameState === "over" || gameState === "win")) setFace(0);
+          resetTouchState();
+          return;
+        }
+      }
+    }
+
+    // 2) 큐브 탭 => 기존 좌클릭(openFromClick)과 동일 조건(다운/업 같은 셀일 때)
+    const upCell = getPickCell(ev);
+    if (upCell && TOUCH.downCell && upCell === TOUCH.downCell) {
+      upCell.openFromClick();
+    }
+
+    // 게임 종료면 얼굴을 0으로 덮지 않음
+    if (!(gameState === "over" || gameState === "win")) setFace(0);
+
+    // 숫자 더블탭이 아니면 lastTap은 리셋(엉뚱한 곳 더블탭 방지)
+    lastTap = { t:0, x:0, y:0, onNumber:false };
+
+    resetTouchState();
+    return; // ✅ 데스크톱 로직 타지 않음
+  }
     // ★ on_up 흐름: 생성 중이면 리셋 금지
     // (원본처럼, up에서 상태 리셋/pressed 해제를 막아야 함)
         const dead = (gameState === "over" || gameState === "win");
@@ -1995,6 +2147,39 @@ if (gameState === "over" || gameState === "win"){
   }
 
   function onPointerMove(ev){
+    if (IS_MOBILE && ev.pointerType === "touch") {
+    if (!TOUCH.active) return;
+
+    // hover는 모바일에선 생략(원하면 유지 가능)
+    if (hoverCell){ hoverCell.setHover(false); hoverCell = null; }
+
+    const dist = touchDist(ev);
+
+    // 일정 거리 이상 움직이면 "탭"을 취소하고 "회전"으로 전환
+    if (!TOUCH.rotate && dist > MOVE_CANCEL_PX) {
+      TOUCH.rotate = true;
+      clearLongPress();
+
+      // 탭(셀 열기) 취소: pressed 피드백도 해제
+      if (TOUCH.downCell && TOUCH.pressedApplied) {
+        TOUCH.downCell.setPressed(false);
+        TOUCH.pressedApplied = false;
+      }
+    }
+
+    // 회전 드래그
+    if (TOUCH.rotate) {
+      const dx = ev.clientX - TOUCH.lastX;
+      const dy = ev.clientY - TOUCH.lastY;
+      TOUCH.lastX = ev.clientX;
+      TOUCH.lastY = ev.clientY;
+
+      orbit.theta -= dx * 0.006;
+      orbit.phi   -= dy * 0.006;
+      updateCameraOrbit();
+    }
+    return; // ✅ 데스크톱 로직 타지 않음
+  }
     // hover(닫힌 큐브만)
        if (gameState === "over" || gameState === "win"){
       if (hoverCell){ hoverCell.setHover(false); hoverCell = null; }
