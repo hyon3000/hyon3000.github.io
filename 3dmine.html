@@ -28,6 +28,9 @@
       padding:14px 16px;
       border-radius:12px;
     }
+    html, body { overscroll-behavior: none; }
+canvas { touch-action: none; }
+
   </style>
   <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 </head>
@@ -720,6 +723,7 @@ function setChordHighlight(active, centerCell = null){
 
   // 우클릭 회전
   let rotDown=false;
+  let leftRotDown = false;
   let rotLastX=0, rotLastY=0;
   let rotStartX=0, rotStartY=0;
 
@@ -912,6 +916,43 @@ function touchDist(ev){
 
       this.applyMarkVisual();
     }
+// ✅ 좌클릭(깃발 위) 전용: ?/해제 없이 "깃발만" 순환
+cycleFlagOnly(){
+  if (this.isOpen) return;
+  if (gameState === "over" || gameState === "win") return;
+
+  const maxPos = CONFIG.minesPerCell | 0;
+  const maxNeg = CONFIG.whiteMinesPerCell | 0;
+  const canPos = maxPos > 0;
+  const canNeg = maxNeg > 0;
+
+  // 혹시 비정상 상태로 들어오면 시작점 보정
+  if (this.markType !== MARK_POS && this.markType !== MARK_NEG){
+    if (canPos){ this.markType = MARK_POS; this.markCount = 1; this.applyMarkVisual(); }
+    else if (canNeg){ this.markType = MARK_NEG; this.markCount = 1; this.applyMarkVisual(); }
+    return;
+  }
+
+  if (this.markType === MARK_POS){
+    if (this.markCount < maxPos) {
+      this.markCount++;
+    } else {
+      // pos max -> neg1 (가능하면), 아니면 pos1로 래핑
+      if (canNeg){ this.markType = MARK_NEG; this.markCount = 1; }
+      else { this.markType = MARK_POS; this.markCount = 1; }
+    }
+  } else { // MARK_NEG
+    if (this.markCount < maxNeg) {
+      this.markCount++;
+    } else {
+      // neg max -> pos1 (가능하면), 아니면 neg1로 래핑
+      if (canPos){ this.markType = MARK_POS; this.markCount = 1; }
+      else { this.markType = MARK_NEG; this.markCount = 1; }
+    }
+  }
+
+  this.applyMarkVisual();
+}
 
     // 눌림 피드백(좌클릭 down 동안)
     setPressed(on){
@@ -951,8 +992,11 @@ function touchDist(ev){
         this.setMarkNone();
       }
 
-      // 깃발이면 좌클릭 open 금지
-      if(isFlagged(this)) return;
+      // ✅ 깃발이면 "열기" 대신 깃발만 순환( ?/해제 없음 )
+if (isFlagged(this)){
+  this.cycleFlagOnly();
+  return;
+}
 
       on_click_cell(this); // “on_click 흐름”으로 처리
     }
@@ -1700,6 +1744,13 @@ if (window.parent === window) {
     renderer.domElement.addEventListener("pointerup", onPointerUp);
     renderer.domElement.addEventListener("contextmenu", (e)=>e.preventDefault());
     renderer.domElement.addEventListener("wheel", onWheel, { passive:false });
+    renderer.domElement.style.touchAction = "none";
+
+// iOS/일부 브라우저에서 스와이프/스크롤 제스처가 살아있는 경우를 강제로 차단
+renderer.domElement.addEventListener("touchmove", (e) => {
+  e.preventDefault();
+}, { passive: false });
+
 // ✅ Middle-click auto-scroll(스크롤 아이콘) 방지: Chrome/Edge/Firefox 공통
 const stopMiddleAutoScroll = (e) => {
   if (e.button === 1) {          // middle
@@ -1886,13 +1937,21 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
 
   // ===== LEFT DOWN: 눌림 피드백(또는 chord 준비) =====
   if(ev.button === 0){
+      // ✅ 배경 회전 중이면 클릭 처리 없이 회전만 종료
+
     if (dead) return; // 죽었으면 셀 클릭/pressed/chord 모두 무시
 
     leftDown = true;
     leftCanceledByChord = false;
     leftDownXY = [ev.clientX, ev.clientY];
     leftDownCell = getPickCell(ev);
-
+// ✅ 배경 회전
+  if (!leftDownCell){
+    leftRotDown = true;
+    rotStartX = rotLastX = ev.clientX;
+    rotStartY = rotLastY = ev.clientY;
+    return;
+  }
     // (C) 이미 rightDown이라면: "우->좌" LR chord 시도
     if(rightDown){
       leftCanceledByChord = true; // 좌클릭 open 취소
@@ -2101,6 +2160,14 @@ if(ev.button === 1){
 
 
     if(ev.button === 0){
+      if (leftRotDown){
+    leftRotDown = false;
+    leftDown = false;
+
+    if(!wasGenerating) on_up_global();
+    clearPressedAndChord();
+    return;
+  }
   leftDown = false;
 
   if(!wasGenerating && leftDownCell && leftPressedApplied){
@@ -2174,7 +2241,7 @@ if (gameState === "over" || gameState === "win"){
       TOUCH.lastX = ev.clientX;
       TOUCH.lastY = ev.clientY;
 
-      orbit.theta -= dx * 0.006;
+      orbit.theta += dx * 0.006;
       orbit.phi   -= dy * 0.006;
       updateCameraOrbit();
     }
@@ -2226,14 +2293,14 @@ if(panDown){
     }
 
     // rotate (right drag) : LR chord 중에는 회전 금지
-if(rotDown && !(chordArmed && chordKind==="lr")){
+if((rotDown || leftRotDown) && !(chordArmed && chordKind==="lr")){
       const dx=ev.clientX-rotLastX;
       const dy=ev.clientY-rotLastY;
       rotLastX=ev.clientX;
       rotLastY=ev.clientY;
 
       // 실제 회전
-      orbit.theta -= dx*0.006;
+      orbit.theta += dx*0.006;
       orbit.phi   -= dy*0.006;
       updateCameraOrbit();
     }
