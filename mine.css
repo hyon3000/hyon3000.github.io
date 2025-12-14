@@ -223,7 +223,7 @@ table.minetable td.flag-0 {
 
 table.minetable td.flag-0:active {
    background-image: url(mine.png);
-   background-position: -144px -16px;
+   background-position: -144px -96px;
 }
 
 table.minetable td.near-1 {
@@ -1271,4 +1271,8 @@ table.minetable td.near-0:active {
 table.minetable td.pressed {
    background-image: url(mine.png);
    background-position: 0px -32px;
+}
+table.minetable td.flag0pressed {
+   background-image: url(mine.png);
+   background-position: -144px -96px;
 }

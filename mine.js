@@ -370,10 +370,15 @@
           var cls = this.get_class(tx, ty);
           // 깃발(flag-*)이 아닌 경우에만 (null은 닫힌 빈칸, flag-0은 물음표)
           // 깃발이 꽂혀있다면 눌린 모습으로 변하지 않음
-          if (cls === null || cls === "flag-0") {
-            this.tds[tx][ty].classList.add("pressed");
-            this._chord_preview_cells.push([tx, ty]);
-          }
+          if (cls === null) {
+        this.tds[tx][ty].classList.add("pressed");
+        this._chord_preview_cells.push([tx, ty, "pressed"]);
+      }
+      // ? 칸
+      else if (cls === "flag-0") {
+        this.tds[tx][ty].classList.add("flag0pressed");
+        this._chord_preview_cells.push([tx, ty, "flag0pressed"]);
+      }
         }
       }
     };
@@ -385,6 +390,7 @@
         var pos = this._chord_preview_cells.pop();
         var td = this.tds[pos[0]][pos[1]];
         if (td) td.classList.remove("pressed");
+        if (td) td.classList.remove("flag0pressed");
       }
     };
 
@@ -2900,9 +2906,12 @@ Minefield.prototype._detachDelegatedEvents = function () {
 
         // 클릭한 셀 눌린 모양 유지
         if (clickedTd && !is_flagged) {
-          if (is_qmark) clickedTd.classList.remove("flag-0");
-
-          clickedTd.classList.add("pressed");
+          if (is_qmark) {
+            // ★ ? 는 flag0pressed 로
+            clickedTd.classList.add("flag0pressed");
+          } else {
+            clickedTd.classList.add("pressed");
+          }
         }
 
         // 얼굴: 눌린 표정(-48px) 강제 적용
@@ -3154,7 +3163,7 @@ Minefield.prototype._detachDelegatedEvents = function () {
     Minefield.prototype.press = function (x, y) {
       if (this.mines[x][y] !== 0) {
         return -1;
-      } else if (this.get_class(x, y) !== null && this.get_class(x, y) !== "flag-0" && this.get_class(x, y) !== "pressed") {
+      } else if (this.get_class(x, y) !== null && this.get_class(x, y) !== "flag-0" && this.get_class(x, y) !== "pressed"&& this.get_class(x, y) !== "flag0pressed") {
         return 1;
       }
 
@@ -3253,7 +3262,7 @@ Minefield.prototype._detachDelegatedEvents = function () {
         var nx = neighbors[i][0], ny = neighbors[i][1];
         var c = this.get_class(nx, ny);
 
-        if (c === null || c === "flag-0" || c === "pressed") {
+        if (c === null || c === "flag-0" || c === "pressed"|| c === "flag0pressed") {
           if (this.press(nx, ny) < 0) return -1;
           if (!isVisited(nx, ny)) {
             qx[tail] = nx; qy[tail] = ny; tail++;
@@ -3272,7 +3281,7 @@ Minefield.prototype._detachDelegatedEvents = function () {
           for (var j = 0; j < adj.length; j++) {
             var ax = adj[j][0], ay = adj[j][1];
             var cls = this.get_class(ax, ay);
-            if (cls === null || cls === "flag-0" || cls === "pressed") {
+            if (cls === null || cls === "flag-0" || cls === "pressed" || cls === "flag0pressed") {
               if (this.press(ax, ay) < 0) return -1;
 
               if (!isVisited(ax, ay)) {
