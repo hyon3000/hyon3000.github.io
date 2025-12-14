@@ -3346,7 +3346,16 @@ function show3DBoard(on){
   } else {
     // ✅ 3D에서 2D로 나갈 때 3D 자동풀이가 돌고 있으면 정지
     stop3DAutoSolve();
+__last3DTick = 0;
+    __threeD.pendingHintPopup = false;
 
+    // ✅ iframe 제거(= 3dmine.html 내부 setInterval/RAF 타이머도 같이 종료됨)
+    if (__threeD.iframe) {
+      try { __threeD.iframe.src = 'about:blank'; } catch(_) {}
+      try { __threeD.iframe.remove(); } catch(_) {}
+      __threeD.iframe = null;
+    }
+    __threeD.ready = false;
     a3d.style.display = 'none';
     a2d.style.display = '';
   }
@@ -3415,6 +3424,7 @@ let __last3DTick = 0;
 window.addEventListener('message', (e) => {
   const m = e.data;
   if (!m || !m.__mine3d) return;
+  if (typeof is3DTheme === 'function' && !is3DTheme()) return;
   if (m.type === 'solverState'){
     window.__threeDsolver.running = !!m.running;
     window.__threeDsolver.paused  = !!m.paused;

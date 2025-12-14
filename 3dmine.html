@@ -2,7 +2,8 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+
   <title>ourmine</title>
   <style>
     html, body { margin:0; height:100%; overflow:hidden; background:#C0C0C0; }
@@ -43,6 +44,9 @@ canvas { touch-action: none; }
   // 파일 상단 근처에 추가
 let __timerId = null;
 let __elapsed = 0;
+let lrChordActive = false;
+let lrChordCenter = null;
+let rightDownNumberCell = null;
 function startParentTimer(){
   stopParentTimer();
   __elapsed = 1;
@@ -695,6 +699,12 @@ function setChordHighlight(active, centerCell = null){
 
   // ✅ “중심 숫자 셀”의 인접(26) 중에서
   // ✅ 안열린 + 깃발없는(= ? 포함)만 70%
+   // ✅ 0) 클릭된 자기 자신도 포함 (조건 만족할 때만)
+  const c0 = chordCenterCell;
+  if (c0.cube.visible && !c0.isOpen && isFlaglessForChord(c0)) {
+    c0.cube.material.opacity = OPACITY_CHORD_HI; // 0.70
+    chordHighlighted.add(c0);
+  }
   const neigh = neighbors26(chordCenterCell);
   for (const n of neigh){
     if(!n.cube.visible) continue;
@@ -709,7 +719,11 @@ function setChordHighlight(active, centerCell = null){
   let leftDown = false;
   let middleDown = false;
   let rightDown = false;
-
+// ✅ 우클릭 드래그=pan, 클릭=마킹(드래그하면 마킹 취소)
+let rightDownCell = null;
+let rightStartXY = null;
+let rightMoved = false;
+let rightPanLastX = 0, rightPanLastY = 0;
   let leftDownCell = null;
   let leftDownXY = null;
   let leftPressedApplied = false;
@@ -747,6 +761,55 @@ const TOUCH = {
   downCell:null,
   pressedApplied:false,
 };
+// ===== 2-touch (pinch zoom + parallel pan) =====
+const TOUCH2 = {
+  pointers: new Map(),   // pointerId -> {x,y}
+  mode: "none",          // "none" | "gesture"
+  lastMidX: 0,
+  lastMidY: 0,
+  lastDist: 0,
+  justGesture: false,    // 제스처 끝난 직후 탭 방지용
+};
+
+function t2_setPointer(ev){
+  TOUCH2.pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+}
+function t2_delPointer(ev){
+  TOUCH2.pointers.delete(ev.pointerId);
+}
+function t2_get2(){
+  const it = TOUCH2.pointers.values();
+  const a = it.next().value;
+  const b = it.next().value;
+  return [a,b];
+}
+function t2_midDist(){
+  const [a,b] = t2_get2();
+  const midX = (a.x + b.x) * 0.5;
+  const midY = (a.y + b.y) * 0.5;
+  const dist = Math.hypot(a.x - b.x, a.y - b.y);
+  return { midX, midY, dist };
+}
+function t2_enterGesture(){
+  TOUCH2.mode = "gesture";
+  TOUCH2.justGesture = true;
+  const { midX, midY, dist } = t2_midDist();
+  TOUCH2.lastMidX = midX;
+  TOUCH2.lastMidY = midY;
+  TOUCH2.lastDist = dist;
+
+  // 1손가락 탭/롱프레스/pressed 모두 취소
+  clearLongPress();
+  if (TOUCH.downCell && TOUCH.pressedApplied){
+    TOUCH.downCell.setPressed(false);
+    TOUCH.pressedApplied = false;
+  }
+  // 단일터치 로직은 더 이상 실행하지 않게
+  TOUCH.active = false;
+  TOUCH.pointerId = null;
+  TOUCH.rotate = false;
+  TOUCH.longPressFired = true; // 탭 방지(의미상)
+}
 
 const DOUBLE_TAP_MS = 280;
 const DOUBLE_TAP_DIST = 22;
@@ -1627,41 +1690,42 @@ function updateScore(){
     if(!hits.length) return null;
     return hits[0].object.userData.cell || null;
   }
+let chordCenterPicked = null;
+  function chordExecute(ev, forcedCell=null){
+  if(gameState!=="playing") return false;
 
-  function chordExecute(ev){
-    if(gameState!=="playing") return false;
-    const cell = getPickNumberCell(ev);
-    if(!cell) return false; // “정확히 숫자 텍스트 클릭” 조건
+  const cell = forcedCell || getPickNumberCell(ev);
+  if(!cell) return false;
 
-    const shown = (cell.adjValue===1000) ? 0 : cell.adjValue;
+  const shown = (cell.adjValue===1000) ? 0 : cell.adjValue;
 
-    let sumFlags=0, absFlags=0;
-    const neigh=neighbors26(cell);
-    for(const n of neigh){
-      sumFlags += flagSignedCount(n);
-      absFlags += flagAbsCount(n);
-    }
+  let sumFlags=0, absFlags=0;
+  const neigh=neighbors26(cell);
+  for(const n of neigh){
+    sumFlags += flagSignedCount(n);
+    absFlags += flagAbsCount(n);
+  }
 
-    if(shown===0){
-      if(absFlags===0) return true;
-      if(sumFlags!==0) return true;
-      for(const n of neigh){
-        if(n.isOpen) continue;
-        if(isFlagged(n)) continue;
-        n.openFromChord(); // ? 포함
-      }
-      return true;
-    }
-
-    if(sumFlags!==shown) return true;
-
+  if(shown===0){
+    if(absFlags===0) return true;
+    if(sumFlags!==0) return true;
     for(const n of neigh){
       if(n.isOpen) continue;
       if(isFlagged(n)) continue;
-      n.openFromChord(); // ? 포함
+      n.openFromChord();
     }
     return true;
   }
+
+  if(sumFlags!==shown) return true;
+
+  for(const n of neigh){
+    if(n.isOpen) continue;
+    if(isFlagged(n)) continue;
+    n.openFromChord();
+  }
+  return true;
+}
 
   // ===== 클릭(큐브) 피킹: visible=true만 선택 (안보이는 큐브가 가로채지 못함) =====
   function getPickCell(ev){
@@ -1841,52 +1905,60 @@ setFace(0); // ✅ reset은 항상 normal
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
   }
-
+let leftDownNumberCell = null;
   // ===== 입력 규칙(요청 반영) =====
   function onPointerDown(ev){
   // ===== 모바일 터치 전용 =====
   if (IS_MOBILE && ev.pointerType === "touch") {
-    renderer.domElement.setPointerCapture(ev.pointerId);
+  renderer.domElement.setPointerCapture(ev.pointerId);
 
-    const dead = (gameState === "over" || gameState === "win");
+  // 멀티터치 상태 업데이트
+  t2_setPointer(ev);
 
-    // 얼굴(눌림)
-    if (!dead) setFace(2);
-
-    // 터치 상태 초기화
-    resetTouchState();
-    TOUCH.active = true;
-    TOUCH.pointerId = ev.pointerId;
-    TOUCH.startX = TOUCH.lastX = ev.clientX;
-    TOUCH.startY = TOUCH.lastY = ev.clientY;
-
-    // 닫힌 큐브를 눌렀으면 pressed 피드백
-    TOUCH.downCell = dead ? null : getPickCell(ev);
-    if (TOUCH.downCell && !TOUCH.downCell.isOpen) {
-      TOUCH.downCell.setPressed(true);
-      TOUCH.pressedApplied = true;
-
-      // 길게 누르면 우클릭(마킹 순환) 처리
-      TOUCH.longPressTimer = setTimeout(() => {
-        // 아직 터치 중이고, 드래그로 회전 전환 안 되었고, 게임 살아있고, 닫힌 큐브일 때만
-        if (!TOUCH.active) return;
-        if (TOUCH.rotate) return;
-        if (gameState === "over" || gameState === "win") return;
-
-        const c = TOUCH.downCell;
-        if (!c || c.isOpen) return;
-
-        // 길게누름 = 우클릭 마킹
-        c.cycleMark();
-        TOUCH.longPressFired = true;
-
-        // pressed 해제(시각)
-        if (TOUCH.pressedApplied) c.setPressed(false);
-        TOUCH.pressedApplied = false;
-      }, 520);
-    }
-    return; // ✅ 데스크톱 로직 타지 않음
+  // 2손가락 이상이면: 즉시 제스처 모드 진입(핀치/팬)
+  if (TOUCH2.pointers.size >= 2) {
+    if (TOUCH2.mode !== "gesture") t2_enterGesture();
+    // 제스처 중엔 얼굴도 눌림(게임 살아있으면)
+    if (!(gameState === "over" || gameState === "win")) setFace(2);
+    return;
   }
+
+  // 여기부터는 1손가락 단일 터치(기존 로직)
+  const dead = (gameState === "over" || gameState === "win");
+  if (!dead) setFace(2);
+
+  // 제스처 직후 새 터치 시작이면 플래그 정리
+  TOUCH2.justGesture = false;
+  TOUCH2.mode = "none";
+
+  resetTouchState();
+  TOUCH.active = true;
+  TOUCH.pointerId = ev.pointerId;
+  TOUCH.startX = TOUCH.lastX = ev.clientX;
+  TOUCH.startY = TOUCH.lastY = ev.clientY;
+
+  TOUCH.downCell = dead ? null : getPickCell(ev);
+  if (TOUCH.downCell && !TOUCH.downCell.isOpen) {
+    TOUCH.downCell.setPressed(true);
+    TOUCH.pressedApplied = true;
+
+    TOUCH.longPressTimer = setTimeout(() => {
+      if (!TOUCH.active) return;
+      if (TOUCH.rotate) return;
+      if (gameState === "over" || gameState === "win") return;
+
+      const c = TOUCH.downCell;
+      if (!c || c.isOpen) return;
+
+      c.cycleMark();
+      TOUCH.longPressFired = true;
+
+      if (TOUCH.pressedApplied) c.setPressed(false);
+      TOUCH.pressedApplied = false;
+    }, 520);
+  }
+  return;
+}
 
     // ✅ 좌/중 클릭이 발생하면(다운) 눌린 얼굴
 if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState === "win")) {
@@ -1898,88 +1970,84 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
 
   // ===== RIGHT DOWN: 즉시 마킹(단, chord면 마킹 금지) =====
   if(ev.button === 2){
-    rightDown = true;
+  rightDown = true;
 
-    // (A) 이미 leftDown이라면: "좌->우" LR chord 시도
-    if(leftDown){
-      // 좌클릭 pressed 취소 + 좌클릭 결과(열기) 취소
-      leftCanceledByChord = true;
-      if(leftDownCell && leftPressedApplied){
-        leftDownCell.setPressed(false);
-        leftPressedApplied = false;
-      }
+  // (A) 이미 leftDown이라면: "좌->우" LR chord 시도 (기존 유지)
+  const numCell = (gameState==="playing") ? getPickNumberCell(ev) : null;
+  rightDownNumberCell = numCell;
 
-      // 숫자면 숫자 기준, 아니면 큐브 기준으로 주변만 하이라이트
-      const numCell = (gameState==="playing") ? getPickNumberCell(ev) : null;
-      const center = numCell || getPickCell(ev) || leftDownCell;
-      if(center){
-        chordArmed = true;
-        chordKind = "lr";
-        chordPointerId = ev.pointerId;
-        setChordHighlight(true, center);
-      }
-      // chord 상황에서는 우클릭 마킹 금지 + 회전도 막음
-      rotDown = false;
-      return;
+  if (leftDown) {
+    leftCanceledByChord = true;
+
+    const center =
+      numCell || leftDownNumberCell || getPickCell(ev) || leftDownCell;
+
+    if (center) {
+      lrChordActive = true;
+      lrChordCenter = center;
+      chordKind = "lr";
+      setChordHighlight(true, center);
     }
-
-    // (B) 일반 우클릭: 회전 준비 + 마킹 즉시
-    rotDown = true;
-    rotStartX = rotLastX = ev.clientX;
-    rotStartY = rotLastY = ev.clientY;
-
-    if (!dead){
-      const c = getPickCell(ev);
-      if(c) c.cycleMark(); // 살아있을 때만 마킹
-    }
-    return;
+    return; // LR chord일 땐 마킹/팬 로직 안 탐
   }
+  // (B) ✅ 우클릭 단독: 드래그하면 pan, 클릭(짧게)하면 마킹
+  const dead = (gameState === "over" || gameState === "win");
+  rightDownCell = dead ? null : getPickCell(ev);
+
+  rightStartXY = [ev.clientX, ev.clientY];
+  rightMoved = false;
+  rightPanLastX = ev.clientX;
+  rightPanLastY = ev.clientY;
+
+  // ✅ 더 이상 우클릭 회전(rotDown) 없음
+  rotDown = false;
+  return;
+}
 
   // ===== LEFT DOWN: 눌림 피드백(또는 chord 준비) =====
   if(ev.button === 0){
-      // ✅ 배경 회전 중이면 클릭 처리 없이 회전만 종료
+        
 
-    if (dead) return; // 죽었으면 셀 클릭/pressed/chord 모두 무시
+  leftDown = true;
+  leftCanceledByChord = false;
+  leftDownXY = [ev.clientX, ev.clientY];
 
-    leftDown = true;
-    leftCanceledByChord = false;
-    leftDownXY = [ev.clientX, ev.clientY];
-    leftDownCell = getPickCell(ev);
-// ✅ 배경 회전
-  if (!leftDownCell){
+  // ★ 숫자 먼저 피킹
+  const numCell = (gameState === "playing") ? getPickNumberCell(ev) : null;
+  leftDownNumberCell = numCell;
+
+  // 큐브 피킹(열린 숫자는 null)
+  leftDownCell = getPickCell(ev);
+// (1) Shift+좌클릭 chord (중클릭과 동일)
+ if (ev.shiftKey) {
+  leftCanceledByChord = true;
+
+  // ✅ 숫자 스프라이트가 우선, 없으면 큐브 셀(닫힌 큐브 포함)
+  const center = numCell || leftDownCell;
+
+  if (center) {
+    chordArmed = true;
+    chordKind = numCell ? "shiftLeft" : "shiftLeftCube"; // ✅ 큐브면 실행 없이 하이라이트만
+    chordPointerId = ev.pointerId;
+    setChordHighlight(true, center);
+  }
+
+  // 회전으로 빠지지 않게 종료
+  return;
+}
+  // (2) 열린 숫자 위를 그냥 좌클릭한 경우: 회전으로 보내지 말고 무시(권장)
+  if (numCell && !leftDownCell) {
+    return;
+  }
+
+  // (3) 여기서부터 배경회전 처리
+  if (!leftDownCell) {
     leftRotDown = true;
     rotStartX = rotLastX = ev.clientX;
     rotStartY = rotLastY = ev.clientY;
     return;
   }
-    // (C) 이미 rightDown이라면: "우->좌" LR chord 시도
-    if(rightDown){
-      leftCanceledByChord = true; // 좌클릭 open 취소
-      const numCell = (gameState==="playing") ? getPickNumberCell(ev) : null;
-      const center = numCell || leftDownCell;
-      if(center){
-        chordArmed = true;
-        chordKind = "lr";
-        chordPointerId = ev.pointerId;
-        setChordHighlight(true, center);
-      }
-      return; // pressed 적용 안 함
-    }
-
-    // (D) Shift+좌: chord 시도(숫자면 실행 가능 / 큐브면 “시도만”)
-    if(ev.shiftKey){
-      leftCanceledByChord = true;
-      const numCell = (gameState==="playing") ? getPickNumberCell(ev) : null;
-      const center = numCell || leftDownCell;
-      if(center){
-        chordArmed = true;
-        chordKind = "shiftLeft";
-        chordPointerId = ev.pointerId;
-        setChordHighlight(true, center);
-      }
-      return; // pressed 적용 안 함
-    }
-
+  if (dead) return;
     // (E) 일반 좌클릭: down에서는 pressed만(한 칸 70%), 실제 처리는 up
     if(leftDownCell){
       leftDownCell.setPressed(true);
@@ -1990,6 +2058,7 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
 
   // ===== MIDDLE DOWN: 숫자면 chord, 아니면 "큐브 chord 시도" + 드래그 pan 가능 =====
   if(ev.button === 1){
+    ev.preventDefault();
     if (dead){
       // 죽었으면 pan만 가능 (큐브/숫자 chord는 금지)
       panDown = true;
@@ -2008,6 +2077,7 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
         chordArmed = true;
         chordKind = "middle";
         chordPointerId = ev.pointerId;
+         chordCenterPicked = numCell;
         setChordHighlight(true, numCell);
         panDown = false;
         return;
@@ -2033,80 +2103,127 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
   function onPointerUp(ev){
     // ===== 모바일 터치 전용 =====
   if (IS_MOBILE && ev.pointerType === "touch") {
-    if (!TOUCH.active) return;
 
+  // 멀티터치 상태에서 pointer 제거
+  if (TOUCH2.pointers.has(ev.pointerId)) t2_delPointer(ev);
+
+  // 제스처 중이었으면: 탭/롱프레스 처리 없이 종료만
+  if (TOUCH2.mode === "gesture") {
     clearLongPress();
 
-    // pressed 해제
-    if (TOUCH.downCell && TOUCH.pressedApplied) {
-      TOUCH.downCell.setPressed(false);
-      TOUCH.pressedApplied = false;
-    }
+    // 아직 2손가락 유지 중이면 계속 제스처
+    if (TOUCH2.pointers.size >= 2) return;
 
-    // 회전이었다면 아무 동작 없이 종료
-    if (TOUCH.rotate) {
-      if (!(gameState === "over" || gameState === "win")) setFace(0);
+    // 1손가락만 남았으면: '회전 모드'로 전환(탭 방지)
+    if (TOUCH2.pointers.size === 1) {
+      const [pid, p] = TOUCH2.pointers.entries().next().value;
+
       resetTouchState();
+      TOUCH.active = true;
+      TOUCH.pointerId = pid;
+      TOUCH.startX = TOUCH.lastX = p.x;
+      TOUCH.startY = TOUCH.lastY = p.y;
+
+      TOUCH.rotate = true;         // 남은 손가락은 드래그 회전으로만 취급(탭 금지)
+      TOUCH.longPressFired = true; // 탭 금지 강화
+
+      TOUCH2.mode = "none";
+      // justGesture는 true 유지(남은 손가락이 곧 떼질 때 오픈 방지)
+      if (!(gameState === "over" || gameState === "win")) setFace(0);
       return;
     }
 
-    // 길게누름(우클릭 마킹) 발생했으면 "탭 열기"는 하지 않음
-    if (TOUCH.longPressFired) {
-      if (!(gameState === "over" || gameState === "win")) setFace(0);
-      resetTouchState();
-      return;
-    }
+    // 손가락 모두 떼면 완전 종료
+    TOUCH2.mode = "none";
+    if (!(gameState === "over" || gameState === "win")) setFace(0);
+    resetTouchState();
+    TOUCH2.justGesture = false;
+    return;
+  }
 
-    // ===== 탭 처리 =====
-    const now = performance.now();
+  // 제스처 직후 남은 1손가락 up: 탭 처리 금지
+  if (TOUCH2.justGesture) {
+    if (!(gameState === "over" || gameState === "win")) setFace(0);
+    resetTouchState();
+    TOUCH2.justGesture = false;
+    return;
+  }
 
-    // 1) 숫자 더블탭 => chording
-    if (gameState === "playing") {
-      const numCell = getPickNumberCell(ev); // (열린 숫자 스프라이트 hit)
-      if (numCell) {
-        const isDouble =
-          lastTap.onNumber &&
-          (now - lastTap.t) <= DOUBLE_TAP_MS &&
-          (Math.hypot(ev.clientX - lastTap.x, ev.clientY - lastTap.y) <= DOUBLE_TAP_DIST);
+  // ====== 여기부터는 기존 단일 터치 UP 로직(거의 그대로) ======
+  if (!TOUCH.active || ev.pointerId !== TOUCH.pointerId) return;
 
-        if (isDouble) {
-          chordExecute(ev); // 숫자 위에서만 실행됨(내부 조건 동일)
-          lastTap = { t:0, x:0, y:0, onNumber:false };
-          if (!(gameState === "over" || gameState === "win")) setFace(0);
-          resetTouchState();
-          return;
-        } else {
-          // 첫 탭(싱글탭)은 기록만 하고 아무 것도 안 함
-          lastTap = { t: now, x: ev.clientX, y: ev.clientY, onNumber:true };
-          if (!(gameState === "over" || gameState === "win")) setFace(0);
-          resetTouchState();
-          return;
-        }
+  clearLongPress();
+
+  if (TOUCH.downCell && TOUCH.pressedApplied) {
+    TOUCH.downCell.setPressed(false);
+    TOUCH.pressedApplied = false;
+  }
+
+  if (TOUCH.rotate) {
+    if (!(gameState === "over" || gameState === "win")) setFace(0);
+    resetTouchState();
+    return;
+  }
+
+  if (TOUCH.longPressFired) {
+    if (!(gameState === "over" || gameState === "win")) setFace(0);
+    resetTouchState();
+    return;
+  }
+
+  const now = performance.now();
+
+  if (gameState === "playing") {
+    const numCell = getPickNumberCell(ev);
+    if (numCell) {
+      const isDouble =
+        lastTap.onNumber &&
+        (now - lastTap.t) <= DOUBLE_TAP_MS &&
+        (Math.hypot(ev.clientX - lastTap.x, ev.clientY - lastTap.y) <= DOUBLE_TAP_DIST);
+
+      if (isDouble) {
+        chordExecute(ev);
+        lastTap = { t:0, x:0, y:0, onNumber:false };
+        if (!(gameState === "over" || gameState === "win")) setFace(0);
+        resetTouchState();
+        return;
+      } else {
+        lastTap = { t: now, x: ev.clientX, y: ev.clientY, onNumber:true };
+        if (!(gameState === "over" || gameState === "win")) setFace(0);
+        resetTouchState();
+        return;
       }
     }
-
-    // 2) 큐브 탭 => 기존 좌클릭(openFromClick)과 동일 조건(다운/업 같은 셀일 때)
-    const upCell = getPickCell(ev);
-    if (upCell && TOUCH.downCell && upCell === TOUCH.downCell) {
-      upCell.openFromClick();
-    }
-
-    // 게임 종료면 얼굴을 0으로 덮지 않음
-    if (!(gameState === "over" || gameState === "win")) setFace(0);
-
-    // 숫자 더블탭이 아니면 lastTap은 리셋(엉뚱한 곳 더블탭 방지)
-    lastTap = { t:0, x:0, y:0, onNumber:false };
-
-    resetTouchState();
-    return; // ✅ 데스크톱 로직 타지 않음
   }
-    // ★ on_up 흐름: 생성 중이면 리셋 금지
+
+  const upCell = getPickCell(ev);
+  if (upCell && TOUCH.downCell && upCell === TOUCH.downCell) {
+    upCell.openFromClick();
+  }
+
+  if (!(gameState === "over" || gameState === "win")) setFace(0);
+  lastTap = { t:0, x:0, y:0, onNumber:false };
+  resetTouchState();
+  return;
+}
+ // ★ on_up 흐름: 생성 중이면 리셋 금지
     // (원본처럼, up에서 상태 리셋/pressed 해제를 막아야 함)
         const dead = (gameState === "over" || gameState === "win");
     if (dead){
       // 드래그 상태만 정리하고, 셀 동작/pressed/chord는 절대 실행하지 않음
       if (ev.button === 0){
         leftDown = false;
+        if (lrChordActive) {
+    
+      chordExecute(null, lrChordCenter);   // ★ forcedCell
+      lrChordActive = false;
+      lrChordCenter = null;
+      setChordHighlight(false, null);
+      on_up_global();
+      clearPressedAndChord();
+    
+    return;
+  }
         if (leftDownCell && leftPressedApplied) leftDownCell.setPressed(false);
       }
       if (ev.button === 1){
@@ -2116,6 +2233,22 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
       if (ev.button === 2){
         rightDown = false;
         rotDown = false;
+        if (lrChordActive) {
+    // 우클릭 마킹 금지
+    rightDownCell = null;
+    rightMoved = false;
+
+    // 둘 다 올라갔으면 실행/정리
+    
+      chordExecute(null, lrChordCenter);   // ★ forcedCell로 실행
+      lrChordActive = false;
+      lrChordCenter = null;
+      setChordHighlight(false, null);
+      on_up_global();
+      clearPressedAndChord();
+    
+    return;
+  }
       }
       clearPressedAndChord();
       return;
@@ -2123,18 +2256,38 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
 
     const wasGenerating = _is_generating;
 
-    if(ev.button === 2){
+   if(ev.button === 2){
   rightDown = false;
-  rotDown = false;
+  rotDown = false; // 남아있으면 정리만
+
   if(!wasGenerating) on_up_global();
 
+  // ✅ LR chord 해제(기존 유지)
   if(!wasGenerating && chordArmed && chordKind==="lr"){
     setChordHighlight(false, null);
     chordArmed = false;
     chordKind = null;
     chordPointerId = null;
     leftCanceledByChord = false;
+
+    // chord였으면 우클릭 클릭 마킹도 하지 않음
+    rightDownCell = null;
+    rightStartXY = null;
+    rightMoved = false;
+    return;
   }
+
+  // ✅ 우클릭 "클릭"이면 마킹 (드래그 했으면 마킹 안 함)
+  if(!wasGenerating && !rightMoved && rightDownCell && !(gameState === "over" || gameState === "win")){
+    const upCell = getPickCell(ev);
+    if (upCell && upCell === rightDownCell){
+      rightDownCell.cycleMark();
+    }
+  }
+
+  rightDownCell = null;
+  rightStartXY = null;
+  rightMoved = false;
   return;
 }
 
@@ -2143,7 +2296,7 @@ if(ev.button === 1){
 
   if(!wasGenerating){
     if(chordArmed && chordKind==="middle"){
-      chordExecute(ev); // 숫자면 실행
+      chordExecute(ev, chordCenterPicked);  // ✅ forced
     }
     // middleCube는 "시도만" 이므로 실행 없음
 
@@ -2214,40 +2367,65 @@ if (gameState === "over" || gameState === "win"){
   }
 
   function onPointerMove(ev){
-    if (IS_MOBILE && ev.pointerType === "touch") {
-    if (!TOUCH.active) return;
+   if (IS_MOBILE && ev.pointerType === "touch") {
+  // 위치 갱신(해당 pointerId만)
+  if (TOUCH2.pointers.has(ev.pointerId)) {
+    t2_setPointer(ev);
+  }
 
-    // hover는 모바일에선 생략(원하면 유지 가능)
+  // 2손가락 제스처: 회전 없이 팬 + 핀치줌
+  if (TOUCH2.pointers.size >= 2 && TOUCH2.mode === "gesture") {
     if (hoverCell){ hoverCell.setHover(false); hoverCell = null; }
 
-    const dist = touchDist(ev);
+    const { midX, midY, dist } = t2_midDist();
 
-    // 일정 거리 이상 움직이면 "탭"을 취소하고 "회전"으로 전환
-    if (!TOUCH.rotate && dist > MOVE_CANCEL_PX) {
-      TOUCH.rotate = true;
-      clearLongPress();
+    // (1) 두손가락 평행 이동 => pan
+    const dx = midX - TOUCH2.lastMidX;
+    const dy = midY - TOUCH2.lastMidY;
+    TOUCH2.lastMidX = midX;
+    TOUCH2.lastMidY = midY;
+    panByPixels(dx, dy);
 
-      // 탭(셀 열기) 취소: pressed 피드백도 해제
-      if (TOUCH.downCell && TOUCH.pressedApplied) {
-        TOUCH.downCell.setPressed(false);
-        TOUCH.pressedApplied = false;
-      }
-    }
-
-    // 회전 드래그
-    if (TOUCH.rotate) {
-      const dx = ev.clientX - TOUCH.lastX;
-      const dy = ev.clientY - TOUCH.lastY;
-      TOUCH.lastX = ev.clientX;
-      TOUCH.lastY = ev.clientY;
-
-      orbit.theta += dx * 0.006;
-      orbit.phi   -= dy * 0.006;
+    // (2) pinch => zoom (dist 늘면 zoom-in: radius 감소)
+    if (TOUCH2.lastDist > 0 && dist > 0) {
+      const factor = (TOUCH2.lastDist / dist);
+      orbit.radius = clamp(orbit.radius * factor, orbit.minRadius, orbit.maxRadius);
       updateCameraOrbit();
     }
-    return; // ✅ 데스크톱 로직 타지 않음
+    TOUCH2.lastDist = dist;
+
+    return; // ✅ 단일터치 로직 타지 않음
   }
-    // hover(닫힌 큐브만)
+
+  // 단일 터치
+  if (!TOUCH.active || ev.pointerId !== TOUCH.pointerId) return;
+
+  if (hoverCell){ hoverCell.setHover(false); hoverCell = null; }
+
+  const distMove = touchDist(ev);
+
+  if (!TOUCH.rotate && distMove > MOVE_CANCEL_PX) {
+    TOUCH.rotate = true;
+    clearLongPress();
+    if (TOUCH.downCell && TOUCH.pressedApplied) {
+      TOUCH.downCell.setPressed(false);
+      TOUCH.pressedApplied = false;
+    }
+  }
+
+  if (TOUCH.rotate) {
+    const dx = ev.clientX - TOUCH.lastX;
+    const dy = ev.clientY - TOUCH.lastY;
+    TOUCH.lastX = ev.clientX;
+    TOUCH.lastY = ev.clientY;
+
+    orbit.theta += dx * 0.006;
+    orbit.phi   -= dy * 0.006;
+    updateCameraOrbit();
+  }
+  return;
+}
+// hover(닫힌 큐브만)
        if (gameState === "over" || gameState === "win"){
       if (hoverCell){ hoverCell.setHover(false); hoverCell = null; }
     } else {
@@ -2258,6 +2436,32 @@ if (gameState === "over" || gameState === "win"){
         if(hoverCell) hoverCell.setHover(true);
       }
     }
+// ✅ 좌클릭: 큐브 위에서 시작했더라도 "드래그"면 회전으로 전환
+if (leftDown && !leftRotDown && leftDownXY) {
+  const distL = Math.hypot(ev.clientX - leftDownXY[0], ev.clientY - leftDownXY[1]);
+
+  if (distL > MOVE_CANCEL_PX) {
+    // pressed 시각효과 해제
+    if (leftDownCell && leftPressedApplied) {
+      leftDownCell.setPressed(false);
+      leftPressedApplied = false;
+    }
+
+    // ✅ shift/lr 등 chord 하이라이트가 켜져있었다면 드래그로 간주하고 취소
+    if (chordArmed && (chordKind === "shiftLeft" || chordKind === "shiftLeftCube" || chordKind === "lr")) {
+      setChordHighlight(false, null);
+      chordArmed = false;
+      chordKind = null;
+      chordPointerId = null;
+      leftCanceledByChord = false;
+    }
+
+    // 회전 모드 진입
+    leftRotDown = true;
+    rotLastX = ev.clientX;
+    rotLastY = ev.clientY;
+  }
+}
 
 // 중클릭: 큐브 chord 시도 상태에서 드래그가 일정 이상이면 chord 하이라이트를 끄고 pan만 수행
 if(middleDown && middleStartXY){
@@ -2282,28 +2486,37 @@ if(panDown){
   panLastY=ev.clientY;
   panByPixels(dx, dy);
 }
+// ✅ 우클릭 드래그 = pan (중클릭 드래그와 동일)
+if (rightDown && !(chordArmed && chordKind==="lr")) {
+  if (rightStartXY) {
+    const dist = Math.hypot(ev.clientX - rightStartXY[0], ev.clientY - rightStartXY[1]);
+    if (!rightMoved && dist > MOVE_CANCEL_PX) rightMoved = true;
+  }
 
-    // pan (middle drag)
-    if(panDown){
-      const dx=ev.clientX-panLastX;
-      const dy=ev.clientY-panLastY;
-      panLastX=ev.clientX;
-      panLastY=ev.clientY;
-      panByPixels(dx, dy);
-    }
+  if (rightMoved) {
+    const dx = ev.clientX - rightPanLastX;
+    const dy = ev.clientY - rightPanLastY;
+    rightPanLastX = ev.clientX;
+    rightPanLastY = ev.clientY;
+    panByPixels(dx, dy);
+  } else {
+    // 아직 클릭 판정 구간이면 last만 갱신(갑작스런 점프 방지)
+    rightPanLastX = ev.clientX;
+    rightPanLastY = ev.clientY;
+  }
+}
 
-    // rotate (right drag) : LR chord 중에는 회전 금지
-if((rotDown || leftRotDown) && !(chordArmed && chordKind==="lr")){
-      const dx=ev.clientX-rotLastX;
-      const dy=ev.clientY-rotLastY;
-      rotLastX=ev.clientX;
-      rotLastY=ev.clientY;
 
-      // 실제 회전
-      orbit.theta += dx*0.006;
-      orbit.phi   -= dy*0.006;
-      updateCameraOrbit();
-    }
+ if(leftRotDown && !(chordArmed && chordKind==="lr")){
+  const dx=ev.clientX-rotLastX;
+  const dy=ev.clientY-rotLastY;
+  rotLastX=ev.clientX;
+  rotLastY=ev.clientY;
+
+  orbit.theta += dx*0.006;
+  orbit.phi   -= dy*0.006;
+  updateCameraOrbit();
+}
 
     // 좌+우 chord: left down 상태에서 right down이 들어오면 onPointerDown에서 arm 처리
     // 여기서는 nothing
