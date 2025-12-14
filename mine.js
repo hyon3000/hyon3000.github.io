@@ -1810,7 +1810,39 @@ Minefield.prototype._detachDelegatedEvents = function () {
       const capB = Math.max(1, this.max_mines | 0);        // 칸당 검은 지뢰 최대
       const capW = Math.max(0, this.max_mines_white | 0);  // 칸당 흰 지뢰 최대
       const classicMode = (!hasWhites) && (capB === 1);  // 클래식 모드(칸당 0/1, 흰지뢰 없음)
+const totalBlack = Math.max(0, this.num_mines | 0);
+  const totalWhite = Math.max(0, this.num_mines_white | 0);
+  // --- 3x3 보호칸 개수(가장자리면 9보다 작음) ---
+  let protect = 0;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const x = firstX + dx, y = firstY + dy;
+    if (x >= 0 && y >= 0 && x < W && y < H) protect++;
+  }
+  const outside = (W * H - protect)*0.65; //65%의 여유 칸수
+  const needB = needCells(totalBlack, capB);
+  const needW = needCells(totalWhite, capW);
+  const infeasible =
+    (needB + needW > outside) ||                 // 검/흰이 서로 같은 칸을 못 쓰므로 합이 outside를 넘으면 불가
+    (totalBlack > outside * capB) ||             // 검은 용량 한계
+    (totalWhite > outside * capW);               // 흰 용량 한계(흰이 있으면)
 
+  if (infeasible) {
+    console.warn("[nopick] impossible config for 3x3-safe first click. fallback.");
+
+    // ✅ 폴백 1: 찍기없음 모드 규칙(3x3 보장)을 포기하고 일반 보드로 진행
+    // (원하면 여기서 '첫칸만 안전' 같은 완화 규칙으로 바꿀 수도 있음)
+    this.use_nopick = false;
+    this.init_mines();
+    this._rebuild_near_from_parts();
+    // start/expand가 어차피 첫 클릭 구제를 처리하므로 여기서 return
+    return 1;
+  }
+  // --- 색 혼합 금지 + cap 고려한 "필요 최소 점유 칸수" ---
+  function needCells(total, cap) {
+    if (total <= 0) return 0;
+    if (cap <= 0) return Infinity;
+    return Math.ceil(total / cap);
+  }
       // ===== 유틸 =====
       const idx = (x, y) => y * W + x;
       const inBounds = (x, y) => (x >= 0 && y >= 0 && x < W && y < H);

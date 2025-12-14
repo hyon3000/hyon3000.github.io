@@ -997,7 +997,7 @@ let middleMoved = false;
 
   function startGameAt(cell){
     // 첫 클릭에서 지뢰 배치/adj 계산/비주얼 구축
-    placeMinesAvoiding(cell);
+    placeMinesAvoiding_ENHANCED(cell); 
     computeAdjValues();
     for(const c of cells) c.buildMinesVisual();
     firstOpen=false;
@@ -1060,44 +1060,336 @@ let middleMoved = false;
   }
 
   // ===== 인접값/확장/승패/게임오버 =====
-  function placeMinesAvoiding(firstCell){
-    placedBlackMines=0; placedWhiteMines=0;
+  // ==============================
+// 3D Mines placement (2D-algo port)
+// random(cluster & prefer max) -> linear sweep -> forced redistribution
+// + "first-click expand if possible"
+// ==============================
+function placeMinesAvoiding_ENHANCED(firstCell){
+  // 0) 초기화
+  for (const c of cells) c.mineValue = 0;
+  placedBlackMines = 0;
+  placedWhiteMines = 0;
 
-    const forbidden=new Set([idx(firstCell.x, firstCell.y, firstCell.z)]);
-    neighbors26(firstCell).forEach(n=>forbidden.add(idx(n.x,n.y,n.z)));
+  const capB = (CONFIG.minesPerCell|0);
+  const capW = (CONFIG.whiteMinesPerCell|0);
 
-    const candidates=[];
-    for(let z=0; z<SIZE.z; z++) for(let y=0; y<SIZE.y; y++) for(let x=0; x<SIZE.x; x++){
-      const id=idx(x,y,z);
-      if(!forbidden.has(id)) candidates.push(id);
-    }
-    for(let i=candidates.length-1;i>0;i--){
-      const j=(Math.random()*(i+1))|0;
-      [candidates[i],candidates[j]]=[candidates[j],candidates[i]];
-    }
+  // cap==0이면 그 색의 total은 0으로 취급(요청이 와도 불가능)
+  let totalB = (capB > 0) ? (CONFIG.minesTotal|0) : 0;
+  let totalW = (capW > 0) ? (CONFIG.whiteMinesTotal|0) : 0;
 
-    let ptr=0;
+  // ---- forbid set: (A) expand 모드(클릭칸+26이웃) vs (B) 클릭칸만 ----
+  const forbidExpand = buildForbidSet3D(firstCell, /*includeNeighbors=*/true);
+  const forbidCenter = buildForbidSet3D(firstCell, /*includeNeighbors=*/false);
 
-    let remainBlack = (CONFIG.minesPerCell>0) ? CONFIG.minesTotal : 0;
-    while(remainBlack>0 && ptr<candidates.length){
-      const c=cells[candidates[ptr++]];
-      if(c.mineValue!==0) continue;
-      const take=Math.min(remainBlack, randInt(1, Math.max(1, CONFIG.minesPerCell)));
-      c.mineValue=+take;
-      remainBlack-=take;
-      placedBlackMines+=take;
-    }
+  // “가능하면 확장 유지”
+  let forbid = null;
 
-    let remainWhite = (CONFIG.whiteMinesPerCell>0) ? CONFIG.whiteMinesTotal : 0;
-    while(remainWhite>0 && ptr<candidates.length){
-      const c=cells[candidates[ptr++]];
-      if(c.mineValue!==0) continue;
-      const take=Math.min(remainWhite, randInt(1, Math.max(1, CONFIG.whiteMinesPerCell)));
-      c.mineValue=-take;
-      remainWhite-=take;
-      placedWhiteMines+=take;
+  if (isFeasibleWithForbid3D(forbidExpand, totalB, totalW, capB, capW)) {
+    forbid = forbidExpand; // ✅ 첫클릭 확장 보장
+  } else if (isFeasibleWithForbid3D(forbidCenter, totalB, totalW, capB, capW)) {
+    forbid = forbidCenter; // ✅ 클릭칸만 안전(확장은 포기)
+  } else {
+    // 여기까지 오면 "클릭칸을 비우고도" 총량이 물리적으로 불가능
+    // -> (a) 그래도 클릭칸은 안전 유지, (b) 가능한 최대치로 clamp해서 "총량=실제배치" 일치시키기
+    forbid = forbidCenter;
+
+    const avail = (SIZE.x*SIZE.y*SIZE.z) - forbid.size;
+
+    const maxB = Math.max(0, Math.min(totalB, avail * Math.max(0, capB)));
+    const maxW = Math.max(0, Math.min(totalW, avail * Math.max(0, capW)));
+
+    // cell-count 제약(혼합 금지): ceil(B/capB)+ceil(W/capW) <= avail
+    // 단순하게 W를 줄여 맞추고, 그래도 안되면 B도 줄임
+    let b = maxB, w = maxW;
+    const needCells = (bb, ww) =>
+      (bb>0 ? Math.ceil(bb/Math.max(1,capB)) : 0) + (ww>0 ? Math.ceil(ww/Math.max(1,capW)) : 0);
+
+    while (needCells(b,w) > avail && w > 0) w--;
+    while (needCells(b,w) > avail && b > 0) b--;
+
+    if (b !== totalB || w !== totalW) {
+      console.warn("[3DMINE] requested mines exceed capacity; clamped:", { reqB: totalB, reqW: totalW, b, w });
+      totalB = b; totalW = w;
+      // 내부/표시 일관성 위해 CONFIG도 맞춰둠(부모가 init 다시 보내면 그때 갱신됨)
+      CONFIG.minesTotal = totalB;
+      CONFIG.whiteMinesTotal = totalW;
     }
   }
+
+  const allowed = buildAllowedCoords3D(forbid); // [[x,y,z], ...] (z,y,x 순회)
+
+  // ---- 배치 순서: 검은 -> 흰 (2D와 동일) ----
+  placedBlackMines = placeColorEnhanced3D(totalB, capB, /*signNeg=*/false, forbid, allowed, capB, capW);
+  placedWhiteMines = placeColorEnhanced3D(totalW, capW, /*signNeg=*/true,  forbid, allowed, capB, capW);
+
+  // 혹시라도(버그/경계) 덜 채워졌으면 CONFIG를 실제와 일치시켜 "항상 맞게" 만듦
+  if (placedBlackMines !== totalB) {
+    console.warn("[3DMINE] black mismatch; fixing CONFIG to placed", { totalB, placedBlackMines });
+    CONFIG.minesTotal = placedBlackMines;
+  }
+  if (placedWhiteMines !== totalW) {
+    console.warn("[3DMINE] white mismatch; fixing CONFIG to placed", { totalW, placedWhiteMines });
+    CONFIG.whiteMinesTotal = placedWhiteMines;
+  }
+}
+
+// ---------- forbid / feasibility ----------
+function buildForbidSet3D(firstCell, includeNeighbors){
+  const s = new Set();
+  s.add(idx(firstCell.x, firstCell.y, firstCell.z));
+  if (includeNeighbors){
+    for (const n of neighbors26(firstCell)) s.add(idx(n.x, n.y, n.z));
+  }
+  return s;
+}
+
+// 혼합 금지 + cap 제약이 있는 "필요 칸 수" 기반 feasibility(2D에서 쓰는 핵심 조건)
+function isFeasibleWithForbid3D(forbidSet, totalB, totalW, capB, capW){
+  const totalCells = SIZE.x*SIZE.y*SIZE.z;
+  const avail = totalCells - forbidSet.size;
+
+  if (totalB < 0 || totalW < 0) return false;
+
+  // cap==0인데 total>0이면 불가
+  if (capB <= 0 && totalB > 0) return false;
+  if (capW <= 0 && totalW > 0) return false;
+
+  if (totalB > avail * Math.max(0, capB)) return false;
+  if (totalW > avail * Math.max(0, capW)) return false;
+
+  const needB = (totalB>0) ? Math.ceil(totalB/Math.max(1,capB)) : 0;
+  const needW = (totalW>0) ? Math.ceil(totalW/Math.max(1,capW)) : 0;
+
+  // 혼합 금지이므로 필요한 “칸 수”가 avail을 넘으면 불가
+  if (needB + needW > avail) return false;
+
+  return true;
+}
+
+function buildAllowedCoords3D(forbidSet){
+  const out = [];
+  for (let z=0; z<SIZE.z; z++){
+    for (let y=0; y<SIZE.y; y++){
+      for (let x=0; x<SIZE.x; x++){
+        const id = idx(x,y,z);
+        if (forbidSet.has(id)) continue;
+        out.push([x,y,z]);
+      }
+    }
+  }
+  return out;
+}
+
+// ---------- placement helpers (2D port) ----------
+function placeColorEnhanced3D(TOTAL, CAP, signNeg, forbidSet, allowedCoords, capB, capW){
+  if (TOTAL <= 0 || CAP <= 0) return 0;
+
+  const oppNeg = !signNeg;
+  const signCap = (neg) => (neg ? capW : capB);
+
+  const canAdd = (x,y,z, neg) => {
+    const c = cells[idx(x,y,z)];
+    const v = c.mineValue|0;
+    if (neg){
+      if (v > 0) return false;            // 혼합 금지
+      return Math.abs(v) < CAP;
+    } else {
+      if (v < 0) return false;
+      return Math.abs(v) < CAP;
+    }
+  };
+
+  const addOne = (x,y,z, neg) => {
+    const c = cells[idx(x,y,z)];
+    c.mineValue = (c.mineValue|0) + (neg ? -1 : +1);
+  };
+
+  const hasNeighborMineSameColorOnly = (x,y,z, neg) => {
+    const c = cells[idx(x,y,z)];
+    const wantSign = neg ? -1 : +1;
+    let hasSame = false;
+    for (const n of neighbors26(c)){
+      const v = (n.mineValue|0);
+      if (v === 0) continue;
+      const s = (v > 0) ? +1 : -1;
+      if (s !== wantSign) return false;  // 다른 색 있으면 false
+      hasSame = true;
+    }
+    return hasSame;
+  };
+
+  let created = 0;
+
+  // ===== 1) 랜덤 뿌리기(클러스터 + "가능하면 n_max") =====
+  let n2 = allowedCoords.length * 220 / 480;               // 2D 원본 그대로
+  const randStallLimit = Math.max(2000, Math.floor(allowedCoords.length * 8));
+  let stall = 0;
+
+  while (created < TOTAL && stall < randStallLimit){
+    const pick = allowedCoords[(Math.random()*allowedCoords.length)|0];
+    const x = pick[0], y = pick[1], z = pick[2];
+
+    const c = cells[idx(x,y,z)];
+    const cur = c.mineValue|0;
+
+    // 혼합 금지
+    if ((signNeg && cur > 0) || (!signNeg && cur < 0)) { stall++; continue; }
+
+    const curAbs = Math.abs(cur);
+    if (curAbs >= CAP) { stall++; continue; }
+
+    const n_max = Math.min(CAP - curAbs, TOTAL - created);
+    let n;
+    if ((TOTAL - created) > n2) { n = n_max; n2 -= 0.5; }  // ✅ 6짜리 많이(=max 많이)
+    else { n = ((Math.random()*n_max)|0) + 1; }
+
+    // 클러스터링(2D 로직 그대로: n>=2면 확률적으로 “주변 지뢰 없으면 skip”)
+    if (n >= 2){
+      const p = (n === 2 ? 0.2 :
+                n === 3 ? 0.5 :
+                n === 4 ? 0.5 :
+                n === 5 ? 0.5 :
+                n === 6 ? 0.5 : 0);
+      if (Math.random() < p){
+        if (!hasNeighborMineSameColorOnly(x,y,z, signNeg)){
+          stall++; continue;
+        }
+      }
+    }
+
+    c.mineValue = cur + (signNeg ? -n : +n);
+    created += n;
+    stall = 0;
+  }
+  if (created >= TOTAL) return created;
+
+  // ===== 2) 선형 스윕으로 보충(칸 하나를 0->CAP까지 끝까지 채우므로 누락 방지) =====
+  for (let i=0; i<allowedCoords.length && created < TOTAL; i++){
+    const [x,y,z] = allowedCoords[i];
+    while (created < TOTAL && canAdd(x,y,z, signNeg)){
+      addOne(x,y,z, signNeg);
+      created++;
+    }
+  }
+  if (created >= TOTAL) return created;
+
+  // ===== 3) 강제 통합/비우기(상대색을 분산 → 내 색 칸 확보) =====
+  // 2D 로직을 3D allowedCoords 기준으로 그대로 이식
+  let safety = allowedCoords.length * 4;
+
+  const valAt = (x,y,z) => (cells[idx(x,y,z)].mineValue|0);
+  const setAt = (x,y,z,v) => { cells[idx(x,y,z)].mineValue = v|0; };
+
+  while (created < TOTAL && safety-- > 0){
+    let freed = null; // [fx,fy,fz, hadAbs]
+
+    // 3-a) 상대색 칸(작은 수량부터) 찾기
+    find_source:
+    for (let want=1; want<=signCap(oppNeg); want++){
+      for (let i=0; i<allowedCoords.length; i++){
+        const [sx,sy,sz] = allowedCoords[i];
+        const v = valAt(sx,sy,sz);
+        if (v === 0) continue;
+
+        // 상대색만
+        if (signNeg ? (v <= 0) : (v >= 0)) continue;
+        if (Math.abs(v) !== want) continue;
+
+        // 이 칸의 상대색 지뢰를 다른 곳으로 전부 옮길 수 있는지 capacity 체크
+        let remain = Math.abs(v);
+        const capOpp = signCap(oppNeg);
+
+        for (let j=0; j<allowedCoords.length && remain>0; j++){
+          const [tx,ty,tz] = allowedCoords[j];
+          if (tx===sx && ty===sy && tz===sz) continue;
+
+          const vv = valAt(tx,ty,tz);
+
+          // oppNeg 색이 수용 가능한 곳(같은 색 또는 빈칸)
+          if (oppNeg){
+            if (vv > 0) continue; // 혼합 불가
+            const room = capOpp - Math.abs(vv);
+            if (room > 0) remain -= Math.min(room, remain);
+          } else {
+            if (vv < 0) continue;
+            const room = capOpp - Math.abs(vv);
+            if (room > 0) remain -= Math.min(room, remain);
+          }
+        }
+
+        if (remain <= 0){
+          freed = [sx,sy,sz, Math.abs(v)];
+          break find_source;
+        }
+      }
+    }
+
+    if (!freed) break;
+
+    const [freedX, freedY, freedZ, freedHad] = freed;
+
+    // 3-b) 실제로 상대색을 분산해 freed 칸 비우기
+    {
+      let remain = freedHad;
+      const capOpp = signCap(oppNeg);
+
+      // (1) 기존 상대색 칸부터 CAP까지 채우기
+      for (let j=0; j<allowedCoords.length && remain>0; j++){
+        const [tx,ty,tz] = allowedCoords[j];
+        if (tx===freedX && ty===freedY && tz===freedZ) continue;
+
+        const vv = valAt(tx,ty,tz);
+        // oppNeg 색 or 0만 수용
+        if (oppNeg){
+          if (vv > 0) continue;
+          if (vv < 0){
+            const room = capOpp - Math.abs(vv);
+            if (room>0){
+              const mv = Math.min(room, remain);
+              setAt(tx,ty,tz, vv - mv); // vv 음수, 더 음수로
+              remain -= mv;
+            }
+          }
+        } else {
+          if (vv < 0) continue;
+          if (vv > 0){
+            const room = capOpp - Math.abs(vv);
+            if (room>0){
+              const mv = Math.min(room, remain);
+              setAt(tx,ty,tz, vv + mv);
+              remain -= mv;
+            }
+          }
+        }
+      }
+
+      // (2) 부족하면 빈칸을 상대색으로 신규 채우기
+      for (let j=0; j<allowedCoords.length && remain>0; j++){
+        const [tx,ty,tz] = allowedCoords[j];
+        if (tx===freedX && ty===freedY && tz===freedZ) continue;
+
+        const vv = valAt(tx,ty,tz);
+        if (vv !== 0) continue;
+
+        const mv = Math.min(capOpp, remain);
+        setAt(tx,ty,tz, oppNeg ? -mv : +mv);
+        remain -= mv;
+      }
+
+      // 원본 칸 비우기(전량 옮겼으므로 0)
+      setAt(freedX, freedY, freedZ, 0);
+    }
+
+    // 3-c) 비워진 칸에 내 색을 채워 넣기
+    while (created < TOTAL && canAdd(freedX,freedY,freedZ, signNeg)){
+      addOne(freedX,freedY,freedZ, signNeg);
+      created++;
+    }
+  }
+
+  return created;
+}
 
   function computeAdjValues(){
     for(const c of cells){
