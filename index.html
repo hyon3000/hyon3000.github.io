@@ -966,12 +966,12 @@ __threeD.lastInit = {
       <input type="number" id="x" min="3" max="9999" step="1" style="width:60px;" value="30">
       <a>세로</a>
       <input type="number" id="y" min="1" max="9999" step="1" style="width:60px;" value="16">
-      <a id="lbl-depth2" style="display:none;">깊이</a>
+      <a id="lbl-depth2" style="display:none;">높이</a>
       <input type="number" id="z" min="1" max="9999" step="1" style="width:60px; display:none;" value="1">
 
       <a>1칸당 최대 지뢰 수</a>
       <input type="number" id="m" min="1" max="6" step="1" style="width:60px;" value="1">
-      <a>전체 지뢰</a>
+      <a>전체 지뢰 수</a>
       <input type="number" id="t" min="1" step="1" style="width:80px;" value="99">
 
       <!-- ▼ 추가: 하얀 지뢰 입력(0 허용) -->
@@ -981,9 +981,9 @@ __threeD.lastInit = {
       <input type="number" id="wt" min="0" step="1" style="width:80px;" value="0">
       <a>지능형 생성</a>
       <select id="ai" style="width:220px;" value="2">
-        <option value="0">0: 찍기 패턴 발생 허용 + 최소 구제</option>
-        <option value="1">1: 찍기 패턴 발생 허용 + 첫 클릭 오프닝 보장 + 무제한 구제</option>
-        <option value="2" selected>2: 찍기 패턴 발생 차단 + 자동 지뢰 풀이(매우 느림)</option>
+        <option value="0">0: 찍기 허용 + 최소 구제</option>
+        <option value="1">1: 찍기 허용 + 첫클릭 오프닝 + 무제한 구제</option>
+        <option value="2" selected>2: 찍기 차단(느림)</option>
       </select>
       <input type="button" onclick="setActiveDifficulty(23);execute(
           document.getElementById('x').value,
@@ -2051,7 +2051,7 @@ updateWindowTitle();
           // 라벨은 정적인 한국어 텍스트를 치환
           let html = form.innerHTML;
           html = html.replace("주문제작:가로", "Custom: cols")
-            .replace("세로", "rows")
+            .replace("세로", "rows").replace("높이", "depth")
             .replace("1칸당 최대 지뢰 수", "Max mines / cell")
             .replace("전체 지뢰 수", "Total mines")
             .replace("1칸당 최대 음수지뢰 수", "Max anti-mines / cell")
@@ -2114,6 +2114,7 @@ updateWindowTitle();
             // 가로/세로(행) 라벨(괄호 유무 모두)
             .replace(/너비\s*\(W\)*/g, "Width")
             .replace(/높이\s*\(H\)*/g, "Height")
+            .replace(/깊이\s*\(D\)*/g, "Depth")
             // 지뢰/음수지뢰(= anti-mine) 항목
             .replace(/최대지뢰\/1칸/g, "Max mines/cell")
             .replace(/지뢰\s*수\s*\(M\)*/g, "Mines")
@@ -3618,7 +3619,12 @@ function syncAIModeUI(){
     if (__aiBackup.mainHTML === null) __aiBackup.mainHTML = sel.innerHTML;
 
     if (on){
-      sel.innerHTML = `<option value="0" selected>0: 찍기 허용 + 최소 구제</option>`;
+      //브라우저가 영어인지 확인해야함, 영어이면 영어문구
+      if((navigator.language || '').toLowerCase().startsWith('ko')){
+        sel.innerHTML = `<option value="0" selected>0: 찍기 허용 + 최소 구제</option>`;
+      } else {
+        sel.innerHTML = `<option value="0" selected>0: Allow Guessing + Minimal Rescue</option>`;
+      }
       sel.value = '0';
     } else {
       sel.innerHTML = __aiBackup.mainHTML;
@@ -3633,7 +3639,12 @@ function syncAIModeUI(){
     if (__aiBackup.customHTML === null) __aiBackup.customHTML = csel.innerHTML;
 
     if (on){
-      csel.innerHTML = `<option value="0" selected>0: 찍기 허용 + 최소 구제</option>`;
+      //브라우저가 영어인지 확인해야함, 영어이면 영어문구
+      if((navigator.language || '').toLowerCase().startsWith('ko')){
+        csel.innerHTML = `<option value="0" selected>0: 찍기 허용 + 최소 구제</option>`;
+      } else {
+        csel.innerHTML = `<option value="0" selected>0: Allow Guessing + Minimal Rescue</option>`;
+      }
       csel.value = '0';
     } else {
       csel.innerHTML = __aiBackup.customHTML;
