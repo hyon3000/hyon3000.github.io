@@ -320,18 +320,16 @@ function hardResetFromParent(){
   const SPACING = 1.18;
   const OPACITY_CLOSED = 0.95;
   const OPACITY_MARKED = 0.50;
-  const OPACITY_DIE_HIT = 0.50;
-  const OPACITY_DIE_MINE = 0.50;
 
   // “눌림/Chord 상태”에서 요구한 70%
   const OPACITY_PRESSED = 0.50;
   const OPACITY_CHORD_HI = 0.50;
-// ===== GAME OVER (WinXP 스타일 공개) =====
-const DIE_OPACITY_HIT   = 0.55; // 밟은 지뢰: 붉은 반투명
-const DIE_OPACITY_OTHER = 0.45; // 나머지 지뢰/오답깃발: 흰 반투명
-const DIE_COLOR_HIT     = 0xff0000;
-const DIE_COLOR_HIT_NOCOLOR = 0xC0C0C0;
-const DIE_COLOR_OTHER   = 0xffffff;
+  // ===== GAME OVER (WinXP 스타일 공개) =====
+  const DIE_OPACITY_HIT   = 0.45; // 밟은 지뢰: 붉은 반투명
+  const DIE_OPACITY_OTHER = 0.45; // 나머지 지뢰/오답깃발: 흰 반투명
+  const DIE_COLOR_HIT     = 0xff7070;
+  const DIE_COLOR_HIT_NOCOLOR = 0xC0C0C0;
+  const DIE_COLOR_OTHER   = 0xffffff;
 
 function __hideMarksVisualOnly(c){
   // 점수/카운트(markType)는 건드리지 않고 “보이는 것만” 숨김
@@ -451,15 +449,10 @@ function revealAfterDeath_WinXP(hitCell=null){
     const d = Math.abs(val) % 10;
     return (val > 0) ? POS_DIGIT_COLOR[d] : NONPOS_DIGIT_COLOR[d];
   }
-  const POS_FLAG_COLORS_BASE = [
-  POS_DIGIT_COLOR[3], POS_DIGIT_COLOR[2], POS_DIGIT_COLOR[6],
-  POS_DIGIT_COLOR[9], POS_DIGIT_COLOR[0], POS_DIGIT_COLOR[8]
-];
+  const POS_FLAG_COLORS_BASE = [ "#ff0000", "#008000", "#008080", "#808000",  "#800080",  "#808080" ];
 
-const NEG_FLAG_COLORS_BASE = [
-  POS_DIGIT_COLOR[1], "#00ff00", NONPOS_DIGIT_COLOR[3],
-  NONPOS_DIGIT_COLOR[9], "#ff00ff", "#ffffff"
-];
+const NEG_FLAG_COLORS_BASE = ["#0000ff","#00ff00","#00ffff","#ffff00","#ff00ff","#ffffff",];
+
 
 function flagColorByRule(markType, i){
   if (!CONFIG.useColor) return "#000000";
@@ -473,7 +466,7 @@ function flagColorByRule(markType, i){
     2: [[-1, 0],[ 1, 0]],
     3: [[-1,-1],[ 1,-1],[ 0, 1]],
     4: [[-1,-1],[ 1,-1],[-1, 1],[ 1, 1]],
-    5: [[-1,-1],[ 1,-1],[-1, 0],[ 1, 0],[ 0, 1]],
+    5: [[-1,-1],[ 1,-1],[0, 0],[ -1, 1],[ 1, 1]],
     6: [[-1,-1],[ 1,-1],[-1, 0],[ 1, 0],[-1, 1],[ 1, 1]],
   };
   const FLAG_DX = 0.20;
@@ -503,19 +496,35 @@ function flagColorByRule(markType, i){
     radius: 26,
     theta: 0.9,
     phi: 1.0,
+    roll: 0.0,
     minRadius: 8,
     maxRadius: 400
   };
-  function updateCameraOrbit(){
-    const eps = 0.05;
-    orbit.phi = clamp(orbit.phi, eps, Math.PI - eps);
-    const sinPhi = Math.sin(orbit.phi);
-    const x = orbit.radius * sinPhi * Math.cos(orbit.theta);
-    const y = orbit.radius * Math.cos(orbit.phi);
-    const z = orbit.radius * sinPhi * Math.sin(orbit.theta);
-    camera.position.set(orbit.target.x + x, orbit.target.y + y, orbit.target.z + z);
-    camera.lookAt(orbit.target);
-  }
+  const __tmpForward = new THREE.Vector3();
+const __tmpUp = new THREE.Vector3();
+
+function updateCameraOrbit(){
+  const eps = 0.05;
+  orbit.phi = clamp(orbit.phi, eps, Math.PI - eps);
+
+  const sinPhi = Math.sin(orbit.phi);
+  const x = orbit.radius * sinPhi * Math.cos(orbit.theta);
+  const y = orbit.radius * Math.cos(orbit.phi);
+  const z = orbit.radius * sinPhi * Math.sin(orbit.theta);
+
+  camera.position.set(
+    orbit.target.x + x,
+    orbit.target.y + y,
+    orbit.target.z + z
+  );
+
+  // ✅ roll: forward(시선)축 기준으로 up을 회전시켜 lookAt에 반영
+  __tmpForward.subVectors(orbit.target, camera.position).normalize(); // forward
+  __tmpUp.set(0, 1, 0).applyAxisAngle(__tmpForward, orbit.roll || 0);  // rolled up
+  camera.up.copy(__tmpUp);
+
+  camera.lookAt(orbit.target);
+}
   function panByPixels(dx, dy){
     const panSpeed = orbit.radius * 0.0016;
     const m = new THREE.Matrix4().extractRotation(camera.matrixWorld);
@@ -768,6 +777,7 @@ const TOUCH2 = {
   lastMidX: 0,
   lastMidY: 0,
   lastDist: 0,
+  lastAngle: 0,
   justGesture: false,    // 제스처 끝난 직후 탭 방지용
 };
 
@@ -788,6 +798,7 @@ function t2_midDist(){
   const midX = (a.x + b.x) * 0.5;
   const midY = (a.y + b.y) * 0.5;
   const dist = Math.hypot(a.x - b.x, a.y - b.y);
+  const angle = Math.atan2(b.y - a.y, b.x - a.x); 
   return { midX, midY, dist };
 }
 function t2_enterGesture(){
@@ -797,7 +808,7 @@ function t2_enterGesture(){
   TOUCH2.lastMidX = midX;
   TOUCH2.lastMidY = midY;
   TOUCH2.lastDist = dist;
-
+  TOUCH2.lastAngle = angle; 
   // 1손가락 탭/롱프레스/pressed 모두 취소
   clearLongPress();
   if (TOUCH.downCell && TOUCH.pressedApplied){
@@ -2206,24 +2217,23 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
   resetTouchState();
   return;
 }
- // ★ on_up 흐름: 생성 중이면 리셋 금지
+    // ★ on_up 흐름: 생성 중이면 리셋 금지
     // (원본처럼, up에서 상태 리셋/pressed 해제를 막아야 함)
-        const dead = (gameState === "over" || gameState === "win");
+    const dead = (gameState === "over" || gameState === "win");
     if (dead){
       // 드래그 상태만 정리하고, 셀 동작/pressed/chord는 절대 실행하지 않음
       if (ev.button === 0){
         leftDown = false;
+        leftRotDown = false;
         if (lrChordActive) {
-    
-      chordExecute(null, lrChordCenter);   // ★ forcedCell
-      lrChordActive = false;
-      lrChordCenter = null;
-      setChordHighlight(false, null);
-      on_up_global();
-      clearPressedAndChord();
-    
-    return;
-  }
+          chordExecute(null, lrChordCenter);   // ★ forcedCell
+          lrChordActive = false;
+          lrChordCenter = null;
+          setChordHighlight(false, null);
+          on_up_global();
+          clearPressedAndChord();
+          return;
+        }
         if (leftDownCell && leftPressedApplied) leftDownCell.setPressed(false);
       }
       if (ev.button === 1){
@@ -2247,8 +2257,8 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
       on_up_global();
       clearPressedAndChord();
     
-    return;
-  }
+      return;
+    }
       }
       clearPressedAndChord();
       return;
@@ -2368,6 +2378,11 @@ if (gameState === "over" || gameState === "win"){
 
   function onPointerMove(ev){
    if (IS_MOBILE && ev.pointerType === "touch") {
+    function normAngleDelta(a){
+      while (a >  Math.PI) a -= Math.PI * 2;
+      while (a < -Math.PI) a += Math.PI * 2;
+      return a;
+    }
   // 위치 갱신(해당 pointerId만)
   if (TOUCH2.pointers.has(ev.pointerId)) {
     t2_setPointer(ev);
@@ -2393,6 +2408,15 @@ if (gameState === "over" || gameState === "win"){
       updateCameraOrbit();
     }
     TOUCH2.lastDist = dist;
+    // ✅ (3) twist(두 점 기울기 회전) => roll
+    let dAng = normAngleDelta(angle - TOUCH2.lastAngle);
+    TOUCH2.lastAngle = angle;
+
+    // 너무 미세한 떨림은 무시(선택)
+    if (Math.abs(dAng) > 0.002) {
+      orbit.roll = (orbit.roll || 0) + dAng;  // ✅ 남은 1축 회전
+      updateCameraOrbit();
+    }
 
     return; // ✅ 단일터치 로직 타지 않음
   }

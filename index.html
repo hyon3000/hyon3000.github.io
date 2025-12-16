@@ -1253,6 +1253,10 @@ function playSound(soundFile) {
         console.warn('Sound creation failed:', err);
       }
     }
+    function isPratoTheme() {
+  const t = window.currentTheme || 'minesweeper';
+  return t === 'prato-xp' || t === 'prato-2000';
+}
 function updateWindowTitle() {
   const KO = isKorean();
   const prato = isPratoTheme();
@@ -1819,10 +1823,7 @@ ${spriteSelectors} {
       // 시작 메시지
       console.info('[Console mirror started]');
     })();
-    function isPratoTheme() {
-  const t = window.currentTheme || 'minesweeper';
-  return t === 'prato-xp' || t === 'prato-2000';
-}
+    
 
 
     
@@ -2216,7 +2217,18 @@ const I18N_STRINGS = {
   'i18n-last-cell': '마지막 남은 칸(찍기 아님)',
   'i18n-last-cell-en': 'Last remaining cell (not a guess)',
 };
+function _findWrongFlag(mf){
+  if (!mf || !mf.flags || !mf.mines) return null;
+  const W = mf.columns|0, H = mf.rows|0;
 
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++){
+    const f = (mf.flags[x]?.[y] || 0) | 0;
+    if (f === 0) continue;
+    const ans = (mf.mines[x]?.[y] || 0) | 0;
+    if (f !== ans) return { x, y, ans };
+  }
+  return null;
+}
   /* ===== (추가) trace 가능 여부 ===== */
   function _hasTracePlayable(mf) {
     return !!(mf && mf.use_nopick && Array.isArray(mf._nopick_trace) && mf._nopick_trace.length);
@@ -2226,6 +2238,10 @@ const I18N_STRINGS = {
   function _setFlagExactUI(mf, x, y, target) {
     target = (target | 0);
     let g = 32;
+  if (target === 0) {
+    while (_isFlagUI(mf, x, y) && g--) mf.on_rclick(x, y);
+    return !_isFlagUI(mf, x, y);
+  }
     while (((mf.flags[x][y] || 0) | 0) !== target && g--) mf.on_rclick(x, y);
     return (((mf.flags[x][y] || 0) | 0) === target);
   }
@@ -2497,6 +2513,16 @@ function _frontierClosedCells(mf) {
 
     // A) trace 재생 가능하면: 기존 trace 기반 힌트(현재 로직 유지)
     if (_hasTracePlayable(mf)) {
+      // ✅ (추가) nopick(trace) 여부와 상관없이 "잘못 마킹" 우선 처리
+      const wrong = _findWrongFlag(mf);
+      if (wrong){
+        // 기존 “찍기있음”쪽 동작과 맞추려면 여기서 자동 수정까지 해도 됨
+        _setFlagExactUI(mf, wrong.x, wrong.y, wrong.ans);
+        if (typeof update_all_mine_counters === 'function') update_all_mine_counters();
+
+        alert(_msg('i18n-wrong-flag', 'i18n-wrong-flag-en', { x: wrong.x, y: wrong.y }));
+        return;
+      }
       // ---- (기존 힌트 로직 그대로) ----
       const t = _nextVisible(mf);
       if (!t) { alert(_msg('i18n-no-next', 'i18n-no-next-en')); return; }
@@ -2542,7 +2568,7 @@ __pushSolveLog(mf, step, true); // ★ 힌트는 1스텝이므로 즉시 1줄 �
       alert(_msg('i18n-next-open', 'i18n-next-open-en', { x: step.x, y: step.y, reason }));
     } else if (step.kind === "fixFlag") {
       // fixFlag는 요구사항 reason 고정
-      alert(_msg('i18n-wrong-flag', 'i18n-wrong-flag-en', { x: step.x, y: step.y }) + "\n" + reason);
+      alert(_msg('i18n-wrong-flag', 'i18n-wrong-flag-en', { x: step.x, y: step.y }) );
     } else { // markMine
       const v = ("val" in step) ? (step.val | 0) : (mf.mines[step.x][step.y] | 0);
       alert(_msg(v < 0 ? 'i18n-next-flag-white' : 'i18n-next-flag-black',
@@ -3473,18 +3499,31 @@ if (m.type === 'solverStep') {
   // 2) 힌트 요청(pendingHintPopup)일 때만 상세 alert
   const isHintPopup = !!__threeD.pendingHintPopup;
   if (isHintPopup) __threeD.pendingHintPopup = false;
+const misFlag =
+    step.kind === 'fixFlag' ||
+    /잘못\s*마킹한\s*칸이\s*있습니다/i.test(reason) ||
+    /mis-flag/i.test(reason);
 
+  if (misFlag) {
+    // 2D 문구에 맞춤 (3D라 z도 같이 표기)
+    alert(
+      ko
+        ? `잘못 마킹한 칸이 있습니다: (${x}, ${y}, ${z}). 먼저 이 칸을 수정하세요.`
+        : `You mis-flagged a cell: (${x}, ${y}, ${z}). Please fix this first.`
+    );
+    return;
+  }
   // ✅ 자동풀기/일반 step: usedGuess만 경고창
   if (!isHintPopup) {
     if (step.usedGuess) {
-      alert(ko ? '찍기 불가피 — 한 칸의 정답을 공개합니다.' : 'Guess unavoidable — revealing one cell.');
+      alert(ko ? '찍기 불가피 — 한 칸의 정답을 제공.' : 'Guess unavoidable — revealing the truth for one cell');
     }
     return; // ← 여기서 끝! (매 step마다 알림 안 뜸)
   }
 
   // ✅ 힌트(F4)로 온 step: 상세 알림
   if (step.usedGuess) {
-    alert(ko ? '찍기 불가피 — 한 칸의 정답을 공개합니다.' : 'Guess unavoidable — revealing one cell.');
+    alert(ko ? '찍기 불가피 — 한 칸의 정답을 제공.' : 'Guess unavoidable — revealing the truth for one cell');
   }
 
   if (step.kind === 'open') {
