@@ -788,9 +788,9 @@ function t2_delPointer(ev){
   TOUCH2.pointers.delete(ev.pointerId);
 }
 function t2_get2(){
-  const it = TOUCH2.pointers.values();
-  const a = it.next().value;
-  const b = it.next().value;
+  const ids = Array.from(TOUCH2.pointers.keys()).sort((a,b)=>a-b);
+  const a = TOUCH2.pointers.get(ids[0]);
+  const b = TOUCH2.pointers.get(ids[1]);
   return [a,b];
 }
 function t2_midDist(){
@@ -798,13 +798,13 @@ function t2_midDist(){
   const midX = (a.x + b.x) * 0.5;
   const midY = (a.y + b.y) * 0.5;
   const dist = Math.hypot(a.x - b.x, a.y - b.y);
-  const angle = Math.atan2(b.y - a.y, b.x - a.x); 
-  return { midX, midY, dist };
+  const angle = Math.atan2(b.y - a.y, b.x - a.x);
+  return { midX, midY, dist, angle };
 }
 function t2_enterGesture(){
   TOUCH2.mode = "gesture";
   TOUCH2.justGesture = true;
-  const { midX, midY, dist } = t2_midDist();
+  const { midX, midY, dist, angle } = t2_midDist();
   TOUCH2.lastMidX = midX;
   TOUCH2.lastMidY = midY;
   TOUCH2.lastDist = dist;
@@ -2392,7 +2392,7 @@ if (gameState === "over" || gameState === "win"){
   if (TOUCH2.pointers.size >= 2 && TOUCH2.mode === "gesture") {
     if (hoverCell){ hoverCell.setHover(false); hoverCell = null; }
 
-    const { midX, midY, dist } = t2_midDist();
+    const { midX, midY, dist, angle } = t2_midDist();
 
     // (1) 두손가락 평행 이동 => pan
     const dx = midX - TOUCH2.lastMidX;
@@ -2414,6 +2414,7 @@ if (gameState === "over" || gameState === "win"){
 
     // 너무 미세한 떨림은 무시(선택)
     if (Math.abs(dAng) > 0.002) {
+      orbit.roll = Number.isFinite(orbit.roll) ? orbit.roll : 0;
       orbit.roll = (orbit.roll || 0) + dAng;  // ✅ 남은 1축 회전
       updateCameraOrbit();
     }
