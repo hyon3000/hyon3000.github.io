@@ -330,6 +330,17 @@ function hardResetFromParent(){
   const DIE_COLOR_HIT     = 0xff7070;
   const DIE_COLOR_HIT_NOCOLOR = 0xC0C0C0;
   const DIE_COLOR_OTHER   = 0xffffff;
+// === pick helpers ===
+const __FLAG_PICKABLES = []; // 깃발(폴/천) 메쉬만 모아둠
+
+function __isDeepVisible(obj){
+  let o = obj;
+  while (o){
+    if (o.visible === false) return false;
+    o = o.parent;
+  }
+  return true;
+}
 
 function __hideMarksVisualOnly(c){
   // 점수/카운트(markType)는 건드리지 않고 “보이는 것만” 숨김
@@ -895,6 +906,14 @@ function touchDist(ev){
         slot.visible=false;
         this.flagsGroup.add(slot);
         this.flagSlots.push(slot);
+        // ✅ slot 안의 실제 메쉬(폴/깃발천)를 피킹 대상으로 등록
+  slot.traverse((o)=>{
+    if (o && o.isMesh){
+      o.userData.cell = this;
+      o.userData.pickType = "flag";
+      __FLAG_PICKABLES.push(o);
+    }
+  });
       }
       this.group.add(this.flagsGroup);
 
@@ -1743,16 +1762,33 @@ let chordCenterPicked = null;
     mouseNDC.x=((ev.clientX-rect.left)/rect.width)*2-1;
     mouseNDC.y=-(((ev.clientY-rect.top)/rect.height)*2-1);
     raycaster.setFromCamera(mouseNDC, camera);
-
-    const hits = raycaster.intersectObjects(cubeMeshes, false);
+  const targets = __FLAG_PICKABLES.concat(cubeMeshes);
+    const hits = raycaster.intersectObjects(targets, false);
     if(!hits.length) return null;
 
     for(const h of hits){
-      const obj = h.object;
-      if(obj && obj.visible){
-        return obj.userData.cell || null;
-      }
+    const obj = h.object;
+    if(!obj) continue;
+    if(!__isDeepVisible(obj)) continue;
+
+    const c = obj.userData.cell || null;
+    if(!c) continue;
+
+    // 1) 깃발을 눌렀으면 그 칸이 이벤트를 “먹음”
+    if(obj.userData.pickType === "flag"){
+      return c;
     }
+
+    // 2) 큐브를 눌렀는데 그 칸이 깃발칸이면 “관통”
+    //    => 뒤에 있는 큐브가 눌리게 된다
+    if(obj === c.cube){
+      if(isFlagged(c)) continue; // ✅ 핵심: 깃발칸 큐브는 클릭을 먹지 않음
+      return c;
+    }
+
+    // 혹시 다른 메쉬가 섞여도 안전하게 처리
+    if(!isFlagged(c)) return c;
+  }
     return null;
   }
 
