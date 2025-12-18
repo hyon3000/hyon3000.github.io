@@ -441,15 +441,14 @@ function revealAfterDeath_WinXP(hitCell=null){
   }
 }
 
-  // ===== 색상 규칙 =====
-  const POS_DIGIT_COLOR = {1:"#0000ff",2:"#008000",3:"#ff0000",4:"#000080",5:"#800000",6:"#008080",7:"#000000",8:"#808080",9:"#808000",0:"#800080"};
-  const NONPOS_DIGIT_COLOR = {0:"#ffffff",1:"#E0A000",2:"#800000",3:"#00ffff",4:"#808000",5:"#008000",6:"#c08000",7:"#000000",8:"#808080",9:"#ffff00"};
+  const POS_DIGIT_COLOR = {1:"#0000ff",2:"#003800",3:"#ff0000",4:"#000038",5:"#380000",6:"#003838",7:"#000000",8:"#383838",9:"#383800",0:"#380038"};
+  const NONPOS_DIGIT_COLOR = {0:"#ffffff",1:"#c45c00",2:"#380000",3:"#00ffff",4:"#383800",5:"#003800",6:"#8a3800",7:"#000000",8:"#383838",9:"#ffff00"};
   function numberColorByRule(val){
     if(!CONFIG.useColor) return "#000000";
     const d = Math.abs(val) % 10;
     return (val > 0) ? POS_DIGIT_COLOR[d] : NONPOS_DIGIT_COLOR[d];
   }
-  const POS_FLAG_COLORS_BASE = [ "#ff0000", "#008000", "#008080", "#808000",  "#800080",  "#808080" ];
+  const POS_FLAG_COLORS_BASE = [ "#ff0000", "#003800", "#003838", "#383800",  "#380038",  "#383838" ];
 
 const NEG_FLAG_COLORS_BASE = ["#0000ff","#00ff00","#00ffff","#ffff00","#ff00ff","#ffffff",];
 
