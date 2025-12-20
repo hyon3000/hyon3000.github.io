@@ -29,6 +29,29 @@
       padding:14px 16px;
       border-radius:12px;
     }
+    #assist-panel{
+  position:fixed;
+  right:10px;
+  bottom:10px;
+  width:220px;
+  height:160px;
+  border:1px solid rgba(0,0,0,0.45);
+  background:#C0C0C0;       /* ✅ 불투명(메인 배경과 동일) */
+  border-radius:10px;
+  z-index: 2000;            /* ✅ 캔버스보다 확실히 위 */
+  pointer-events: auto;
+  touch-action: none;
+  overflow:hidden;
+}
+#assist-canvas{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  display:block;
+  touch-action:none;
+}
+
     html, body { overscroll-behavior: none; }
 canvas { touch-action: none; }
 
@@ -37,7 +60,9 @@ canvas { touch-action: none; }
 </head>
 <body>
   <div id="loading-overlay"><div class="box">Generating…</div></div>
-
+<div id="assist-panel">
+  <canvas id="assist-canvas"></canvas>
+</div>
   
 
 <script>
@@ -215,6 +240,7 @@ function refreshColorsNow(){
       c._numberSprite = spr;
     } else {
       const spr = getNumberSprite(String(c.adjValue), numberColorByRule(c.adjValue));
+      inheritLayersFromCell(c, spr); 
       spr.userData.cell = c;
       c.content.add(spr);
       c._numberSprite = spr;
@@ -384,6 +410,7 @@ function __renderNumberOnly(c){
     return;
   }
   const spr = getNumberSprite(String(c.adjValue), numberColorByRule(c.adjValue));
+  inheritLayersFromCell(c, spr); 
   spr.userData.cell = c;
   c.content.add(spr);
   c._numberSprite = spr;
@@ -487,6 +514,81 @@ function flagColorByRule(markType, i){
   const raycaster = new THREE.Raycaster();
   const mouseNDC = new THREE.Vector2();
   const overlayEl = document.getElementById("loading-overlay");
+const assistEl = document.getElementById("assist-panel");
+
+// pointerId -> { startedInMain: bool }
+const __ptrStart = new Map();
+
+function __isInActiveArea(clientX, clientY){
+  if (!__PICK.rect) return false;
+
+  const r = __PICK.rect;
+  if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) return false;
+
+  // main 입력일 때만 보조창 제외
+  if (__PICK.source === "main" && assistEl){
+    const ar = assistEl.getBoundingClientRect();
+    if (clientX >= ar.left && clientX <= ar.right && clientY >= ar.top && clientY <= ar.bottom) return false;
+  }
+  return true;
+}
+function __setPickContext(source, domEl){
+  __PICK.source = source;
+  __PICK.dom = domEl;
+  __PICK.rect = domEl.getBoundingClientRect();
+  __PICK.camera = (source === "assist") ? assistCamera : camera;
+}
+function __releaseAllInputs(pointerId){
+  // 입력 상태 전부 강제 해제 (메인 바깥으로 나가면 즉시 release)
+  leftDown = false;
+  middleDown = false;
+  rightDown = false;
+leftDownAxis = null;
+  panDown = false;
+  rotDown = false;
+  leftRotDown = false;
+
+  lrChordActive = false;
+  lrChordCenter = null;
+
+  rightDownCell = null;
+  rightStartXY = null;
+  rightMoved = false;
+
+  leftDownCell = null;
+  leftDownXY = null;
+  leftPressedApplied = false;
+  leftCanceledByChord = false;
+
+  middleStartXY = null;
+  middleMoved = false;
+
+  chordArmed = false;
+  chordKind = null;
+  chordPointerId = null;
+
+  setChordHighlight(false, null);
+  clearPressedAndChord();
+
+  // hover 잔상 제거
+  if (hoverCell){ hoverCell.setHover(false); hoverCell = null; }
+
+  // 터치 상태도 정리
+  try { resetTouchState(); } catch(e) {}
+  try {
+    TOUCH2?.pointers?.clear?.();
+    if (TOUCH2) { TOUCH2.mode = "none"; TOUCH2.justGesture = false; }
+  } catch(e){}
+
+  // 얼굴: 생성중이면 그대로(Generating), 아니면 normal
+  if (!_is_generating && !(gameState === "over" || gameState === "win")) setFace(0);
+
+  // pointer capture 해제
+try { (__PICK.dom || renderer.domElement).releasePointerCapture(pointerId); } catch(e) {}
+
+__ptrStart.delete(__PICK.source+"|"+pointerId);
+
+}
 
   let cells = [];
   let cubeMeshes = [];
@@ -598,8 +700,10 @@ function updateCameraOrbit(){
     const tex = new THREE.CanvasTexture(canvas);
     tex.anisotropy = 4;
     const mat = new THREE.SpriteMaterial({ map: tex, transparent:true });
+      mat.depthTest = false; 
     const spr = new THREE.Sprite(mat);
     spr.scale.set(0.7,0.7,0.7);
+    spr.renderOrder = 99999999; 
     return spr;
   }
 
@@ -700,6 +804,27 @@ function xColorByRule(){
   setFace(0); // ✅ 추가
 }
 
+let assistRenderer = null;
+let assistCamera = null;
+let assistCanvas = null;
+
+const L_MAIN = 0;
+const L_ASSIST_CELLS = 1;
+const L_ASSIST_UI = 2;
+
+let __PICK = { source:"main", dom:null, camera:null, rect:null };
+
+let __assistPrevCells = [];   // 이전에 layer1 켰던 셀들
+let __assistCells = [];       // 현재 focused 주변 셀들(최대 27)
+const __AXIS_PICKABLES = [];  // 삼각뿔 피킹
+let axisGroup = null;
+function setLayerRecursive(obj, layer, enable){
+  obj.traverse((o)=>{
+    if (!o.layers) return;
+    if (enable) o.layers.enable(layer);
+    else o.layers.disable(layer);
+  });
+}
 
   // ===== chord 하이라이트(전역) =====
   let chordHighlightActive = false;
@@ -720,6 +845,7 @@ function setChordHighlight(active, centerCell = null){
   // ✅ 안열린 + 깃발없는(= ? 포함)만 70%
    // ✅ 0) 클릭된 자기 자신도 포함 (조건 만족할 때만)
   const c0 = chordCenterCell;
+  setFocusedCell(chordCenterCell);
   if (c0.cube.visible && !c0.isOpen && isFlaglessForChord(c0)) {
     c0.cube.material.opacity = OPACITY_CHORD_HI; // 0.70
     chordHighlighted.add(c0);
@@ -856,7 +982,10 @@ function resetTouchState(){
 function touchDist(ev){
   return Math.hypot(ev.clientX - TOUCH.startX, ev.clientY - TOUCH.startY);
 }
-
+function inheritLayersFromCell(cell, obj){
+  if (!cell || !obj || !obj.layers) return;
+  obj.layers.mask = cell.group.layers.mask; // ✅ cell이 가진 레이어를 그대로 상속
+}
   // ===== Cell =====
   class Cell{
     constructor(x,y,z, worldPos){
@@ -874,7 +1003,7 @@ function touchDist(ev){
       const cubeGeo=new THREE.BoxGeometry(1,1,1);
       const cubeMat=new THREE.MeshStandardMaterial({
         color:0xffffff, transparent:true, opacity:OPACITY_CLOSED,
-        roughness:0.25, metalness:0.0, depthWrite:false,
+        roughness:0.25, metalness:0.0, depthWrite:true,
         emissive:0x000000, emissiveIntensity:0.35
       });
       this.cube = new THREE.Mesh(cubeGeo, cubeMat);
@@ -975,6 +1104,7 @@ function touchDist(ev){
 
     // ★ 우클릭 다운에서 즉시 적용
     cycleMark(){
+      setFocusedCell(this);
       if(this.isOpen) return;
       if(gameState==="over" || gameState==="win") return;
 
@@ -1010,6 +1140,7 @@ function touchDist(ev){
     }
 // ✅ 좌클릭(깃발 위) 전용: ?/해제 없이 "깃발만" 순환
 cycleFlagOnly(){
+  setFocusedCell(this);
   if (this.isOpen) return;
   if (gameState === "over" || gameState === "win") return;
 
@@ -1076,6 +1207,8 @@ cycleFlagOnly(){
 
     // 좌클릭/Chord는 “업”에서 처리하도록 외부에서 호출
     openFromClick(){
+      setFocusedCell(this);
+
       if(this.isOpen) return;
       if(gameState==="over" || gameState==="win") return;
 
@@ -1130,11 +1263,13 @@ if (isFlagged(this)){
         expandTrueZerosFrom(this);
       } else if(this.adjValue===1000){
         const spr=getNumberSprite("0", numberColorByRule(0));
+        inheritLayersFromCell(this, spr);  
         spr.userData.cell=this;
         this.content.add(spr);
         this._numberSprite=spr;
       } else {
         const spr=getNumberSprite(String(this.adjValue), numberColorByRule(this.adjValue));
+        inheritLayersFromCell(this, spr); 
         spr.userData.cell=this;
         this.content.add(spr);
         this._numberSprite=spr;
@@ -1606,11 +1741,13 @@ function placeColorEnhanced3D(TOTAL, CAP, signNeg, forbidSet, allowedCoords, cap
           q.push(n);
         } else if(n.adjValue===1000){
           const spr=getNumberSprite("0", numberColorByRule(0));
+          inheritLayersFromCell(n, spr); 
           spr.userData.cell=n;
           n.content.add(spr);
           n._numberSprite=spr;
         } else {
           const spr=getNumberSprite(String(n.adjValue), numberColorByRule(n.adjValue));
+          inheritLayersFromCell(n, spr);
           spr.userData.cell=n;
           n.content.add(spr);
           n._numberSprite=spr;
@@ -1706,24 +1843,44 @@ function updateScore(){
   
 
   // ===== Chord: “업”에서 실행 (정확히 숫자 스프라이트 클릭) =====
-  function getPickNumberCell(ev){
-    const rect=renderer.domElement.getBoundingClientRect();
-    mouseNDC.x=((ev.clientX-rect.left)/rect.width)*2-1;
-    mouseNDC.y=-(((ev.clientY-rect.top)/rect.height)*2-1);
-    raycaster.setFromCamera(mouseNDC, camera);
+ function getPickNumberCell(ev){
+  const rect = __PICK.rect || renderer.domElement.getBoundingClientRect();
+  mouseNDC.x=((ev.clientX-rect.left)/rect.width)*2-1;
+  mouseNDC.y=-(((ev.clientY-rect.top)/rect.height)*2-1);
+  raycaster.setFromCamera(mouseNDC, __PICK.camera || camera);
 
-    const targets=[];
-    for(const c of cells) if(c.isOpen && c._numberSprite) targets.push(c._numberSprite);
-
-    const hits = raycaster.intersectObjects(targets, false);
-    if(!hits.length) return null;
-    return hits[0].object.userData.cell || null;
+  const targets=[];
+  // ✅ assist면 현재 27셀 범위만 스프라이트 탐색(빠름)
+  const srcCells = (__PICK.source === "assist") ? __assistCells : cells;
+  for(const c of srcCells){
+    if(c && c.isOpen && c._numberSprite) targets.push(c._numberSprite);
   }
-let chordCenterPicked = null;
+
+  const hits = raycaster.intersectObjects(targets, false);
+  if(!hits.length) return null;
+
+  // ✅ assist면 layer로 한 번 더 필터(안전)
+  for (const h of hits){
+    const obj = h.object;
+    if (!obj) continue;
+    if (__PICK.source === "assist"){
+      if (!obj.layers.test(assistCamera.layers)) continue;
+    } else {
+      if (!obj.layers.test(camera.layers)) continue;
+    }
+    return obj.userData.cell || null;
+  }
+  return null;
+}
+
+
+  let chordCenterPicked = null;
   function chordExecute(ev, forcedCell=null){
   if(gameState!=="playing") return false;
 
   const cell = forcedCell || getPickNumberCell(ev);
+  setFocusedCell(cell);
+
   if(!cell) return false;
 
   const shown = (cell.adjValue===1000) ? 0 : cell.adjValue;
@@ -1755,42 +1912,266 @@ let chordCenterPicked = null;
   }
   return true;
 }
+let focusOutline = null;
+let focusedCell = null;
+let __focusOutlineTimer = null;
+let __focusOutlineToken = 0;
+
+const __tmpV3 = new THREE.Vector3();
+let leftDownAxis = null;        // ✅ assist 축 삼각뿔 down 저장용
+let __lastClickSource = "main"; // ✅ 마지막 클릭이 main/assist 중 어디였는지
+function __focusFromPress(cell){
+  if (!cell || cell.__axis) return;     // axis는 제외(메인엔 어차피 없음)
+  __lastClickSource = __PICK.source;    // main/assist 구분
+  setFocusedCell(cell);                 // 여기서 outline 위치/표시 규칙이 적용됨
+}
+
+function createFocusOutline(){
+  const geo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.03, 1.03, 1.03));
+  const mat = new THREE.LineBasicMaterial({ color: 0x000000 });
+  mat.depthTest = true;   // 큐브가 없어도, 다른 것 뒤여도 선이 보이게
+  mat.depthWrite = false;
+
+  focusOutline = new THREE.LineSegments(geo, mat);
+  focusOutline.visible = false;
+  focusOutline.renderOrder = 10000;
+  focusOutline.frustumCulled = false;
+  scene.add(focusOutline);
+}
+function __updateFocusOutlineVisibility(){
+  if (!focusOutline) return;
+
+  // 기존 타이머 정리
+  if (__focusOutlineTimer){
+    clearTimeout(__focusOutlineTimer);
+    __focusOutlineTimer = null;
+  }
+
+  if (!focusedCell){
+    focusOutline.visible = false;
+    return;
+  }
+
+  // assist면 계속 표시
+  if (__lastClickSource === "assist"){
+    focusOutline.visible = true;
+    return;
+  }
+
+  // main이면 1초만 표시 후 숨김
+  if (__lastClickSource === "main"){
+    focusOutline.visible = true;
+
+    const myToken = ++__focusOutlineToken;
+    const myCell = focusedCell;
+
+    __focusOutlineTimer = setTimeout(() => {
+      // 그 사이에 다른 이벤트/포커스 변화가 있었으면 무시
+      if (myToken !== __focusOutlineToken) return;
+      if (__lastClickSource !== "main") return;
+      if (focusedCell !== myCell) return;
+
+      focusOutline.visible = false;
+      __focusOutlineTimer = null;
+    }, 100);
+
+    return;
+  }
+
+  // 그 외는 숨김
+  focusOutline.visible = false;
+}
+
+
+function createAxisPyramids(){
+  const g = new THREE.Group();
+  g.visible = false;
+
+  const geo = new THREE.ConeGeometry(0.35, 0.55, 4); // ✅ 삼각뿔 느낌(4면)
+  const mat = new THREE.MeshStandardMaterial({ color:0x8a8a8a, roughness:0.8, metalness:0.0 });
+
+  // ConeGeometry는 기본이 +Y 방향이 “뾰족”
+  const dirs = [
+    { name:"+X", dx:+1, dy:0, dz:0, wdir:new THREE.Vector3(+1,0,0) },
+    { name:"-X", dx:-1, dy:0, dz:0, wdir:new THREE.Vector3(-1,0,0) },
+
+    // 논리 y(행)는 world Z
+    { name:"+Y", dx:0, dy:+1, dz:0, wdir:new THREE.Vector3(0,0,+1) },
+    { name:"-Y", dx:0, dy:-1, dz:0, wdir:new THREE.Vector3(0,0,-1) },
+
+    // 논리 z(깊이)는 world Y
+    { name:"+Z", dx:0, dy:0, dz:+1, wdir:new THREE.Vector3(0,+1,0) },
+    { name:"-Z", dx:0, dy:0, dz:-1, wdir:new THREE.Vector3(0,-1,0) },
+  ];
+
+  const up = new THREE.Vector3(0,1,0);
+
+  for (const d of dirs){
+    const m = new THREE.Mesh(geo, mat.clone());
+    m.userData.pickType = "axis";
+    m.userData.dir = { dx:d.dx, dy:d.dy, dz:d.dz };
+    m.userData.wdir = d.wdir.clone().normalize();
+    m.quaternion.setFromUnitVectors(up, m.userData.wdir); // 방향 회전
+    __AXIS_PICKABLES.push(m);
+    g.add(m);
+  }
+
+  // 보조창 전용 레이어
+    // ✅ "보조창 전용": layer를 enable이 아니라 set으로 고정
+  g.traverse((o)=>{
+    if (o.layers) o.layers.set(L_ASSIST_UI);  // layer 2 ONLY
+  });
+  return g;
+}
+
+function updateAxisPyramids(){
+  if (!axisGroup) return;
+
+  if (!focusedCell){
+    axisGroup.visible = false;
+    return;
+  }
+
+  focusedCell.group.getWorldPosition(__tmpV3);
+
+  const offset = SPACING * 1.2; // 중심으로부터 거리
+  let anyVisible = false;
+
+  for (const m of axisGroup.children){
+    const d = m.userData?.dir;
+    if (!d){ m.visible = false; continue; }
+
+    const nx = (focusedCell.x + (d.dx|0))|0;
+    const ny = (focusedCell.y + (d.dy|0))|0;
+    const nz = (focusedCell.z + (d.dz|0))|0;
+
+    const canMove = inBounds(nx, ny, nz);
+
+    // ✅ 이동 불가면 아예 안 뜸
+    m.visible = !!canMove;
+
+    if (canMove){
+      anyVisible = true;
+      const wdir = m.userData.wdir;
+      m.position.copy(__tmpV3).addScaledVector(wdir, offset);
+    }
+  }
+
+  // ✅ 6방향 모두 이동 불가면 axisGroup 자체 숨김 (ex: 1*1*1)
+  axisGroup.visible = anyVisible;
+}
+
+function moveFocusByAxis(dx,dy,dz){
+  if (!focusedCell) return;
+  const nx = focusedCell.x + dx;
+  const ny = focusedCell.y + dy;
+  const nz = focusedCell.z + dz;
+  if (!inBounds(nx,ny,nz)) return;
+  setFocusedCell(cells[idx(nx,ny,nz)]);
+}
+
+function updateAssistNeighborhood(centerCell){
+  // 1) 이전 layer1 끄기
+  for (const c of __assistPrevCells){
+    if (!c) continue;
+    setLayerRecursive(c.group, L_ASSIST_CELLS, false);
+  }
+  __assistPrevCells = [];
+  __assistCells = [];
+
+  if (!centerCell) {
+    if (axisGroup) axisGroup.visible = false;
+    return;
+  }
+
+  // 2) 중심 포함 27(경계면 더 적음)
+  for (let dz=-1; dz<=1; dz++){
+    for (let dy=-1; dy<=1; dy++){
+      for (let dx=-1; dx<=1; dx++){
+        const x = centerCell.x + dx;
+        const y = centerCell.y + dy;
+        const z = centerCell.z + dz;
+        if (!inBounds(x,y,z)) continue;
+        const c = cells[idx(x,y,z)];
+        if (!c) continue;
+        __assistCells.push(c);
+      }
+    }
+  }
+
+  // 3) 해당 셀들 layer1 켜기
+  for (const c of __assistCells){
+    setLayerRecursive(c.group, L_ASSIST_CELLS, true);
+    __assistPrevCells.push(c);
+  }
+
+  // 4) 삼각뿔 UI 갱신
+  updateAxisPyramids();
+}
+
+function setFocusedCell(cell){
+  focusedCell = cell;
+  if (!focusOutline) return;
+
+if (!cell){
+  focusOutline.visible = false;
+  updateAssistNeighborhood(null);
+  return;
+}
+
+  cell.group.getWorldPosition(__tmpV3);
+  focusOutline.position.copy(__tmpV3);
+  __updateFocusOutlineVisibility();
+
+  updateAssistNeighborhood(cell);    // ✅ 추가
+}
 
   // ===== 클릭(큐브) 피킹: visible=true만 선택 (안보이는 큐브가 가로채지 못함) =====
-  function getPickCell(ev){
-    const rect=renderer.domElement.getBoundingClientRect();
-    mouseNDC.x=((ev.clientX-rect.left)/rect.width)*2-1;
-    mouseNDC.y=-(((ev.clientY-rect.top)/rect.height)*2-1);
-    raycaster.setFromCamera(mouseNDC, camera);
-  const targets = __FLAG_PICKABLES.concat(cubeMeshes);
-    const hits = raycaster.intersectObjects(targets, false);
-    if(!hits.length) return null;
+function getPickCell(ev){
+  const rect = __PICK.rect || renderer.domElement.getBoundingClientRect();
+  mouseNDC.x=((ev.clientX-rect.left)/rect.width)*2-1;
+  mouseNDC.y=-(((ev.clientY-rect.top)/rect.height)*2-1);
+  raycaster.setFromCamera(mouseNDC, __PICK.camera || camera);
 
-    for(const h of hits){
+  // ✅ assist는 삼각뿔도 피킹 대상
+  const targets = (__PICK.source === "assist")
+    ? (__AXIS_PICKABLES.concat(__FLAG_PICKABLES, cubeMeshes))
+    : (__FLAG_PICKABLES.concat(cubeMeshes));
+
+  const hits = raycaster.intersectObjects(targets, false);
+  if(!hits.length) return null;
+
+  for(const h of hits){
     const obj = h.object;
     if(!obj) continue;
     if(!__isDeepVisible(obj)) continue;
 
+    // ✅ layer 필터
+    if (__PICK.source === "assist"){
+      if (!obj.layers.test(assistCamera.layers)) continue;
+    } else {
+      if (!obj.layers.test(camera.layers)) continue;
+    }
+
+    // ✅ 삼각뿔 클릭
+    if (obj.userData.pickType === "axis"){
+      return { __axis:true, dir: obj.userData.dir };
+    }
+
     const c = obj.userData.cell || null;
     if(!c) continue;
 
-    // 1) 깃발을 눌렀으면 그 칸이 이벤트를 “먹음”
     if(obj.userData.pickType === "flag"){
       return c;
     }
-
-    // 2) 큐브를 눌렀는데 그 칸이 깃발칸이면 “관통”
-    //    => 뒤에 있는 큐브가 눌리게 된다
     if(obj === c.cube){
-      if(isFlagged(c)) continue; // ✅ 핵심: 깃발칸 큐브는 클릭을 먹지 않음
+      if(isFlagged(c)) continue;
       return c;
     }
-
-    // 혹시 다른 메쉬가 섞여도 안전하게 처리
     if(!isFlagged(c)) return c;
   }
-    return null;
-  }
+  return null;
+}
 
   // ===== pressed/chord 상태 정리 =====
   function clearPressedAndChord(){
@@ -1806,8 +2187,44 @@ let chordCenterPicked = null;
     leftCanceledByChord = false;
 middleStartXY = null;
 middleMoved = false;
-
+leftDownAxis = null;
   }
+function updateAssistCamera(){
+  if (!assistCamera || !assistRenderer) return;
+
+  const w = assistEl.clientWidth|0;
+  const h = assistEl.clientHeight|0;
+  if (w <= 2 || h <= 2) return;
+
+  // 캔버스 리사이즈(필요할 때만)
+  const needResize = (assistCanvas.width !== Math.floor(w*devicePixelRatio)) || (assistCanvas.height !== Math.floor(h*devicePixelRatio));
+  if (needResize){
+    assistRenderer.setSize(w, h, false);
+    assistCamera.aspect = w / h;
+    assistCamera.updateProjectionMatrix();
+  }
+
+  // focused 기준으로 target 잡고, 메인 orbit의 방향(theta/phi/roll)은 공유
+  const target = __tmpV3;
+  if (focusedCell) focusedCell.group.getWorldPosition(target);
+  else target.set(0,0,0);
+
+  const r = SPACING * 4.2; // 주변 3x3x3이 들어오는 적당한 거리
+  const eps = 0.05;
+  const phi = clamp(orbit.phi, eps, Math.PI - eps);
+
+  const sinPhi = Math.sin(phi);
+  const x = r * sinPhi * Math.cos(orbit.theta);
+  const y = r * Math.cos(phi);
+  const z = r * sinPhi * Math.sin(orbit.theta);
+
+  assistCamera.position.set(target.x + x, target.y + y, target.z + z);
+
+  __tmpForward.subVectors(target, assistCamera.position).normalize();
+  __tmpUp.set(0,1,0).applyAxisAngle(__tmpForward, orbit.roll || 0);
+  assistCamera.up.copy(__tmpUp);
+  assistCamera.lookAt(target);
+}
 
   // ===== init =====
 init();
@@ -1846,14 +2263,46 @@ if (window.parent === window) {
     const dir=new THREE.DirectionalLight(0xffffff, 1.0);
     dir.position.set(12,24,10);
     scene.add(dir);
+    for (const obj of scene.children){
+  if (obj && obj.isLight){
+    obj.layers.enable(L_ASSIST_CELLS);
+    obj.layers.enable(L_ASSIST_UI);
+  }
+}
+createFocusOutline();
+// ===== assist renderer/camera =====
+assistCanvas = document.getElementById("assist-canvas");
+assistRenderer = new THREE.WebGLRenderer({ canvas: assistCanvas, antialias:true, alpha:false });
+assistRenderer.setPixelRatio(devicePixelRatio);
+assistRenderer.setClearColor(0xC0C0C0, 1);
 
+assistCamera = new THREE.PerspectiveCamera(60, 1, 0.1, 900);
+assistCamera.layers.set(L_ASSIST_CELLS);
+assistCamera.layers.enable(L_ASSIST_UI);
+
+axisGroup = createAxisPyramids();
+scene.add(axisGroup);
     window.addEventListener("resize", onResize);
 
-    renderer.domElement.addEventListener("pointermove", onPointerMove);
-    renderer.domElement.addEventListener("pointerdown", onPointerDown);
-    renderer.domElement.addEventListener("pointerup", onPointerUp);
+renderer.domElement.addEventListener("pointermove", (ev)=>{ __setPickContext("main", renderer.domElement); onPointerMove(ev); });
+renderer.domElement.addEventListener("pointerdown", (ev)=>{ __setPickContext("main", renderer.domElement); onPointerDown(ev); });
+renderer.domElement.addEventListener("pointerup",   (ev)=>{ __setPickContext("main", renderer.domElement); onPointerUp(ev); });
+renderer.domElement.addEventListener("wheel", (ev)=>{ __setPickContext("main", renderer.domElement); onWheel(ev); }, { passive:false });
+
     renderer.domElement.addEventListener("contextmenu", (e)=>e.preventDefault());
-    renderer.domElement.addEventListener("wheel", onWheel, { passive:false });
+
+    renderer.domElement.addEventListener("pointercancel", (ev)=>{
+  if (__ptrStart.get(__PICK.source+"|"+ev.pointerId)) __releaseAllInputs(ev.pointerId);});
+// ===== assist input bind (same handlers, different pick context) =====
+assistCanvas.addEventListener("pointermove", (ev)=>{ __setPickContext("assist", assistCanvas); onPointerMove(ev); });
+assistCanvas.addEventListener("pointerdown", (ev)=>{ __setPickContext("assist", assistCanvas); onPointerDown(ev); });
+assistCanvas.addEventListener("pointerup",   (ev)=>{ __setPickContext("assist", assistCanvas); onPointerUp(ev); });
+assistCanvas.addEventListener("pointercancel",(ev)=>{ __setPickContext("assist", assistCanvas); 
+  if (__ptrStart.get(__PICK.source+"|"+ev.pointerId)) __releaseAllInputs(ev.pointerId);
+});
+assistCanvas.addEventListener("contextmenu", (e)=>e.preventDefault());
+assistCanvas.addEventListener("wheel", (ev)=>{ __setPickContext("assist", assistCanvas); onWheel(ev); }, { passive:false });
+
     renderer.domElement.style.touchAction = "none";
 
 // iOS/일부 브라우저에서 스와이프/스크롤 제스처가 살아있는 경우를 강제로 차단
@@ -1882,6 +2331,9 @@ renderer.domElement.addEventListener("mouseup",   stopMiddleAutoScroll, { captur
   }
 
   function resetGame(){
+    setFocusedCell(null);
+__focusOutlineToken++; // 진행 중 타이머 무효화
+
     stopParentTimer(false);
   __elapsed = 0;
   postToParent({ __mine3d:1, type:'timer', elapsed: 0 });
@@ -1954,9 +2406,17 @@ setFace(0); // ✅ reset은 항상 normal
 let leftDownNumberCell = null;
   // ===== 입력 규칙(요청 반영) =====
   function onPointerDown(ev){
+    // 메인영역 밖(보조창 포함)에서 시작한 입력은 메인에 전달하지 않음
+if (!renderer) return;
+if (!__isInActiveArea(ev.clientX, ev.clientY)) return;
+
+// 이 pointer는 메인에서 시작
+__ptrStart.set(__PICK.source+"|"+ev.pointerId, true);
+
+
   // ===== 모바일 터치 전용 =====
   if (IS_MOBILE && ev.pointerType === "touch") {
-  renderer.domElement.setPointerCapture(ev.pointerId);
+  (ev.currentTarget || renderer.domElement).setPointerCapture(ev.pointerId);
 
   // 멀티터치 상태 업데이트
   t2_setPointer(ev);
@@ -1985,6 +2445,7 @@ let leftDownNumberCell = null;
 
   TOUCH.downCell = dead ? null : getPickCell(ev);
   if (TOUCH.downCell && !TOUCH.downCell.isOpen) {
+    __focusFromPress(TOUCH.downCell);  
     TOUCH.downCell.setPressed(true);
     TOUCH.pressedApplied = true;
 
@@ -2011,7 +2472,8 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
   setFace(2);
 }
 
-  renderer.domElement.setPointerCapture(ev.pointerId);
+  (__PICK.dom || renderer.domElement).setPointerCapture(ev.pointerId); // ✅ main/assist 모두 정상
+
   const dead = (gameState === "over" || gameState === "win");
 
   // ===== RIGHT DOWN: 즉시 마킹(단, chord면 마킹 금지) =====
@@ -2029,6 +2491,7 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
       numCell || leftDownNumberCell || getPickCell(ev) || leftDownCell;
 
     if (center) {
+      __lastClickSource = __PICK.source;  
       lrChordActive = true;
       lrChordCenter = center;
       chordKind = "lr";
@@ -2039,7 +2502,9 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
   // (B) ✅ 우클릭 단독: 드래그하면 pan, 클릭(짧게)하면 마킹
   const dead = (gameState === "over" || gameState === "win");
   rightDownCell = dead ? null : getPickCell(ev);
-
+if (rightDownCell && !rightDownCell.__axis) {
+  __focusFromPress(rightDownCell);     // ✅ 큐브/깃발 눌림이면 테두리 이동
+}
   rightStartXY = [ev.clientX, ev.clientY];
   rightMoved = false;
   rightPanLastX = ev.clientX;
@@ -2064,6 +2529,13 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
 
   // 큐브 피킹(열린 숫자는 null)
   leftDownCell = getPickCell(ev);
+  // ✅ assist 삼각뿔이면: 셀 pressed/회전/chord로 들어가지 말고 down만 기록
+if (leftDownCell && leftDownCell.__axis){
+  leftDownAxis = leftDownCell;
+  leftDownCell = null;
+  leftPressedApplied = false;
+  return;
+}
 // (1) Shift+좌클릭 chord (중클릭과 동일)
  if (ev.shiftKey) {
   leftCanceledByChord = true;
@@ -2072,6 +2544,7 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
   const center = numCell || leftDownCell;
 
   if (center) {
+    __lastClickSource = __PICK.source;
     chordArmed = true;
     chordKind = numCell ? "shiftLeft" : "shiftLeftCube"; // ✅ 큐브면 실행 없이 하이라이트만
     chordPointerId = ev.pointerId;
@@ -2083,6 +2556,7 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
 }
   // (2) 열린 숫자 위를 그냥 좌클릭한 경우: 회전으로 보내지 말고 무시(권장)
   if (numCell && !leftDownCell) {
+    __focusFromPress(numCell);
     return;
   }
 
@@ -2096,6 +2570,7 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
   if (dead) return;
     // (E) 일반 좌클릭: down에서는 pressed만(한 칸 70%), 실제 처리는 up
     if(leftDownCell){
+       __focusFromPress(leftDownCell);
       leftDownCell.setPressed(true);
       leftPressedApplied = true;
     }
@@ -2120,6 +2595,7 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
     if(gameState==="playing"){
       const numCell = getPickNumberCell(ev);
       if(numCell){
+        __lastClickSource = __PICK.source;
         chordArmed = true;
         chordKind = "middle";
         chordPointerId = ev.pointerId;
@@ -2133,7 +2609,8 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
     // 숫자 아니면: 큐브를 chord “시도”로 취급(주변만 70%),
     // 단 드래그하면 pan으로 전환
     const cubeCell = getPickCell(ev);
-    if(cubeCell){
+if (cubeCell && !cubeCell.__axis) {
+  __lastClickSource = __PICK.source;
       chordArmed = true;
       chordKind = "middleCube"; // ★ 실행은 안 함
       chordPointerId = ev.pointerId;
@@ -2252,7 +2729,19 @@ if ((ev.button === 0 || ev.button === 1) && !(gameState === "over" || gameState 
   resetTouchState();
   return;
 }
-    // ★ on_up 흐름: 생성 중이면 리셋 금지
+// 메인에서 시작한 클릭이라도 메인 안에서 끝난 경우만 유효
+if (!__ptrStart.get(__PICK.source+"|"+ev.pointerId)) return; // 메인에서 시작한 게 아니면 무시
+
+if (!__isInActiveArea(ev.clientX, ev.clientY)) {
+  __releaseAllInputs(ev.pointerId);
+  return;
+}
+
+// 정상 up이면 여기서부터 기존 로직 계속
+__ptrStart.delete(__PICK.source + "|" + ev.pointerId);
+
+  
+// ★ on_up 흐름: 생성 중이면 리셋 금지
     // (원본처럼, up에서 상태 리셋/pressed 해제를 막아야 함)
     const dead = (gameState === "over" || gameState === "win");
     if (dead){
@@ -2396,6 +2885,27 @@ if(ev.button === 1){
 
   // 일반 좌클릭: up에서 처리
   const upCell = getPickCell(ev);
+  // ✅ assist의 삼각뿔 클릭이면 포커스 이동
+// ✅ assist의 삼각뿔 클릭이면 포커스 이동 (down→up 동일 축일 때만)
+if (upCell && upCell.__axis){
+  if (leftDownAxis && leftDownAxis.__axis){
+    const a = leftDownAxis.dir, b = upCell.dir;
+    const same =
+      ((a.dx|0)===(b.dx|0)) && ((a.dy|0)===(b.dy|0)) && ((a.dz|0)===(b.dz|0));
+    if (same){
+      moveFocusByAxis(b.dx|0, b.dy|0, b.dz|0);
+    }
+  } else {
+    // down 기록이 없더라도(예외 케이스) 클릭이면 이동 허용
+    const d = upCell.dir;
+    moveFocusByAxis(d.dx|0, d.dy|0, d.dz|0);
+  }
+  leftDownAxis = null;
+  clearPressedAndChord();
+  return;
+}
+
+
   if(dist <= MOVE_CANCEL_PX && upCell && leftDownCell && upCell === leftDownCell){
     upCell.openFromClick();
   }
@@ -2412,6 +2922,14 @@ if (gameState === "over" || gameState === "win"){
   }
 
   function onPointerMove(ev){
+    // 메인에서 시작한 포인터가 메인영역을 벗어나는 순간: 즉시 release
+if (__ptrStart.get(__PICK.source+"|"+ev.pointerId)) {
+  if (!__isInActiveArea(ev.clientX, ev.clientY)) {
+    __releaseAllInputs(ev.pointerId);
+    return;
+  }
+}
+
    if (IS_MOBILE && ev.pointerType === "touch") {
     function normAngleDelta(a){
       while (a >  Math.PI) a -= Math.PI * 2;
@@ -2486,16 +3004,20 @@ if (gameState === "over" || gameState === "win"){
   return;
 }
 // hover(닫힌 큐브만)
-       if (gameState === "over" || gameState === "win"){
-      if (hoverCell){ hoverCell.setHover(false); hoverCell = null; }
-    } else {
-      const c=getPickCell(ev);
-      if(c !== hoverCell){
-        if(hoverCell) hoverCell.setHover(false);
-        hoverCell = c;
-        if(hoverCell) hoverCell.setHover(true);
-      }
-    }
+      // hover(닫힌 큐브만)
+if (gameState === "over" || gameState === "win"){
+  if (hoverCell){ hoverCell.setHover(false); hoverCell = null; }
+} else {
+  const pick = getPickCell(ev);
+  const c = (pick && pick.__axis) ? null : pick;  // ✅ axis는 hover 제외
+
+  if (c !== hoverCell){
+    if(hoverCell) hoverCell.setHover(false);
+    hoverCell = c;
+    if(hoverCell) hoverCell.setHover(true);
+  }
+}
+
 // ✅ 좌클릭: 큐브 위에서 시작했더라도 "드래그"면 회전으로 전환
 if (leftDown && !leftRotDown && leftDownXY) {
   const distL = Math.hypot(ev.clientX - leftDownXY[0], ev.clientY - leftDownXY[1]);
@@ -2590,8 +3112,15 @@ if (rightDown && !(chordArmed && chordKind==="lr")) {
   }
 
   function animate(){
-    requestAnimationFrame(animate);
-    renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+
+  renderer.render(scene, camera);
+
+  // ✅ assist render
+  updateAssistCamera();
+  if (assistRenderer && assistCamera){
+    assistRenderer.render(scene, assistCamera);
+  }
   }
 
   // ====== 생성/보드 ======
@@ -3041,6 +3570,7 @@ function __fixWrongFlag3D(){
 function __applyStep3D(step){
   if (!step) return false;
   const c = __cellAt3D(step.x|0, step.y|0, step.z|0);
+  setFocusedCell(c);
   if (!c) return false;
 
   if (step.kind === "open"){
