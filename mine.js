@@ -2768,35 +2768,70 @@ const totalBlack = Math.max(0, this.num_mines | 0);
           this.game_status = 1;
 
           // ★ Trace 에 없는 '지뢰 없는 칸'을 모두 open 으로 강제로 추가
-          (function fillAllSafeCellsToTrace(self) {
-            // 1) 이미 Trace 에 기록된 open 위치들
-            const openedByTrace = self.new_table();  // 숫자 0/1 로만 사용
-            for (let i = 0; i < Trace.length; i++) {
-              const t = Trace[i];
-              if (!t || t.kind !== "open") continue;
-              const x = t.x | 0, y = t.y | 0;
-              if (x >= 0 && x < W && y >= 0 && y < H) {
-                openedByTrace[x][y] = 1;
-              }
-            }
+        // ★ Trace 에 없는 '지뢰 없는 칸'을 모두 open 으로 강제로 추가
+//    (버그 수정: postfill 가능 조건일 때만 허용, 아니면 이 보드는 폐기)
+const okFill = (function fillAllSafeCellsToTrace(self) {
+  // 1) Trace 에 기록된 open 위치들
+  const openedByTrace = self.new_table();
+  for (let i = 0; i < Trace.length; i++) {
+    const t = Trace[i];
+    if (!t || t.kind !== "open") continue;
+    const x = t.x | 0, y = t.y | 0;
+    if (x >= 0 && x < W && y >= 0 && y < H) openedByTrace[x][y] = 1;
+  }
 
-            // 2) mines 상에서 지뢰가 없고(==0), 아직 한번도 open 으로 나온 적 없는 칸들
-            //    → Trace 맨 뒤에 open 으로 추가한다.
-            for (let y = 0; y < H; y++) {
-              for (let x = 0; x < W; x++) {
-                if ((self.mines[x][y] | 0) === 0 && !openedByTrace[x][y]) {
-                  pushTrace("open", { x, y, reason: "post-fill" });
-                }
-              }
-            }
+  // 2) 남은(Trace에 의해 아직 open 처리되지 않은) 칸들의 전역 카운트 계산
+  // N: 안열린칸수(Trace 기준), p: 남은 검은지뢰수, q: 남은 흰지뢰수
+  let N = 0, p = 0, q = 0;
+  const missingSafe = []; // Trace에 없는데 실제로 안전(==0)인 칸들
 
-            // 3) 최종 완료 로그를 Trace 제일 끝에 한 번만 찍어 둔다.
-            let openCount = 0;
-            for (let i = 0; i < Trace.length; i++) {
-              if (Trace[i] && Trace[i].kind === "open") openCount++;
-            }
-            pushTrace("done", { opens: openCount });
-          })(this);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (openedByTrace[x][y]) continue; // 이미 Trace에서 open 처리됨
+      N++;
+
+      const m = self.mines[x][y] | 0;
+      if (m > 0) p += m;
+      else if (m < 0) q += (-m);
+      else missingSafe.push([x, y]); // 안전칸이 Trace에 누락됨
+    }
+  }
+
+  // 3) postfill 가능 조건(요청한 공식)
+  const a = Math.max(1, self.max_mines | 0);
+  const b = Math.max(0, self.max_mines_white | 0);
+
+  const canPostfill =
+    (p === 0 && q === 0) ||
+    (p === 0 && b > 0 && ((N - 1) * b) < q) ||
+    (q === 0 && a > 0 && ((N - 1) * a) < p);
+
+  // 4) 안전칸이 Trace에 누락되어 있는데, postfill 조건이 아니면:
+  //    => "남은 칸이 섞인 상태"인데 postfill로 안전칸을 던지게 되는 원인
+  //    => 이 보드는 찍기없음 요구를 만족 못하므로 실패 처리
+  if (missingSafe.length > 0 && !canPostfill) return false;
+
+  // 5) postfill이 “정말로” 가능한 경우에만, 누락된 안전칸을 post-fill로 추가
+  if (missingSafe.length > 0) {
+    for (let i = 0; i < missingSafe.length; i++) {
+      const x = missingSafe[i][0], y = missingSafe[i][1];
+      pushTrace("open", { x, y, reason: "post-fill" });
+    }
+  }
+
+  // 6) done 로그는 기존대로
+  let openCount = 0;
+  for (let i = 0; i < Trace.length; i++) {
+    if (Trace[i] && Trace[i].kind === "open") openCount++;
+  }
+  pushTrace("done", { opens: openCount });
+
+  return true;
+})(this);
+
+// ★ 추가: 위 검증에 실패하면 이 보드는 폐기하고 다음 attempt로
+if (!okFill) continue;
+
 
           // 추론 근거 트리 출력 (이 시점에서 Trace 는 이미 'post-fill' + 'done'까지 포함)
           try { dumpTraceToConsole(); } catch (e) { }
