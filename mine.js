@@ -2879,7 +2879,7 @@ const totalBlack = Math.max(0, this.num_mines | 0);
         }
 
         // 안전한 지뢰 이동 시도
-        for (let attempt = 0; attempt < numMoves * 10 && moveCount < numMoves; attempt++) {
+        for (let attempt = 0; attempt < numMoves * 5 && moveCount < numMoves; attempt++) {
           // 이동할 지뢰가 있는 칸 선택 (공개되지 않은 칸 중에서)
           const fromCandidates = [];
           for (let y = 0; y < H; y++) {
@@ -2904,11 +2904,57 @@ const totalBlack = Math.max(0, this.num_mines | 0);
           
           if (toCandidates.length === 0) break;
 
-          // 무작위 선택
+          // 인접한 지뢰칸 수를 계산하는 함수
+          const countAdjacentMineCells = (x, y) => {
+            let count = 0;
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                if (dx === 0 && dy === 0) continue;
+                const nx = x + dx, ny = y + dy;
+                if (nx >= 0 && nx < W && ny >= 0 && ny < H) {
+                  if ((this.mines[nx][ny] | 0) !== 0) {
+                    count++;
+                  }
+                }
+              }
+            }
+            return count;
+          };
+
+          // 후보칸을 최대 7개 선택 (무작위)
+          const selectedToCandidates = [];
+          const maxCandidates = Math.min(7, toCandidates.length);
+          
+          if (toCandidates.length <= 7) {
+            // 7개 이하면 모든 후보칸 사용
+            selectedToCandidates.push(...toCandidates);
+          } else {
+            // 7개 이상이면 무작위로 7개 선택
+            const shuffled = [...toCandidates];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            selectedToCandidates.push(...shuffled.slice(0, 7));
+          }
+
+          // 선택된 후보칸들 중에서 인접한 지뢰칸 수가 가장 적은 칸 찾기
+          let bestCandidate = selectedToCandidates[0];
+          let minAdjacentMines = countAdjacentMineCells(bestCandidate[0], bestCandidate[1]);
+          
+          for (let i = 1; i < selectedToCandidates.length; i++) {
+            const [x, y] = selectedToCandidates[i];
+            const adjacentMines = countAdjacentMineCells(x, y);
+            if (adjacentMines < minAdjacentMines) {
+              minAdjacentMines = adjacentMines;
+              bestCandidate = [x, y];
+            }
+          }
+
+          // 최적의 위치 선택
           const fromIdx = Math.floor(Math.random() * fromCandidates.length);
-          const toIdx = Math.floor(Math.random() * toCandidates.length);
           const [fromX, fromY] = fromCandidates[fromIdx];
-          const [toX, toY] = toCandidates[toIdx];
+          const [toX, toY] = bestCandidate;
           
           // 지뢰 이동 전에 영향받는 칸들의 가장 이른 스텝 확인
           const earliestStep = findEarliestStepForAffectedCells(fromX, fromY, toX, toY, openedCells);
@@ -2961,7 +3007,7 @@ const totalBlack = Math.max(0, this.num_mines | 0);
         const mineDensity = currentMineCount / maxPossibleMines;
         
         // 어닐링 시도 수 계산
-        const ANNEALING_ATTEMPTS = Math.floor(hasWhiteMines ? mineDensity * 80 : mineDensity * 200);
+        const ANNEALING_ATTEMPTS = Math.floor(hasWhiteMines ? mineDensity * 160 : mineDensity * 200);
         const ROLLBACK_STEPS = hasWhiteMines ? 4 : 3;  // 음수지뢰가 있으면 5스텝, 없으면 3스텝
         
         for (let annealAttempt = 0; annealAttempt < ANNEALING_ATTEMPTS; annealAttempt++) {
