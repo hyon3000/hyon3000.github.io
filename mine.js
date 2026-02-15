@@ -20,6 +20,9 @@
 
       // ★ 흰/검 깃발 카운터(별도)
       this.num_flags_white = 0;
+      
+      // ★ 지뢰 이동 시 롤백 필요 스텝 추적
+      this.mineMovePendingRollback = -1;
     }
 
     /* ---------- 분석/이론값 ---------- */
@@ -1818,7 +1821,7 @@ const totalBlack = Math.max(0, this.num_mines | 0);
     const x = firstX + dx, y = firstY + dy;
     if (x >= 0 && y >= 0 && x < W && y < H) protect++;
   }
-  const outside = (W * H - protect)*0.65; //65%의 여유 칸수
+  const outside = (W * H - protect)*0.7; //65%의 여유 칸수
   const needB = needCells(totalBlack, capB);
   const needW = needCells(totalWhite, capW);
   const infeasible =
@@ -1922,72 +1925,6 @@ const totalBlack = Math.max(0, this.num_mines | 0);
         flush(); // 남은 것 출력
         console.groupEnd();
       }
-// === [SA PATCH] 주변 parts/near_mines를 "국소" 업데이트 (전체 재빌드 X) ===
-Minefield.prototype._sa_adjustAroundPartsAndNear = function (x, y, dBlack, dWhite) {
-  var adj = this.near_positions(x, y);
-  var hasWhite = ((this.num_mines_white | 0) > 0);
-
-  for (var i = 0; i < adj.length; i++) {
-    var nx = adj[i][0], ny = adj[i][1];
-
-    if (dBlack) this._near_black[nx][ny] += dBlack;
-    if (dWhite) this._near_white[nx][ny] += dWhite;
-
-    // near_mines는 해당 이웃칸만 즉시 갱신
-    var b = this._near_black[nx][ny] | 0;
-    var w = this._near_white[nx][ny] | 0;
-
-    if (hasWhite && b === w && b > 0) this.near_mines[nx][ny] = 1000;
-    else this.near_mines[nx][ny] = (b - w);
-  }
-};
-
-// === [SA PATCH] 지뢰 1개(유닛) 이동: src -> dst (색/용량/혼합금지 준수) ===
-Minefield.prototype._sa_moveOneMineUnit = function (sx, sy, tx, ty, isWhite) {
-  var capB = Math.max(1, this.max_mines | 0);
-  var capW = Math.max(0, this.max_mines_white | 0);
-
-  var vs = this.mines[sx][sy] | 0;
-  var vt = this.mines[tx][ty] | 0;
-
-  if (isWhite) {
-    if (capW <= 0) return false;
-    if (vs >= 0) return false;           // src에 흰이 없음
-    if (vt > 0) return false;            // 혼합 금지(검은 있으면 불가)
-    if (Math.abs(vt) >= capW) return false;
-
-    // src: 흰 1 감소(-3 -> -2), dst: 흰 1 증가(0 -> -1)
-    this.mines[sx][sy] = vs + 1;
-    this.mines[tx][ty] = vt - 1;
-
-    // 주변 parts: 흰 기여량(near_white) -1 / +1
-    this._sa_adjustAroundPartsAndNear(sx, sy, 0, -1);
-    this._sa_adjustAroundPartsAndNear(tx, ty, 0, +1);
-    return true;
-  } else {
-    if (vs <= 0) return false;           // src에 검은이 없음
-    if (vt < 0) return false;            // 혼합 금지(흰 있으면 불가)
-    if (Math.abs(vt) >= capB) return false;
-
-    // src: 검은 1 감소(+3 -> +2), dst: 검은 1 증가(0 -> +1)
-    this.mines[sx][sy] = vs - 1;
-    this.mines[tx][ty] = vt + 1;
-
-    // 주변 parts: 검은 기여량(near_black) -1 / +1
-    this._sa_adjustAroundPartsAndNear(sx, sy, -1, 0);
-    this._sa_adjustAroundPartsAndNear(tx, ty, +1, 0);
-    return true;
-  }
-};
-
-// === [SA PATCH] mines 2D 스냅샷(깊은복사) ===
-Minefield.prototype._sa_copyMines2D = function () {
-  var snap = this.new_table();
-  for (var x = 0; x < this.columns; x++) {
-    for (var y = 0; y < this.rows; y++) snap[x][y] = this.mines[x][y] | 0;
-  }
-  return snap;
-};
 
 
       // ===== 경량 솔버(노게스) =====
@@ -2008,7 +1945,8 @@ Minefield.prototype._sa_copyMines2D = function () {
         const hardDeadline = Date.now() + DYNAMIC_TIME_BUDGET_MS;
 
         this._rebuild_near_from_parts(); // near 갱신
-        if ((this.near_mines[firstX][firstY] | 0) !== 0) return { ok: false, opened: null }; // 첫칸 실패
+        if ((this.near_mines[firstX][firstY] | 0) !== 0) 
+          return { ok: false, opened: null }; // 첫칸 실패
 
         const W = this.columns, H = this.rows;
         // 열린(안전) 상태
@@ -2572,7 +2510,8 @@ Minefield.prototype._sa_copyMines2D = function () {
             if (timedOut) {
               return { ok: false };
             }
-            if (!found) return { ok: false };
+            if (!found) 
+              return { ok: false };
             return { ok: true, min: minV, max: maxV };
           }
 
@@ -2601,7 +2540,8 @@ Minefield.prototype._sa_copyMines2D = function () {
         let guard = W * H * 8;
         while (!done() && !timeUp() && guard-- > 0) {
           // === [ADD] 동적 시간 초과시 즉시 포기
-          if (Date.now() > hardDeadline) return { ok: false, opened: opened };
+          if (Date.now() > hardDeadline) 
+            return { ok: false, opened: opened };
 
           // === [ADD] 라운드 전 opened/fixed 스냅샷
           const openedBefore = openedCount;
@@ -2610,7 +2550,8 @@ Minefield.prototype._sa_copyMines2D = function () {
 
           const frontierRes = collectFrontier.call(this);
           const { vars, cons } = frontierRes;
-          if (!vars.length || !cons.length) return { ok: false, opened: opened };
+          if (!vars.length || !cons.length) 
+            return { ok: false, opened: opened };
 
           // (1) 빠른 결정식: RuleA/B (티어별)
           if (applyRuleAB_Tiered.call(this, vars, cons)) continue;
@@ -2647,7 +2588,7 @@ Minefield.prototype._sa_copyMines2D = function () {
               if (subVars.length > COMP_CAP) continue;
 
               const r = this._enforceGACSigned(subVars, subCons, capB, capW);
-              if (r && r.fail) return false; // 모순 → 이 보드 실패
+              if (r && r.fail) return { ok: false, opened: opened }; // 모순 → 이 보드 실패
 
               if (r && r.progressed) {
                 progressedGAC = true;
@@ -2786,15 +2727,15 @@ Minefield.prototype._sa_copyMines2D = function () {
             stallRounds++;
 
             // (1) 프런티어가 큰데 무진전 → 바로 포기
-            if (U >= MAX_FRONTIER_VARS_HARD) return false;
+            if (U >= MAX_FRONTIER_VARS_HARD) return { ok: false, opened: opened };
 
             // (2) 연속 무진전 + 미결정 비율 높음 → 포기
             if (stallRounds >= STALL_LIMIT) {
-              if (undecidedRatio >= UNDECIDED_RATIO_HARD) return false;
+              if (undecidedRatio >= UNDECIDED_RATIO_HARD) return { ok: false, opened: opened };
 
               // (3) 컴포가 많고 평균 크기도 큰데(난해) 미결정 비율 높음 → 완화 임계로 포기
               if (compsNow.length >= 6 && avgVar >= 8 && undecidedRatio >= UNDECIDED_RATIO_SOFT) {
-                return false;
+                return { ok: false, opened: opened };
               }
             }
 
@@ -2805,314 +2746,528 @@ Minefield.prototype._sa_copyMines2D = function () {
           }
 
         }
-        if (timeUp()) return false;
+        if (timeUp()) return { ok: false, opened: opened };
         if (done()) {
-          return true;
+          return { ok: true, opened: opened };
         }
-        return false;
+        return { ok: false, opened: opened };
       }
 
-  // ===== [SA PATCH] 어널링 상한 = mineDensity * 500 =====
-const placeableCells = (W * H - protect) | 0;
-const maxCapForDensity = Math.max(1, Math.max(capB, capW || 0));
-const maxPlaceable = Math.max(1, placeableCells * maxCapForDensity);
-const mineDensity = Math.max(0, Math.min(1, (totalBlack + totalWhite) / maxPlaceable));
-const SA_MAX_ITERS = Math.floor(mineDensity * 500);
+      // ====== 게임 상태 저장/복원 함수들 ======
+      const saveGameState = () => {
+        return {
+          mines: JSON.parse(JSON.stringify(this.mines)),
+          near_mines: JSON.parse(JSON.stringify(this.near_mines)),
+          _near_black: JSON.parse(JSON.stringify(this._near_black)),
+          _near_white: JSON.parse(JSON.stringify(this._near_white)),
+          opened: this.opened ? JSON.parse(JSON.stringify(this.opened)) : null,
+          mine_sweeper_game_board: this.mine_sweeper_game_board ? JSON.parse(JSON.stringify(this.mine_sweeper_game_board)) : null,
+          traceLength: Trace.length,
+          mineMovePendingRollback: this.mineMovePendingRollback
+        };
+      };
 
-// 보호영역 마스크(3x3)
-const protectMask = new Uint8Array(W * H);
-function pidx(x, y) { return (y * W + x) | 0; }
-function inProtect(x, y) { return protectMask[pidx(x, y)] === 1; }
-for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-  const x = firstX + dx, y = firstY + dy;
-  if (x >= 0 && y >= 0 && x < W && y < H) protectMask[pidx(x, y)] = 1;
-}
+      const restoreGameState = (state) => {
+        this.mines = state.mines;
+        this.near_mines = state.near_mines;
+        this._near_black = state._near_black;
+        this._near_white = state._near_white;
+        if (state.opened) this.opened = state.opened;
+        if (state.mine_sweeper_game_board) this.mine_sweeper_game_board = state.mine_sweeper_game_board;
+        Trace.length = state.traceLength; // Trace를 이전 상태로 되돌림
+        this.mineMovePendingRollback = state.mineMovePendingRollback || -1;
+      };
 
-// (A) 3x3 보호영역을 "강제 0"으로 만들기: 내부 지뢰를 바깥으로 모두 이동(가능하면)
-const clear3x3Strict = () => {
-  // 빠른 타깃 탐색(랜덤 -> 실패시 선형)
-  function findTarget(isWhite, avoidX, avoidY) {
-    const cap = isWhite ? capW : capB;
-
-    // 1) 랜덤 시도
-    let tries = 120;
-    while (tries-- > 0) {
-      const tx = (Math.random() * W) | 0;
-      const ty = (Math.random() * H) | 0;
-      if (tx === avoidX && ty === avoidY) continue;
-      if (inProtect(tx, ty)) continue;
-
-      const v = this.mines[tx][ty] | 0;
-      if (isWhite) {
-        if (v > 0) continue;
-        if (Math.abs(v) >= cap) continue;
-        return [tx, ty];
-      } else {
-        if (v < 0) continue;
-        if (Math.abs(v) >= cap) continue;
-        return [tx, ty];
-      }
-    }
-
-    // 2) 선형 스캔
-    for (let ty = 0; ty < H; ty++) for (let tx = 0; tx < W; tx++) {
-      if (tx === avoidX && ty === avoidY) continue;
-      if (inProtect(tx, ty)) continue;
-
-      const v = this.mines[tx][ty] | 0;
-      if (isWhite) {
-        if (v > 0) continue;
-        if (Math.abs(v) >= capW) continue;
-        return [tx, ty];
-      } else {
-        if (v < 0) continue;
-        if (Math.abs(v) >= capB) continue;
-        return [tx, ty];
-      }
-    }
-    return null;
-  }
-
-  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-    const sx = firstX + dx, sy = firstY + dy;
-    if (sx < 0 || sy < 0 || sx >= W || sy >= H) continue;
-
-    // 보호칸에 있는 모든 지뢰 유닛을 밖으로 이동
-    while ((this.mines[sx][sy] | 0) !== 0) {
-      const v = this.mines[sx][sy] | 0;
-      const isWhite = (v < 0);
-
-      const t = findTarget.call(this, isWhite, sx, sy);
-      if (!t) return false;
-
-      const tx = t[0], ty = t[1];
-      if (!this._sa_moveOneMineUnit(sx, sy, tx, ty, isWhite)) return false;
-    }
-  }
-  return true;
-};
-
-// (B) SA 스코어: "자기칸 0 && near_mines 0" (국소 업데이트용)
-const isZeroNN = (x, y) => ((this.mines[x][y] | 0) === 0) && ((this.near_mines[x][y] | 0) === 0);
-const countZeroNN = () => this.count_zero_no_neighbor();
-
-// 국소 셀 목록(최대 18개)에서만 zeroNN 변화량 계산
-function collectAffected(sx, sy, tx, ty) {
-  const cells = [];
-  const pushUniq = (x, y) => {
-    for (let i = 0; i < cells.length; i++) if (cells[i][0] === x && cells[i][1] === y) return;
-    cells.push([x, y]);
-  };
-
-  pushUniq(sx, sy);
-  pushUniq(tx, ty);
-
-  let adj = this.near_positions(sx, sy);
-  for (let i = 0; i < adj.length; i++) pushUniq(adj[i][0], adj[i][1]);
-
-  adj = this.near_positions(tx, ty);
-  for (let i = 0; i < adj.length; i++) pushUniq(adj[i][0], adj[i][1]);
-
-  return cells;
-}
-function countZeroNNOnCells(cells) {
-  let c = 0;
-  for (let i = 0; i < cells.length; i++) {
-    const x = cells[i][0], y = cells[i][1];
-    if (isZeroNN(x, y)) c++;
-  }
-  return c;
-}
-
-// (C) SA move 제안(보호칸 제외, 혼합금지/용량 준수)
-function proposeMove() {
-  const hasW = (hasWhites && capW > 0 && totalWhite > 0);
-  const isWhite = hasW && (Math.random() < (totalWhite / Math.max(1, (totalBlack + totalWhite))));
-
-  // src 찾기
-  let sx = -1, sy = -1;
-  for (let t = 0; t < 80; t++) {
-    const x = (Math.random() * W) | 0;
-    const y = (Math.random() * H) | 0;
-    if (inProtect(x, y)) continue;
-    const v = this.mines[x][y] | 0;
-    if (isWhite ? (v < 0) : (v > 0)) { sx = x; sy = y; break; }
-  }
-  if (sx < 0) return null;
-
-  // dst 찾기
-  let tx = -1, ty = -1;
-  const cap = isWhite ? capW : capB;
-  for (let t = 0; t < 80; t++) {
-    const x = (Math.random() * W) | 0;
-    const y = (Math.random() * H) | 0;
-    if (x === sx && y === sy) continue;
-    if (inProtect(x, y)) continue;
-    const v = this.mines[x][y] | 0;
-
-    if (isWhite) {
-      if (v > 0) continue;
-      if (Math.abs(v) >= cap) continue;
-    } else {
-      if (v < 0) continue;
-      if (Math.abs(v) >= cap) continue;
-    }
-    tx = x; ty = y; break;
-  }
-  if (tx < 0) return null;
-
-  return { sx, sy, tx, ty, isWhite };
-}
-
-// (D) 성공 처리 코드(기존 블록 그대로)만 함수로 감싸서 재사용
-const commitSolved = () => {
-  // 상태 보정
-  this.remaining = W * H;
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if ((this.mines[x][y] | 0) !== 0) this.remaining--;
-  this.total_safe = this.remaining;
-  this.game_status = 1;
-
-  // Trace 누락 안전칸 post-fill 검증/추가(기존 코드 그대로)
-  const okFill = (function fillAllSafeCellsToTrace(self) {
-    const openedByTrace = self.new_table();
-    for (let i = 0; i < Trace.length; i++) {
-      const t = Trace[i];
-      if (!t || t.kind !== "open") continue;
-      const x = t.x | 0, y = t.y | 0;
-      if (x >= 0 && x < W && y >= 0 && y < H) openedByTrace[x][y] = 1;
-    }
-
-    let N = 0, p = 0, q = 0;
-    const missingSafe = [];
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      if (openedByTrace[x][y]) continue;
-      N++;
-      const m = self.mines[x][y] | 0;
-      if (m > 0) p += m;
-      else if (m < 0) q += (-m);
-      else missingSafe.push([x, y]);
-    }
-
-    const a = Math.max(1, self.max_mines | 0);
-    const b = Math.max(0, self.max_mines_white | 0);
-
-    const canPostfill =
-      (p === 0 && q === 0) ||
-      (p === 0 && b > 0 && ((N - 1) * b) < q) ||
-      (q === 0 && a > 0 && ((N - 1) * a) < p);
-
-    if (missingSafe.length > 0 && !canPostfill) return false;
-
-    if (missingSafe.length > 0) {
-      for (let i = 0; i < missingSafe.length; i++) {
-        const x = missingSafe[i][0], y = missingSafe[i][1];
-        pushTrace("open", { x, y, reason: "post-fill" });
-      }
-    }
-
-    let openCount = 0;
-    for (let i = 0; i < Trace.length; i++) if (Trace[i] && Trace[i].kind === "open") openCount++;
-    pushTrace("done", { opens: openCount });
-    return true;
-  })(this);
-
-  if (!okFill) return false;
-
-  try { dumpTraceToConsole(); } catch (e) { }
-  this._nopick_trace = Trace.slice();
-  return true;
-};
-
-// ====== 메인: 재샘플링 + (막히면) SA로 지뢰 이동 ======
-for (let attempt = 1; ; attempt++) {
-  // 1) 랜덤 보드 생성
-  this.init_mines();
-
-  // 2) 3x3 보호칸을 "강제 0"으로 만들기(더 이상 '우연히 0'을 기다리지 않음)
-  if (!clear3x3Strict.call(this)) continue;
-
-  // 안전장치: 첫칸은 반드시 진짜0이어야 함
-  // (3x3이 모두 0이면 first는 자동으로 0이지만, 혹시 모를 드리프트 방지)
-  this._rebuild_near_from_parts();
-  if ((this.near_mines[firstX][firstY] | 0) !== 0) continue;
-
-  // 3) 일단 한 번 풀어본다(기존처럼)
-  Trace.length = 0;
-  if (solveNoGuessFast.call(this, firstX, firstY, Date.now() + 2000)) {
-    if (commitSolved()) return 1;
-    // post-fill 검증 실패면 다음 보드
-  }
-
-  // 4) 실패하면: SA_MAX_ITERS 까지 "지뢰 1유닛 이동"으로 개선 시도
-  if (SA_MAX_ITERS > 0) {
-    let curZero = countZeroNN.call(this);
-    let bestZero = curZero;
-    let bestSnap = this._sa_copyMines2D();
-
-    const T0 = 1.0, T1 = 0.02;
-    const checkEvery = 20; // 가끔만 실제 솔버로 확인(너무 자주 돌리면 역효과)
-
-    for (let it = 0; it < SA_MAX_ITERS; it++) {
-      const mv = proposeMove.call(this);
-      if (!mv) continue;
-
-      const cells = collectAffected.call(this, mv.sx, mv.sy, mv.tx, mv.ty);
-      const before = countZeroNNOnCells.call(this, cells);
-
-      // move 적용
-      if (!this._sa_moveOneMineUnit(mv.sx, mv.sy, mv.tx, mv.ty, mv.isWhite)) continue;
-
-      const after = countZeroNNOnCells.call(this, cells);
-      const newZero = curZero + (after - before);
-
-      // SA 수용 판정(ZeroNN 비율 기반)
-      const sOld = curZero / Math.max(1, placeableCells);
-      const sNew = newZero / Math.max(1, placeableCells);
-      const d = sNew - sOld;
-
-      const a = (SA_MAX_ITERS <= 1) ? 1 : (it / (SA_MAX_ITERS - 1));
-      const T = T0 * Math.pow((T1 / T0), a);
-
-      let accept = (d >= 0);
-      if (!accept) {
-        const prob = Math.exp(d / Math.max(1e-6, T));
-        if (Math.random() < prob) accept = true;
-      }
-
-      if (accept) {
-        curZero = newZero;
-        if (curZero > bestZero) {
-          bestZero = curZero;
-          bestSnap = this._sa_copyMines2D();
+      // ====== 지뢰 이동 시 영향받는 공개 칸들의 열린 스텝을 찾는 함수 ======
+      const findEarliestStepForAffectedCells = (fromX, fromY, toX, toY, openedCells) => {
+        const W = this.columns, H = this.rows;
+        
+        // 1. 지뢰가 있던 위치들 + 옮긴 뒤 지뢰가 있는 위치들
+        const affectedPositions = new Set();
+        affectedPositions.add(fromX + ',' + fromY);
+        affectedPositions.add(toX + ',' + toY);
+        
+        // 2. 1의 위치에 인접한 칸들 중 솔버가 열어본 칸들을 찾고, 
+        // 3. 숫자가 실제로 바뀌는 칸들만 필터링
+        const affectedCells = [];
+        
+        // fromX, fromY 주변 검사 (지뢰가 사라지므로 주변 숫자가 감소)
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = fromX + dx, ny = fromY + dy;
+            if (nx >= 0 && nx < W && ny >= 0 && ny < H) {
+              const index = ny * W + nx;
+              if (openedCells[index]) {
+                // 이 칸의 숫자가 실제로 바뀌는지 확인 (fromX, fromY에 있던 지뢰의 영향)
+                const mineValue = this.mines[fromX][fromY] | 0;
+                if (mineValue !== 0) {
+                  affectedCells.push(nx + ',' + ny);
+                }
+              }
+            }
+          }
         }
-      } else {
-        // 거절 → 원상복구(역이동)
-        this._sa_moveOneMineUnit(mv.tx, mv.ty, mv.sx, mv.sy, mv.isWhite);
-      }
+        
+        // toX, toY 주변 검사 (지뢰가 생기므로 주변 숫자가 증가)
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = toX + dx, ny = toY + dy;
+            if (nx >= 0 && nx < W && ny >= 0 && ny < H) {
+              const index = ny * W + nx;
+              if (openedCells[index]) {
+                // 이 칸의 숫자가 실제로 바뀌는지 확인 (toX, toY로 옮겨질 지뢰의 영향)
+                const mineValue = this.mines[fromX][fromY] | 0;
+                if (mineValue !== 0) {
+                  const cellKey = nx + ',' + ny;
+                  if (!affectedCells.includes(cellKey)) {
+                    affectedCells.push(cellKey);
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        // 4. Trace에서 해당 칸들이 언제 열렸는지 확인해 가장 이른 스텝 찾기
+        let earliestStep = Infinity;
+        
+        for (let i = 0; i < Trace.length; i++) {
+          const traceItem = Trace[i];
+          if (!traceItem || typeof traceItem !== 'object') continue;
+          
+          if (traceItem.kind === 'open' || 
+              (traceItem.kind === 'ruleA' && traceItem.cells) ||
+              (traceItem.kind === 'subset' && traceItem.open)) {
+            
+            let cellsToCheck = [];
+            if (traceItem.kind === 'open') {
+              cellsToCheck = [traceItem];
+            } else if (traceItem.kind === 'ruleA' && Array.isArray(traceItem.cells)) {
+              cellsToCheck = traceItem.cells;
+            } else if (traceItem.kind === 'subset' && Array.isArray(traceItem.open)) {
+              cellsToCheck = traceItem.open;
+            }
+            
+            for (const cell of cellsToCheck) {
+              if (cell && typeof cell === 'object' && 
+                  typeof cell.x === 'number' && typeof cell.y === 'number') {
+                const cellKey = cell.x + ',' + cell.y;
+                if (affectedCells.includes(cellKey)) {
+                  earliestStep = Math.min(earliestStep, i);
+                  break;
+                }
+              }
+            }
+          }
+        }
+        
+        return earliestStep < Infinity ? earliestStep : -1;
+      };
 
-      // 가끔 실제 solvable인지 확인(빠른 확인 -> 성공이면 즉시 종료)
-      if ((it % checkEvery) === 0) {
+      // ====== 안전한 지뢰 이동 함수 (개선된 버전) ======
+      const annealingMoveMines = (openedCells, numMoves = 3) => {
+        const W = this.columns, H = this.rows;
+        let moveCount = 0;
+        
+        // 공개된 셀들 매핑
+        const isOpened = this.new_table();
+        for (let i = 0; i < openedCells.length; i++) {
+          if (openedCells[i]) {
+            const x = i % W, y = Math.floor(i / W);
+            isOpened[x][y] = true;
+          }
+        }
+
+        // 안전한 지뢰 이동 시도
+        for (let attempt = 0; attempt < numMoves * 10 && moveCount < numMoves; attempt++) {
+          // 이동할 지뢰가 있는 칸 선택 (공개되지 않은 칸 중에서)
+          const fromCandidates = [];
+          for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+              if (!isOpened[x][y] && (this.mines[x][y] | 0) !== 0) {
+                fromCandidates.push([x, y]);
+              }
+            }
+          }
+          
+          if (fromCandidates.length === 0) break;
+          
+          // 이동 대상 칸 선택 (공개되지 않고 지뢰가 없는 칸)
+          const toCandidates = [];
+          for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+              if (!isOpened[x][y] && (this.mines[x][y] | 0) === 0) {
+                toCandidates.push([x, y]);
+              }
+            }
+          }
+          
+          if (toCandidates.length === 0) break;
+
+          // 무작위 선택
+          const fromIdx = Math.floor(Math.random() * fromCandidates.length);
+          const toIdx = Math.floor(Math.random() * toCandidates.length);
+          const [fromX, fromY] = fromCandidates[fromIdx];
+          const [toX, toY] = toCandidates[toIdx];
+          
+          // 지뢰 이동 전에 영향받는 칸들의 가장 이른 스텝 확인
+          const earliestStep = findEarliestStepForAffectedCells(fromX, fromY, toX, toY, openedCells);
+          
+          // 영향받는 공개 칸이 있다면 해당 스텝으로 되돌려야 함
+          if (earliestStep >= 0) {
+            // 가장 이른 스텝으로 Trace를 되돌림 (실제로는 이후 로직에서 처리)
+            // 여기서는 이동 가능 여부만 판단하고, 실제 되돌리기는 호출부에서 처리
+            this.mineMovePendingRollback = earliestStep;
+          }
+          
+          // 지뢰 이동
+          const mineValue = this.mines[fromX][fromY];
+          this.mines[fromX][fromY] = 0;
+          this.mines[toX][toY] = mineValue;
+          
+          moveCount++;
+        }
+        
+        // near_mines 재계산
+        rebuildParts();
+        return moveCount;
+      };
+
+      // ====== 시뮬레이티드 어닐링을 포함한 솔빙 시도 ======
+      const attemptSolveWithAnnealing = (firstX, firstY) => {
+        const deadline = Date.now() + 2000;
+        let result = solveNoGuessFast.call(this, firstX, firstY, deadline);
+        
+        if (result.ok) return result;
+
+        // 지뢰 밀도에 따른 어닐링 시도 수 계산
+        const W = this.columns, H = this.rows;
+        const maxPossibleMines = W * H; // 가능한 최대 지뢰 수 (검은지뢰와 흰지뢰는 같은칸에 있을수없음)
+        
+        // 현재 지뢰 수 합계 계산
+        let currentMineCount = 0;
+        let hasWhiteMines = false;
+        for (let y = 0; y < H; y++) {
+          for (let x = 0; x < W; x++) {
+            const mineValue = this.mines[x][y] | 0;
+            if (mineValue !== 0) {
+              currentMineCount++;
+              if (mineValue < 0) hasWhiteMines = true;
+            }
+          }
+        }
+        
+        // 지뢰 밀도 계산 (0~1 범위)
+        const mineDensity = currentMineCount / maxPossibleMines;
+        
+        // 어닐링 시도 수 계산
+        const ANNEALING_ATTEMPTS = Math.floor(hasWhiteMines ? mineDensity * 80 : mineDensity * 200);
+        const ROLLBACK_STEPS = hasWhiteMines ? 4 : 3;  // 음수지뢰가 있으면 5스텝, 없으면 3스텝
+        
+        for (let annealAttempt = 0; annealAttempt < ANNEALING_ATTEMPTS; annealAttempt++) {
+          // 현재 상태 저장
+          const currentState = saveGameState();
+          
+          // 지뢰 이동 전에 rollback스텝 이전으로 되돌리기 (막힌 곳 n스텝 이전에서 실행)
+          if (Trace.length > ROLLBACK_STEPS) {
+            Trace.length = Math.max(0, Trace.length - ROLLBACK_STEPS);
+          }
+          
+          // 지뢰 이동 초기화
+          this.mineMovePendingRollback = -1;
+          
+          // 지뢰 이동 (공개된 정보 기준)
+          const movedCount = annealingMoveMines(result.opened);
+          
+          if (movedCount > 0) {
+            // 지뢰 이동으로 인해 추가 롤백이 필요한 경우
+            if (this.mineMovePendingRollback >= 0) {
+              // 가장 이른 스텝으로 추가 되돌리기
+              const targetStep = this.mineMovePendingRollback;
+              if (targetStep < Trace.length) {
+                Trace.length = targetStep;
+              }
+            }
+            
+            // 지뢰 이동 후 상태 완전 리셋 - 처음부터 다시 풀기
+            // 이전 풀이 흔적 제거
+            this.opened = this.new_table();
+            this.mine_sweeper_game_board = this.new_table();
+            
+            // 첫 번째 클릭만 다시 설정 (안전한 칸이므로)
+            this.opened[firstX][firstY] = true;
+            this.mine_sweeper_game_board[firstX][firstY] = 2; // opened
+            
+            // Trace 완전 리셋
+            Trace.length = 0;
+            
+            // 다시 풀어보기 (완전히 새로운 시작)
+            const newDeadline = Date.now() + 1000; // 1초로 단축
+            const newResult = solveNoGuessFast.call(this, firstX, firstY, newDeadline);
+            
+            if (newResult.ok) {
+              return newResult; // 성공!
+            }
+            
+            // 진전 체크: 새로운 판에서 최소 4+n스텝을 풀었는지 확인
+            let newProgress = 0;
+            if (newResult.opened) {
+              for (let i = 0; i < newResult.opened.length; i++) {
+                if (newResult.opened[i]) { // 새로 연 칸 수만 계산
+                  newProgress++;
+                }
+              }
+            }
+            
+            // 충분한 진전이 있었는지 확인 (최소 4+ROLLBACK_STEPS 스텝)
+            const minRequiredProgress = 4 + ROLLBACK_STEPS + 
+              (this.mineMovePendingRollback >= 0 ? (currentState.traceLength - this.mineMovePendingRollback) : 0);
+            
+            if (newProgress < minRequiredProgress) {
+              // 충분한 진전이 없으면 어닐링 실패로 간주하고 되돌리기
+              restoreGameState(currentState);
+              // 상태 복원 후 near_mines도 다시 계산
+              rebuildParts();
+            } else {
+              // 진전했으면 이 상태로 계속
+              result = newResult;
+            }
+          } else {
+            // 지뢰 이동 실패시 되돌리기
+            restoreGameState(currentState);
+          }
+        }
+        
+        return { ok: false, opened: result.opened }; // 30번 시도 모두 실패
+      };
+
+      // ====== 판 품질 평가 함수 ======
+      const evaluateBoardQuality = (trace, minesArray) => {
+        const W = this.columns, H = this.rows;
+        const maxBlackMines = Math.max(1, this.max_mines | 0);
+        const maxWhiteMines = Math.max(0, this.max_mines_white | 0);
+        
+        // 1. 전체 지뢰칸 개수 계산 (지뢰가 있는 칸의 개수, 지뢰 갯수가 아님)
+        let totalMineCells = 0;
+        let maxCapacityMineCells = 0;
+        
+        for (let y = 0; y < H; y++) {
+          for (let x = 0; x < W; x++) {
+            const mineValue = minesArray[x][y] | 0;
+            if (mineValue !== 0) {
+              totalMineCells++;
+              
+              // 최대 용량 지뢰칸 체크
+              if (mineValue > 0) {
+                // 검은 지뢰: 최대 개수와 같은지 체크
+                if (mineValue === maxBlackMines) {
+                  maxCapacityMineCells++;
+                }
+              } else {
+                // 흰 지뢰: 절댓값이 최대 개수와 같은지 체크
+                if (Math.abs(mineValue) === maxWhiteMines) {
+                  maxCapacityMineCells++;
+                }
+              }
+            }
+          }
+        }
+        
+        // 2. post-fill로 확정된 지뢰칸 개수 계산
+        let postFillMineCells = 0;
+        for (let i = 0; i < trace.length; i++) {
+          const t = trace[i];
+          if (t && t.kind === "open" && t.reason === "post-fill") {
+            const x = t.x | 0, y = t.y | 0;
+            if (x >= 0 && x < W && y >= 0 && y < H) {
+              const mineValue = minesArray[x][y] | 0;
+              if (mineValue !== 0) {
+                postFillMineCells++;
+              }
+            }
+          }
+        }
+        
+        // 3. 비율 계산 및 품질 점수 계산
+        const postFillRatio = totalMineCells > 0 ? postFillMineCells / totalMineCells : 0;
+        const maxCapacityRatio = totalMineCells > 0 ? maxCapacityMineCells / totalMineCells : 0;
+        
+        const qualityScore = postFillRatio * 3 + maxCapacityRatio * 1;
+        
+        return qualityScore; // 낮을수록 좋음
+      };
+
+      // ====== 단일 판 생성 시도 함수 ======
+      const generateSingleBoard = (firstX, firstY) => {
+        this.init_mines();
+        
+        if (!this._relocateFirstClick(firstX, firstY, true)) return null;
+        rebuildParts();
+        if ((this.near_mines[firstX][firstY] | 0) !== 0) return null;
+
         Trace.length = 0;
-        // 짧게 검사(시간 제한)
-        if (solveNoGuessFast.call(this, firstX, firstY, Date.now() + 500)) {
-          if (commitSolved()) return 1;
+        const result = attemptSolveWithAnnealing(firstX, firstY);
+        
+        if (!result.ok) return null;
+
+        // 상태 저장
+        const boardState = {
+          mines: JSON.parse(JSON.stringify(this.mines)),
+          near_mines: JSON.parse(JSON.stringify(this.near_mines)),
+          _near_black: JSON.parse(JSON.stringify(this._near_black)),
+          _near_white: JSON.parse(JSON.stringify(this._near_white)),
+          trace: Trace.slice(),
+          quality: evaluateBoardQuality(Trace, this.mines)
+        };
+        
+        return boardState;
+      };
+
+      // ====== 메인: 최적 보드 생성 ======
+      const GENERATION_TIME_BUDGET = 5000; // 5초
+      const startTime = Date.now();
+      
+      let bestBoard = null;
+      let firstBoardTime = 0;
+      
+      // 첫 번째 보드 생성 시도
+      for (let attempt = 1; ; attempt++) {
+        const board = generateSingleBoard(firstX, firstY);
+        if (board) {
+          bestBoard = board;
+          firstBoardTime = Date.now() - startTime;
+          break;
         }
       }
-    }
+      
+      // 첫 번째 보드 생성이 5초 이내에 완료되었다면 더 많은 보드를 시도
+      if (firstBoardTime < GENERATION_TIME_BUDGET) {
+        const remainingTime = GENERATION_TIME_BUDGET - firstBoardTime;
+        const additionalDeadline = Date.now() + remainingTime;
+        const MAX_ADDITIONAL_ATTEMPTS = 10; // 최대 추가 시도 횟수 제한
+        
+        let additionalAttempts = 0;
+        let successfulAttempts = 0;
+        while (Date.now() < additionalDeadline && successfulAttempts < MAX_ADDITIONAL_ATTEMPTS) {
+          const board = generateSingleBoard(firstX, firstY);
+          additionalAttempts++;
+          if (board) {
+            successfulAttempts++;
+            // 더 좋은 품질의 보드를 찾았다면 교체
+            if (board.quality < bestBoard.quality) {
+              bestBoard = board;
+            }
+          }
+        }
+        
+        console.log(`[Board Generation] First board: ${firstBoardTime}ms, Additional attempts: ${additionalAttempts}, Successful boards: ${successfulAttempts}, Best quality: ${bestBoard.quality}`);
+      }
+      
+      // 최선의 보드 상태 복원
+      if (bestBoard) {
+        this.mines = bestBoard.mines;
+        this.near_mines = bestBoard.near_mines;
+        this._near_black = bestBoard._near_black;
+        this._near_white = bestBoard._near_white;
+        Trace.length = 0;
+        Trace.push(...bestBoard.trace);
+        
+        // 상태 보정
+        this.remaining = W * H;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if ((this.mines[x][y] | 0) !== 0) this.remaining--;
+        this.total_safe = this.remaining;
+        this.game_status = 1;
 
-    // 5) SA 끝났으면 best 상태로 복구 후 "정식" 검사
-    this.mines = bestSnap;
-    this._refresh_parts_from_mines(); // mines 기준으로 parts/near 전체 재구성
-    Trace.length = 0;
+        // ★ Trace 에 없는 '지뢰 없는 칸'을 모두 open 으로 강제로 추가
+        (function fillAllSafeCellsToTrace(self) {
+          // 1) 이미 Trace 에 기록된 open 위치들
+          const openedByTrace = self.new_table();  // 숫자 0/1 로만 사용
+          for (let i = 0; i < Trace.length; i++) {
+            const t = Trace[i];
+            if (!t || t.kind !== "open") continue;
+            const x = t.x | 0, y = t.y | 0;
+            if (x >= 0 && x < W && y >= 0 && y < H) {
+              openedByTrace[x][y] = 1;
+            }
+          }
 
-    if (solveNoGuessFast.call(this, firstX, firstY, Date.now() + 2000)) {
-      if (commitSolved()) return 1;
-    }
-  }
+          // 2) mines 상에서 지뢰가 없고(==0), 아직 한번도 open 으로 나온 적 없는 칸들
+          //    → Trace 맨 뒤에 open 으로 추가한다.
+          for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+              if ((self.mines[x][y] | 0) === 0 && !openedByTrace[x][y]) {
+                pushTrace("open", { x, y, reason: "post-fill" });
+              }
+            }
+          }
 
-  // 6) SA 한도 초과(또는 SA 미사용) → 기존처럼 재샘플링(continue)
-}
+          // 3) 최종 완료 로그를 Trace 제일 끝에 한 번만 찍어 둔다.
+          let openCount = 0;
+          for (let i = 0; i < Trace.length; i++) {
+            if (Trace[i] && Trace[i].kind === "open") openCount++;
+          }
+          pushTrace("done", { opens: openCount });
+        })(this);
 
+        // 추론 근거 트리 출력 (이 시점에서 Trace 는 이미 'post-fill' + 'done'까지 포함)
+        try { dumpTraceToConsole(); } catch (e) { }
+
+        // ★ 추론 로그를 인스턴스에 보관해 매크로가 그대로 재생할 수 있게 한다
+        this._nopick_trace = Trace.slice();
+        return 1; // 성공
+      }
+      
+      // ====== Fallback: 첫 번째 보드 생성 실패 시 기존 방식으로 무한 시도 ======
+      console.log("[Board Generation] Failed to generate initial board, falling back to infinite attempts");
+      for (let attempt = 1; ; attempt++) {
+        const board = generateSingleBoard(firstX, firstY);
+        if (board) {
+          // 보드 상태 복원
+          this.mines = board.mines;
+          this.near_mines = board.near_mines;
+          this._near_black = board._near_black;
+          this._near_white = board._near_white;
+          Trace.length = 0;
+          Trace.push(...board.trace);
+          
+          // 상태 보정
+          this.remaining = W * H;
+          for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if ((this.mines[x][y] | 0) !== 0) this.remaining--;
+          this.total_safe = this.remaining;
+          this.game_status = 1;
+
+          // ★ Trace 에 없는 '지뢰 없는 칸'을 모두 open 으로 강제로 추가
+          (function fillAllSafeCellsToTrace(self) {
+            const openedByTrace = self.new_table();
+            for (let i = 0; i < Trace.length; i++) {
+              const t = Trace[i];
+              if (!t || t.kind !== "open") continue;
+              const x = t.x | 0, y = t.y | 0;
+              if (x >= 0 && x < W && y >= 0 && y < H) {
+                openedByTrace[x][y] = 1;
+              }
+            }
+
+            for (let y = 0; y < H; y++) {
+              for (let x = 0; x < W; x++) {
+                if ((self.mines[x][y] | 0) === 0 && !openedByTrace[x][y]) {
+                  pushTrace("open", { x, y, reason: "post-fill" });
+                }
+              }
+            }
+
+            let openCount = 0;
+            for (let i = 0; i < Trace.length; i++) {
+              if (Trace[i] && Trace[i].kind === "open") openCount++;
+            }
+            pushTrace("done", { opens: openCount });
+          })(this);
+
+          try { dumpTraceToConsole(); } catch (e) { }
+          this._nopick_trace = Trace.slice();
+          return 1;
+        }
+      }
     };
 
 
