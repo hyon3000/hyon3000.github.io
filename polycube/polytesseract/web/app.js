@@ -1434,6 +1434,32 @@ function stickblock() {
       }
     }
   }
+  // 자폭: placed immediately triggers 3x3x3x3 destruction
+  for (let x = 0; x < 7; x += 1) {
+    for (let y = 0; y < 7; y += 1) {
+      for (let z = 0; z < 7; z += 1) {
+        for (let w = 0; w < 7; w += 1) {
+        if (state.nowblock[x][y][z][w] !== 0 && (state.nowblock[x][y][z][w] & 255) === 1) {
+          const bx = x + state.blockpos[0];
+          const by = y + state.blockpos[1];
+          const bz = z + state.blockpos[2];
+          const bw = w + state.blockpos[3];
+          for (let x2 = bx - 1; x2 <= bx + 1; x2 += 1) {
+            for (let y2 = by - 1; y2 <= by + 1; y2 += 1) {
+              for (let z2 = bz - 1; z2 <= bz + 1; z2 += 1) {
+                for (let w2 = bw - 1; w2 <= bw + 1; w2 += 1) {
+                if (x2 >= 0 && x2 < 7 && y2 >= 0 && y2 < 7 && z2 >= 0 && z2 < 26 && w2 >= 0 && w2 < 7) {
+                  state.blk[x2][y2][z2][w2] = 0;
+                }
+                }
+              }
+            }
+          }
+        }
+        }
+      }
+    }
+  }
   return setnextblock();
 }
 
