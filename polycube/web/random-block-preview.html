@@ -1,0 +1,98 @@
+<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{width:128px;height:128px}</style>
+</head><body>
+<canvas id="c" width="512" height="512"></canvas>
+<script src="./fixed-pipeline.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const blockcnt = parseInt(params.get('n') || '6', 10);
+const seed = parseInt(params.get('s') || '42', 10);
+const scale = 0.09;
+
+// Simple seeded random
+let _seed = seed;
+function rand() { _seed = (_seed * 1103515245 + 12345) & 0x7fffffff; return _seed; }
+
+const r = new window.FixedPipelineGL(document.getElementById('c'));
+const GL = window.GL;
+
+r.matrixMode('PROJECTION');
+r.orthof(-1.2, 1.2, -1.2, 1.2, 0.1, 20);
+r.matrixMode('MODELVIEW');
+r.loadIdentity();
+r.clearColor(0, 0, 0, 0);
+r.clear(r.gl.COLOR_BUFFER_BIT | r.gl.DEPTH_BUFFER_BIT);
+r.translatef(0, 0, -5);
+r.rotatef(25, 1, 0, 0);
+r.rotatef(35, 0, 1, 0);
+r.lineWidth(6);
+
+function fillQuad(a, b, c, d, col) {
+  r.color4f(col[0], col[1], col[2], col[3]);
+  r.begin(GL.TRIANGLE_FAN);
+  r.vertex3f(a[0], a[1], a[2]); r.vertex3f(b[0], b[1], b[2]);
+  r.vertex3f(c[0], c[1], c[2]); r.vertex3f(d[0], d[1], d[2]);
+  r.end();
+}
+
+// Generate random block (same as C++ createNewBlock)
+const block = [];
+for (let x=0;x<7;x++) { block[x]=[]; for(let y=0;y<7;y++) { block[x][y]=[]; for(let z=0;z<7;z++) block[x][y][z]=0; }}
+
+let bx=2, by=2, bz=2, cnt=0;
+let xh=0,xl=6,yh=0,yl=6,zh=0,zl=6;
+const cellValue = 101 + blockcnt;
+while (cnt < blockcnt) {
+  if (block[bx][by][bz] === 0) {
+    cnt++;
+    block[bx][by][bz] = cellValue;
+    if(bx>=xh)xh=bx; if(bx<=xl)xl=bx;
+    if(by>=yh)yh=by; if(by<=yl)yl=by;
+    if(bz>=zh)zh=bz; if(bz<=zl)zl=bz;
+  }
+  switch(rand() % 6) {
+    case 0: bx=Math.min(6,bx+1); break;
+    case 1: bx=Math.max(0,bx-1); break;
+    case 2: by=Math.min(6,by+1); break;
+    case 3: by=Math.max(0,by-1); break;
+    case 4: bz=Math.min(6,bz+1); break;
+    default: bz=Math.max(0,bz-1); break;
+  }
+}
+// Center
+const ox=Math.floor((xl+xh)/2)-3, oy=Math.floor((yl+yh)/2)-3, oz=Math.floor((zl+zh)/2)-3;
+
+// Draw
+const v = cellValue;
+let pic = (v & 127) ^ 64;
+const R = pic >> 4, G = (pic >> 2) & 3, B = pic & 3;
+let cr = (R + 0.6) / 4.8, cg = (G + 0.8) / 4.4, cb = (B + 0.8) / 4.4;
+
+for (let x=0;x<7;x++) for(let y=0;y<7;y++) for(let z=0;z<7;z++) {
+  const sx=x+ox, sy=y+oy, sz=z+oz;
+  if(sx<0||sx>6||sy<0||sy>6||sz<0||sz>6) continue;
+  if(block[sx][sy][sz]===0) continue;
+  const s=scale;
+  const cx=(x-3)*2*s, cz=(y-3)*2*s, cy=(z-3)*2*s;
+  const color=[cr,cg,cb,1];
+  const x0=cx-s,x1=cx+s,y0=cy-s,y1=cy+s,z0=cz-s,z1=cz+s;
+  fillQuad([x0,y0,z0],[x1,y0,z0],[x1,y1,z0],[x0,y1,z0], color);
+  fillQuad([x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1], color);
+  fillQuad([x0,y0,z0],[x0,y0,z1],[x0,y1,z1],[x0,y1,z0], color);
+  fillQuad([x1,y0,z0],[x1,y0,z1],[x1,y1,z1],[x1,y1,z0], color);
+  fillQuad([x0,y1,z0],[x1,y1,z0],[x1,y1,z1],[x0,y1,z1], color);
+  fillQuad([x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1], color);
+  const tlf=s*0.85, e=1.01*s;
+  const bright=[Math.min(1,cr*1.2),Math.min(1,cg*1.2),Math.min(1,cb*1.2),1];
+  fillQuad([-tlf+cx,-e+cy,tlf+cz],[tlf+cx,-e+cy,tlf+cz],[tlf+cx,-e+cy,-tlf+cz],[-tlf+cx,-e+cy,-tlf+cz],bright);
+  fillQuad([-tlf+cx,e+cy,tlf+cz],[tlf+cx,e+cy,tlf+cz],[tlf+cx,e+cy,-tlf+cz],[-tlf+cx,e+cy,-tlf+cz],bright);
+  fillQuad([e+cx,-tlf+cy,tlf+cz],[e+cx,tlf+cy,tlf+cz],[e+cx,tlf+cy,-tlf+cz],[e+cx,-tlf+cy,-tlf+cz],bright);
+  fillQuad([-e+cx,-tlf+cy,tlf+cz],[-e+cx,tlf+cy,tlf+cz],[-e+cx,tlf+cy,-tlf+cz],[-e+cx,-tlf+cy,-tlf+cz],bright);
+  fillQuad([-tlf+cx,-tlf+cy,e+cz],[tlf+cx,-tlf+cy,e+cz],[tlf+cx,tlf+cy,e+cz],[-tlf+cx,tlf+cy,e+cz],bright);
+  fillQuad([-tlf+cx,-tlf+cy,-e+cz],[tlf+cx,-tlf+cy,-e+cz],[tlf+cx,tlf+cy,-e+cz],[-tlf+cx,tlf+cy,-e+cz],bright);
+}
+document.title='done';
+</script>
+</body></html>

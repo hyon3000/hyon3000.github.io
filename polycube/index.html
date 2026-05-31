@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Polycube — 2D/3D/4D Tetris</title>
+<meta name="description" content="Polycube: 2D Polynomino, 3D Polycube, 4D Polytesseract tetris puzzle games. Play in your browser.">
+<meta property="og:title" content="Polycube — 2D/3D/4D Tetris">
+<meta property="og:description" content="2D/3D/4D 테트리스 퍼즐 게임. 폴리오미노, 폴리큐브, 폴리테서렉트.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://hyon3000.github.io/polycube/index.html">
+<link href="win98.css" media="screen" rel="stylesheet" type="text/css">
+<link href="mine-win98.css" media="screen" rel="stylesheet" type="text/css">
+<script src="vendor/jquery.min.js"></script>
+<script src="vendor/jquery-ui.min.js"></script>
+<script src="jquery.mswin.js"></script>
+<script src="jquery.mswin.menu.js"></script>
+<style>
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #fff; }
+.windows { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.polycube-window { position: relative; display: flex; flex-direction: column; }
+.polycube-window .title-bar .title-icon {
+  background-image: url(polycube_icon.png);
+  background-size: 16px 16px;
+  image-rendering: pixelated !important;
+}
+.polycube-window .window-content {
+  flex: 1; overflow: hidden;
+  border-left: 3px solid #808080; border-top: 3px solid #808080;
+  border-right: 3px solid #fff; border-bottom: 3px solid #fff;
+  background: #000;
+}
+.polycube-window .window-content iframe { width: 100%; height: 100%; border: none; display: block; }
+li.menu_polytheme > ul.menu, li.menu_polyothergames > ul.menu {
+  width: max-content !important; min-width: 150px !important;
+}
+</style>
+</head>
+<body>
+<div class="windows windows-98">
+  <div class="window has-menu polycube-window">
+    <div class="title-bar">
+      <div class="title-icon"></div>
+      <div class="title">Polycube</div>
+      <div class="title-button-group">
+        <div class="title-button minimize"></div>
+        <div class="title-button maximize disabled" onclick="event.preventDefault();event.stopPropagation();return false;"></div>
+        <div class="title-button close"></div>
+      </div>
+    </div>
+    <ul class="menu-bar">
+      <li>
+        <a href="#" data-access-key="g" class="menu-game-top">게임</a>
+        <ul class="menu">
+          <li class="menu_polytheme" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">　테마...</a>
+            <ul class="menu">
+              <li class="poly-theme-polycube" onclick="return runMenu(function(){ switchToPolycube(); });"><a href="#">✓ 폴리큐브 (3D)</a></li>
+              <li class="poly-theme-polynomino" onclick="return runMenu(function(){ switchToPolynomino(); });"><a href="#">　폴리노미노 (2D)</a></li>
+              <li class="poly-theme-polytesseract" onclick="return runMenu(function(){ switchToPolytesseract(); });"><a href="#">　폴리테서렉트 (4D)</a></li>
+            </ul>
+          </li>
+          <li class="separator"></li>
+          <li class="poly-item-toggle" onclick="return runMenu(function(){ toggleItems(); });"><a href="#">✓ 아이템 사용</a></li>
+          <li class="separator"></li>
+          <li class="poly-menuclose" onclick="return runMenu(function(){ $('.has-menu.polycube-window').css('visibility','hidden'); });">
+            <a href="#">　끝내기(X)</a>
+          </li>
+        </ul>
+      </li>
+      <li>
+        <a href="#" data-access-key="h" class="menu-help-top">도움말</a>
+        <ul class="menu">
+          <li class="menu_polyothergames" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">　다른 게임</a>
+            <ul class="menu">
+              <li class="poly-minesweeper" onclick="return runMenu(function(){ window.location.href='../index.html'; });">
+                <a href="#">　지뢰찾기</a>
+              </li>
+
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+    <div class="window-content">
+      <iframe id="game" src="game.html"></iframe>
+    </div>
+  </div>
+</div>
+<script>
+function runMenu(fn) { fn(); return false; }
+$(function() {
+  if ($('.menu-bar').length) $('.menu-bar').menubar();
+  $('.polycube-window').draggable({ handle: '.title' });
+  $('.polycube-window .title-button.minimize').on('click', function() {
+    $('.has-menu.polycube-window').hide();
+  });
+  $('.polycube-window .title-button.close').on('click', function() {
+    $('.has-menu.polycube-window').css('visibility', 'hidden');
+  });
+});
+function resize() {
+  var vw = window.innerWidth, vh = window.innerHeight;
+  var win = document.querySelector('.polycube-window');
+  var chrome = 46, ratio = 1/2, gw, gh;
+  if (vw / (vh - chrome) < ratio) { gw = vw - 8; gh = gw / ratio; }
+  else { gh = vh - chrome - 8; gw = gh * ratio; }
+  win.style.width = Math.floor(gw + 8) + 'px';
+  win.style.height = Math.floor(gh + chrome + 8) + 'px';
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Close menus when game iframe is clicked/focused
+function closeAllMenus() {
+  try {
+    $('.menu-bar').find('ul.menu').hide();
+    $('.menu-bar > li').removeClass('ui-state-active ui-state-open ui-state-focus ui-state-hover');
+    $('.menu-bar').menubar('collapseAll', null, true);
+  } catch(e) {}
+}
+document.getElementById('game').addEventListener('load', function() {
+  try {
+    this.contentWindow.document.addEventListener('pointerdown', closeAllMenus);
+  } catch(e) {}
+});
+window.addEventListener('blur', closeAllMenus);
+
+(function() {
+  var lang = (navigator.language || navigator.userLanguage || '').toLowerCase();
+  if (!lang.startsWith('ko')) {
+    document.documentElement.setAttribute('lang', 'en');
+    var gt = document.querySelector('.menu-game-top');
+    var ht = document.querySelector('.menu-help-top');
+    if (gt) gt.textContent = 'Game';
+    if (ht) ht.textContent = 'Help';
+    function st(sel, txt) { var el = document.querySelector(sel); if (el) { var a = el.querySelector('a'); if (a) a.textContent = txt; } }
+    st('li.menu_polytheme', '\u3000Theme...');
+    st('li.poly-theme-polycube', '\u2713 Polycube (3D)');
+    st('li.poly-theme-polynomino', '\u3000Polynomino (2D)');
+    st('li.poly-theme-polytesseract', '\u3000Polytesseract (4D)');
+    st('li.poly-theme-modern', '\u3000Modern');
+    st('li.poly-theme-classic', '\u3000Classic');
+    st('li.poly-item-toggle', '\u2713 Items');
+    st('li.poly-menuclose', '\u3000Exit');
+    st('li.menu_polyothergames', '\u3000Other Games');
+    st('li.poly-minesweeper', '\u3000Minesweeper');
+  }
+})();
+var itemsEnabled = true;
+function syncItemsToGame() {
+  // Reload the iframe with/without ?items=0 parameter
+  var iframe = document.getElementById('game');
+  if (!iframe) return;
+  var src = iframe.src.split('?')[0];
+  iframe.src = src + (itemsEnabled ? '' : '?items=0');
+}
+function toggleItems() {
+  itemsEnabled = !itemsEnabled;
+  var el = document.querySelector('.poly-item-toggle a');
+  if (el) {
+    var name = el.textContent.trim().replace(/^[✓\u2713]\s*/, '').replace(/^\u3000/, '');
+    el.textContent = (itemsEnabled ? '✓ ' : '\u3000') + name;
+  }
+  syncItemsToGame();
+}
+function updateThemeChecks(active) {
+  var items = ['polycube', 'polynomino', 'polytesseract'];
+  for (var i = 0; i < items.length; i++) {
+    var el = document.querySelector('.poly-theme-' + items[i] + ' a');
+    if (!el) continue;
+    var name = el.textContent.trim().replace(/^[✓\u2713]\s*/, '');
+    el.textContent = (items[i] === active ? '✓ ' : '\u3000') + name;
+  }
+}
+function itemsParam() { return itemsEnabled ? '' : '?items=0'; }
+function switchToPolynomino() {
+  document.getElementById('game').src = 'polynomino/game.html' + itemsParam();
+  document.querySelector('.polycube-window .title').textContent = 'Polynomino';
+  var icon = document.querySelector('.polycube-window .title-icon');
+  if (icon) icon.style.backgroundImage = 'url(polynomino/polynomino_icon.png)';
+  updateThemeChecks('polynomino');
+}
+function switchToPolycube() {
+  document.getElementById('game').src = 'game.html' + itemsParam();
+  document.querySelector('.polycube-window .title').textContent = 'Polycube';
+  var icon = document.querySelector('.polycube-window .title-icon');
+  if (icon) icon.style.backgroundImage = 'url(polycube_icon.png)';
+  updateThemeChecks('polycube');
+}
+function switchToPolytesseract() {
+  document.getElementById('game').src = 'polytesseract/game.html' + itemsParam();
+  document.querySelector('.polycube-window .title').textContent = 'Polytesseract';
+  var icon = document.querySelector('.polycube-window .title-icon');
+  if (icon) icon.style.backgroundImage = 'url(polytesseract/polytesseract_icon.png)';
+  updateThemeChecks('polytesseract');
+}
+</script>
+</body>
+</html>

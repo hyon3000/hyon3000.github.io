@@ -1,0 +1,3834 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta name="google-site-verification" content="sVA6QJSCCEozZiu7jjWZHOHMoLK4c4JN6ecoNAuG4bg" />
+  <title>Minesweeper — 지뢰찾기</title>
+  <meta charset="utf-8" />
+  <meta name="description" content="Classic Minesweeper with Windows 98 UI. Play in your browser. 클래식 지뢰찾기 웹 게임.">
+  <meta property="og:title" content="Minesweeper — 지뢰찾기">
+  <meta property="og:description" content="Windows 98 스타일 클래식 지뢰찾기. 브라우저에서 플레이.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://hyon3000.github.io/">
+  <link href="mine.css" media="screen" rel="stylesheet" type="text/css" />
+  <link href="win98.css" media="screen" rel="stylesheet" type="text/css" />
+  <link href="mine-win98.css" media="screen" rel="stylesheet" type="text/css" />
+  <style>
+    /* 오버레이 애니메이션: 1초(1s) 딜레이 후 opacity 1로 변경 */
+    @keyframes delayedFadeIn {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    #loading-overlay.delayed-show {
+      opacity: 0;
+      /* 시작은 투명 */
+      /* duration:0.1s, delay:1s */
+      animation: delayedFadeIn 0.1s linear 1s forwards;
+    }
+
+    /* 가로 스크롤 허용 */
+    html,
+    body {
+      overflow-x: auto;
+    }
+
+    .windows {
+      position: relative;
+      overflow: visible;
+      width: max-content;
+      min-width: 100%;
+    }
+
+    .mine-window {
+      position: relative;
+      display: inline-block;
+    }
+
+    /* 이중 카운터용 컨테이너(아이콘+세그먼트 두 줄) */
+    .mine-counters-dual {
+      display: inline-flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .counter-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* 깃발 아이콘 (mine.png는 160x256 스케일 기준) */
+    .counter-icon {
+      width: 16px;
+      height: 16px;
+      background-image: url(mine.png);
+      background-size: 160px 256px;
+      image-rendering: pixelated;
+      flex: 0 0 16px;
+    }
+
+    /* (검은지뢰깃발) 원본(288,288~320,320) → 절반 좌표(-144px,-144px) */
+    .icon-flag-black {
+      background-position: -144px -144px;
+    }
+
+    /* (하얀지뢰깃발) 원본(0,288~32,320) → 절반 좌표(0,-144px) */
+    .icon-flag-white {
+      background-position: 0px -144px;
+    }
+
+    .notice {
+      margin: 10px 0 14px;
+      padding: 10px 12px;
+      border: 1px solid #b5b5b5;
+      background: #fcfcfc;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .notice h3 {
+      margin: 0 0 6px;
+      font-size: 14px;
+    }
+
+    .notice ul {
+      margin: 6px 0 0 18px;
+      padding: 0;
+    }
+
+    .notice li {
+      margin: 2px 0;
+    }
+
+    .notice .warn {
+      display: inline-block;
+      padding: 0 6px;
+      border-radius: 3px;
+      background: #fff3cd;
+      border: 1px solid #ffe69c;
+    }
+
+    /* --- Console 미러 패널 --- */
+    .console-panel {
+      margin: 10px 0 18px;
+      border: 1px solid #b5b5b5;
+      background: #ffffff;
+    }
+
+    .console-panel .console-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      background: #f2f2f2;
+      border-bottom: 1px solid #d0d0d0;
+      font-size: 13px;
+    }
+
+    .console-panel .console-head .title {
+      font-weight: 600;
+      margin-right: auto;
+    }
+
+    .console-panel .console-head button,
+    .console-panel .console-head label {
+      font-size: 12px;
+    }
+
+    .console-panel .console-body {
+      max-height: 220px;
+      overflow: auto;
+      background: #ffffff;
+      font: 12px/1.5 monospace;
+      padding: 8px;
+      white-space: pre-wrap;
+    }
+
+    .console-line {
+      padding: 1px 0;
+    }
+
+    .console-time {
+      color: #888;
+    }
+
+    .console-lvl-log {
+      color: #222;
+    }
+
+    .console-lvl-info {
+      color: #146c94;
+    }
+
+    .console-lvl-warn {
+      color: #a46c00;
+    }
+
+    .console-lvl-error {
+      color: #b00020;
+    }
+
+    .ui-resizable-handle {
+      display: none !important;
+    }
+    /*  메뉴 항목 링크에만 적용 (너무 넓게 잡지 않기) */
+.menu .ui-menu-item > a {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/*  오른쪽 단축키는 auto margin으로 우측 고정 */
+.menu .ui-menu-item > a .mi-key {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
+  text-align: right;
+  min-width: 3ch;
+  opacity: 0.9;
+}
+
+.menu .ui-menu-item > a .mi-label { flex: 0 1 auto; }
+/*  jQuery UI가 실제로 스타일을 먹이는 wrapper를 강제로 좌측정렬 + flex */
+.menu .ui-menu-item > .ui-menu-item-wrapper,
+.menu .ui-menu-item > a.ui-menu-item-wrapper {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-start !important;
+  width: 100% !important;
+  box-sizing: border-box;
+  text-align: left !important;
+}
+
+/*  라벨은 왼쪽, 단축키는 오른쪽 */
+.menu .ui-menu-item-wrapper .mi-label { 
+  flex: 1 1 auto;
+  text-align: left;
+}
+.menu .ui-menu-item-wrapper .mi-key {
+  margin-left: auto;
+  flex: 0 0 auto;
+  min-width: 3ch;
+  text-align: right;
+}
+
+/*  서브메뉴 화살표(▶)가 있는 항목도 라벨이 밀려 “오른쪽 정렬처럼” 보이지 않게 */
+.menu .ui-menu-item-wrapper {
+  position: relative;
+  padding-right: 18px; /* 화살표 자리 확보 */
+}
+.menu .ui-menu-item-wrapper .ui-menu-icon {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+/*  서브메뉴 화살표(span.ui-menu-icon)가 공간을 차지하지 않게 */
+.menu .ui-menu-item > .ui-menu-item-wrapper,
+.menu .ui-menu-item > a.ui-menu-item-wrapper {
+  position: relative; 
+  padding-right: 18px !important; 
+}
+
+/* jQuery UI submenu arrow */
+.menu .ui-menu-icon.ui-icon {
+  position: absolute !important;  
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  margin: 0 !important;
+  flex: 0 0 auto !important;      
+  pointer-events: none;         
+}
+/*  (테마/치트) "서브메뉴" 폭을 내용에 맞춰 자동 확장 + 줄바꿈 금지 */
+li.menu_theme > ul.menu,
+li.menu_cheat > ul.menu,
+li.menu_othergames > ul.menu {
+  width: max-content !important; 
+  min-width: 220px !important; 
+}
+
+/*  메뉴 항목 텍스트 줄바꿈 방지(라벨/단축키/전체) */
+li.menu_theme > ul.menu .ui-menu-item-wrapper,
+li.menu_cheat > ul.menu .ui-menu-item-wrapper,
+li.menu_theme > ul.menu .mi-label,
+li.menu_cheat > ul.menu .mi-label,
+li.menu_theme > ul.menu .mi-key,
+li.menu_cheat > ul.menu .mi-key,
+.menu,
+.menu .ui-menu-item-wrapper,
+.menu .mi-label,
+.menu .mi-key{
+  white-space: nowrap !important;
+}
+
+/* (선택) 키/화살표 자리 때문에 오른쪽이 답답하면 여유를 더 줌 */
+li.menu_theme > ul.menu .ui-menu-item-wrapper,
+li.menu_cheat > ul.menu .ui-menu-item-wrapper {
+  padding-right: 40px !important;
+}
+
+
+.menu .ui-menu-item-wrapper {
+  flex-wrap: nowrap !important;
+}
+
+/*  서브메뉴 폭이 내용에 맞게 늘어나게 */
+.menu {
+  width: max-content !important;
+  min-width: 220px !important; /* 취향대로 */
+}
+
+/*  화살표 자리 때문에 답답하면 여유 */
+.menu .ui-menu-item-wrapper {
+  padding-right: 40px !important;
+}
+/* 타이틀바 기준점 */
+.mine-window .title-bar{
+  position: relative;
+}
+
+/*  타이틀은 아이콘과 버튼 사이 영역을 “직접 지정” */
+.mine-window .title-bar .title{
+  position: absolute;
+  left: 19.7px;   
+  right: 56px;  
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 3D 난이도 메뉴는 기본 숨김 (inline display도 이김) */
+.menu-3d-only { display: none !important; }
+
+/* 3D 테마일 때만 표시 */
+body.theme-3d .menu-3d-only { display: list-item !important; }
+
+
+  </style>
+</head>
+
+<body>
+  <div id="loading-overlay"
+    style="display:none; opacity:0;position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:9999; background:silver; border:2px outset white; padding:2px; box-shadow:2px 2px 10px rgba(0,0,0,0.5);">
+    <div
+      style="border:2px inset white; padding:5px 5px; text-align:center; font-family:'굴림', sans-serif; font-size:12px;">
+      <strong>⏳...</strong><br><br>
+    </div>
+  </div>
+
+  <div id="hscroll-guard" style="height:1px;width:0;overflow:hidden;"></div>
+  <script>
+    function is3DDifficultyIndex(idx){
+  idx = idx | 0;
+  return idx >= 16 && idx <= 22; // menu16~menu22
+}
+function setMenuText(liSelector, label, keyText = "") {
+  const li = document.querySelector(liSelector);
+  if (!li) return;
+
+  // jQuery UI가 wrapper를 만들면 그걸 우선 사용
+  const wrap = li.querySelector(".ui-menu-item-wrapper") || li.querySelector("a");
+  if (!wrap) return;
+
+  //  "목차" 같은 잔여 텍스트 노드 제거 (submenu 화살표는 유지)
+  [...wrap.childNodes].forEach(n => {
+    if (n.nodeType === Node.TEXT_NODE) n.remove();
+    // 혹시 깨진 마크업으로 생긴 span 등도 정리 (필요 최소만)
+    if (n.nodeType === Node.ELEMENT_NODE) {
+      const el = n;
+      const keep =
+        el.classList.contains("mi-label") ||
+        el.classList.contains("mi-key") ||
+        el.classList.contains("ui-menu-icon");
+      if (!keep && el.tagName !== "A") {
+        // 일반적으로는 span만 생기므로 제거해도 안전
+        // (혹시 유지할 요소가 더 있으면 keep 조건에 추가)
+      }
+    }
+  });
+
+  let lab = wrap.querySelector(".mi-label");
+  let key = wrap.querySelector(".mi-key");
+
+  if (!lab) {
+    lab = document.createElement("span");
+    lab.className = "mi-label";
+    // 화살표가 있으면 그 앞에, 없으면 맨 앞에
+    const icon = wrap.querySelector(".ui-menu-icon");
+    wrap.insertBefore(lab, icon || wrap.firstChild);
+  }
+
+  if (!key) {
+    key = document.createElement("span");
+    key.className = "mi-key";
+    wrap.appendChild(key);
+  }
+
+  lab.textContent = label;
+  key.textContent = keyText;
+}
+
+    (function () {
+      console.log("★ Global Event Script Loaded");
+
+      // 1. 마우스 누름 감지 (캡처링 모드: true)
+      window.addEventListener('mousedown', function (e) {
+
+        // 좌클릭(0)만 처리
+        if (e.button !== 0 && e.button !== 1) return;
+
+        // 클릭된 요소가 지뢰찾기 윈도우(.mine-window) 내부에 있는지 확인
+        var targetWin = e.target.closest('.mine-window');
+        if (!targetWin) return;
+        if (e.button === 1 || e.button === 2) {
+          e.preventDefault();
+          // preventDefault를 해도 JS 이벤트 전파는 계속되므로 게임 로직(Chording)은 정상 작동함
+        }
+        if (e.target.closest('.menu-bar') || e.target.closest('.title-bar')) {
+          return;
+        }
+
+        // ★ [수정] 클릭된 요소가 '얼굴 버튼' 자신이라면 여기서 중단!
+        // 얼굴 버튼을 눌렀을 때는 'O' 표정이 아니라, CSS의 :active 효과(버튼 눌림)가 나와야 함
+        if (e.target.closest('.mine-reset-button')) {
+          return;
+        }
+
+        // 게임 객체가 없거나, 게임 종료 상태(-1:패배, -2:승리)라면 반응하지 않음 (진행중 1, 대기 0)
+        if (!window.minefield || window.minefield.game_status < 0) return;
+
+        // 얼굴 아이콘을 찾아 강제로 'O' 표정(-48px) 적용
+        var faceIcon = document.querySelector(".mine-reset-button .mine-reset-button-inner");
+        if (faceIcon) {
+          // 기존 CSS(:active)를 덮어쓰기 위해 !important 사용
+          faceIcon.style.setProperty("background-position", "-48px 0", "important");
+        }
+      }, true); // true: 캡처링
+
+
+      // 2. 마우스 뗌 감지 (캡처링 모드: true)
+      window.addEventListener('mouseup', function (e) {
+        if (!window.minefield) return;
+
+        // A. 생성 중(모래시계)일 때는 얼굴을 리셋하지 않고 유지 (mine.js 로직 연동)
+        if (window.minefield._is_generating) return;
+
+        // B. 게임이 끝난 상태가 아니라면 웃는 얼굴로 복구
+        if (window.minefield.game_status >= 0) {
+          var faceIcon = document.querySelector(".mine-reset-button .mine-reset-button-inner");
+          if (faceIcon) {
+            // 강제 스타일 제거 -> CSS 기본값(웃는 얼굴 0 0)로 복귀
+            faceIcon.style.removeProperty("background-position");
+
+            // 안전장치: JS로도 명시적 초기화
+            faceIcon.style.backgroundPosition = "0 0";
+          }
+        }
+      }, true); // true: 캡처링
+    })();
+  </script>
+  <script>
+    function updateHScrollGuard() {
+      const win = document.querySelector('.mine-window');
+      const guard = document.getElementById('hscroll-guard');
+      if (win && guard) guard.style.width = (win.offsetWidth + 32) + 'px';
+    }
+    window.addEventListener('resize', updateHScrollGuard);
+
+    /* ===== 공통 유틸: 숫자/클램프/상한 계산 ===== */
+    function toInt(v, d = 0) { v = parseInt(v); return isNaN(v) ? d : v; }
+    function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+    // capBlackTotal = (cells-1)*maxBlackPerCell
+    // capWhiteTotal = capBlackTotal - blackTotal(최종값), 음수면 0
+    function calcCaps(cols, rows,depth, maxBlackPerCell, blackTotalNow, maxWhitePerCell = 0) {
+      // 1) 전체 칸수 및 검은지뢰 총 수용량
+      const C = Math.max(3, cols | 0);
+      const R = Math.max(1, rows | 0);
+      const D = Math.max(1, depth | 0);
+      const cells = C * R * D;
+
+      const capBlackPerCell = Math.max(1, maxBlackPerCell | 0);
+      const capBlackTotal = Math.max(0, (cells - 1) * capBlackPerCell);
+
+      // 2) 검은지뢰가 최소로 점유해야 하는 칸 수
+      const blackUsed = Math.min(Math.max(0, blackTotalNow | 0), capBlackTotal);
+      const minBlackCells = Math.ceil(blackUsed / capBlackPerCell);
+
+      // 3) 흰지뢰를 넣을 수 있는 칸 수
+      const whitePlaceableCells = Math.max(0, (cells - 1) - minBlackCells);
+
+      // 4) 칸당 흰지뢰 수용량을 곱해 최대 흰지뢰 총량
+      const capWhitePerCell = Math.max(0, maxWhitePerCell | 0);
+      const capWhiteTotal = whitePlaceableCells * capWhitePerCell;
+
+      return { capBlackTotal, capWhiteTotal };
+    }
+
+    // 폼 입력에 실시간 적용: 상호 의존 상한 보정
+    function applyFormCaps() {
+      const cols = toInt(x.value, 3);
+      const rows = toInt(y.value, 1);
+      const depth = toInt(z.value, 1);
+      // 1) 칸당 최대 검은지뢰수 (1~6)
+      let maxBlackPerCell = clamp(toInt(m.value, 1), 1, 6);
+      if (toInt(m.value, 1) < 0 || toInt(m.value, 1) > 6) m.value = maxBlackPerCell;
+
+      // 2) 칸당 최대 흰지뢰수 (0~6)  ← id는 wm 이 맞습니다.
+      let maxWhitePerCell = clamp(toInt(wm.value, 0), 0, 6);
+      if (toInt(wm.value, 0) < 0 || toInt(wm.value, 0) > 6) wm.value = maxWhitePerCell;
+
+      // 3) 검은 총수 보정
+      let k = Math.max(1, toInt(t.value, 1));
+      let caps = calcCaps(cols, rows, depth, maxBlackPerCell, k, maxWhitePerCell);
+      if (k > caps.capBlackTotal) k = caps.capBlackTotal;
+      if (toInt(t.value, 1) < 0 || toInt(t.value, 1) > k) t.value = k;
+
+      // 4) 흰 총수 보정 (검은 확정치 사용)
+      caps = calcCaps(cols, rows, depth, maxBlackPerCell, k, maxWhitePerCell);
+      let whiteTotal = Math.max(0, toInt(wt.value, 0));
+      if (whiteTotal > caps.capWhiteTotal) whiteTotal = caps.capWhiteTotal;
+      wt.value = whiteTotal;
+
+      // 5) max 힌트 동기화
+      t.max = String(caps.capBlackTotal);
+      wt.max = String(caps.capWhiteTotal);
+    }
+
+    /* ---------- 실행 함수 (흰색 지뢰 지원) ---------- */
+    var execute = function (i, j, k, l = 1, whiteTotal = 0, whiteMax = 0, aiLevel = null, depth = 1) {
+      //setActiveDifficulty(23);
+      // 1) 입력 정규화
+      i = Math.max(3, toInt(i, 3)); j = toInt(j, 1); 
+      k = toInt(k, 1); l = clamp(toInt(l, 1), 1, 6);
+      whiteTotal = Math.max(0, toInt(whiteTotal, 0));
+      whiteMax = clamp(toInt(whiteMax, 0), 0, 6);
+      depth = Math.max(1, toInt(depth, 1));
+      depth = is3DTheme() ? depth : 1;
+      // 1-1) 지능형 생성 수준 확정 (기본값 0)
+      if (aiLevel === null || typeof aiLevel === "undefined") {
+        aiLevel = toInt(document.getElementById('ai')?.value, 0);
+      } else {
+        aiLevel = toInt(aiLevel, 0);
+      }
+    if (is3DTheme()){
+        aiLevel = 0;              // 모드 0만
+      }
+      // 2) 상한 보정(모든 경로에서 동일하게 강제)
+      //    2-1) 검은지뢰 총수 k 보정
+      let caps = calcCaps(i, j,depth, l, k, whiteMax);
+      if (k > caps.capBlackTotal) k = caps.capBlackTotal;
+
+      //    2-2) 흰지뢰 총수 whiteTotal 보정 (검은 확정치 사용)
+      caps = calcCaps(i, j, depth, l, k, whiteMax);
+      if (whiteTotal > caps.capWhiteTotal) whiteTotal = caps.capWhiteTotal;
+      // 3) 폼 값 반영 + 폼 max 힌트 반영
+      x.value = i; y.value = j; m.value = l; t.value = k;
+      wm.value = whiteMax; wt.value = whiteTotal;
+      const aiSel = document.getElementById('ai');
+      if (aiSel) aiSel.value = String(aiLevel);
+
+      t.max = String(caps.capBlackTotal);
+      wt.max = String(caps.capWhiteTotal);
+
+
+      /* 보드 생성 (mine.js가 6인자 지원 시 그대로 전달) */
+if (is3DTheme()){
+   stop2DTimerAndResetUI(); 
+    stop2DAutoSolve();
+    show3DBoard(true);
+
+  //  3D는 셀 크기(픽셀)를 따로 쓰는 구조라면 여기서 통일
+  const cellPx = 50;
+
+  //  여기서 실제 보드 크기를 i/j/depth/k/l/whiteTotal/whiteMax로 확정
+  const cols = i;
+  const rows = j;
+  const dep  = depth;
+
+  const minesTotal      = k;
+  const minesPerCell    = l;
+  const whitePerCell    = whiteMax;
+
+    const hasWhite = whiteTotal > 0;
+      const head = document.querySelector('.window-content .mine-head-area');
+      if (head) head.style.height = hasWhite ? '58px' : '38px';
+
+      const extraHead = hasWhite ? 20 : 0; // 58-38
+  // 창 크기 조절 (기존 16 고정은 오동작)
+  $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win")
+    .css({ width: 22 + cellPx * 16, height: 104 + cellPx * 16 });
+
+  $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win")
+    .find(".window-content .mine-head-area")
+    .css({ width: 2 + cellPx * 16 });
+
+      
+      $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win")
+      .find(".window-content .mine-area")
+      .css({ "width": cellPx * 16, "height": cellPx * 16 });
+      $(".inner").css({ "width": cellPx * 16, "height": cellPx * 16 });
+      
+      
+        if (hasWhite) $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").find(".window-content .mine-head-area .mine-reset-button").css({ "left": -4 + 8 * cellPx });
+      else $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").find(".window-content .mine-head-area .mine-reset-button").css({ "left": -11 + 8 * cellPx });
+      
+      
+      $(".windows").css({ "height": (112 + extraHead) + cellPx * 16 });
+  $("#mine-area-3d").css({ width: cellPx * 16, height: cellPx * 16 });
+__threeD.lastInit = {
+    cols, rows, depth: dep,
+    mines: minesTotal,
+    minespercell: minesPerCell,
+    whitemines: whiteTotal,
+    whiteminespercell: whitePerCell,
+  };
+
+  if (__threeD.ready) post3D({ type: "init", payload: __threeD.lastInit });
+  else ensure3DIframe();
+
+  updateHScrollGuard();
+  return;
+  }
+
+  // ---- 2D 정상 동작 ----
+  show3DBoard(false);
+
+
+      minefield.init_board(i, j, k, l, whiteTotal, whiteMax, aiLevel);
+
+
+
+      // ▼ 노픽 모드일 때만 콘솔 미러 표시
+      const cp = document.getElementById('console-panel');
+      if (cp) {
+  
+        cp.style.display = '';
+        
+      }
+
+
+      /* 레이아웃: 이중 카운터면 헤더 높이/창 높이를 키움 */
+      const hasWhite = whiteTotal > 0;
+      const head = document.querySelector('.window-content .mine-head-area');
+      if (head) head.style.height = hasWhite ? '58px' : '38px';
+
+      const extraHead = hasWhite ? 20 : 0; // 58-38
+      // 메인 지뢰찾기 창만 크기 조정 (사용자지정 창, 최고기록 창, 이름입력 창 제외)
+      $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").css({ "width": 22 + i * 16, "height": (104 + extraHead) + j * 16 });
+      $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").find(".window-content .mine-head-area").css({ "width": 2 + i * 16 });
+      $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").find(".window-content .mine-area").css({ "width": i * 16, "height": j * 16 });
+      $(".inner").css({ "width": i * 16, "height": j * 16 });
+      
+      
+        if (hasWhite) $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").find(".window-content .mine-head-area .mine-reset-button").css({ "left": -4 + 8 * i });
+      else $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").find(".window-content .mine-head-area .mine-reset-button").css({ "left": -11 + 8 * i });
+      
+      
+      $(".windows").css({ "height": (112 + extraHead) + j * 16 });
+
+      renderCounters(hasWhite);
+      update_all_mine_counters();
+      updateHScrollGuard();
+    };
+  </script>
+
+  <div class="windows windows-98" style="height:365px;">
+    <div class="window has-menu mine-window">
+      <div class="title-bar">
+        <div class="title-icon"></div>
+        <div class="title">Minesweeper</div>
+        <div class="title-button-group">
+          <div class="title-button minimize"></div>
+          <div class="title-button maximize disabled"
+            onclick="event.preventDefault(); event.stopPropagation(); return false;"></div>
+          <div class="title-button close"></div>
+        </div>
+      </div>
+      <ul class="menu-bar">
+        <li>
+          <a href="#" data-access-key="g" class="menu151">게임</a>
+          <ul class="menu">
+            <li class="menu0" onclick="return runMenu(() => {pressreset();});"><a href="#">
+              <span class="mi-label">　새 게임(N)</span>
+              <span class="mi-key">F2</span>
+            
+            </a></li>
+            <li class="separator"></li>
+            <li class="menu1"
+              onclick="return runMenu(() => {execute(9, 9, 10, 1, 0, 0, 2);setActiveDifficulty(1);  });"><a
+                href="#">　초급(B)</a></li>
+            <li class="menu2"
+              onclick="return runMenu(() => {execute(16, 16, 40, 1, 0, 0, 2);setActiveDifficulty(2);  });"><a
+                href="#">　중급(I)</a></li>
+            <li class="menu3"
+              onclick="return runMenu(() => {execute(30, 16, 99, 1, 0, 0, 2);setActiveDifficulty(3);  });"><a href="#">✓
+                고급(E)</a></li>
+            <li class="menu_4" onclick="event.preventDefault(); event.stopPropagation(); return false;"
+              style="cursor: default;">
+              <a href="#" onclick="event.preventDefault(); event.stopPropagation(); return false;"
+                style="cursor: default;">　기타...</a>
+              <ul class="menu">
+                <li class="menu4"
+                  onclick="return runMenu(() => {execute(30, 16, 120, 2, 0, 0, 2);setActiveDifficulty(4);  });"><a
+                    href="#">　초고급</a></li>
+                <li class="menu5"
+                  onclick="return runMenu(() => {execute(30, 16, 160, 3, 0, 0, 2);setActiveDifficulty(5);  });"><a
+                    href="#">　😱</a></li>
+                <li class="menu6"
+                  onclick="return runMenu(() => {execute(30, 16, 220, 4, 0, 0, 2);setActiveDifficulty(6); });"><a
+                    href="#">　💀</a></li>
+                <li class="menu7"
+                  onclick="return runMenu(() => {execute(30, 16, 420, 4, 0, 0, 2);setActiveDifficulty(7);  });"><a
+                    href="#">　☠️</a></li>
+                <li class="menu8"
+                  onclick="return runMenu(() => {execute(30, 16, 530, 5, 0, 0, 2);setActiveDifficulty(8);  });"><a
+                    href="#">　☠️×2</a></li>
+                <li class="menu9"
+                  onclick="return runMenu(() => {execute(30, 16, 680, 6, 0, 0, 2);setActiveDifficulty(9);  });"><a
+                    href="#">　☠️×3</a></li>
+                <li class="menu10"
+                  onclick="return runMenu(() => {execute(30, 16, 40, 1, 20, 1, 2);setActiveDifficulty(10);  });"><a
+                    href="#">　음수지뢰</a></li>
+                <li class="menu11"
+                  onclick="return runMenu(() => {execute(30, 16, 110, 4, 30, 2, 2);setActiveDifficulty(11);  });"><a
+                    href="#">　음수 중급</a></li>
+                <li class="menu12"
+                  onclick="return runMenu(() => {execute(30, 16, 240, 6, 100, 6, 1);setActiveDifficulty(12);  });"><a
+                    href="#">　음수 고급</a></li>
+                <li class="menu13"
+                  onclick="return runMenu(() => {execute(118, 58, 1412, 1, 0, 0, 0);setActiveDifficulty(13);  });"><a
+                    href="#">　대형</a></li>
+                <li class="menu14"
+                  onclick="return runMenu(() => {execute(640, 480, 63300, 1, 0, 0, 0);setActiveDifficulty(14);  });"><a
+                    href="#">　초대형</a></li>
+                <li class="menu15"
+                  onclick="return runMenu(() => {execute(1280, 720, 192000, 1, 0, 0, 0);setActiveDifficulty(15);  });">
+                  <a href="#">　특대형</a></li>
+                
+                <li class="menu-3d-only menu16"
+                  onclick="return runMenu(() => {execute(7, 7, 10, 1, 0, 0, 0,7);setActiveDifficulty(16);  });"><a
+                    href="#">　3D 소형</a></li>
+                <li class="menu-3d-only menu17"
+                  onclick="return runMenu(() => {execute(15, 10, 99, 1, 0, 0, 0,10);setActiveDifficulty(17);  });"><a
+                    href="#">　3D 중형</a></li>
+                <li class="menu-3d-only menu18"
+                  onclick="return runMenu(() => {execute(15, 12, 180, 1, 0, 0, 0,12);setActiveDifficulty(18);  });"><a
+                    href="#">　3D 대형</a></li>
+                <li class="menu-3d-only menu19"
+                  onclick="return runMenu(() => {execute(15, 10, 500, 3, 0, 0, 0,10);setActiveDifficulty(19);  });"><a
+                    href="#">　3D 고난이도</a></li>
+                <li class="menu-3d-only menu20"
+                  onclick="return runMenu(() => {execute(15, 10, 1000, 6, 0, 0, 0,10);setActiveDifficulty(20);  });"><a
+                    href="#">　3D 초고난이도</a></li>
+                <li class="menu-3d-only menu21"
+                  onclick="return runMenu(() => {execute(15, 10, 80, 1, 30, 1, 0,10);setActiveDifficulty(21);  });"><a
+                    href="#">　3D 음수</a></li>
+                <li class="menu-3d-only menu22"
+                  onclick="return runMenu(() => {execute(15, 10, 300, 6, 150, 6, 0,10);setActiveDifficulty(22);  });"><a
+                    href="#">　3D 음수 고난이도</a></li>
+              </ul>
+            </li>
+            <li class="menu23" onclick="return runMenu(() => { openCustomDialog();setActiveDifficulty(23);});"><a
+                href="#">　사용자 지정(C)...</a></li>
+            <li class="separator"></li>
+
+            <!-- ?표시(Question marks) 토글 -->
+            <li id="opt-qmark" class="checkable" onclick="return runMenu(() => toggleQuestionMarks());"><a href="#">✓ ?
+                표시(M)</a></li>
+
+            <!-- Color 토글 -->
+            <li id="opt-color" class="checkable" onclick="return runMenu(() => toggleColorMode());"><a href="#">✓ 컬러로
+                표시(L)</a></li>
+
+            <!-- Sound 토글 -->
+            <li id="opt-sound" class="checkable" onclick="return runMenu(() => toggleSound());"><a href="#">　소리(S)</a>
+            </li>
+
+            <!-- Theme 메뉴 추가 -->
+            <li class="menu_theme" onclick="event.preventDefault(); event.stopPropagation(); return false;"
+              style="cursor: default;">
+              <a href="#" onclick="event.preventDefault(); event.stopPropagation(); return false;"
+                style="cursor: default;">　테마...</a>
+              <ul class="menu">
+                <li class="theme-minesweeper" onclick="return runMenu(() => setTheme('minesweeper'));"><a href="#">✓ Minesweeper</a></li>
+                <li class="theme-prato-xp" onclick="return runMenu(() => setTheme('prato-xp'));"><a href="#">　Prato fiorito (XP)</a></li>
+                <li class="theme-prato-2000" onclick="return runMenu(() => setTheme('prato-2000'));"><a href="#">　Prato fiorito (2000)</a></li>
+                <li class="theme-3d" onclick="return runMenu(() => setTheme('3d'));"><a href="#">　3D</a></li>
+
+              </ul>
+            </li>
+
+            <!--onclick시 runMenu에서 window has-menu mine-window ui-resizable ui-draggable의 visible을 none으로한다-->
+            <li class="separator"></li>
+            <li class="besttimes" onclick="return runMenu(() => printBestTimes());"><a href="#">　최고 기록(T)...</a></li>
+            <li class="separator"></li>
+            <li class="menuclose"
+              onclick="return runMenu(() => { $('.has-menu.mine-window.ui-resizable.ui-draggable').css('visibility', 'hidden'); });">
+              <a href="#">　끝내기(X)</a>
+            </li>
+          </ul>
+        </li>
+
+        <li>
+          <a href="#" data-access-key="h" class="menu152">도움말</a>
+          <ul class="menu">
+            <li class="menu102" onclick="return runMenu(() => openHelpContents());">
+              <a href="#">
+                <span class="mi-label">　목차(C)</span>
+              <span class="mi-key">F1</span>
+              
+              </a>
+            </li>
+            <li class="menu100" onclick="return runMenu(() => openHelpContents());">
+              <a href="#">　도움말 검색(S)...</a>
+            </li>
+            <li class="menu103" onclick=""><a href="#">　도움말 사용(H)</a></li>
+            <li class="separator"></li>
+            <li class="menu_cheat" onclick="event.preventDefault(); event.stopPropagation(); return false;"
+              style="cursor: default;">
+              <a href="#" onclick="event.preventDefault(); event.stopPropagation(); return false;"
+                style="cursor: default;">　치트...</a>
+              <ul class="menu">
+                <li class="menu-autosolve"
+                  onclick="return runMenu(() => document.getElementById('console-play').click());"><a href="#">
+                  <span class="mi-label">　자동으로 풀기</span>
+              <span class="mi-key">F3</span>
+                  </a></li>
+                <li class="menu-hint" onclick="return runMenu(() => document.getElementById('console-hint').click());">
+                  <a href="#">
+                    <span class="mi-label">　힌트 제공</span>
+              <span class="mi-key">F4</span>
+                  
+                  </a>
+                </li>
+              </ul>
+            </li>
+            <li class="separator"></li>
+            <li class="menu_othergames" onclick="event.preventDefault(); event.stopPropagation(); return false;"
+              style="cursor: default;">
+              <a href="#" onclick="event.preventDefault(); event.stopPropagation(); return false;"
+                style="cursor: default;">　다른 게임</a>
+              <ul class="menu">
+                <li class="menu-polycube" onclick="return runMenu(() => { window.location.href = 'polycube/index.html'; });">
+                  <a href="#">　폴리큐브</a>
+                </li>
+
+              </ul>
+            </li>
+            <li class="separator"></li>
+            <li class="menu101" onclick="return runMenu(() => alert(window.__APPNAME_SING || 'Minesweeper'));"><a href="#">　지뢰 찾기 정보(A)...</a>
+            </li>
+
+          </ul>
+        </li>
+      </ul>
+
+
+
+      <div class="window-content">
+        <div class="mine-head-area" style="height:38px;">
+          <!-- 단일 카운터(기본) : 절대배치 그대로 사용 -->
+          <div id="counters-single" class="counters-single" style="">
+            <div class="mine-counter" id="mine-counter-single">
+              <div class="digit digit-0"></div>
+              <div class="digit digit-0"></div>
+              <div class="digit digit-0"></div>
+            </div>
+          </div>
+
+          <!-- 이중 카운터: 컨테이너만 절대배치, 내부 카운터는 flex로 폭 자동 -->
+          <div id="counters-dual" class="mine-counters-dual"
+            style="display:none; position:absolute; top:4px; left:1px;">
+            <div id="counter-row-black" class="counter-row" style="min-height:23px;">
+              <div class="counter-icon icon-flag-black" title="검은 지뢰"></div>
+              <div class="mine-counter" id="mine-counter-black"
+                style="position:static; width:auto; height:23px; display:flex;">
+                <div class="digit digit-0"></div>
+                <div class="digit digit-0"></div>
+                <div class="digit digit-0"></div>
+              </div>
+            </div>
+            <div id="counter-row-white" class="counter-row" style="min-height:23px;">
+              <div class="counter-icon icon-flag-white" title="하얀(음수) 지뢰"></div>
+              <div class="mine-counter" id="mine-counter-white"
+                style="position:static; width:auto; height:23px; display:flex;">
+                <div class="digit digit-0"></div>
+                <div class="digit digit-0"></div>
+                <div class="digit digit-0"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mine-reset-button" onclick="resetBoard()">
+            <div class="mine-reset-button-inner"></div>
+          </div>
+
+          <div class="mine-timer">
+            <div class="digit digit-0"></div>
+            <div class="digit digit-0"></div>
+            <div class="digit digit-0"></div>
+          </div>
+        </div>
+
+        <div id="mine-area-2d" class="mine-area"></div>
+        <div id="mine-area-3d" class="mine-area" style="display:none; padding:0;"></div>
+
+      </div>
+    </div>
+    <!-- Fake mswin Win98-style Custom Dialog -->
+    <div id="custom-win" class="window mine-window customdialog">
+      <div class="title-bar">
+        <div class="title-icon"></div>
+        <div class="title" id="custdialtitle">사용자 지정 게임</div>
+        <div class="title-button-group">
+          <div class="title-button close" onclick="closeCustomDialog()"></div>
+        </div>
+      </div>
+      <div class="window-content" style="padding:8px;">
+        <form id="custom-form" onsubmit="submitCustomDialog(); return false;">
+          <div id="customdial2" style="display:flex; flex-direction:column; gap:8px;">
+            <!-- 상단: 입력창들 + 버튼들 -->
+            <div style="display:flex; gap:8px;">
+              <!-- 왼쪽: 높이~최대음수지뢰 입력창들 -->
+              <div style="display:grid; grid-template-columns: 100px 1fr; gap:6px 8px; align-items:center;">
+                <label>높이(H)</label>
+                <input type="number" id="c-rows" min="1" max="9999" step="1" value="16" style="width:30px;">
+                <label>너비(W)</label>
+                <input type="number" id="c-cols" min="3" max="9999" step="1" value="30" style="width:30px;">
+                <label id="lbl-depth1" style="display:none">깊이(D)</label>
+                <input type="number" id="c-depth" min="1" max="9999" step="1" value="1" style="width:30px; display:none;">
+                <label>지뢰 수(M)</label>
+                <input type="number" id="c-total" min="1" step="1" value="99" style="width:30px;">
+                <label>최대지뢰/1칸</label>
+                <input type="number" id="c-max" min="1" max="6" step="1" value="1" style="width:30px;">
+                <label>음수지뢰 수</label>
+                <input type="number" id="c-wtotal" min="0" step="1" value="0" style="width:30px;">
+                <label>최대음수지뢰/1칸</label>
+                <input type="number" id="c-wmax" min="0" max="6" step="1" value="0" style="width:30px;">
+              </div>
+
+              <!-- 오른쪽: 버튼들 (세로 배치) -->
+              <div style="display:flex; flex-direction:column; gap:8px; justify-content:center;">
+                <button type="submit" class="title-button" style="padding:2px 10px;">확인</button>
+                <div style="height:10px"> </div>
+                <button type="button" class="title-button" onclick="closeCustomDialog()"
+                  style="padding:2px 10px;">취소</button>
+              </div>
+            </div>
+
+            <!-- 하단: 지능형 생성 -->
+            <div style="display:grid; grid-template-columns: 100px 1fr; gap:6px 8px; align-items:center;">
+              <label>지능형 생성</label>
+              <select id="c-ai" style="width:90px;">
+                <option value="0">0: 찍기 허용 + 최소 구제</option>
+                <option value="1">1: 찍기 허용 + 첫클릭 오프닝 + 무제한 구제</option>
+                <option value="2" selected>2: 찍기 차단(느림)</option>
+              </select>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Best Times Dialog -->
+    <div id="besttimes-win" class="window mine-window customdialog">
+      <div class="title-bar">
+        <div class="title-icon"></div>
+        <div class="title" id="besttimestitle">지뢰 찾기 최고 기록</div>
+        <div class="title-button-group">
+          <div class="title-button close" onclick="closeBestTimes()"></div>
+        </div>
+      </div>
+      <div class="window-content" style="padding:12px;">
+        <div id="besttimes-content" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;">
+          <!-- Best times will be populated here dynamically -->
+        </div>
+        <div style="display:flex; gap:8px; justify-content:center;">
+          <button type="button" class="title-button" onclick="resetBestTimes()"
+            style="padding:4px 16px;">원래대로(R)</button>
+          <button type="button" class="title-button" onclick="closeBestTimes()" style="padding:4px 16px;">확인</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Name Input Dialog (No Title Bar) -->
+    <div id="nameinput-win" class="mine-window"
+      style="display:none; position:absolute; z-index:1200; background:#c0c0c0; border:2px outset #c0c0c0; padding:4px; width:100px; height:max-content; box-sizing:border-box;">
+      <div
+        style="text-align:center; align-items:center; height:100%; display:flex; flex-direction:column; justify-content:space-between;">
+        <div id="nameinput-message"
+          style="font-size:7px; line-height:1.1; margin:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; max-width:110px;">
+        </div>
+        <input type="text" id="nameinput-field"
+          style="width:80px; padding:0; font-size:7px; margin:1px 0; border:1px solid #808080;" maxlength="20" />
+        <button type="button" onclick="submitNameInput()"
+          style="width:30px; padding:0; font-size:7px; margin:0; border:1px outset #c0c0c0;">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="userctrl" class="userctrl" style="margin:0">
+    <form oninput="applyFormCaps()">
+      <a>주문제작:가로</a>
+      <input type="number" id="x" min="3" max="9999" step="1" style="width:60px;" value="30">
+      <a>세로</a>
+      <input type="number" id="y" min="1" max="9999" step="1" style="width:60px;" value="16">
+      <a id="lbl-depth2" style="display:none;">높이</a>
+      <input type="number" id="z" min="1" max="9999" step="1" style="width:60px; display:none;" value="1">
+
+      <a>1칸당 최대 지뢰 수</a>
+      <input type="number" id="m" min="1" max="6" step="1" style="width:60px;" value="1">
+      <a>전체 지뢰 수</a>
+      <input type="number" id="t" min="1" step="1" style="width:80px;" value="99">
+
+      <!-- ▼ 추가: 하얀 지뢰 입력(0 허용) -->
+      <a>1칸당 최대 음수지뢰 수</a>
+      <input type="number" id="wm" min="0" max="6" step="1" style="width:60px;" value="0">
+      <a>전체 음수지뢰 수</a>
+      <input type="number" id="wt" min="0" step="1" style="width:80px;" value="0">
+      <a>지능형 생성</a>
+      <select id="ai" style="width:220px;" value="2">
+        <option value="0">0: 찍기 허용 + 최소 구제</option>
+        <option value="1">1: 찍기 허용 + 첫클릭 오프닝 + 무제한 구제</option>
+        <option value="2" selected>2: 찍기 차단(느림)</option>
+      </select>
+      <input type="button" onclick="setActiveDifficulty(23);execute(
+          document.getElementById('x').value,
+          document.getElementById('y').value,
+          document.getElementById('t').value,
+          document.getElementById('m').value,
+          document.getElementById('wt').value,
+          document.getElementById('wm').value,
+          document.getElementById('ai').value,
+          document.getElementById('z').value
+        )" value="생성">
+      <input type="button" onclick="hideViaURL()" value="문구 숨기기">
+    </form>
+  </div>
+  <!-- Placeholder div to maintain draggable area height when text is hidden -->
+  <div id="userctrl-placeholder" style="display:none; visibility:hidden; height:0; overflow:hidden;"></div>
+  <div id="heavy-notice" class="notice">
+    <h3>안내 / 성능 주의</h3>
+    <ul>
+      <li><strong>3D지뢰찾기 출시:게임-테마에서 3D를 선택하세요</strong></li>
+      <li> 모바일에서 조작:짧게 눌러 좌클릭, 길게 눌러 우클릭, 열린칸을 더블터치해서 chording.</li>
+      <li>첫 클릭 직후 <span class="warn">판 생성</span>에 시간이 걸릴 수 있습니다. (지뢰 수↑, 판 크기↑일수록 증가)</li>
+      <ul>
+        <li>초대형과 특대형 판은 초기화에 약 5~10초가 소요됩니다</li>
+      </ul>
+      <li><strong>찍기 패턴 발생 허용의 구제 기능 관련</strong>
+        <ul>
+          <li>복수해가 존재하여 찍기 상황이 발생하였고, 사용자가 지뢰칸을 선택했더라도 사용자의 입력이 이미 공개된 정보에 모순을 만들지 않는다면 그 칸에 지뢰가 없도록 판을 수정합니다</li>
+          <li>하지만 무제한 구제는 난이도를 심각하게 낮춥니다</li>
+        </ul>
+      </li>
+      <li><strong>찍기 패턴 발생 차단</strong> 모드 성능 주의:
+        <ul>
+          <li>음수지뢰가 있으면 매우 느립니다. (중급 크기의 판 이상에서 비권장)</li>
+          <li>1칸당 최대 지뢰 수가 4 이상이면 매우 느립니다.</li>
+          <li>대형 이상의 큰 판에서는 매우 느립니다.</li>
+          <li>해당 모드는 “찍기 없는 풀이 순서”를 항상 보장합니다.</li>
+        </ul>
+      </li>
+
+    </ul>
+    <div id="console-panel" class="console-panel" style="display:none">
+      <div class="console-head">
+        <span class="title">실시간 로그 (Console mirror)</span>
+        <label><input type="checkbox" id="console-autoscroll" checked> 자동 스크롤</label>
+        <button type="button" id="console-play">자동으로 풀기</button>
+        <button type="button" id="console-hint">힌트 제공</button>
+        <button type="button" id="console-pause">콘솔 일시정지</button>
+        <button type="button" id="console-clear">콘솔 비우기</button>
+        <button type="button" id="console-copy">콘솔 내용 복사</button>
+
+      </div>
+      <div class="console-body" id="console-body" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <script src="vendor/jquery.min.js"></script>
+  <script src="vendor/jquery-ui.min.js"></script>
+  <script src="jquery.mswin.js"></script>
+  <script src="jquery.mswin.listview.js"></script>
+  <script src="jquery.mswin.menu.js"></script>
+  <script src="mine.js"></script>
+  <script>
+        function isKorean() {
+      var lang = (navigator.language || navigator.userLanguage || "").toLowerCase();
+      return lang.startsWith("ko");
+    }
+    function stop2DAutoSolve(){
+  const mf = window.minefield;
+  if (!mf) return;
+
+  if (mf._macro_timer){
+    clearInterval(mf._macro_timer);
+    mf._macro_timer = null;
+  }
+  mf._macro_running = false;
+  mf._macro_paused = false;
+
+  // 콘솔 로그 버퍼 flush (있으면)
+  if (typeof __flushSolveLog === 'function') __flushSolveLog();
+
+  // 버튼 텍스트 원복(있으면)
+  const btn = document.getElementById('console-play');
+  if (btn){
+    const ko = (navigator.language || '').toLowerCase().startsWith('ko');
+    btn.textContent = ko ? '자동으로 풀기' : 'Solve Automatically';
+  }
+}
+
+    function stop2DTimerAndResetUI(){
+  if (timer_id) { window.clearInterval(timer_id); timer_id = null; }
+  timer_val = 0;
+  update_counter_timer(0, $(".mine-timer"));
+}
+
+    // 메뉴의 체크 모양을 단순 텍스트(✓)로 표현
+    function updateQuestionMenuVisual() {
+  const on = !!(window.minefield && window.minefield.question);
+  setMenuText('#opt-qmark',
+    (on ? '✓ ' : '　') + (isKorean() ? '? 표시(M)' : 'Marks (?)'),
+    ''
+  );
+  document.getElementById('opt-qmark')?.setAttribute('aria-checked', String(on));
+}
+
+    // Color 메뉴 비주얼 업데이트
+    function updateColorMenuVisual() {
+  const on = !!(window.minefield && window.minefield.useColor);
+  setMenuText('#opt-color',
+    (on ? '✓ ' : '　') + (isKorean() ? '컬러로 표시(L)' : 'Color'),
+    ''
+  );
+  document.getElementById('opt-color')?.setAttribute('aria-checked', String(on));
+}
+
+
+    // Sound 메뉴 비주얼 업데이트
+    function updateSoundMenuVisual() {
+  const on = !!(window.minefield && window.minefield.soundEnabled);
+  setMenuText('#opt-sound',
+    (on ? '✓ ' : '　') + (isKorean() ? '소리(S)' : 'Sound'),
+    ''
+  );
+  document.getElementById('opt-sound')?.setAttribute('aria-checked', String(on));
+}
+
+
+
+
+    // ?표시 토글 → minefield.question true/false
+    function toggleQuestionMarks() {
+      if (!window.minefield) return;
+      // 존재하지 않으면 속성 추가, 있으면 단순 토글
+      if (typeof window.minefield.question === 'undefined') {
+        window.minefield.question = true;
+      } else {
+        window.minefield.question = !window.minefield.question;
+      }
+      updateQuestionMenuVisual();
+      if (is3DTheme()) post3D({ type:'config', usemark: !!window.minefield.question });
+    }
+
+    // Color 토글 → 이미지 파일 전환
+    function toggleColorMode() {
+      // minefield 객체가 없으면 생성
+      if (!window.minefield) {
+        window.minefield = {};
+      }
+
+      // 존재하지 않으면 속성 추가, 있으면 단순 토글
+      if (typeof window.minefield.useColor === 'undefined') {
+        window.minefield.useColor = false; // 현재 true라고 가정하고 false로 토글
+      } else {
+        window.minefield.useColor = !window.minefield.useColor;
+      }
+
+      // CSS 이미지 참조 전환
+      updateImageReferences(window.minefield.useColor);
+      updateColorMenuVisual();
+
+      console.log('Color mode toggled:', window.minefield.useColor);
+      if (is3DTheme()) post3D({ type:'config', usecolor: !!window.minefield.useColor });
+    }
+
+    // Sound 토글
+    function toggleSound() {
+      // minefield 객체가 없으면 생성
+      if (!window.minefield) {
+        window.minefield = {};
+      }
+
+      // 존재하지 않으면 속성 추가, 있으면 단순 토글
+      if (typeof window.minefield.soundEnabled === 'undefined') {
+        window.minefield.soundEnabled = true; // 처음 클릭시 true로 설정
+      } else {
+        window.minefield.soundEnabled = !window.minefield.soundEnabled;
+      }
+
+      updateSoundMenuVisual();
+      console.log('Sound mode toggled:', window.minefield.soundEnabled);
+      if (is3DTheme()) post3D({ type:'sound', enabled: !!window.minefield.soundEnabled });
+
+    }
+ window.currentTheme = window.currentTheme || 'minesweeper';
+
+    // 테마 메뉴 체크 표시용
+    function updateThemeMenuVisual() {
+  const current = window.currentTheme || 'minesweeper';
+  const labels = {
+  'minesweeper': 'Minesweeper',
+  'prato-xp': 'Prato fiorito (XP)',
+  'prato-2000': 'Prato fiorito (2000)',
+  '3d': '3D',
+};
+
+const items = [
+  { selector: 'li.theme-minesweeper', key: 'minesweeper' },
+  { selector: 'li.theme-prato-xp',    key: 'prato-xp' },
+  { selector: 'li.theme-prato-2000',  key: 'prato-2000' },
+  { selector: 'li.theme-3d',          key: '3d' },
+];
+
+  items.forEach(it => {
+    const checked = (current === it.key);
+    setMenuText(it.selector, (checked ? '✓ ' : '　') + labels[it.key], '');
+  });
+}
+
+
+    // 실제 테마 변경 함수
+    function setTheme(theme) {
+      const prevIs3D = is3DTheme();                 // ✅ 변경 전 상태 저장
+  const prevDiff = currentDifficultyLevel ?? 3; // ✅ 현재 난이도도 저장
+      const allowed = ['minesweeper', 'prato-xp', 'prato-2000', '3d'];
+      if (!allowed.includes(theme)) theme = 'minesweeper';
+
+      window.currentTheme = theme;
+      document.body.classList.toggle('theme-3d', theme === '3d');
+
+updateWindowTitle();
+  show3DBoard(is3DTheme());
+  syncDepthUI();
+  syncAIModeUI();
+
+      // 메뉴 체크 반영
+      updateThemeMenuVisual();
+
+      // 이미지 / 아이콘 다시 적용 (현재 컬러모드 유지)
+      const useColor = !!(window.minefield && window.minefield.useColor);
+      updateImageReferences(useColor);
+        //if (opts.skipExecute) return;
+              //syncDepthUI();//한번더 필요
+//syncAIModeUI(); // 한번더 필요
+if (is3DTheme()){
+  stop2DAutoSolve();
+  // 현재 폼 값으로 2D 재생성(원하면)
+   execute(x.value, y.value, t.value, m.value, wt.value, wm.value, ai.value, z.value);
+}
+else{
+  if (is3DDifficultyIndex(currentDifficultyLevel ?? 0)) {
+    setActiveDifficulty(1);
+    execute(9, 9, 10, 1, 0, 0, 2, 1);
+  } else {
+    execute(x.value, y.value, t.value, m.value, wt.value, wm.value, ai.value, 1);
+  }
+}
+    }
+    // 사운드 재생 함수
+function playSound(soundFile) {
+      if (!window.minefield || !window.minefield.soundEnabled) return;
+
+      // 테마에 따라 gameover.wav만 교체
+      let actualFile = soundFile;
+      const theme = window.currentTheme || 'minesweeper';
+
+      if (soundFile === 'gameover.wav') {
+        if (theme === 'prato-xp') {
+          actualFile = 'pgameover.wav';
+        } else if (theme === 'prato-2000') {
+          actualFile = 'qgameover.wav';
+        }
+      }
+
+      try {
+        const audio = new Audio(actualFile);
+        audio.play().catch(err => console.warn('Sound playback failed:', err));
+      } catch (err) {
+        console.warn('Sound creation failed:', err);
+      }
+    }
+    function isPratoTheme() {
+  const t = window.currentTheme || 'minesweeper';
+  return t === 'prato-xp' || t === 'prato-2000';
+}
+function updateWindowTitle() {
+  const KO = isKorean();
+  const prato = isPratoTheme();
+
+  const nameSing = KO
+    ? (prato ? '꽃 피는 초원' : '지뢰 찾기')
+    : (prato ? 'Flowery Meadow' : 'Minesweeper');
+
+  const namePlural = KO
+    ? (prato ? '꽃 피는 초원' : '지뢰 찾기')
+    : (prato ? 'Flowery Meadows' : 'Mine Sweepers');
+
+  window.__APPNAME_SING = nameSing;
+  window.__APPNAME_PLUR = namePlural;
+
+  //  여기 추가: 타이틀바 텍스트 실제 반영
+  const titleEl = document.querySelector('.mine-window .title-bar .title');
+  if (titleEl) titleEl.textContent = nameSing;
+ document.title = nameSing;
+
+
+  // Help > About... 갱신은 기존대로 유지
+  if (typeof setMenuText === 'function') {
+    setMenuText(
+      'li.menu101',
+      KO ? `　${nameSing} 정보(A)...` : `　About ${nameSing}...`,
+      ''
+    );
+  }
+}
+function buildMineSpriteSelectors(){
+  const out = [];
+
+  // base cell
+  out.push("table.minetable td", "table.minetable td:active");
+
+  const clsPairs = (prefix, from, to) => {
+    for (let i = from; i <= to; i++){
+      out.push(`table.minetable td.${prefix}${i}`, `table.minetable td.${prefix}${i}:active`);
+    }
+  };
+
+  // wrong / mines / flags
+  clsPairs("mine-wrong", 1, 6);
+  clsPairs("mine-", 1, 6);
+  clsPairs("flag-", 0, 6);
+
+  // negative(anti) mine flags/mines
+  clsPairs("flag-m", 1, 6);
+  clsPairs("mine-m", 1, 6);
+
+  // exploded
+  clsPairs("mine-exploded", 1, 6);
+  clsPairs("mine-exploded-m", 1, 6);
+
+  // wrong negative
+  clsPairs("mine-wrong-m", 1, 6);
+
+  // empty / near
+  out.push(
+    "table.minetable td.empty", "table.minetable td.empty:active",
+    "table.minetable td.near-0", "table.minetable td.near-0:active",
+    'table.minetable td[class*="near-"]', 'table.minetable td[class*="near-"]:active'
+  );
+
+  return out.join(",\n");
+}
+
+    // 모든 이미지 참조를 변경하는 함수 (CSS 클래스 추가 방식)
+       // 모든 이미지 참조를 변경하는 함수 (CSS 클래스 추가 방식)
+    function updateImageReferences(useColor) {
+      const suffix = useColor ? '' : 'b'; // 컬러: mineX.png, 흑백: mineXb.png
+
+      // 테마에 따라 기본 파일 이름 결정
+      const theme = window.currentTheme || 'minesweeper';
+      let mineBase = 'mine';          // mine.png / mineb.png
+      let iconFile = 'mine_icon.png'; // 타이틀바 아이콘
+
+      if (theme === 'prato-xp') {
+        mineBase = 'pmine';           // pmine.png / pmineb.png
+        iconFile = 'pmine_icon.png';
+      } else if (theme === 'prato-2000') {
+        mineBase = 'qmine';           // qmine.png / qmineb.png
+        iconFile = 'qmine_icon.png';
+      }
+
+      // 기존 스타일 태그가 있으면 제거
+      const oldStyle = document.getElementById('color-mode-override');
+      if (oldStyle) {
+        oldStyle.remove();
+      }
+
+      // 새로운 스타일 태그 생성
+      const styleTag = document.createElement('style');
+      styleTag.id = 'color-mode-override';
+const spriteSelectors = buildMineSpriteSelectors();
+
+styleTag.textContent = `
+/* Dynamic color/theme override - ${useColor ? 'COLOR' : 'BLACK & WHITE'} / theme=${theme} */
+
+${!useColor ? `
+.window-content .mine-head-area .mine-reset-button .mine-reset-button-inner { border-color:#000000 !important; }
+.window-content .mine-head-area { border-top-color:#000000 !important; border-left-color:#000000 !important; }
+.window-content .mine-head-area .mine-counter,
+.window-content .mine-head-area .mine-timer { border-top-color:#000000 !important; border-left-color:#000000 !important; }
+.window-content .mine-head-area .mine-reset-button {
+  border-top-color:#000000 !important; border-left-color:#000000 !important;
+  border-bottom:1px solid #000000 !important; border-right:1px solid #000000 !important;
+}
+.window-content .mine-head-area .mine-reset-button:active { border-top-color:#000000 !important; border-left-color:#000000 !important; }
+.window-content .mine-area { border-top-color:#000000 !important; border-left-color:#000000 !important; }
+` : ''}
+
+/* 지뢰판 셀 스프라이트 */
+${spriteSelectors} {
+  background-image: url(${mineBase}${suffix}.png) !important;
+}
+
+/* 카운터 아이콘(깃발) */
+.counter-icon { background-image: url(${mineBase}${suffix}.png) !important; }
+
+/* 숫자 디스플레이 */
+.window-content .mine-head-area .mine-counter .digit,
+.window-content .mine-head-area .mine-timer .digit,
+.digit { background-image: url(digit${suffix}.png) !important; }
+
+/* 리셋 버튼 (얼굴) */
+.window-content .mine-head-area .mine-reset-button .mine-reset-button-inner {
+  background-image: url(face${suffix}.png) !important;
+  background-size: 120px 24px !important;
+}
+.window-content .mine-head-area .mine-reset-button:active .mine-reset-button-inner {
+  background-position: -96px 0 !important;
+}
+
+/* 타이틀바 아이콘 */
+.title-bar .title-icon {
+  background-image: url(${iconFile}) !important;
+  image-rendering: pixelated;
+}
+`;
+
+      
+
+      document.head.appendChild(styleTag);
+
+      console.log(`✓ Theme: ${theme}, Color mode: ${useColor ? 'COLOR' : 'B/W'}`);
+      console.log(`✓ Using images: ${mineBase}${suffix}.png, digit${suffix}.png, face${suffix}.png, ${iconFile}`);
+    }
+
+    // 초기 상태(원하면 기본값을 true로 시작)
+    document.addEventListener('DOMContentLoaded', function () {
+      // minefield 객체 초기화 (없으면 생성)
+      if (!window.minefield) {
+        window.minefield = {};
+      }
+
+      if (typeof window.minefield.question === 'undefined') {
+        window.minefield.question = true;  // 기본 ON (원하면 false로 바꾸세요)
+      }
+      if (typeof window.minefield.useColor === 'undefined') {
+        window.minefield.useColor = true;  // 기본 컬러 모드 ON
+      }
+      if (typeof window.minefield.soundEnabled === 'undefined') {
+        window.minefield.soundEnabled = false;  // 기본적으로 해제
+      }
+
+      updateQuestionMenuVisual();
+      updateColorMenuVisual();
+      updateSoundMenuVisual();
+      updateThemeMenuVisual(); 
+      document.body.classList.toggle('theme-3d', is3DTheme());
+
+      updateImageReferences(window.minefield.useColor);
+      updateWindowTitle(); // 타이틀 업데이트
+      // 기존 메뉴 시스템 활성화(이미 사용 중이면 무시)
+      if ($('.menu-bar').length) $('.menu-bar').menubar();
+    });
+    updateWindowTitle();
+  </script>
+
+  <script>
+    /* GET 파서 */
+    function getQueryParams() {
+      const p = new URLSearchParams(window.location.search);
+      return {
+        rows: p.get('rows'),
+        cols: p.get('cols'),
+        depth: p.get('depth'), 
+        minespercell: p.get('minespercell'),
+        mines: p.get('mines'),
+        whiteminespercell: p.get('whiteminespercell'),
+        whitemines: p.get('whitemines'),
+        logic: p.get('logic'),
+        hide: p.get('hide'),
+        theme: p.get('theme'),
+      };
+    }
+    function themeIdxToKey(idx){
+      idx = idx|0;
+      if (idx === 1) return 'prato-xp';
+      if (idx === 2) return 'prato-2000';
+      if (idx === 3) return '3d';
+      return 'minesweeper'; // 0 or default
+    }
+    function themeKeyToIdx(key){
+      if (key === 'prato-xp') return 1;
+      if (key === 'prato-2000') return 2;
+      if (key === '3d') return 3;
+      return 0;
+    }
+    function hasCoreParams(q) {
+      return q.rows !== null && q.cols !== null && q.minespercell !== null && q.mines !== null;
+    }
+    function getQueryDefault0(v) { const n = parseInt(v); return isNaN(n) ? 0 : n; }
+
+    /* 하단 입력 숨기기 */
+    function hideUserInputs() {
+      const u = document.getElementById('userctrl');
+      const n = document.getElementById('heavy-notice');
+      const placeholder = document.getElementById('userctrl-placeholder');
+
+      // Calculate combined height before hiding
+      let totalHeight = 0;
+      if (u) {
+        totalHeight += u.offsetHeight;
+      }
+      if (n) {
+        totalHeight += n.offsetHeight;
+      }
+
+      // Hide the actual elements
+      if (u) u.style.display = 'none';
+      if (n) n.style.display = 'none';
+
+      // Show placeholder with the same height to maintain draggable area
+      if (placeholder && totalHeight > 0) {
+        placeholder.style.display = 'block';
+        placeholder.style.height = totalHeight + 'px';
+      }
+    }
+
+    /* GET 리다이렉트(보내기 전에 상한 보정) */
+    function hideViaURL() {
+      let cols = clamp(toInt(x.value, 3), 3, 999999);
+      let rows = clamp(toInt(y.value, 1), 1, 999999);
+       let depth = clamp(toInt(z.value, 1), 1, 999999);
+  if (!is3DTheme()) depth = 1;
+      let mpc = clamp(toInt(m.value, 1), 1, 6);
+      let mines = Math.max(1, toInt(t.value, 1));
+      let wmpc = clamp(toInt(wm.value, 0), 0, 6);
+      let wmines = Math.max(0, toInt(wt.value, 0));
+
+      // 보정 1: 검은 총수
+      let caps = calcCaps(cols, rows, depth,mpc, mines, wmpc);
+      if (mines > caps.capBlackTotal) mines = caps.capBlackTotal;
+
+      // 보정 2: 흰 총수(검은 확정치 반영)
+      caps = calcCaps(cols, rows, depth,mpc, mines, wmpc);
+      if (wmines > caps.capWhiteTotal) wmines = caps.capWhiteTotal;
+
+      // 폼에도 반영(시각적 피드백)
+      x.value = cols; y.value = rows; m.value = mpc; t.value = mines;
+      wm.value = wmpc; wt.value = wmines;
+      t.max = String(caps.capBlackTotal);
+      wt.max = String(caps.capWhiteTotal);
+
+      const u = new URL(window.location.href);
+      // ✅ theme 인덱스 추가 (0,1,2,3)
+  u.searchParams.set('theme', themeKeyToIdx(window.currentTheme || 'minesweeper'));
+
+      u.searchParams.set('cols', cols);
+      u.searchParams.set('rows', rows);
+      u.searchParams.set('depth', depth);
+      u.searchParams.set('minespercell', mpc);
+      u.searchParams.set('mines', mines);
+      u.searchParams.set('whiteminespercell', wmpc);
+      u.searchParams.set('whitemines', wmines);
+      // 지능형 생성 수준 포함(기본 0)
+      let logic = toInt(document.getElementById('ai')?.value, 0);
+      u.searchParams.set('logic', logic);
+      // 숨김 플래그 & 캐시 방지용 타임스탬프
+      u.searchParams.set('hide', '1');
+      u.searchParams.set('ts', String(Date.now()));
+
+      // 뒤로가기 히스토리를 남기지 않고, 강제 새로고침 효과
+      window.location.replace(u.pathname + '?' + u.searchParams.toString());
+    }
+
+    /* 유틸: digit DOM 수 맞추기 */
+    function ensure_digits(counter, count) {
+      const cur = counter.children().length;
+      if (cur < count) {
+        for (let i = 0; i < count - cur; i++) counter.append('<div class="digit digit-0"></div>');
+      } else if (cur > count) {
+        for (let i = 0; i < cur - count; i++) $(counter.children()[0]).remove();
+      }
+    }
+    /* 타이머(3자리 고정) */
+    function update_counter_timer(val, counter) {
+      if (val > 999) val = 999; if (val < 0) val = 0;
+      ensure_digits(counter, 3);
+      const digits = [Math.floor(val / 100), Math.floor(val / 10) % 10, val % 10];
+      for (let i = 0; i < 3; i++) {
+        const d = digits[i];
+        const child = $(counter.children()[i]);
+        child.removeClass(); child.addClass("digit digit-" + d);
+      }
+    }
+    /* 숫자 카운터(자릿수 고정 지원) */
+    function update_counter_generic(val, counter, totalForWidth, fixedDigits) {
+      let N = fixedDigits || Math.max(3, String(Math.abs(totalForWidth || val || 0)).length);
+      ensure_digits(counter, N);
+      const isNeg = val < 0;
+      if (isNeg) {
+        const slots = N - 1;
+        const maxAbs = Math.pow(10, slots) - 1;
+        let absVal = Math.abs(val);
+        if (absVal > maxAbs) absVal = maxAbs;
+        let child = $(counter.children()[0]);
+        child.removeClass().addClass("digit digit-10");
+        const padded = String(absVal).padStart(slots, "0");
+        for (let i = 0; i < slots; i++) {
+          const d = padded.charCodeAt(i) - 48;
+          child = $(counter.children()[i + 1]);
+          child.removeClass().addClass("digit digit-" + d);
+        }
+      } else {
+        const padded = String(val).padStart(N, "0");
+        for (let i = 0; i < N; i++) {
+          const d = padded.charCodeAt(i) - 48;
+          const child = $(counter.children()[i]);
+          child.removeClass().addClass("digit digit-" + d);
+        }
+      }
+      counter.css({ width: (N * 13) + "px", display: "flex", whiteSpace: "nowrap", height: "23px" });
+    }
+
+    /* 모듈 전환 */
+    function renderCounters(hasWhite) {
+      const single = document.getElementById('counters-single');
+      const dual = document.getElementById('counters-dual');
+      if (!single || !dual) return;
+      if (hasWhite) {
+        single.style.display = 'none'; dual.style.display = '';
+        //div class가 mint-timer인 것과 mine-reset-button인 것의 style의 top을 16px로 설정
+        const timer = document.querySelector('.mine-timer');
+        if (timer) timer.style.top = '16px';
+        const resetBtn = document.querySelector('.mine-reset-button');
+        if (resetBtn) resetBtn.style.top = '16px';
+      }
+      else {
+        single.style.display = ''; dual.style.display = 'none';
+        //div class가 mint-timer인 것과 mine-reset-button인 것의 style의 top을 6px로 설정
+        const timer = document.querySelector('.mine-timer');
+        if (timer) timer.style.top = '6px';
+        const resetBtn = document.querySelector('.mine-reset-button');
+        if (resetBtn) resetBtn.style.top = '6px';
+      }
+    }
+
+    /* 모든 카운터 갱신 */
+    function update_all_mine_counters() {
+      const hasWhite = (minefield.white_total || minefield.num_mines_white || 0) > 0;
+      if (hasWhite) {
+        const bTotal = (minefield.num_mines || 0);
+        const wTotal = (minefield.white_total || minefield.num_mines_white || 0);
+        const maxTotalAbs = Math.max(Math.abs(bTotal), Math.abs(wTotal));
+        const N = Math.max(3, String(maxTotalAbs).length);
+        const blackRemain = bTotal - (minefield.num_flags || 0);
+        const whiteRemain = wTotal - (minefield.num_flags_white || 0);
+        update_counter_generic(blackRemain, $("#mine-counter-black"), bTotal, N);
+        update_counter_generic(whiteRemain, $("#mine-counter-white"), wTotal, N);
+      } else {
+        const remain = (minefield.num_mines || 0) - (minefield.num_flags || 0);
+        update_counter_generic(remain, $("#mine-counter-single"), minefield.num_mines || 0);
+      }
+    }
+
+    /* 윈도우/메뉴 초기화 — 요소가 있을 때만 안전하게 실행 */
+    if ($('.window').length) $('.window').window();
+    if ($('.listview').length) $('.listview').listview();
+    if ($('.desktop-listview').length) $('.desktop-listview').listview();
+    if ($('.menu-bar').length) $('.menu-bar').menubar();
+    if ($('.taskbar ul.start').length) {
+      $('.taskbar ul.start').menubar({ position_toplevel: { my: "left bottom", at: "left top" } });
+    }
+
+    /* 타이머 */
+    var timer_val = 0, timer_id = null;
+    var update_timer = function () {
+      timer_val += 1;
+      update_counter_timer(timer_val, $(".mine-timer"));
+      // 타이머가 증가할 때 소리 재생
+      playSound('timer.wav');
+    };
+
+    /* Minefield 인스턴스 */
+    var mine_area = document.getElementById("mine-area-2d");
+
+    var minefield = new window.Minefield(
+      mine_area,
+      function (status) {
+        var smile = $(".mine-reset-button .mine-reset-button-inner");
+        // 얼굴 위치: 0=평상시, -24px=죽음, -48px=생각중, -72px=승리, -96px=눌림(강조)
+        var bg = "0 0"; if (status === -1) bg = "-24px 0"; if (status === -2) bg = "-72px 0"; if (status === 2) bg = "-48px 0";
+        smile.css({ "background-position": bg });
+
+        if (status === 0) {
+          timer_id = window.setInterval(update_timer, 1000);
+          playSound('timer.wav');
+          update_counter_timer(1, $(".mine-timer"));
+        }
+        if (status < 0 || status === 1) {
+          window.clearInterval(timer_id);
+          if (status === 1) {
+            const hasWhite = (minefield.white_total || minefield.num_mines_white || 0) > 0;
+            renderCounters(hasWhite);
+            const head = document.querySelector('.window-content .mine-head-area');
+            if (head) head.style.height = hasWhite ? '58px' : '38px';
+            update_all_mine_counters();
+            timer_val = 1; timer_id = null;
+            // 타이머가 증가할 때 소리 재생
+            update_counter_timer(0, $(".mine-timer"));
+          }
+          if (status === -1) {
+            // 게임 실패 시 (지뢰를 밟았을 때) gameover.wav 재생
+            playSound('gameover.wav');
+          }
+          if (status === -2) {
+            update_all_mine_counters();
+            // 게임 클리어 시 clear.wav 재생
+            playSound('clear.wav');
+            // Save best time if this is a tracked difficulty level
+            if (DIFFICULTY_LEVELS[currentDifficultyLevel]) {
+              const level = DIFFICULTY_LEVELS[currentDifficultyLevel];
+              const currentTime = timer_val;
+              const bestTime = getBestTime(level);
+              if (currentTime < bestTime) {
+                // 새로운 기록이므로 이름 입력 창을 띄움
+                showNameInputDialog(level, currentTime);
+              }
+            }
+          }
+        }
+      },
+      function (status) {
+        // ★ 게임이 끝난 상태(-1: 패배, -2: 클리어)에서는 덮어쓰지 않음
+        if (minefield.game_status < 0) return;
+
+        var smile = $(".mine-reset-button .mine-reset-button-inner");
+
+        // status === 1: 셀 버튼 눌림 → 3번째 얼굴(-48px, thinking face)
+        // status === 0: 정상 → 1번째 얼굴(0)
+        // 5번째 얼굴(-96px)은 CSS :active로 얼굴 버튼 자체가 눌렸을 때 표시
+        smile.css({ "background-position": (status === 1) ? "-48px 0" : "0 0" });
+      }
+    );
+
+    /* 깃발 우클릭 시 카운터 갱신 */
+    minefield.on_rclick_func = function () { update_all_mine_counters(); };
+
+
+
+    /* GET 인자 자동 적용 (로드 시에도 상한 보정 강제) */
+    document.addEventListener('DOMContentLoaded', function () {
+      const q = getQueryParams();
+        // ✅ 1) theme 먼저 적용(보드 재생성은 여기서 하지 않음)
+          let themeIdx;
+  if (q.theme !== null) {
+    themeIdx = clamp(toInt(q.theme, 0), 0, 3);
+  } else {
+    const d = toInt(q.depth, 1);              // depth가 없으면 1로 간주
+    themeIdx = (d >= 2) ? 3 : 0;              // 규칙: (없음/1)->0, (>=2)->3
+  }
+   setTheme(themeIdxToKey(themeIdx), { skipExecute: true });
+      if (hasCoreParams(q)) {
+        let cols = Math.max(3, toInt(q.cols, 30));
+        let rows = toInt(q.rows, 16);
+        let depth = toInt(q.depth, 1);
+        let mpc = clamp(toInt(q.minespercell, 1), 1, 6);
+        let mines = Math.max(1, toInt(q.mines, 99));
+        let wmpc = clamp(getQueryDefault0(q.whiteminespercell), 0, 6);
+        let wmines = Math.max(0, getQueryDefault0(q.whitemines));
+        let logic = (q.logic !== null) ? clamp(toInt(q.logic, 0), 0, 2) : 0;
+        // 보정 1: 검은 총수
+        let caps = calcCaps(cols, rows, depth,mpc, mines, wmpc);
+        if (mines > caps.capBlackTotal) mines = caps.capBlackTotal;
+
+        // 보정 2: 흰 총수
+        caps = calcCaps(cols, rows, depth,mpc, mines, wmpc);
+        if (wmines > caps.capWhiteTotal) wmines = caps.capWhiteTotal;
+
+        execute(cols, rows, mines, mpc, wmines, wmpc, logic, depth);
+
+        // 폼과 max 힌트도 동기화
+        x.value = cols; y.value = rows; z.value = depth; m.value = mpc; t.value = mines;
+        wm.value = wmpc; wt.value = wmines;
+        t.max = String(caps.capBlackTotal);
+        wt.max = String(caps.capWhiteTotal);
+        const aiSel = document.getElementById('ai');
+        if (aiSel) aiSel.value = String(logic);
+        hideUserInputs();
+      }
+      else if (q.hide === '1') {
+        // 핵심 파라미터가 없더라도, hide=1이면 설명/폼을 무조건 숨김
+        hideUserInputs();
+      }
+      else {
+        // li class="menu1"를 누르는 명령을 한번 준다
+        const menu1 = document.querySelector('li.menu1');
+        if (menu1) menu1.click();
+      }
+    });
+    /* ===== Console Mirror ===== */
+    (function setupConsoleMirror() {
+      const bodyEl = document.getElementById('console-body');
+      const btnPlay = document.getElementById('console-play');
+      const btnPause = document.getElementById('console-pause');
+      const btnClear = document.getElementById('console-clear');
+      const btnCopy = document.getElementById('console-copy');
+      const cbAuto = document.getElementById('console-autoscroll');
+
+      if (!bodyEl) return; // 안전가드
+
+      let paused = false;
+      function ts() {
+        const d = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3, '0')}`;
+      }
+      function print(level, args) {
+        if (paused) return;
+        const line = document.createElement('div');
+        line.className = `console-line console-lvl-${level}`;
+        const t = document.createElement('span');
+        t.className = 'console-time';
+        t.textContent = `[${ts()}] `;
+        line.appendChild(t);
+
+        const content = Array.from(args).map(v => {
+          try {
+            if (typeof v === 'string') return v;
+            return JSON.stringify(v);
+          } catch (_) {
+            return String(v);
+          }
+        }).join(' ');
+        line.appendChild(document.createTextNode(content));
+        bodyEl.appendChild(line);
+
+        if (cbAuto && cbAuto.checked) {
+          bodyEl.scrollTop = bodyEl.scrollHeight;
+        }
+      }
+
+      // 원본 보존
+      const orig = {
+        log: console.log.bind(console),
+        info: console.info?.bind(console) || function () { },
+        warn: console.warn?.bind(console) || function () { },
+        error: console.error?.bind(console) || function () { },
+      };
+
+      // 후킹
+      console.log = function () { print('log', arguments); orig.log.apply(console, arguments); };
+      console.info = function () { print('info', arguments); orig.info.apply(console, arguments); };
+      console.warn = function () { print('warn', arguments); orig.warn.apply(console, arguments); };
+      console.error = function () { print('error', arguments); orig.error.apply(console, arguments); };
+
+      // 컨트롤
+      if (btnPause) {
+        btnPause.addEventListener('click', function () {
+          paused = !paused;
+          btnPause.textContent = paused ? '재개' : '일시정지';
+        });
+      }
+      if (btnClear) {
+        btnClear.addEventListener('click', function () {
+          bodyEl.textContent = '';
+        });
+      }
+      if (btnCopy) {
+        btnCopy.addEventListener('click', async function () {
+          const text = Array.from(bodyEl.querySelectorAll('.console-line'))
+            .map(el => el.textContent).join('\n');
+          try { await navigator.clipboard.writeText(text); } catch (_) { }
+        });
+      }
+
+      // 시작 메시지
+      console.info('[Console mirror started]');
+    })();
+    
+
+
+    
+
+    // 타이틀 업데이트 함수
+    
+    //pressreset 함수는 minefield.reset_board();를 실행
+    function pressreset() {
+      if (window.minefield) {
+        minefield.reset_board();
+      }
+    }
+
+    // 키보드 단축키 처리 (F2 + 메뉴 단축키)
+    document.addEventListener('keydown', function (e) {
+      const key = e.key.toUpperCase();
+      if (e.key === 'F1') {
+        e.preventDefault();
+        openHelpContents();
+        return;
+      }
+      // F2 키: 항상 새 게임
+      if (e.key === 'F2') {
+        e.preventDefault();
+        pressreset();
+        return;
+      }
+      if (e.key === 'F3') {
+        e.preventDefault();
+        document.getElementById('console-play')?.click();
+        return;
+      }
+      if (e.key === 'F4') {
+        e.preventDefault();
+        document.getElementById('console-hint')?.click();
+        return;
+      }
+      // 서브메뉴가 열려있는지 확인
+      const gameSubMenu = document.querySelector('.menu-bar > li:first-child > .menu');
+      const helpSubMenu = document.querySelector('.menu-bar > li:nth-child(2) > .menu');
+
+      const isGameMenuVisible = gameSubMenu && (
+        gameSubMenu.style.display === 'block' ||
+        window.getComputedStyle(gameSubMenu).display === 'block'
+      );
+
+      const isHelpMenuVisible = helpSubMenu && (
+        helpSubMenu.style.display === 'block' ||
+        window.getComputedStyle(helpSubMenu).display === 'block'
+      );
+
+      // 게임 메뉴가 열려있을 때
+      if (isGameMenuVisible) {
+        let handled = false;
+
+        if (key === 'N') {
+          e.preventDefault();
+          pressreset();
+          handled = true;
+        } else if (key === 'B') {
+          e.preventDefault();
+          execute(9, 9, 10, 1, 0, 0, 2);
+          setActiveDifficulty(1);
+          handled = true;
+        } else if (key === 'I') {
+          e.preventDefault();
+          execute(16, 16, 40, 1, 0, 0, 2);
+          setActiveDifficulty(2);
+          handled = true;
+        } else if (key === 'E') {
+          e.preventDefault();
+          execute(30, 16, 99, 1, 0, 0, 2);
+          setActiveDifficulty(3);
+          handled = true;
+        } else if (key === 'C') {
+          e.preventDefault();
+          openCustomDialog();
+          setActiveDifficulty(23);
+          handled = true;
+        } else if (key === 'M') {
+          e.preventDefault();
+          toggleQuestionMarks();
+          handled = true;
+        } else if (key === 'L') {
+          e.preventDefault();
+          toggleColorMode();
+          handled = true;
+        } else if (key === 'S') {
+          e.preventDefault();
+          toggleSound();
+          handled = true;
+        } else if (key === 'T') {
+          e.preventDefault();
+          printBestTimes();
+          handled = true;
+        } else if (key === 'X') {
+          e.preventDefault();
+          $('.has-menu.mine-window.ui-resizable.ui-draggable').css('visibility', 'hidden');
+          handled = true;
+        }
+
+        if (handled) {
+          closeMenus();
+        }
+      }
+
+      // Best Times 다이얼로그가 열려있는지 확인
+      const bestTimesDialog = document.getElementById('besttimes-win');
+      const isBestTimesVisible = bestTimesDialog && (
+        bestTimesDialog.style.display === 'block' ||
+        (bestTimesDialog.style.display !== 'none' && window.getComputedStyle(bestTimesDialog).display === 'block')
+      );
+
+      // Best Times 다이얼로그가 열려있을 때
+      if (isBestTimesVisible) {
+        if (key === 'R') {
+          e.preventDefault();
+          resetBestTimes();
+          return;
+        }
+      }
+
+      // 도움말 메뉴가 열려있을 때
+      if (isHelpMenuVisible) {
+        let handled = false;
+        const alertMsg = isKorean() ? '도움말은 아래에 있습니다' : 'Help is below';
+
+        if (key === 'C') {
+          e.preventDefault();
+          alert(alertMsg);
+          handled = true;
+        } else if (key === 'S') {
+          e.preventDefault();
+          alert(alertMsg);
+          handled = true;
+        } else if (key === 'H') {
+          e.preventDefault();
+          // 도움말 사용 (기능 없음)
+          handled = true;
+        } else if (key === 'A') {
+          e.preventDefault();
+          alert(window.__APPNAME_SING || 'Minesweeper');
+          handled = true;
+        }
+
+        if (handled) {
+          closeMenus();
+        }
+      }
+    });
+
+    /* ===== Runtime i18n: if not Korean, switch UI texts to English ===== */
+    (function () {
+
+
+      function setText(el, txt) { if (el) el.textContent = txt; }
+      function setHTML(el, html) { if (el) el.innerHTML = html; }
+
+     function localizeToEnglish() {
+  document.documentElement.setAttribute("lang", "en");
+
+  // 상단 메뉴(이건 <a class="menu151"> 형태라 setMenuText가 아니라 textContent 그대로 OK)
+  document.querySelector('.menu151') && (document.querySelector('.menu151').textContent = 'Game');
+  document.querySelector('.menu152') && (document.querySelector('.menu152').textContent = 'Help');
+
+  // 게임 메뉴
+  setMenuText('li.menu0',  '　New', 'F2');
+  setMenuText('li.menu1',  '　Beginner', '');
+  setMenuText('li.menu2',  '　Intermediate', '');
+  setMenuText('li.menu3',  '　Expert', '');
+  setMenuText('li.menu_4', '　Others...', '');
+  setMenuText('li.menu4',  '　Ultra', '');
+  setMenuText('li.menu5',  '　😱', '');
+  setMenuText('li.menu6',  '　💀', '');
+  setMenuText('li.menu7',  '　☠️', '');
+  setMenuText('li.menu8',  '　☠️×2', '');
+  setMenuText('li.menu9',  '　☠️×3', '');
+  setMenuText('li.menu10', '　AntiMine', '');
+  setMenuText('li.menu11', '　Anti Intermediate', '');
+  setMenuText('li.menu12', '　Anti Expert', '');
+  setMenuText('li.menu13', '　Large', '');
+  setMenuText('li.menu14', '　XLarge', '');
+  setMenuText('li.menu15', '　XXLarge', '');
+  setMenuText('li.menu16', '　3D Mini', '');
+  setMenuText('li.menu17', '　3D Medium', '');
+  setMenuText('li.menu18', '　3D Large', '');
+  setMenuText('li.menu19', '　3D Expert', '');
+  setMenuText('li.menu20', '　3D SuperExpert', '');
+  setMenuText('li.menu21', '　3D Neg', '');
+  setMenuText('li.menu22', '　3D Neg Expert', '');
+  setMenuText('li.menu23', '　Custom...', '');
+  setMenuText('li.besttimes', '　Best Times...', '');
+  setMenuText('li.menuclose', '　Exit', '');
+
+  // 도움말 메뉴
+  setMenuText('li.menu102', '　Contents', 'F1');
+  setMenuText('li.menu100', '　Search for Help on...', '');
+  setMenuText('li.menu103', '　Using Help', '');
+  setMenuText('li.menu101', '　About Minesweeper...', '');
+
+  // 치트 메뉴
+  setMenuText('li.menu_cheat', '　Cheat...', '');
+  setMenuText('li.menu-autosolve', '　Solve Automatically', 'F3');
+  setMenuText('li.menu-hint', '　Hint', 'F4');
+setMenuText('li.menu_theme', '　Theme...', '');
+  setMenuText('li.menu_othergames', '　Other Games', '');
+  setMenuText('li.menu-polycube', '　Polycube', '');
+  
+
+  // 옵션/테마는 기존 업데이트 함수가 setMenuText를 쓰게 바꿨으니 이것만 호출
+  updateQuestionMenuVisual();
+  updateColorMenuVisual();
+  updateSoundMenuVisual();
+  updateThemeMenuVisual();
+updateWindowTitle();
+  // 타이틀
+  //const titleEl = document.querySelector('.mine-window .title-bar .title');
+  //if (titleEl) titleEl.textContent = 'Minesweeper';
+  /* 2) Counter icon tooltips */
+
+        const blackIcon = document.querySelector(".icon-flag-black");
+        if (blackIcon) blackIcon.setAttribute("title", "Black mine");
+        const whiteIcon = document.querySelector(".icon-flag-white");
+        if (whiteIcon) whiteIcon.setAttribute("title", "Anti-mine");
+
+        /* 3) Form labels / buttons */
+        const form = document.querySelector("#userctrl form");
+        if (form) {
+          // 라벨은 정적인 한국어 텍스트를 치환
+          let html = form.innerHTML;
+          html = html.replace("주문제작:가로", "Custom: cols")
+            .replace("세로", "rows").replace("높이", "depth")
+            .replace("1칸당 최대 지뢰 수", "Max mines / cell")
+            .replace("전체 지뢰 수", "Total mines")
+            .replace("1칸당 최대 음수지뢰 수", "Max anti-mines / cell")
+            .replace("전체 음수지뢰 수", "Total anti-mines")
+            .replace("지능형 생성", "Generation mode")
+            .replace("생성", "Create")
+            .replace("문구 숨기기", "Hide controls")
+
+          form.innerHTML = html;
+
+          // 셀렉트 옵션도 영문화
+          const aiSel = document.getElementById('ai');
+          if (aiSel) {
+            const opt = aiSel.options;
+            if (opt[0]) opt[0].text = "0: allow guesses + minimal rescue";
+            if (opt[1]) opt[1].text = "1: allow guesses + guaranteed first click opening +unlimited rescue";
+            if (opt[2]) opt[2].text = "2: strict no-guess (slow)";
+          }
+        }
+
+        /* 4) Heavy notice(제목/문구만 부분 치환, DOM은 보존) */
+        const notice = document.getElementById("heavy-notice");
+        if (notice) {
+          const h3 = notice.querySelector("h3");
+          setText(h3, "Notice / Performance Tips");
+
+          // 한국어 리스트 항목을 안전하게 교체 (있는 경우에만)
+          // 첫 번째 큰 <ul> 안의 한국어 문구들을 찾아 영어로 바꿉니다.
+          // 이미 영어라면 그대로 둡니다.
+          const list = notice.querySelector("ul");
+          if (list) {
+            let html = list.innerHTML;
+            html = html
+              .replace(/3D지뢰찾기 출시:게임-테마에서 3D를 선택하세요/, '3D Minesweeper was Launched: Choose 3D in the Game Themes')
+              .replace(/모바일에서 조작:짧게 눌러 좌클릭, 길게 눌러 우클릭, 열린칸을 더블터치해서 chording.<\/li>/, 'Controls on mobile: Short press to left-click, long press to right-click, double-tap an open space to chord.</li>')
+              .replace(/첫 클릭 직후 .*?증가\)<\/li>/, 'Right after the first click, <span class="warn">board generation</span> may take a while. (More mines & larger boards take longer.)</li>')
+              .replace(/초대형과 특대형 판은 초기화에 약 .*?<\/li>/, 'XLarge and XXLarge boards take about 5–10 seconds to initialize.</li>')
+              .replace(/<li><strong>찍기 패턴 발생 허용의 구제 기능 관련<\/strong>/, '<li><strong>About the rescue feature when guesses are allowed</strong>')
+              .replace(/복수해가 .*?수정합니다<\/li>/, 'If multiple solutions exist and a guess situation occurs, and you click a mine cell without contradicting revealed info, the board will be modified so that there is no mine in that cell.</li>')
+              .replace(/하지만 무제한 구제는 난이도를 심각하게 낮춥니다<\/li>/, 'However, unlimited rescues significantly reduce the difficulty.</li>')
+              .replace(/<li><strong>찍기 패턴 발생 차단<\/strong> 모드 성능 주의:/, '<li><strong>Strict no-guess</strong> mode performance caveats:')
+              .replace(/음수지뢰가 있으면 매우 느립니다.*?<\/li>/, 'Very slow when anti-mines are used (not recommended for ≥ Intermediate).</li>')
+              .replace(/1칸당 최대 지뢰 수가 4 이상이면 매우 느립니다\.<\/li>/, 'Very slow if max mines per cell ≥ 4.</li>')
+              .replace(/대형 이상의 큰 판에서는 매우 느립니다\.<\/li>/, 'Very slow on large boards (≥ Large).</li>')
+              .replace(/해당 모드는 “찍기 없는 풀이 순서”를 항상 보장합니다\.<\/li>/, 'This mode guarantees a guess-free solution order.</li>')
+              .replace(/도움말/, 'Help')
+              .replace(/난이도는 게임에서 선택하세요.\\n?표시는 옵션에서 토글합니다./, 'Select difficulty in-game.\\nToggle question marks in options.');
+            setHTML(list, html);
+          }
+
+        }
+        const form2 = document.querySelector("#customdial2");
+        if (form2) {
+          // 라벨은 정적인 한국어 텍스트를 치환
+          let html = form2.innerHTML;
+
+          // ▼ 한–영 치환: #userctrl 폼 안에서 쓰이는 모든 한국어 라벨/버튼 텍스트 커버
+          html = html
+            // "주문제작:가로" 및 공백 변형
+            // 가로/세로(행) 라벨(괄호 유무 모두)
+            .replace(/너비\s*\(W\)*/g, "Width")
+            .replace(/높이\s*\(H\)*/g, "Height")
+            .replace(/깊이\s*\(D\)*/g, "Depth")
+            // 지뢰/음수지뢰(= anti-mine) 항목
+            .replace(/최대지뢰\/1칸/g, "Max mines/cell")
+            .replace(/지뢰\s*수\s*\(M\)*/g, "Mines")
+            .replace(/최대음수지뢰\/1칸/g, "Max antiMines/cell")
+            .replace(/음수지뢰\s*수/g, "antiMines")
+            // 생성 모드
+            .replace(/지능형\s*생성/g, "Generation mode")
+            // 버튼들
+            .replace(/확인/g, "OK")
+            .replace(/취소/g, "Cancel");
+
+          form2.innerHTML = html;
+
+          // 셀렉트 옵션(지능형 생성) 영어화는 기존 코드 그대로 유지
+          const aiSel = document.getElementById('c-ai');
+          if (aiSel) {
+            const opt = aiSel.options;
+            if (opt[0]) opt[0].text = "0: allow guesses + minimal rescue";
+            if (opt[1]) opt[1].text = "1: allow guesses + guaranteed first click opening + unlimited rescue";
+            if (opt[2]) opt[2].text = "2: strict no-guess + auto-solve (slow)";
+          }
+        }
+        //custdialtitle의 텍스트도 처리
+        const custdialtitle = document.querySelector('#custdialtitle');
+        if (custdialtitle) {
+          let html = custdialtitle.innerHTML;
+          html = html.replace(/사용자\s*지정\s*게임/g, 'Custom Field');
+          custdialtitle.innerHTML = html;
+        }
+
+        /* 5) Console panel 헤더/버튼 */
+        const cp = document.getElementById("console-panel");
+        if (cp) {
+          const titleEl = cp.querySelector('.console-head .title');
+          const pauseEl = document.getElementById('console-pause');
+          const playEl = document.getElementById('console-play');
+          const hintEl = document.getElementById('console-hint');   // ← 누락됐던 부분 추가
+          const clearEl = document.getElementById('console-clear');
+          const copyEl = document.getElementById('console-copy');
+          const autoLbl = cp.querySelector('.console-head label');
+
+          setText(titleEl, 'Live Log (Console mirror)');
+          setText(playEl, 'Solve Automatically');
+          setText(hintEl, 'Hint From Log');              // ← “힌트 제공” 번역
+          setText(pauseEl, 'Pause Console');
+          setText(clearEl, 'Clear Console');
+          setText(copyEl, 'Copy Console');
+          if (autoLbl) setHTML(autoLbl, '<input type="checkbox" id="console-autoscroll" checked> Auto scroll');
+
+          // 일시정지 버튼 토글 텍스트도 영어로
+          pauseEl?.addEventListener('click', function () {
+            const isResume = pauseEl.textContent.includes('Resume');
+            pauseEl.textContent = isResume ? 'Pause' : 'Resume';
+          });
+        }
+}
+
+      if (!isKorean()) {
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", localizeToEnglish);
+        } else {
+          localizeToEnglish();
+        }
+      } else {
+        // 한국어인 경우에도 타이틀 업데이트
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", updateWindowTitle);
+        } else {
+          updateWindowTitle();
+        }
+      }
+    })();
+
+const I18N_STRINGS = {
+  'i18n-wrong-flag': '잘못 마킹한 칸이 있습니다: ({x}, {y}). 먼저 이 칸을 수정하세요.',
+  'i18n-wrong-flag-en': 'You mis-flagged a cell: ({x}, {y}). Please fix this first.',
+
+  'i18n-not-nopick': '이 기능은 ‘찍기 없음’ 보드에서만 사용할 수 있습니다. ‘찍기 없음’ 모드라면, 적어도 한 칸을 여세요. ',
+  'i18n-not-nopick-en': "Hints are available only on a “no-pick” board. If it’s already “no-pick” mode, please open at least one cell. ",
+
+  'i18n-no-next': '더 이상 제공할 힌트가 없습니다. 한 칸도 열지 않았다면 적어도 한 칸을 여세요.',
+  'i18n-no-next-en': "No further hints. If you haven't opened any cells yet, open at least one cell. ",
+
+  'i18n-next-open': '다음으로 열어야 하는 안전한 칸: ({x}, {y}). 근거: {reason}',
+  'i18n-next-open-en': 'Next safe cell to open: ({x}, {y}). Rationale: {reason}',
+
+  'i18n-next-flag-black': '다음 위치에 지뢰 깃발 {n}개: ({x}, {y}). 근거: {reason}',
+  'i18n-next-flag-black-en': 'Place {n} mine flag(s) at ({x}, {y}). Rationale: {reason}',
+
+  'i18n-next-flag-white': '다음 위치에 음수 지뢰 깃발 {n}개: ({x}, {y}). 근거: {reason}',
+  'i18n-next-flag-white-en': 'Place {n} anti-mine flag(s) at ({x}, {y}). Rationale: {reason}',
+
+  'i18n-guess-needed': '찍기 불가피-한 칸의 정답을 제공',
+  'i18n-guess-needed-en': 'Guess unavoidable — revealing the truth for one cell.',
+
+  'i18n-dead': '이미 죽었습니다',
+  'i18n-dead-en': 'Already dead',
+
+  'i18n-last-cell': '마지막 남은 칸(찍기 아님)',
+  'i18n-last-cell-en': 'Last remaining cell (not a guess)',
+};
+function _findWrongFlag(mf){
+  if (!mf || !mf.flags || !mf.mines) return null;
+  const W = mf.columns|0, H = mf.rows|0;
+
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++){
+    const f = (mf.flags[x]?.[y] || 0) | 0;
+    if (f === 0) continue;
+    const ans = (mf.mines[x]?.[y] || 0) | 0;
+    if (f !== ans) return { x, y, ans };
+  }
+  return null;
+}
+  /* ===== (추가) trace 가능 여부 ===== */
+  function _hasTracePlayable(mf) {
+    return !!(mf && mf.use_nopick && Array.isArray(mf._nopick_trace) && mf._nopick_trace.length);
+  }
+
+  /* ===== (추가) flags를 정확히 target으로 맞추기(0 포함) ===== */
+  function _setFlagExactUI(mf, x, y, target) {
+    target = (target | 0);
+    let g = 32;
+  if (target === 0) {
+    while (_isFlagUI(mf, x, y) && g--) mf.on_rclick(x, y);
+    return !_isFlagUI(mf, x, y);
+  }
+    while (((mf.flags[x][y] || 0) | 0) !== target && g--) mf.on_rclick(x, y);
+    return (((mf.flags[x][y] || 0) | 0) === target);
+  }
+
+  /* ===== (추가) 임의 한 칸 정답 제공(찍기 불가피) ===== */
+  function _pickOneTruthCell(mf) {
+    const cand = _frontierClosedCells(mf); // ★ 인접 프론티어만 허용
+  if (!cand || !cand.length) return null;
+
+  // 기존처럼 "첫 번째"를 고르고 싶으면 그대로 [0],
+  // 임의로 고르고 싶으면 랜덤 선택
+  const [x, y] = cand[(Math.random() * cand.length) | 0];
+
+  const ans = (mf.mines[x][y] | 0);
+  if (ans === 0) return { kind: "open", x, y, reason: "찍기 불가피-한 칸의 정답을 제공" };
+  return { kind: "markMine", x, y, val: ans, reason: "찍기 불가피-한 칸의 정답을 제공" };
+}
+/* ===== (추가) 미오픈 칸이 유일하면 그 좌표 반환, 아니면 null ===== */
+function _onlyOneUnopenedCell(mf) {
+  const W = mf.columns | 0, H = mf.rows | 0;
+  let foundX = -1, foundY = -1, cnt = 0;
+
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (!mf.is_opened(x, y)) {
+      cnt++;
+      if (cnt > 1) return null;
+      foundX = x; foundY = y;
+    }
+  }
+  return (cnt === 1) ? { x: foundX, y: foundY } : null;
+}
+
+  /* ===== (추가) 요구사항 서브루틴 =====
+     mode:
+       { cause: "hint"|"auto", isFirstAuto: boolean }
+  */
+  function assistSubroutine(mf, mode) {
+    mode = mode || { cause: "hint", isFirstAuto: true };
+    if (!mf || mf.game_status < 0) return null;
+
+    // 1) 잘못 마킹된 깃발이 있으면 그 중 하나 수정
+    const W = mf.columns | 0, H = mf.rows | 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const f = (mf.flags[x][y] || 0) | 0;
+      if (f === 0) continue;
+      const ans = (mf.mines[x][y] | 0);
+      if (f !== ans) {
+        return {
+          kind: "fixFlag",
+          x, y,
+          val: ans,
+          reason: "잘못 마킹한 칸이 있습니다"
+        };
+      }
+    }
+
+    // 2) 잘못 마킹이 없으면 solveonestep 1스텝
+    if (typeof mf.solveonestep === "function") {
+      const step = mf.solveonestep();
+      if (step) return step; // solveonestep 결과(타입)를 그대로 사용
+    }
+// 2.5) ★ 추가: 미오픈 칸이 유일(1개)하면 '찍기'로 취급하지 않고 확정 처리
+{
+  const last = _onlyOneUnopenedCell(mf);
+  if (last) {
+    const x = last.x | 0, y = last.y | 0;
+
+    const capB = Math.max(1, (mf.max_mines | 0));
+    const capW = Math.max(0, (mf.max_mines_white | 0));
+
+    const bRemain = ((mf.num_mines | 0) - (mf.num_flags | 0)) | 0;
+    const wTotal  = ((mf.white_total != null ? mf.white_total : mf.num_mines_white) | 0);
+    const wRemain = (wTotal - (mf.num_flags_white | 0)) | 0;
+const lastReason = _msg('i18n-last-cell', 'i18n-last-cell-en');
+    // 남은 지뢰가 있으면 -> 그 1칸이 지뢰, 없으면 -> 안전칸 오픈
+    if (bRemain > 0) {
+      const v = Math.min(capB, bRemain | 0); // 안전장치(캡 초과 방지)
+      return { kind: "markMine", x, y, val: v, reason: lastReason };
+    }
+    if (wRemain > 0) {
+      const v = -Math.min(capW, wRemain | 0); // 음수지뢰는 음수 val
+      return { kind: "markMine", x, y, val: v, reason: lastReason };
+    }
+    return { kind: "open", x, y, reason: lastReason };
+  }
+}
+
+    // 3) solveonestep이 null이고, 힌트이거나 자동 첫 실행이면 “정답 1칸 제공”
+    if (mode.cause === "hint" || (mode.cause === "auto" && mode.isFirstAuto)) {
+      const step = _pickOneTruthCell(mf);
+      // ★ (추가) 자동 첫 실행에서 '정답 1칸 제공'이 실제로 발생하면 경고창
+      if (step && mode.cause === "auto" && mode.isFirstAuto) {
+        alert(_msg('i18n-guess-needed', 'i18n-guess-needed-en'));
+
+      }
+      return step;
+    }
+
+    // 4) 자동 2번째 이후 null이면 null
+    return null;
+  }
+
+  /* ===== (추가) step 적용기 ===== */
+  function applyAssistStep(mf, step) {
+    if (!step) return false;
+    const x = step.x | 0, y = step.y | 0;
+
+    if (step.kind === "open") {
+      const ok = _openWithUnflag(mf, x, y);
+      if (typeof update_all_mine_counters === "function") update_all_mine_counters();
+      return ok;
+    }
+
+    if (step.kind === "fixFlag" || step.kind === "markMine") {
+      // solveonestep이 val을 주면 그걸, 아니면 실제 정답(mf.mines)으로 맞춤
+      const target = ("val" in step) ? (step.val | 0) : (mf.mines[x][y] | 0);
+      const ok = _setFlagExactUI(mf, x, y, target);
+      if (typeof update_all_mine_counters === "function") update_all_mine_counters();
+      return ok;
+    }
+
+    return false;
+  }
+    /* ===== 작은 i18n 헬퍼 ===== */
+    const _isKO = () => (navigator.language || '').toLowerCase().startsWith('ko');
+    function _msg(idKo, idEn, map = {}) {
+      const key = _isKO() ? idKo : idEn;
+      let s = I18N_STRINGS[key] || '';
+      return s.replace(/\{(\w+)\}/g, (_, k) => (map[k] ?? ''));
+    }
+
+    const _deadMsg = () => _msg('i18n-dead', 'i18n-dead-en') || 'you already dead';
+
+    /* ===== 공통 유틸(깃발/열기) ===== */
+    function _isFlagUI(mf, x, y) { const c = mf.get_class(x, y); return !!(c && /^flag-/.test(c)); }
+    function _removeFlagFully(mf, x, y) { let g = 24; while (_isFlagUI(mf, x, y) && g--) mf.on_rclick(x, y); }
+    function _ensureFlagExactly(mf, x, y, target) { if ((mf.flags[x][y] || 0) === target) return false; let g = 24; while ((mf.flags[x][y] || 0) !== target && g--) mf.on_rclick(x, y); return true; }
+    function _openWithUnflag(mf, x, y) { if (_isFlagUI(mf, x, y)) _removeFlagFully(mf, x, y); if (mf.is_opened(x, y)) return false; mf.on_click(x, y); return true; }
+// 열린칸/깃발칸에 인접한(8방향) "닫힌 & 비깃발" 칸 목록
+function _frontierClosedCells(mf) {
+  const W = mf.columns | 0, H = mf.rows | 0;
+  const set = new Set();
+  const out = [];
+
+  const inb = (x,y)=> (x>=0 && y>=0 && x<W && y<H);
+
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const opened = mf.is_opened(x, y);
+    const flagged = _isFlagUI(mf, x, y); // flag-*만 “깃발”로 본다(요구사항 문구와 일치)
+
+    if (!opened && !flagged) continue; // anchor(열림/깃발)만 기준점
+
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue;
+      const nx = x + dx, ny = y + dy;
+      if (!inb(nx, ny)) continue;
+
+      // 후보: 닫혔고(flag 포함해) 아직 표시 안 된 칸
+      if (mf.is_opened(nx, ny)) continue;
+      if (_isFlagUI(mf, nx, ny)) continue;
+
+      const key = nx + "," + ny;
+      if (!set.has(key)) { set.add(key); out.push([nx, ny]); }
+    }
+  }
+  return out;
+}
+
+    /* ===== trace 진행상태 유틸 ===== */
+    function _done(mf, t) {
+      if (!t) return true;
+      if (t.kind === 'open')
+        return mf.is_opened(t.x, t.y);
+      if (t.kind === 'markMine')
+        return ((mf.flags[t.x][t.y] || 0) === (mf.mines[t.x][t.y] | 0));
+      return true; // rule/subset/flood 등은 힌트/매크로 관점에서 소비된 것으로 간주
+    }
+    function _nextVisible(mf) {
+      const tr = mf._nopick_trace || []; let i = 0;
+      while (i < tr.length &&
+        _done(mf, tr[i]))
+        i++;
+      for (; i < tr.length; i++) {
+        const t = tr[i]; if (t.kind === 'open' || t.kind === 'markMine')
+          return t;
+      }
+      return null;
+    }
+    function humanizeReason(raw) {
+      if (!raw) return "";
+      const KO = (navigator.language || "").toLowerCase().startsWith("ko");
+
+      // 규칙별 정규식 매핑 (위에서부터 우선적용)
+      const table = [
+        // Rule A
+        [/^RuleA N==0\b/i, () => KO
+          ? "숫자칸의 남은 지뢰 수 N이 0 → 주변 닫힌 칸은 모두 안전"
+          : "Remaining mines N is 0 → all adjacent closed cells are safe"],
+        [/^RuleA N==F\b/i, () => KO
+          ? "인접 깃발 수 F가 요구 지뢰 수 N과 같음 → 나머지 인접 칸은 모두 안전"
+          : "Flags F equals required mines N → all other adjacent cells are safe"],
+
+        // Rule B
+        [/^RuleB U==1 exact count=(\d+)/i, (m) => KO
+          ? `주변 닫힌 칸 U가 1개이고 남은 지뢰가 ${m[1]}개 → 그 1칸이 전부 지뢰`
+          : `Only 1 closed neighbor (U=1) and ${m[1]} mine(s) remaining → that cell must be a mine`],
+        [/^RuleB cap count=(\d+)/i, (m) => KO
+          ? `인접 제약(최대 수용)으로 지뢰 ${m[1]}개가 강제`
+          : `Capacity bounds force ${m[1]} mine(s)`],
+
+        // SUBSET
+        [/^subset single exact count=(\d+)/i, (m) => KO
+          ? `부분집합 추론으로 해당 칸(묶음)에 지뢰 ${m[1]}개가 정확히 필요`
+          : `Subset logic forces exactly ${m[1]} mine(s) in the cell set`],
+        [/^subset Δ=0\b/i, () => KO
+          ? "부분집합 추론 결과 Δ=0 → 비교된 나머지 칸은 모두 안전"
+          : "Subset logic Δ=0 → remaining compared cells are all safe"],
+        [/^subset Δ=\|S\|\*cap\b/i, () => KO
+          ? "부분집합 S의 크기×칸당 최대지뢰(cap)만큼 채워야 함 → S가 모두 지뢰"
+          : "Subset size × per-cell cap must be filled → S is all mines"],
+
+        // EXISTENCE
+        [/^exist\(range==\{0\}\)/i, () => KO
+          ? "모든 가능한 배치에서 주변 지뢰 수가 0 → 항상 안전"
+          : "In all placements neighbors count is 0 → always safe"],
+        [/^exist\(range==\{(\d+)\}\)/i, (m) => KO
+          ? `가능한 배치에서 주변 지뢰 수가 ${m[1]}으로만 일치`
+          : `Across all placements the neighbor count is always ${m[1]}`],
+
+        // BOUNDS
+        [/^bounds exact count=(\d+)/i, (m) => KO
+          ? `상·하한 경계 계산으로 정확히 지뢰 ${m[1]}개 필요`
+          : `Lower/upper bounds force exactly ${m[1]} mine(s)`],
+        [/^bounds chord N==minSum\b/i, () => KO
+          ? "최소 합이 이미 채워져 더 이상 지뢰 불가 → 나머지는 안전"
+          : "Minimum sum already satisfied → remaining cells are safe"],
+
+        // 기타 자주 보이는 로그 꼬리표
+        [/^flood-neighbor\b/i, () => KO
+          ? "0칸 연쇄 공개로 인접 안전칸 자동 공개"
+          : "Auto-reveal from zero-cell flood"],
+        [/^seed\b/i, () => KO
+          ? "첫 클릭으로 시작한 안전 오픈"
+          : "Safe open triggered by the first click"],
+
+        [/^RuleB\s+N==U\s+count=(\d+)/i, (m) => KO
+          ? `숫자칸에서 남은 지뢰 수 N이 미정 칸 수 U와 같음 → 그 U칸이 모두 지뢰 (총 ${m[1]}개)`
+          : `Remaining mines N equals number of unknown cells U → all U cells are mines (total ${m[1]})`],
+
+      ];
+
+      for (const [re, make] of table) {
+        const m = re.exec(raw);
+        if (m) {
+          const explain = make(m);
+          // 원문도 함께 보여 주되, 사람이 읽는 설명을 뒤에 덧붙임
+          return `${raw} — ${explain}`;
+        }
+      }
+      // 매칭 실패 시 원문 그대로
+      return raw;
+    }
+    /* ===== 힌트: wrong-flag 우선 알림+즉시수정 → 다음 스텝 1회 실행+근거 alert ===== */
+      window.provide_nopick_hint = function () {
+    const mf = window.minefield;
+    if (!mf) return;
+
+    if (mf.game_status === -1) { alert(_deadMsg()); console.warn('you already dead'); return; }
+
+    // A) trace 재생 가능하면: 기존 trace 기반 힌트(현재 로직 유지)
+    if (_hasTracePlayable(mf)) {
+      // ✅ (추가) nopick(trace) 여부와 상관없이 "잘못 마킹" 우선 처리
+      const wrong = _findWrongFlag(mf);
+      if (wrong){
+        // 기존 “찍기있음”쪽 동작과 맞추려면 여기서 자동 수정까지 해도 됨
+        _setFlagExactUI(mf, wrong.x, wrong.y, wrong.ans);
+        if (typeof update_all_mine_counters === 'function') update_all_mine_counters();
+
+        alert(_msg('i18n-wrong-flag', 'i18n-wrong-flag-en', { x: wrong.x, y: wrong.y }));
+        return;
+      }
+      // ---- (기존 힌트 로직 그대로) ----
+      const t = _nextVisible(mf);
+      if (!t) { alert(_msg('i18n-no-next', 'i18n-no-next-en')); return; }
+
+      const reason = (t.reason ?? (t.kind === 'flood' ? '인접 칸 자동 공개' : 'auto'));
+      const nice = humanizeReason(reason);
+
+      if (t.kind === 'open') {
+        if (_openWithUnflag(mf, t.x, t.y)) {
+          alert(_msg('i18n-next-open', 'i18n-next-open-en', { x: t.x, y: t.y, reason: nice }));
+        } else {
+          alert(_msg('i18n-no-next', 'i18n-no-next-en'));
+        }
+      } else { // markMine
+        const want = mf.mines[t.x][t.y] | 0;
+        if (!want) { alert(_msg('i18n-no-next', 'i18n-no-next-en')); return; }
+
+        if (_setFlagExactUI(mf, t.x, t.y, want)) {
+          alert(_msg(want < 0 ? 'i18n-next-flag-white' : 'i18n-next-flag-black',
+            want < 0 ? 'i18n-next-flag-white-en' : 'i18n-next-flag-black-en',
+            { x: t.x, y: t.y, n: Math.abs(want), reason: nice }));
+        } else {
+          alert(_msg('i18n-no-next', 'i18n-no-next-en'));
+        }
+      }
+      return;
+    }
+
+    // B) trace 재생할 게 없으면: 요구사항 서브루틴 1회
+    const step = assistSubroutine(mf, { cause: "hint", isFirstAuto: true });
+    if (!step) { alert(_msg('i18n-no-next', 'i18n-no-next-en')); return; }
+
+    // step 적용
+    applyAssistStep(mf, step);
+__pushSolveLog(mf, step, true); // ★ 힌트는 1스텝이므로 즉시 1줄 출력
+
+    // 안내 문구(좌표+근거)
+    const reason =
+      (step.reason === "찍기 불가피-한 칸의 정답을 제공")
+        ? _msg('i18n-guess-needed', 'i18n-guess-needed-en')
+        : humanizeReason(step.reason || "");
+    if (step.kind === "open") {
+      alert(_msg('i18n-next-open', 'i18n-next-open-en', { x: step.x, y: step.y, reason }));
+    } else if (step.kind === "fixFlag") {
+      // fixFlag는 요구사항 reason 고정
+      alert(_msg('i18n-wrong-flag', 'i18n-wrong-flag-en', { x: step.x, y: step.y }) );
+    } else { // markMine
+      const v = ("val" in step) ? (step.val | 0) : (mf.mines[step.x][step.y] | 0);
+      alert(_msg(v < 0 ? 'i18n-next-flag-white' : 'i18n-next-flag-black',
+        v < 0 ? 'i18n-next-flag-white-en' : 'i18n-next-flag-black-en',
+        { x: step.x, y: step.y, n: Math.abs(v), reason }));
+    }
+  };
+
+    /* ===== 보드 UID: init_mines_nopick 성공시 증가 ===== */
+    (function () {
+      const orig = window.Minefield?.prototype?.init_mines_nopick;
+      if (orig && !window.Minefield.prototype.__uidWrapped) {
+        window.Minefield.prototype.__uidWrapped = true;
+        window.Minefield.prototype.init_mines_nopick = function (fx, fy) {
+          const r = orig.call(this, fx, fy); if (r === 1) this._nopick_board_uid = (this._nopick_board_uid || 0) + 1; return r;
+        };
+      }
+    })();
+
+    /* ===== 자동재생: 0.3s, 보드교체/사망 정지, 버튼 토글(일시정지/재개) ===== */
+    /* ===== 자동재생: 0.3s, 보드교체/사망 정지, 버튼 토글(일시정지/재개) ===== */
+(function () {
+  const labelPlay = () => _isKO() ? '자동으로 풀기' : 'Solve Automatically';
+  const labelPause = () => _isKO() ? '자동 풀기 일시 중지' : 'Pause Auto-solve';
+ function bindConsoleButtons() {
+    const btn = document.getElementById('console-play');
+    const hintBtn = document.getElementById('console-hint');
+
+    if (!btn) return;
+
+    // 버튼 라벨 초기화(3D 상태 반영하려면 _syncSolveBtnText3D() 호출해도 OK)
+    btn.textContent = labelPlay();
+
+    btn.addEventListener('click', () => {
+      if (typeof is3DTheme === 'function' && is3DTheme()) {
+        toggle3DAutoSolve();
+        return;
+      }
+      const mf = window.minefield;
+      if (mf && typeof startOrResume === 'function') startOrResume(mf);
+    });
+
+    if (hintBtn) {
+      hintBtn.addEventListener('click', () => {
+        if (typeof is3DTheme === 'function' && is3DTheme()) {
+          request3DHint();
+          return;
+        }
+        try { window.provide_nopick_hint(); } catch (e) { console.error(e); }
+      });
+    }
+  }
+  function startOrResume(mf) {
+
+    // ★ (변경) trace 강제 체크 제거: trace가 없으면 assist 모드로 동작
+    if (mf.game_status === -1) { alert(_deadMsg()); console.warn('you already dead'); return; }
+
+    // 토글(일시정지/재개) 구조는 그대로
+    if (mf._macro_timer && mf._macro_running && mf._macro_paused) { mf._macro_paused = false; btn && (btn.textContent = labelPause()); return; }
+    if (mf._macro_timer && mf._macro_running && !mf._macro_paused) { mf._macro_paused = true; btn && (btn.textContent = labelPlay()); return; }
+
+    if (mf._macro_timer) clearInterval(mf._macro_timer);
+    mf._macro_running = true; mf._macro_paused = false;
+
+    // ★ (추가) 이번 자동풀기에서 trace를 쓸지/assist를 쓸지 결정
+    const hasTrace = !!(mf.use_nopick && Array.isArray(mf._nopick_trace) && mf._nopick_trace.length);
+    const startUID = mf._nopick_board_uid || 0;       // 기존 유지
+    let firstAssist = true;                           // ★ assist 모드에서 “첫 서브루틴만 찍기 불가피 허용” 구현용
+
+    mf._macro_timer = setInterval(function () {
+      if (!mf._macro_running) { stop('manual'); return; }
+      if (mf._macro_paused) return;
+
+      // ★ (변경) 보드 교체 체크는 trace 모드에서만 의미 있으니 그대로 두되 조건부
+      if (hasTrace && (mf._nopick_board_uid || 0) !== startUID) { stop('board changed'); return; }
+
+      if (mf.game_status === -1) { stop('dead'); console.warn('you already dead'); alert(_deadMsg()); return; }
+
+      if (hasTrace) {
+        // ===== (기존) trace 기반 1틱 1개 =====
+        const step = _nextVisible(mf); if (!step) { stop('done'); return; }
+        if (step.kind === 'open') _openWithUnflag(mf, step.x, step.y);
+        else _ensureFlagExactly(mf, step.x, step.y, (mf.mines[step.x][step.y] | 0));
+        return;
+      }
+
+      // ===== ★ (추가) trace가 없으면 assist 서브루틴 반복 =====
+      const step = assistSubroutine(mf, { cause: "auto", isFirstAuto: firstAssist });
+      firstAssist = false;
+
+      if (!step) { stop('done'); return; } // 자동풀기: 2번째 이후 null이면 종료(요구사항 4)
+
+      applyAssistStep(mf, step);
+      __pushSolveLog(mf, step, false); // ★ 20개씩 묶어서 출력
+
+      // 1틱당 1개만 수행 (기존 정책 유지)
+    }, 40);
+
+    function stop(reason) {
+      clearInterval(mf._macro_timer); mf._macro_timer = null;
+      mf._macro_running = false; mf._macro_paused = false;
+      __flushSolveLog();
+      btn && (btn.textContent = labelPlay());
+      if (reason) console.info('[macro] stopped:', reason);
+    }
+    btn && (btn.textContent = labelPause());
+  }
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindConsoleButtons);
+  } else {
+    bindConsoleButtons();
+  }
+  // Minefield 메서드로도 접근 가능하게 (기존 유지)
+  if (window.Minefield && !window.Minefield.prototype.nopick_debug_macro)
+    window.Minefield.prototype.nopick_debug_macro = function () { startOrResume(this); };
+
+  
+
+})();
+
+  </script>
+  <script>
+    function closeMenus() {
+      const mb = $('.menu-bar');
+      // 1) 위젯 API로 전체 접기 (가능하면 이게 가장 깔끔)
+      try { mb.menubar('collapseAll'); } catch (e) { }
+
+      // 2) 상태 클래스/ARIA 정리 + 실제 숨김 (폴백)
+      mb.find('.ui-state-open').removeClass('ui-state-open');
+      mb.find('> li').removeClass('ui-state-active ui-state-hover ui-state-focus');
+      mb.find('.ui-state-active').removeClass('ui-state-active');
+      mb.find('.menu')
+        .hide()
+        .attr({ 'aria-hidden': 'true', 'aria-expanded': 'false' });
+
+      // 3) 포커스도 살짝 빼주면 blur 의존 UI에서도 안전
+      mb.trigger('blur');
+    }
+  </script>
+  <script>
+    // 다이얼로그 열기: 현재 값 반영 + 화면 중앙에 보여주기
+    function openCustomDialog() {
+
+
+
+
+      // 현재 폼/보드 상태를 가져와 기본값 채우기
+      try {
+        const cols = parseInt(document.getElementById('x')?.value || minefield?.columns || 30) || 30;
+        const rows = parseInt(document.getElementById('y')?.value || minefield?.rows || 16) || 16;
+        const mpc = parseInt(document.getElementById('m')?.value || 1) || 1;
+        const tot = parseInt(document.getElementById('t')?.value || 99) || 99;
+        const wmpc = parseInt(document.getElementById('wm')?.value || 0) || 0;
+        const wtot = parseInt(document.getElementById('wt')?.value || 0) || 0;
+        const aiStr = document.getElementById('ai')?.value;
+        let ai = parseInt(aiStr, 10);
+        if (Number.isNaN(ai)) ai = 2;   // NaN일 때만 2로 대체 (0은 살림)
+
+
+        document.getElementById('c-cols').value = cols;
+        document.getElementById('c-rows').value = rows;
+        document.getElementById('c-max').value = mpc;
+        document.getElementById('c-total').value = tot;
+        document.getElementById('c-wmax').value = wmpc;
+        document.getElementById('c-wtotal').value = wtot;
+        document.getElementById('c-ai').value = String(ai);
+        document.getElementById('c-qmark').checked = !!(window.minefield && window.minefield.question);
+      } catch (_) { }
+
+      const $w = $('#custom-win');
+      if (!$w.data('mswin-window')) $w.window(); // 안전: 최초 1회만
+      $w.css({
+        display: '',
+        position: 'absolute',
+        left: '10px',
+        top: '10px',
+        'z-index': 1100
+
+      });
+      const dialog = document.getElementById('custom-win');
+      if (dialog) {
+        dialog.style.width = '225px';
+        dialog.style.height = 'max-content';
+        //이 다이얼로그를 가장 앞으로
+        dialog.style.zIndex = 1000;
+      }
+
+    }
+
+    function closeCustomDialog() {
+      $('#custom-win').hide();
+    }
+
+    // 확인 → 보정 → execute() → ?표시 반영 → 끝내기
+    function submitCustomDialog() {
+      // 입력
+      let i = parseInt(document.getElementById('c-cols').value, 10);
+      let j = parseInt(document.getElementById('c-rows').value, 10);
+      let d = parseInt(document.getElementById('c-depth').value, 10);
+      let l = parseInt(document.getElementById('c-max').value, 10);       // mines per cell
+      let k = parseInt(document.getElementById('c-total').value, 10);     // total mines
+      let wm = parseInt(document.getElementById('c-wmax').value, 10);      // white mines per cell
+      let wt = parseInt(document.getElementById('c-wtotal').value, 10);    // total white mines
+      let ai = parseInt(document.getElementById('c-ai').value, 10);
+
+
+      // 기본/보정
+      i = Math.max(3, i | 0);
+      j = Math.max(1, j | 0);
+      d = Math.max(1, d | 0);
+      if (!is3DTheme()) d = 1;          // 2D면 깊이는 항상 1
+      // (원하면 상한도) d = Math.min(9999, d);
+
+      l = Math.min(6, Math.max(1, l | 0));
+      wm = Math.min(6, Math.max(0, wm | 0));
+      k = Math.max(1, k | 0);
+      wt = Math.max(0, wt | 0);
+      ai = Math.max(0, Math.min(2, ai | 0));
+
+      // 상한 보정(캡) — 기존 calcCaps() 재사용
+      let caps = calcCaps(i, j, d, l, k, wm);
+      if (k > caps.capBlackTotal) k = caps.capBlackTotal;
+      caps = calcCaps(i, j, d, l, k, wm);
+      if (wt > caps.capWhiteTotal) wt = caps.capWhiteTotal;
+
+      // 적용
+      try {
+        setActiveDifficulty(23);
+        execute(i, j, k, l, wt, wm, ai, d);
+
+      } catch (e) {
+        console.error(e);
+      }
+
+      closeCustomDialog();
+    }
+
+    //customdialog의 display:none;를 js코드로 동적으로 지정
+    document.addEventListener('DOMContentLoaded', function () {
+      const dialog = document.getElementById('custom-win');
+      if (dialog) {
+        dialog.style.display = 'none';
+      }
+    });
+
+  </script>
+<script>
+/* ===== (추가) pick-mode(=trace 없음)에서도 콘솔에 근거 로그 남기기 ===== */
+(function installSolveReasonLogger(){
+  if (window.__solveReasonLoggerInstalled) return;
+  window.__solveReasonLoggerInstalled = true;
+
+  const BUF_MAX = 20;          // 20개씩 한 줄
+  const FLUSH_MS = 350;        // 너무 오래 쌓이면(실시간성) 강제 flush
+
+  const state = window.__solveLogState = window.__solveLogState || {
+    buf: [],
+    lastFlush: 0
+  };
+
+  function _safeReason(step){
+  let r = (step && typeof step.reason === 'string' && step.reason.trim())
+    ? step.reason.trim()
+    : 'auto';
+
+  // 영어 환경이면 한국어 reason을 치환
+  const isKO =
+    (typeof _isKO === 'function') ? _isKO()
+    : ((navigator.language || '').toLowerCase().startsWith('ko'));
+
+  if (!isKO) {
+    const guessEN = (typeof _msg === 'function')
+      ? _msg('i18n-guess-needed', 'i18n-guess-needed-en')
+      : 'Guess unavoidable — revealing the truth for one cell.';
+
+    //  문자열 "비교" 없이 치환만 사용
+    r = r
+      .replace(/찍기\s*불가피-한\s*칸의\s*정답을\s*제공/g, guessEN)
+      .replace(/잘못\s*마킹한\s*칸이\s*있습니다/g, 'Mis-flag detected');
+  }
+
+  return r;
+}
+
+
+  function _formatStep(mf, step){
+    if (!step) return null;
+    const x = (step.x|0), y = (step.y|0);
+    const r = _safeReason(step);
+
+    if (step.kind === 'open') {
+      return `OPEN(${x},${y})-${r}`;
+    }
+
+    if (step.kind === 'markMine' || step.kind === 'fixFlag') {
+      // val이 있으면 그걸, 없으면 정답(mf.mines)을 참고
+      let v = 0;
+      if (step && ('val' in step)) v = (step.val|0);
+      else if (mf && mf.mines && mf.mines[x] && typeof mf.mines[x][y] !== 'undefined') v = (mf.mines[x][y]|0);
+
+      const n = Math.abs(v);
+      // 다중지뢰(한 칸에 2개 이상) 표기를 원하면 xN을 붙임 (원치 않으면 이 부분 삭제 가능)
+      const mult = (n > 1) ? `x${n}` : '';
+      return `FLAG(${x},${y})${mult}-${r}`;
+    }
+
+    // 혹시 solveonestep이 다른 kind를 줄 때를 대비(있으면 로그라도 남김)
+    if (typeof step.x !== 'undefined' && typeof step.y !== 'undefined') {
+      return `${String(step.kind||'STEP').toUpperCase()}(${x},${y})-${r}`;
+    }
+    return `${String(step.kind||'STEP').toUpperCase()}-${r}`;
+  }
+
+  window.__pushSolveLog = function(mf, step, immediate=false){
+    const msg = _formatStep(mf, step);
+    if (!msg) return;
+
+    // hint 버튼은 1스텝만 수행하니 바로 찍는 게 보기 좋음
+    if (immediate) {
+      console.info(msg);
+      return;
+    }
+
+    state.buf.push(msg);
+    const now = Date.now();
+
+    if (state.buf.length >= BUF_MAX || (now - state.lastFlush) > FLUSH_MS) {
+      console.info(state.buf.join(' | '));
+      state.buf.length = 0;
+      state.lastFlush = now;
+    }
+  };
+
+  window.__flushSolveLog = function(){
+    if (state.buf.length) {
+      console.info(state.buf.join(' | '));
+      state.buf.length = 0;
+      state.lastFlush = Date.now();
+    }
+  };
+})();
+</script>
+
+  <script>
+    // ===== Best Times Management =====
+    // Difficulty level mapping: menu index -> level name
+    const DIFFICULTY_LEVELS = {
+      1: 'beginner',      // 초급
+      2: 'intermediate',  // 중급
+      3: 'expert',        // 고급
+      4: 'ultra',         // 초고급
+      5: 'level5',        // 😱
+      6: 'level6',        // 💀
+      7: 'level7',        // ☠️
+      8: 'level8',        // ☠️×2
+      9: 'level9',        // ☠️×3
+      10: 'antimine',     // 음수지뢰
+      11: 'antimine2',     // 음수지뢰
+      12: 'antimine3',     // 음수지뢰
+      13: 'large',        // 대형
+      14: 'xlarge',       // 초대형
+      15: 'xxlarge',       // 특대형
+      16: '_3dmini',     // 3D 소형
+      17: '_3dmedium',   // 3D 중형
+      18: '_3dlarge',    // 3D 대형
+      19: '_3dexpert',   // 3D 고난이도
+      20: '_3dsuperexpert', // 3D 초고난이도
+      21: '_3dneg',      // 3D 음수
+      22: '_3dnegexpert' // 3D 음수 고난이
+    };
+
+    const DIFFICULTY_NAMES_KO = {
+      beginner: '초급',
+      intermediate: '중급',
+      expert: '고급',
+      ultra: '초고급',
+      level5: '😱',
+      level6: '💀',
+      level7: '☠️',
+      level8: '☠️×2',
+      level9: '☠️×3',
+      antimine: '음수지뢰',
+      antimine2: '음수 중급',
+      antimine3: '음수 고급',
+      large: '대형',
+      xlarge: '초대형',
+      xxlarge: '특대형',
+      _3dmini: '3D 소형',
+      _3dmedium: '3D 중형',
+      _3dlarge: '3D 대형',
+      _3dexpert: '3D 고난이도',
+      _3dsuperexpert: '3D 초고난이도',
+      _3dneg: '3D 음수',
+      _3dnegexpert: '3D 음수 고난이도'
+    };
+
+    const DIFFICULTY_NAMES_EN = {
+      beginner: 'Beginner',
+      intermediate: 'Intermediate',
+      expert: 'Expert',
+      ultra: 'Ultra',
+      level5: '😱',
+      level6: '💀',
+      level7: '☠️',
+      level8: '☠️×2',
+      level9: '☠️×3',
+      antimine: 'AntiMine',
+      antimine2: 'Anti Intermediate',
+      antimine3: 'Anti Expert',
+      large: 'Large',
+      xlarge: 'XLarge',
+      xxlarge: 'XXLarge',
+      _3dmini: '3D Mini',
+      _3dmedium: '3D Medium',
+      _3dlarge: '3D Large',
+      _3dexpert: '3D Expert',
+      _3dsuperexpert: '3D Super Expert',
+      _3dneg: '3D Negative',
+      _3dnegexpert: '3D Negative Expert'
+    };
+
+    // Current active difficulty (set when user selects a difficulty)
+    let currentDifficultyLevel = 3; // Default to Expert
+
+    // Get best time for a difficulty level
+    function getBestTime(level) {
+      try {
+        const stored = localStorage.getItem('minesweeper_best_' + level);
+        return stored ? parseInt(stored, 10) : 999;
+      } catch (e) {
+        return 999;
+      }
+    }
+
+    // Get best time record (time + name) for a difficulty level
+    function getBestRecord(level) {
+      try {
+        const timeStored = localStorage.getItem('minesweeper_best_' + level);
+        const nameStored = localStorage.getItem('minesweeper_name_' + level);
+        const time = timeStored ? parseInt(timeStored, 10) : 999;
+        const defaultName = isKorean() ? '익명' : 'Anonymous';
+        const name = nameStored || defaultName;
+        return { time, name };
+      } catch (e) {
+        const defaultName = isKorean() ? '익명' : 'Anonymous';
+        return { time: 999, name: defaultName };
+      }
+    }
+
+    // Set best time for a difficulty level
+    function setBestTime(level, time, playerName = null) {
+      try {
+        localStorage.setItem('minesweeper_best_' + level, String(time));
+        if (playerName) {
+          localStorage.setItem('minesweeper_name_' + level, playerName);
+        }
+      } catch (e) {
+        console.error('Failed to save best time:', e);
+      }
+    }
+
+    // Reset all best times
+    function resetAllBestTimes() {
+      Object.values(DIFFICULTY_LEVELS).forEach(level => {
+        try {
+          localStorage.removeItem('minesweeper_best_' + level);
+          localStorage.removeItem('minesweeper_name_' + level);
+        } catch (e) { }
+      });
+    }
+
+    // Open best times dialog
+    function openBestTimes() {
+      const $w = $('#besttimes-win');
+      if (!$w.data('mswin-window')) $w.window();
+
+      // Update dialog content
+      const content = document.getElementById('besttimes-content');
+      if (!content) return;
+
+      const isKO = isKorean();
+      const names = isKO ? DIFFICULTY_NAMES_KO : DIFFICULTY_NAMES_EN;
+      const secondsText = isKO ? '초' : ' seconds';
+
+      // Build the content
+      let html = '';
+      const show3D = is3DTheme();
+
+Object.keys(DIFFICULTY_LEVELS)
+  .sort((a, b) => parseInt(a) - parseInt(b))
+  .filter(key => {
+    const level = DIFFICULTY_LEVELS[key];
+    const is3DLevel = /^_3d/.test(level);   // 내부 ID 기준(가장 안전)
+    return show3D || !is3DLevel;            // 3D테마가 아니면 3D레벨 숨김
+  })
+  .forEach(key => {
+        const level = DIFFICULTY_LEVELS[key];
+        const name = names[level] + ':';
+        const record = getBestRecord(level);
+        const timeStr = record.time === 999 ? '999' : String(record.time);
+
+        html += `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 8px; ">
+  <span style="flex:0 0 70px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</span>
+  <span style="flex:0 0 80px; ">${timeStr}${secondsText}</span>
+  <span style="flex:1; ">${record.name}</span>
+</div>`;
+      });
+
+      content.innerHTML = html;
+
+      // Update dialog title
+      const title = document.getElementById('besttimestitle');
+      if (title) {
+        title.textContent = isKO
+  ? ((isPratoTheme() ? '꽃 피는 초원' : '지뢰 찾기') + ' 최고 기록')
+  : ('Fastest ' + (window.__APPNAME_PLUR || 'Mine Sweepers'));
+
+      }
+
+      // Update button labels
+      const buttons = $w.find('button');
+      if (buttons.length >= 2) {
+        buttons.eq(0).text(isKO ? '원래대로(R)' : 'Reset Scores');
+        buttons.eq(1).text(isKO ? '확인' : 'OK');
+      }
+
+      // Position and show (best times dialog specific)
+      $w.css({
+        display: '',
+        position: 'absolute',
+        left: '10px',
+        top: '10px',
+        'z-index': 1100,
+        width: '250px',
+        height: 'max-content'
+      });
+    }
+
+    function closeBestTimes() {
+      $('#besttimes-win').hide();
+    }
+
+    function resetBestTimes() {
+
+
+      resetAllBestTimes();
+      openBestTimes(); // Refresh the dialog
+
+    }
+
+    function printBestTimes() {
+      openBestTimes();
+    }
+
+    // Initialize besttimes dialog on load
+    document.addEventListener('DOMContentLoaded', function () {
+      const dialog = document.getElementById('besttimes-win');
+      if (dialog) {
+        dialog.style.display = 'none';
+      }
+
+      // Initialize name input dialog
+      const nameDialog = document.getElementById('nameinput-win');
+      if (nameDialog) {
+        nameDialog.style.display = 'none';
+      }
+    });
+
+    // Variables to store current record info
+    let currentRecordLevel = null;
+    let currentRecordTime = null;
+
+    // Show name input dialog for new record
+    function showNameInputDialog(level, time) {
+      currentRecordLevel = level;
+      currentRecordTime = time;
+
+      const dialog = document.getElementById('nameinput-win');
+      const messageEl = document.getElementById('nameinput-message');
+      const inputEl = document.getElementById('nameinput-field');
+
+      if (!dialog || !messageEl || !inputEl) return;
+
+      // Set language-appropriate message
+      const isKO = isKorean();
+      const levelNames = isKO ? DIFFICULTY_NAMES_KO : DIFFICULTY_NAMES_EN;
+      const levelName = levelNames[level] || level;
+
+      const message = isKO
+        ? `${levelName} 수준에서는 최고 기록입니다.\n이름을 입력하십시오.`
+        : `You have the fastest time for ${levelName} level.\nPlease enter your name.`;
+
+      messageEl.style.whiteSpace = 'pre-line';
+      messageEl.textContent = message;
+
+      // Set default name
+      const defaultName = isKO ? '익명' : 'Anonymous';
+      inputEl.value = defaultName;
+
+      // Update button text
+      const button = dialog.querySelector('button');
+      if (button) {
+        button.textContent = isKO ? '확인' : 'OK';
+      }
+
+      // Position dialog at (10,10)
+      dialog.style.display = 'block';
+      dialog.style.left = '10px';
+      dialog.style.top = '10px';
+      dialog.style.transform = 'none';
+
+      // Focus and select input text
+      setTimeout(() => {
+        inputEl.focus();
+        inputEl.select();
+      }, 100);
+    }
+
+    // Submit name input and save record
+    function submitNameInput() {
+      const inputEl = document.getElementById('nameinput-field');
+      const dialog = document.getElementById('nameinput-win');
+
+      if (!inputEl || !dialog || !currentRecordLevel || currentRecordTime === null) return;
+
+      const playerName = inputEl.value.trim() || (isKorean() ? '익명' : 'Anonymous');
+
+      // Save the record with player name
+      setBestTime(currentRecordLevel, currentRecordTime, playerName);
+
+      // Hide dialog
+      dialog.style.display = 'none';
+
+      // Clear current record info
+      currentRecordLevel = null;
+      currentRecordTime = null;
+      printBestTimes();
+    }
+
+    // Handle Enter key in name input
+    document.addEventListener('keydown', function (e) {
+      const dialog = document.getElementById('nameinput-win');
+      if (dialog && dialog.style.display === 'block' && e.key === 'Enter') {
+        e.preventDefault();
+        submitNameInput();
+      }
+    });
+  </script>
+
+  <script>
+    function runMenu(fn) {
+      // 메뉴 접기는 바로, 실행은 다음 틱에
+      closeMenus();
+
+      // 추가: 메뉴바의 모든 활성 상태를 강제로 제거
+      $('.menu-bar > li').removeClass('ui-state-active ui-state-hover ui-state-focus ui-state-open');
+      $('.menu-bar .menu').hide().attr('aria-hidden', 'true').attr('aria-expanded', 'false');
+      $('.menu-bar .ui-state-active').removeClass('ui-state-active');
+
+      setTimeout(fn, 0);   // 또는: requestAnimationFrame(fn)
+
+      return false;        // a# href="#" 기본 내비 막기
+    }
+    function setActiveDifficulty(idx) {
+      // Update current difficulty level for best times tracking
+      if (typeof currentDifficultyLevel !== 'undefined') {
+        currentDifficultyLevel = idx;
+      }
+
+      const KO = isKorean();
+
+      // 난이도 메뉴 번호: Beginner~Custom (menu1~menu11)
+      
+      const labelsKO = [
+    "새 게임(N)", "초급(B)", "중급(I)", "고급(E)", "초고급", "😱", "💀", "☠️", "☠️×2",
+    "☠️×3", "음수지뢰", "음수 중급", "음수 고급", "대형", "초대형", "특대형", "3D 소형","3D 중형","3D 대형","3D 고난이도","3D 초고난이도","3D 음수","3D 음수 고난이도","사용자 지정(C)..."
+  ];
+  const labelsEN = [
+    "New", "Beginner", "Intermediate", "Expert", "Ultra", "😱", "💀", "☠️", "☠️×2",
+    "☠️×3", "AntiMine", "Anti Intermediate", "Anti Expert", "Large", "XLarge", "XXLarge", "3D Mini","3D Medium","3D Large","3D Expert","3D Super Expert","3D Negative","3D Negative Expert","Custom..."
+  ];
+
+      // 전체 초기화
+  for (let i = 0; i <= 23; i++) {
+    const label = (KO ? labelsKO[i] : labelsEN[i]) || '';
+    const key = (i === 0) ? 'F2' : '';
+    setMenuText(`li.menu${i}`, '　' + label, key);
+  }
+
+  // 선택 항목 체크
+  {
+    const label = (KO ? labelsKO[idx] : labelsEN[idx]) || '';
+    const key = (idx === 0) ? 'F2' : '';
+    setMenuText(`li.menu${idx}`, '✓ ' + label, key);
+  }
+    }
+  </script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  // Windows 98 테마 전체에서 우클릭 메뉴 비활성화
+  const win98 = document.querySelectorAll('.windows-98');
+
+  win98.forEach(el => {
+    el.addEventListener('contextmenu', function (e) {
+      e.preventDefault();   // 브라우저 기본 메뉴만 차단
+      // stopPropagation() 은 절대 쓰지 마세요 — 우클릭 로직이 막힙니다.
+    });
+	 el.addEventListener('mousedown', function (e) {
+      if (e.button !== 1) return; // middle 버튼만 관심
+
+      // ▶ 지뢰판(#mine-area) 위 중클릭은 그대로 두기
+      //   - 여기서 preventDefault()를 안 해야
+      //     mine.js / Minefield의 중클릭(chording 등) 로직이 온전히 동작
+      if (e.target.closest('#mine-area-2d, #mine-area-3d, .mine-area')) {
+  return;
+}
+
+      // 그 외 Win98 영역에서는 중클릭 자동 스크롤 기본동작만 차단
+      e.preventDefault();
+      // 절대 stopPropagation() 쓰지 마세요.
+      // 이벤트는 그대로 위/아래로 흘러야 기존 코드가 작동합니다.
+    });
+  });
+});
+document.addEventListener('DOMContentLoaded', function () {
+  const overlay = document.getElementById('loading-overlay');
+  const host = document.querySelector('.mine-window .window-content') || document.querySelector('.mine-window');
+  if (overlay && host && overlay.parentNode !== host) {
+    host.appendChild(overlay);
+    // fixed로 남아있을 수 있으니 안전하게 absolute 강제
+    overlay.style.position = 'absolute';
+    overlay.style.top = '50%';
+    overlay.style.left = '50%';
+    overlay.style.transform = 'translate(-50%, -50%)';
+    overlay.style.zIndex = '9999';
+  }
+});
+function openHelpContents() {
+  // “도움말은 아래에 있습니다”에 해당하는 영역으로 스크롤
+  const target = document.getElementById('heavy-notice') || document.getElementById('userctrl');
+  if (!target) return;
+
+  const st = window.getComputedStyle(target);
+  if (st.display === 'none' || st.visibility === 'hidden') {
+    alert(isKorean() ? '도움말(안내) 영역이 숨겨져 있습니다.' : 'Help area is hidden.');
+    return;
+  }
+
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+// ===== 3D Bridge =====
+function is3DTheme(){ return (window.currentTheme || 'minesweeper') === '3d'; }
+
+const __threeD = {
+  iframe: null,
+  ready: false,
+  lastInit: null,
+  pendingHintPopup: false,
+};
+
+function ensure3DIframe(){
+  const host = document.getElementById('mine-area-3d');
+  if (!host) return null;
+
+  if (__threeD.iframe && __threeD.iframe.isConnected) return __threeD.iframe;
+
+  const ifr = document.createElement('iframe');
+  ifr.src = '3dmine.html';
+  ifr.style.width = '100%';
+  ifr.style.height = '100%';
+  ifr.style.border = '0';
+  ifr.style.display = 'block';
+  ifr.setAttribute('title', '3D Minesweeper');
+  host.innerHTML = '';
+  host.appendChild(ifr);
+
+  __threeD.iframe = ifr;
+  __threeD.ready = false;
+  ifr.addEventListener('load', () => {
+    // load 시점에도 한번 시도 (ready 이전이면 3D쪽 pendingInit에 들어가게 만들 수도 있음)
+    if (__threeD.lastInit) post3D({ type:'init', payload: __threeD.lastInit });
+    post3D({ type:'sound', enabled: !!(window.minefield && window.minefield.soundEnabled) });
+  });
+  return ifr;
+}
+
+function post3D(msg){
+  const ifr = __threeD.iframe;
+  if (!ifr || !ifr.contentWindow) return;
+  ifr.contentWindow.postMessage({ __mine3d: 1, ...msg }, '*');
+}
+
+function show3DBoard(on){
+  const a2d = document.getElementById('mine-area-2d');
+  const a3d = document.getElementById('mine-area-3d');
+  if (!a2d || !a3d) return;
+
+  if (on){
+    ensure3DIframe();
+    a2d.style.display = 'none';
+    a3d.style.display = '';
+  } else {
+    // ✅ 3D에서 2D로 나갈 때 3D 자동풀이가 돌고 있으면 정지
+    stop3DAutoSolve();
+__last3DTick = 0;
+    __threeD.pendingHintPopup = false;
+
+    // ✅ iframe 제거(= 3dmine.html 내부 setInterval/RAF 타이머도 같이 종료됨)
+    if (__threeD.iframe) {
+      try { __threeD.iframe.src = 'about:blank'; } catch(_) {}
+      try { __threeD.iframe.remove(); } catch(_) {}
+      __threeD.iframe = null;
+    }
+    __threeD.ready = false;
+    a3d.style.display = 'none';
+    a2d.style.display = '';
+  }
+}
+// ===== 3D Auto-solve / Hint bridge =====
+window.__threeDsolver = window.__threeDsolver || { running:false, paused:false };
+
+function _solveLabelPlay(){
+  const ko = (navigator.language || '').toLowerCase().startsWith('ko');
+  return ko ? '자동으로 풀기' : 'Solve Automatically';
+}
+function _solveLabelPause(){
+  const ko = (navigator.language || '').toLowerCase().startsWith('ko');
+  return ko ? '자동 풀기 일시 중지' : 'Pause Auto-solve';
+}
+function _syncSolveBtnText3D(){
+  const btn = document.getElementById('console-play');
+  if (!btn) return;
+  // running && !paused => pause 라벨, 그 외는 play 라벨
+  btn.textContent = (window.__threeDsolver.running && !window.__threeDsolver.paused)
+    ? _solveLabelPause()
+    : _solveLabelPlay();
+}
+
+function toggle3DAutoSolve(){
+  ensure3DIframe();
+  if (!__threeD.iframe) return;
+
+  const st = window.__threeDsolver;
+
+  if (!st.running){
+    st.running = true; st.paused = false;
+    post3D({ type:'solver', cmd:'start' });
+  } else if (!st.paused){
+    st.paused = true;
+    post3D({ type:'solver', cmd:'pause' });
+  } else {
+    st.paused = false;
+    post3D({ type:'solver', cmd:'resume' });
+  }
+  _syncSolveBtnText3D();
+}
+
+function stop3DAutoSolve(){
+  const st = window.__threeDsolver;
+  if (st.running){
+    post3D({ type:'solver', cmd:'stop' });
+  }
+  st.running = false;
+  st.paused = false;
+  _syncSolveBtnText3D();
+
+  // (있으면) 콘솔 버퍼 flush
+  if (typeof __flushSolveLog === 'function') __flushSolveLog();
+}
+
+function request3DHint(){
+  ensure3DIframe();
+  __threeD.pendingHintPopup = true;      // ✅ 추가
+  post3D({ type:'solver', cmd:'hint' });
+}
+
+// 3D -> parent 메시지 수신
+let __last3DTick = 0;
+
+window.addEventListener('message', (e) => {
+  const m = e.data;
+  if (!m || !m.__mine3d) return;
+  if (typeof is3DTheme === 'function' && !is3DTheme()) return;
+  if (m.type === 'solverState'){
+    window.__threeDsolver.running = !!m.running;
+    window.__threeDsolver.paused  = !!m.paused;
+    _syncSolveBtnText3D();
+    return;
+  }
+// ✅ 3D iframe에서 온 키 입력을 main의 기존 단축키 핸들러로 전달
+if (m.type === 'key') {
+  const ev = new KeyboardEvent('keydown', {
+    key: m.key,
+    code: m.code,
+    ctrlKey: !!m.ctrlKey,
+    altKey: !!m.altKey,
+    shiftKey: !!m.shiftKey,
+    metaKey: !!m.metaKey,
+    bubbles: true
+  });
+  document.dispatchEvent(ev);
+  return;
+}
+
+  if (m.type === 'ready'){
+    __threeD.ready = true;
+
+    if (__threeD.lastInit) {
+      post3D({ type:'init', payload: __threeD.lastInit });
+    }
+
+    // (선택) 사운드 상태도 3D로 재전송
+    post3D({ type:'sound', enabled: !!(window.minefield && window.minefield.soundEnabled) });
+
+    return;
+  }
+// ✅ 추가: 3D 힌트/스텝 결과를 받아 알림창 띄우기
+ // ✅ 수정: 3D 힌트/자동풀기 알림 정책(2D와 동일)
+if (m.type === 'solverStep') {
+  const step = m.step || m.payload;
+  if (!step) return;
+
+  const ko = (navigator.language || '').toLowerCase().startsWith('ko');
+  const x = step.x|0, y = step.y|0, z = step.z|0;
+  const reason = (step.reason || '').toString();
+
+  // 1) 자동풀기에서는 "찍기 불가피"만 alert
+  // 2) 힌트 요청(pendingHintPopup)일 때만 상세 alert
+  const isHintPopup = !!__threeD.pendingHintPopup;
+  if (isHintPopup) __threeD.pendingHintPopup = false;
+const misFlag =
+    step.kind === 'fixFlag' ||
+    /잘못\s*마킹한\s*칸이\s*있습니다/i.test(reason) ||
+    /mis-flag/i.test(reason);
+
+  if (misFlag) {
+    // 2D 문구에 맞춤 (3D라 z도 같이 표기)
+    alert(
+      ko
+        ? `잘못 마킹한 칸이 있습니다: (${x}, ${y}, ${z}). 먼저 이 칸을 수정하세요.`
+        : `You mis-flagged a cell: (${x}, ${y}, ${z}). Please fix this first.`
+    );
+    return;
+  }
+  // ✅ 자동풀기/일반 step: usedGuess만 경고창
+  if (!isHintPopup) {
+    if (step.usedGuess) {
+      alert(ko ? '찍기 불가피 — 한 칸의 정답을 제공.' : 'Guess unavoidable — revealing the truth for one cell');
+    }
+    return; // ← 여기서 끝! (매 step마다 알림 안 뜸)
+  }
+
+  // ✅ 힌트(F4)로 온 step: 상세 알림
+  if (step.usedGuess) {
+    alert(ko ? '찍기 불가피 — 한 칸의 정답을 제공.' : 'Guess unavoidable — revealing the truth for one cell');
+  }
+
+  if (step.kind === 'open') {
+    alert(
+      ko
+        ? `다음으로 열어야 하는 안전한 칸: (${x}, ${y}, ${z}). 근거: ${reason}`
+        : `Next safe cell to open: (${x}, ${y}, ${z}). Rationale: ${reason}`
+    );
+    return;
+  }
+
+  if (step.kind === 'markMine' || step.kind === 'fixFlag') {
+    const v = (step.val|0);
+    const n = Math.abs(v);
+    const isWhite = (v < 0);
+
+    alert(
+      ko
+        ? `다음 위치에 ${isWhite ? '음수 지뢰' : '지뢰'} 깃발 ${n}개: (${x}, ${y}, ${z}). 근거: ${reason}`
+        : `Place ${n} ${isWhite ? 'anti-mine' : 'mine'} flag(s) at (${x}, ${y}, ${z}). Rationale: ${reason}`
+    );
+    return;
+  }
+
+  alert(`${step.kind} (${x},${y},${z}) : ${reason}`);
+  return;
+}
+
+if (m.type === 'face'){
+    // status: -2 win, -1 dead, 2 thinking, 0 normal
+    setFaceByStatus(m.status);
+    return;
+  }
+    //  3D 카운터(지뢰/음수지뢰) 동기화
+  if (m.type === 'counters'){
+    update3DCounters(m.payload || m);
+    return;
+  }
+
+  //  3D 타이머 동기화 (초 단위)
+  if (m.type === 'timer'){
+  const sec = Math.max(0, (m.elapsed|0));
+  update_counter_timer(sec, $(".mine-timer"));
+
+  // ✅ 3D 타이머 증가 시 소리 (sec가 바뀔 때만)
+  if (sec > 0 && sec !== __last3DTick) playSound('timer.wav');
+  __last3DTick = sec;
+
+  return;
+}
+  if (m.type === 'playSound'){
+    // 3D쪽에서 "이 사운드 재생해줘" 요청
+    playSound(m.file);
+    return;
+  }
+});
+//  3D 카운터(UI) 갱신 (2D minefield 없이도 DOM 직접 업데이트)
+function update3DCounters(p){
+  // p: { blackRemain, whiteRemain, blackTotal, whiteTotal }
+  //    또는 { minesLeft, antiMinesLeft, minesTotal, antiMinesTotal } 등도 허용
+  if (!document.getElementById('mine-counter-single')) return; // DOM 준비 전이면 무시
+
+  const bRemain = ((p.blackRemain ?? p.minesLeft ?? p.remain ?? 0) | 0);
+  const wRemain = ((p.whiteRemain ?? p.antiMinesLeft ?? p.whiteLeft ?? 0) | 0);
+
+  const bTotal  = ((p.blackTotal  ?? p.minesTotal ?? p.totalMines     ?? Math.max(bRemain,0)) | 0);
+  const wTotal  = ((p.whiteTotal  ?? p.antiMinesTotal ?? p.totalAntiMines ?? Math.max(wRemain,0)) | 0);
+
+  const hasWhite = (wTotal > 0) || (wRemain !== 0);
+
+  // 헤더/카운터 레이아웃 전환(이미 main에 있는 함수 재사용)
+  renderCounters(hasWhite);
+  const head = document.querySelector('.window-content .mine-head-area');
+  if (head) head.style.height = hasWhite ? '58px' : '38px';
+
+  if (hasWhite){
+    const maxAbs = Math.max(
+      Math.abs(bTotal), Math.abs(wTotal),
+      Math.abs(bRemain), Math.abs(wRemain)
+    );
+    const N = Math.max(3, String(maxAbs).length);
+
+    update_counter_generic(bRemain, $("#mine-counter-black"), bTotal, N);
+    update_counter_generic(wRemain, $("#mine-counter-white"), wTotal, N);
+  } else {
+    // 단일 카운터는 “검은 지뢰 remain”만 표시한다고 가정
+    update_counter_generic(bRemain, $("#mine-counter-single"), bTotal || Math.abs(bRemain));
+  }
+}
+
+// 얼굴 표시 통일 함수(2D/3D 공용)
+function setFaceByStatus(status){
+  // 0 normal, 2 thinking, -1 dead, -2 win
+  var smile = $(".mine-reset-button .mine-reset-button-inner");
+  var bg = "0 0";
+  if (status === -1) bg = "-24px 0";
+  if (status === -2) bg = "-72px 0";
+  if (status === 2)  bg = "-48px 0";
+  smile.css({ "background-position": bg });
+}
+function resetBoard(){
+  if (is3DTheme()){
+    stop3DAutoSolve();     // ✅ 추가
+
+    __last3DTick = 0;
+    post3D({ type:'reset' });
+    setFaceByStatus(0);
+    return;
+  }
+  if (window.minefield) minefield.reset_board();
+}
+function syncDepthUI(){
+  const on = is3DTheme();
+  document.getElementById('z')?.style.setProperty('display', on ? '' : 'none');
+
+  // custom dialog
+  document.getElementById('lbl-depth1')?.style.setProperty('display', on ? '' : 'none');
+  document.getElementById('lbl-depth2')?.style.setProperty('display', on ? '' : 'none');
+  document.getElementById('c-depth')?.style.setProperty('display', on ? '' : 'none');
+}
+const __aiBackup = {
+  mainHTML: null,
+  customHTML: null,
+};
+
+function syncAIModeUI(){
+  const on = is3DTheme();
+
+  // 메인 셀렉트
+  const sel = document.getElementById('ai');
+  if (sel){
+    if (__aiBackup.mainHTML === null) __aiBackup.mainHTML = sel.innerHTML;
+
+    if (on){
+      //브라우저가 영어인지 확인해야함, 영어이면 영어문구
+      if((navigator.language || '').toLowerCase().startsWith('ko')){
+        sel.innerHTML = `<option value="0" selected>0: 찍기 허용 + 최소 구제</option>`;
+      } else {
+        sel.innerHTML = `<option value="0" selected>0: Allow Guessing + Minimal Rescue</option>`;
+      }
+      sel.value = '0';
+    } else {
+      sel.innerHTML = __aiBackup.mainHTML;
+      // 기본 2로 복구(원래 로직 유지)
+      sel.value = sel.value || '2';
+    }
+  }
+
+  // 커스텀 다이얼로그 셀렉트
+  const csel = document.getElementById('c-ai');
+  if (csel){
+    if (__aiBackup.customHTML === null) __aiBackup.customHTML = csel.innerHTML;
+
+    if (on){
+      //브라우저가 영어인지 확인해야함, 영어이면 영어문구
+      if((navigator.language || '').toLowerCase().startsWith('ko')){
+        csel.innerHTML = `<option value="0" selected>0: 찍기 허용 + 최소 구제</option>`;
+      } else {
+        csel.innerHTML = `<option value="0" selected>0: Allow Guessing + Minimal Rescue</option>`;
+      }
+      csel.value = '0';
+    } else {
+      csel.innerHTML = __aiBackup.customHTML;
+      csel.value = csel.value || '2';
+    }
+  }
+}
+// ===== 3D iframe -> main bridge (face / timer / counters / sound) =====
+(function install3DBridge(){
+  if (window.__mine3dBridgeInstalled) return;
+  window.__mine3dBridgeInstalled = true;
+
+  function setFaceUI(status){
+    // 0 normal, 2 thinking, -1 dead, -2 win  (3dmine.html과 동일 약속)
+    const faceEl = document.querySelector(".mine-reset-button .mine-reset-button-inner");
+    if (!faceEl) return;
+
+    let bg = "0 0";
+    if (status === -1) bg = "-24px 0";
+    else if (status === -2) bg = "-72px 0";
+    else if (status === 2) bg = "-48px 0";
+
+    // 3D는 iframe에서 오니 CSS(:active)와 충돌 없게 important로 강제
+    faceEl.style.setProperty("background-position", bg, "important");
+  }
+
+  function update3DTimer(elapsed){
+    elapsed = (elapsed|0);
+    // 3자리 타이머 갱신 (기존 유틸 재사용)
+    update_counter_timer(elapsed, $(".mine-timer"));
+  }
+
+  function update3DCounters(p){
+    if (!p) return;
+    const blackTotal  = (p.blackTotal|0);
+    const whiteTotal  = (p.whiteTotal|0);
+    const blackRemain = (p.blackRemain|0);
+    const whiteRemain = (p.whiteRemain|0);
+
+    const hasWhite = whiteTotal > 0;
+    renderCounters(hasWhite);
+
+    // 헤더 높이도 2D와 동일 규칙으로 맞춤
+    const head = document.querySelector('.window-content .mine-head-area');
+    if (head) head.style.height = hasWhite ? '58px' : '38px';
+
+    if (hasWhite){
+      const maxAbs = Math.max(Math.abs(blackTotal), Math.abs(whiteTotal));
+      const N = Math.max(3, String(maxAbs).length);
+      update_counter_generic(blackRemain, $("#mine-counter-black"), blackTotal, N);
+      update_counter_generic(whiteRemain, $("#mine-counter-white"), whiteTotal, N);
+    } else {
+      update_counter_generic(blackRemain, $("#mine-counter-single"), blackTotal);
+    }
+  }
+
+  window.addEventListener("message", (e) => {
+    const m = e.data;
+    if (!m || !m.__mine3d) return;
+
+    // 혹시 2D 테마일 때 들어온 메시지는 무시(테마 전환 중 레이스 방지)
+    if (typeof is3DTheme === "function" && !is3DTheme()) return;
+
+    if (m.type === "ready") {
+      window.__threeD = window.__threeD || {};
+      window.__threeD.ready = true;
+      if (window.__threeD.lastInit && typeof post3D === "function") {
+        post3D({ type:"init", payload: window.__threeD.lastInit });
+      }
+      return;
+    }
+
+    if (m.type === "face") {
+      setFaceUI(m.status);
+      return;
+    }
+
+    if (m.type === "timer") {
+      update3DTimer(m.elapsed);
+      return;
+    }
+
+    if (m.type === "counters") {
+      update3DCounters(m.payload);
+      return;
+    }
+
+    if (m.type === "playSound") {
+      if (typeof playSound === "function") playSound(m.file);
+      return;
+    }
+  });
+})();
+
+</script>
+</body>
+
+</html>

@@ -1,0 +1,530 @@
+<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{width:128px;height:128px}</style>
+</head><body>
+<canvas id="c" width="512" height="512"></canvas>
+<script>
+// Override getContext to force preserveDrawingBuffer for screenshot capture
+const _origGetContext = HTMLCanvasElement.prototype.getContext;
+HTMLCanvasElement.prototype.getContext = function(type, attrs) {
+  if (type === 'webgl' || type === 'experimental-webgl') {
+    attrs = Object.assign({}, attrs, { preserveDrawingBuffer: true });
+  }
+  return _origGetContext.call(this, type, attrs);
+};
+</script>
+<script src="./rawblock-data.js"></script>
+<script src="./fixed-pipeline.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const value = parseInt(params.get('v') || '0', 10);
+const blockIdx = parseInt(params.get('i') || '-1', 10);
+const rndCnt = parseInt(params.get('r') || '0', 10);
+const scale = 0.38;
+
+const r = new window.FixedPipelineGL(document.getElementById('c'));
+const GL = window.GL;
+
+r.matrixMode('PROJECTION');
+r.orthof(-1, 1, -1, 1, 0.1, 10);
+r.matrixMode('MODELVIEW');
+r.loadIdentity();
+r.clearColor(0, 0, 0, 0);
+r.clear(r.gl.COLOR_BUFFER_BIT | r.gl.DEPTH_BUFFER_BIT);
+r.translatef(0, 0, -3);
+r.rotatef(25, 1, 0, 0);
+r.rotatef(30, 0, 1, 0);
+r.lineWidth(24);
+
+// Shared WebGL helpers
+function fillQuad(a, b, c, d, col) {
+  r.color4f(col[0], col[1], col[2], col[3]);
+  r.begin(GL.TRIANGLE_FAN);
+  r.vertex3f(a[0], a[1], a[2]);
+  r.vertex3f(b[0], b[1], b[2]);
+  r.vertex3f(c[0], c[1], c[2]);
+  r.vertex3f(d[0], d[1], d[2]);
+  r.end();
+}
+
+// Multi-block mode: ?i=INDEX renders the full block from rawblock-data
+if (blockIdx >= 0 && window.RAWBLOCK_DATA && blockIdx < window.RAWBLOCK_DATA.length) {
+  const block = window.RAWBLOCK_DATA[blockIdx];
+  // Find bounds and val
+  let bval = 0, xMin=7,xMax=-1,yMin=7,yMax=-1,zMin=7,zMax=-1;
+  for (let bx=0;bx<7;bx++) for(let by=0;by<7;by++) for(let bz=0;bz<7;bz++) {
+    if (block[bx][by][bz] !== 0) {
+      if (!bval) bval = block[bx][by][bz];
+      xMin=Math.min(xMin,bx); xMax=Math.max(xMax,bx);
+      yMin=Math.min(yMin,by); yMax=Math.max(yMax,by);
+      zMin=Math.min(zMin,bz); zMax=Math.max(zMax,bz);
+    }
+  }
+  if (bval !== 0) {
+    let bpic = bval & 127;
+    if (bval !== 0) bpic ^= 64;
+    const bR = bpic >> 4, bG = (bpic >> 2) & 3, bB = bpic & 3;
+    let bcr = (bR + 0.6) / 4.8, bcg = (bG + 0.8) / 4.4, bcb = (bB + 0.8) / 4.4;
+    if (bR === 0 && bG === 0 && bB === 0) { bcr = 0.02; bcg = 0.02; bcb = 0.02; }
+    if ((bval & 255) > 127) { bcr = Math.min(1, bcr * 0.7 + 0.12); bcg *= 0.6; bcb *= 0.6; }
+    const bcolor = [bcr, bcg, bcb, 1];
+    const bspan = Math.max(xMax-xMin+1, yMax-yMin+1, zMax-zMin+1, 3);
+    const bs = 0.7 / bspan;
+    // Face culling: axis mapping px=bx, py=bz(height), pz=by(depth)
+    const cx = (xMin+xMax)/2, cy = (yMin+yMax)/2, cz = (zMin+zMax)/2;
+    for (let bx=0;bx<7;bx++) for(let by=0;by<7;by++) for(let bz=0;bz<7;bz++) {
+      if (block[bx][by][bz] === 0) continue;
+      const px = (bx-cx)*2*bs, py = (bz-cz)*2*bs, pz = (by-cy)*2*bs;
+      const s2 = bs;
+      const tl = s2 * 0.85, e2 = s2 * 1.06;
+      const bright = [bcr*1.2, bcg*1.2, bcb*1.2, 1];
+      const has = (dx,dy,dz) => bx+dx>=0&&bx+dx<7&&by+dy>=0&&by+dy<7&&bz+dz>=0&&bz+dz<7&&block[bx+dx][by+dy][bz+dz]!==0;
+      // px-s2 (left): skip if bx-1 occupied
+      if (!has(-1,0,0)) { fillQuad([px-s2,py-s2,pz-s2],[px-s2,py-s2,pz+s2],[px-s2,py+s2,pz+s2],[px-s2,py+s2,pz-s2], bcolor); fillQuad([px-e2,py-tl,pz+tl],[px-e2,py+tl,pz+tl],[px-e2,py+tl,pz-tl],[px-e2,py-tl,pz-tl], bright); }
+      // px+s2 (right): skip if bx+1
+      if (!has(1,0,0)) { fillQuad([px+s2,py-s2,pz-s2],[px+s2,py-s2,pz+s2],[px+s2,py+s2,pz+s2],[px+s2,py+s2,pz-s2], bcolor); fillQuad([px+e2,py-tl,pz+tl],[px+e2,py+tl,pz+tl],[px+e2,py+tl,pz-tl],[px+e2,py-tl,pz-tl], bright); }
+      // pz-s2 (back): skip if by-1
+      if (!has(0,-1,0)) { fillQuad([px-s2,py-s2,pz-s2],[px+s2,py-s2,pz-s2],[px+s2,py+s2,pz-s2],[px-s2,py+s2,pz-s2], bcolor); fillQuad([px-tl,py-tl,pz-e2],[px+tl,py-tl,pz-e2],[px+tl,py+tl,pz-e2],[px-tl,py+tl,pz-e2], bright); }
+      // pz+s2 (front): skip if by+1
+      if (!has(0,1,0)) { fillQuad([px-s2,py-s2,pz+s2],[px+s2,py-s2,pz+s2],[px+s2,py+s2,pz+s2],[px-s2,py+s2,pz+s2], bcolor); fillQuad([px-tl,py-tl,pz+e2],[px+tl,py-tl,pz+e2],[px+tl,py+tl,pz+e2],[px-tl,py+tl,pz+e2], bright); }
+      // py-s2 (bottom): skip if bz-1
+      if (!has(0,0,-1)) { fillQuad([px-s2,py-s2,pz-s2],[px+s2,py-s2,pz-s2],[px+s2,py-s2,pz+s2],[px-s2,py-s2,pz+s2], bcolor); fillQuad([px-tl,py-e2,pz+tl],[px+tl,py-e2,pz+tl],[px+tl,py-e2,pz-tl],[px-tl,py-e2,pz-tl], bright); }
+      // py+s2 (top): skip if bz+1
+      if (!has(0,0,1)) { fillQuad([px-s2,py+s2,pz-s2],[px+s2,py+s2,pz-s2],[px+s2,py+s2,pz+s2],[px-s2,py+s2,pz+s2], bcolor); fillQuad([px-tl,py+e2,pz+tl],[px+tl,py+e2,pz+tl],[px+tl,py+e2,pz-tl],[px-tl,py+e2,pz-tl], bright); }
+    }
+    document.title = 'done';
+  }
+} else if (rndCnt >= 6) {
+  // Random block mode: ?r=CNT generates a random polycube with CNT cubes
+  let _s = rndCnt * 12345 + 67890;
+  function _sr() { _s = (_s * 1103515245 + 12345) & 0x7fffffff; return _s; }
+  const rg = {};
+  let rx = 3, ry = 3, rz = 0, rn = 0;
+  const _rv4={6:207,7:206,8:205,9:203,10:202,11:201,12:199,13:198,14:197}; const rval = _rv4[rndCnt] || (158+rndCnt);
+  while (rn < rndCnt) {
+    const rk = rx + ',' + ry + ',' + rz;
+    if (!rg[rk]) { rg[rk] = 1; rn++; }
+    const rd = _sr() % 6;
+    if (rd === 0) rx = Math.min(6, rx + 1); else if (rd === 1) rx = Math.max(0, rx - 1);
+    else if (rd === 2) ry = Math.min(6, ry + 1); else if (rd === 3) ry = Math.max(0, ry - 1);
+    else if (rd === 4) rz = Math.min(6, rz + 1); else rz = Math.max(0, rz - 1);
+  }
+  const rcells = Object.keys(rg).map(k => k.split(',').map(Number));
+  let rxMin=7,rxMax=-1,ryMin=7,ryMax=-1,rzMin=7,rzMax=-1;
+  for (const [cx,cy,cz] of rcells) { rxMin=Math.min(rxMin,cx);rxMax=Math.max(rxMax,cx);ryMin=Math.min(ryMin,cy);ryMax=Math.max(ryMax,cy);rzMin=Math.min(rzMin,cz);rzMax=Math.max(rzMax,cz); }
+  let rpic = rval & 127; rpic ^= 64;
+  const rR = rpic >> 4, rG2 = (rpic >> 2) & 3, rB = rpic & 3;
+  let rcr = (rR + 0.6) / 4.8, rcg = (rG2 + 0.8) / 4.4, rcb = (rB + 0.8) / 4.4;
+  if (rR === 0 && rG2 === 0 && rB === 0) { rcr = 0.02; rcg = 0.02; rcb = 0.02; }
+  if ((rval & 255) > 127) { rcr = Math.min(1, rcr * 0.7 + 0.12); rcg *= 0.6; rcb *= 0.6; }
+  const rcolor = [rcr, rcg, rcb, 1];
+  const rspan = Math.max(rxMax-rxMin+1, ryMax-ryMin+1, rzMax-rzMin+1, 2);
+  const rbs = 0.7 / rspan;
+  // Face culling: skip faces adjacent to another cube
+  // Axis mapping: px=(bx), py=(bz=height), pz=(by=depth)
+  const rcx2 = (rxMin+rxMax)/2, rcy2 = (ryMin+ryMax)/2, rcz2 = (rzMin+rzMax)/2;
+  for (const [bx, by, bz] of rcells) {
+    const px = (bx-rcx2)*2*rbs, py = (bz-rcz2)*2*rbs, pz = (by-rcy2)*2*rbs;
+    const s2 = rbs;
+    const tl = s2*0.85, e2 = s2*1.06;
+    const bright = [rcr*1.2, rcg*1.2, rcb*1.2, 1];
+    // px-s2 face (left): skip if bx-1 occupied
+    if (!rg[(bx-1)+','+by+','+bz]) {
+      fillQuad([px-s2,py-s2,pz-s2],[px-s2,py-s2,pz+s2],[px-s2,py+s2,pz+s2],[px-s2,py+s2,pz-s2], rcolor);
+      fillQuad([px-e2,py-tl,pz+tl],[px-e2,py+tl,pz+tl],[px-e2,py+tl,pz-tl],[px-e2,py-tl,pz-tl], bright);
+    }
+    // px+s2 face (right): skip if bx+1 occupied
+    if (!rg[(bx+1)+','+by+','+bz]) {
+      fillQuad([px+s2,py-s2,pz-s2],[px+s2,py-s2,pz+s2],[px+s2,py+s2,pz+s2],[px+s2,py+s2,pz-s2], rcolor);
+      fillQuad([px+e2,py-tl,pz+tl],[px+e2,py+tl,pz+tl],[px+e2,py+tl,pz-tl],[px+e2,py-tl,pz-tl], bright);
+    }
+    // pz-s2 face (back): skip if by-1 occupied
+    if (!rg[bx+','+(by-1)+','+bz]) {
+      fillQuad([px-s2,py-s2,pz-s2],[px+s2,py-s2,pz-s2],[px+s2,py+s2,pz-s2],[px-s2,py+s2,pz-s2], rcolor);
+      fillQuad([px-tl,py-tl,pz-e2],[px+tl,py-tl,pz-e2],[px+tl,py+tl,pz-e2],[px-tl,py+tl,pz-e2], bright);
+    }
+    // pz+s2 face (front): skip if by+1 occupied
+    if (!rg[bx+','+(by+1)+','+bz]) {
+      fillQuad([px-s2,py-s2,pz+s2],[px+s2,py-s2,pz+s2],[px+s2,py+s2,pz+s2],[px-s2,py+s2,pz+s2], rcolor);
+      fillQuad([px-tl,py-tl,pz+e2],[px+tl,py-tl,pz+e2],[px+tl,py+tl,pz+e2],[px-tl,py+tl,pz+e2], bright);
+    }
+    // py-s2 face (bottom): skip if bz-1 occupied
+    if (!rg[bx+','+by+','+(bz-1)]) {
+      fillQuad([px-s2,py-s2,pz-s2],[px+s2,py-s2,pz-s2],[px+s2,py-s2,pz+s2],[px-s2,py-s2,pz+s2], rcolor);
+      fillQuad([px-tl,py-e2,pz+tl],[px+tl,py-e2,pz+tl],[px+tl,py-e2,pz-tl],[px-tl,py-e2,pz-tl], bright);
+    }
+    // py+s2 face (top): skip if bz+1 occupied
+    if (!rg[bx+','+by+','+(bz+1)]) {
+      fillQuad([px-s2,py+s2,pz-s2],[px+s2,py+s2,pz-s2],[px+s2,py+s2,pz+s2],[px-s2,py+s2,pz+s2], rcolor);
+      fillQuad([px-tl,py+e2,pz+tl],[px+tl,py+e2,pz+tl],[px+tl,py+e2,pz-tl],[px-tl,py+e2,pz-tl], bright);
+    }
+  }
+  document.title = 'done';
+} else {
+// Single-cell mode: ?v=VALUE
+let pic = value & 127;
+if ((value & 255) !== 0) pic ^= 64;
+const R = pic >> 4, G = (pic >> 2) & 3, B = pic & 3;
+let cr = (R + 0.6) / 4.8, cg = (G + 0.8) / 4.4, cb = (B + 0.8) / 4.4;
+if (R === 0 && G === 0 && B === 0) { cr = 0.02; cg = 0.02; cb = 0.02; }
+
+const s = scale;
+const x = 0, y = 0, z = 0;
+const color = [cr, cg, cb, 1];
+
+const LW = 0.025; // thick line half-width
+function thickLine(a, b, col) {
+  const dx=b[0]-a[0], dy=b[1]-a[1], dz=b[2]-a[2];
+  const len=Math.sqrt(dx*dx+dy*dy+dz*dz)||1;
+  const ux=dx/len, uy=dy/len, uz=dz/len;
+  let ax,ay,az;
+  if (Math.abs(ux)<0.9){ax=1;ay=0;az=0;}else{ax=0;ay=1;az=0;}
+  let nx=uy*az-uz*ay, ny=uz*ax-ux*az, nz=ux*ay-uy*ax;
+  const nl=Math.sqrt(nx*nx+ny*ny+nz*nz)||1;
+  nx=nx/nl*LW; ny=ny/nl*LW; nz=nz/nl*LW;
+  // Second perpendicular for rounded look
+  let mx=uy*nz-uz*ny, my=uz*nx-ux*nz, mz=ux*ny-uy*nx;
+  const ml=Math.sqrt(mx*mx+my*my+mz*mz)||1;
+  mx=mx/ml*LW; my=my/ml*LW; mz=mz/ml*LW;
+  // Two crossed quads = diamond cross-section (looks rounder)
+  fillQuad([a[0]+nx,a[1]+ny,a[2]+nz],[b[0]+nx,b[1]+ny,b[2]+nz],
+           [b[0]-nx,b[1]-ny,b[2]-nz],[a[0]-nx,a[1]-ny,a[2]-nz], col);
+  fillQuad([a[0]+mx,a[1]+my,a[2]+mz],[b[0]+mx,b[1]+my,b[2]+mz],
+           [b[0]-mx,b[1]-my,b[2]-mz],[a[0]-mx,a[1]-my,a[2]-mz], col);
+}
+function roundCap(p, col) {
+  // Draw a small disc at point p for rounded line endings
+  const R = LW;
+  const N = 6;
+  for (let i = 0; i < N; i++) {
+    const a1 = Math.PI*2*i/N, a2 = Math.PI*2*(i+1)/N;
+    fillQuad(p, [p[0]+Math.cos(a1)*R, p[1]+Math.sin(a1)*R, p[2]],
+                [p[0]+Math.cos(a2)*R, p[1]+Math.sin(a2)*R, p[2]], p, col);
+    fillQuad(p, [p[0]+Math.cos(a1)*R, p[1], p[2]+Math.sin(a1)*R],
+                [p[0]+Math.cos(a2)*R, p[1], p[2]+Math.sin(a2)*R], p, col);
+    fillQuad(p, [p[0], p[1]+Math.cos(a1)*R, p[2]+Math.sin(a1)*R],
+                [p[0], p[1]+Math.cos(a2)*R, p[2]+Math.sin(a2)*R], p, col);
+  }
+}
+function lineStrip(pts, col) {
+  for (let i = 0; i < pts.length - 1; i++) {
+    thickLine(pts[i], pts[i+1], col);
+    roundCap(pts[i], col);
+  }
+  if (pts.length > 0) roundCap(pts[pts.length-1], col);
+}
+function lines(pts, col) {
+  for (let i = 0; i < pts.length - 1; i += 2) {
+    thickLine(pts[i], pts[i+1], col);
+    roundCap(pts[i], col);
+    roundCap(pts[i+1], col);
+  }
+}
+
+// pic==95 is wire cube (block 31)
+if (pic === 95) {
+  lineStrip([[x-s,y+s,z+s],[x+s,y+s,z+s],[x+s,y+s,z-s],[x-s,y+s,z-s],[x-s,y+s,z+s]], color);
+  lineStrip([[x-s,y-s,z+s],[x+s,y-s,z+s],[x+s,y-s,z-s],[x-s,y-s,z-s],[x-s,y-s,z+s]], color);
+  lineStrip([[x+s,y-s,z+s],[x+s,y+s,z+s],[x+s,y+s,z-s],[x+s,y-s,z-s],[x+s,y-s,z+s]], color);
+  lineStrip([[x-s,y-s,z+s],[x-s,y+s,z+s],[x-s,y+s,z-s],[x-s,y-s,z-s],[x-s,y-s,z+s]], color);
+  lineStrip([[x+s,y-s,z+s],[x+s,y+s,z+s],[x-s,y+s,z+s],[x-s,y-s,z+s],[x+s,y-s,z+s]], color);
+  lineStrip([[x+s,y-s,z-s],[x+s,y+s,z-s],[x-s,y+s,z-s],[x-s,y-s,z-s],[x+s,y-s,z-s]], color);
+  document.title = 'done';
+} else {
+// Draw solid cube body
+const x0=x-s, x1=x+s, y0=y-s, y1=y+s, z0=z-s, z1=z+s;
+fillQuad([x0,y0,z0],[x1,y0,z0],[x1,y1,z0],[x0,y1,z0], color);
+fillQuad([x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1], color);
+fillQuad([x0,y0,z0],[x0,y0,z1],[x0,y1,z1],[x0,y1,z0], color);
+fillQuad([x1,y0,z0],[x1,y0,z1],[x1,y1,z1],[x1,y1,z0], color);
+fillQuad([x0,y1,z0],[x1,y1,z0],[x1,y1,z1],[x0,y1,z1], color);
+fillQuad([x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1], color);
+
+// Draw special decorations
+const e = 1.15 * s;
+const t = s;
+const jR = () => Math.min(1, Math.random());
+const jG = () => Math.min(1, Math.random() * 0.25);
+
+let lc;
+if (pic === 27) lc = [jR(), Math.min(1, Math.random()*0.5), jG(), 1];
+else if (pic === 68 || pic === 70) lc = [jG(), jR(), jG(), 1];
+else if (pic === 40) lc = [jR(), jR(), jR(), 1];
+else if ([38,41,52,54,55,60,62].includes(pic)) lc = [jG(), jG(), jR(), 1];
+else if (pic === 65 || pic === 75) lc = [0.4, 0.03, 0.03, 1];
+else if ([53,56,57,58,59,61,63,66,69,94,96].includes(pic)) lc = [jR(), jG(), jG(), 1];
+else if (pic === 72 || pic === 73 || pic === 74 || pic === 80 || pic === 81 || pic === 84 || pic === 85 || pic === 86) lc = [jR(), Math.min(1, Math.random()*0.5), jG(), 1];
+else lc = color;
+
+const q = (verts) => fillQuad(verts[0], verts[1], verts[2], verts[3], lc);
+
+if (pic === 95) {
+  // Wire cube only
+  lineStrip([[x-s,y+s,z+s],[x+s,y+s,z+s],[x+s,y+s,z-s],[x-s,y+s,z-s],[x-s,y+s,z+s]], color);
+  lineStrip([[x-s,y-s,z+s],[x+s,y-s,z+s],[x+s,y-s,z-s],[x-s,y-s,z-s],[x-s,y-s,z+s]], color);
+  lineStrip([[x+s,y-s,z+s],[x+s,y+s,z+s],[x+s,y+s,z-s],[x+s,y-s,z-s],[x+s,y-s,z+s]], color);
+  lineStrip([[x-s,y-s,z+s],[x-s,y+s,z+s],[x-s,y+s,z-s],[x-s,y-s,z-s],[x-s,y-s,z+s]], color);
+} else if (pic === 65) {
+  // self-destruct: 3 perpendicular squares/cross (same as bombs)
+  lineStrip([[x,t+y,t+z],[x,-t+y,t+z],[x,-t+y,-t+z],[x,t+y,-t+z],[x,t+y,t+z]], lc);
+  lineStrip([[t+x,y,t+z],[-t+x,y,t+z],[-t+x,y,-t+z],[t+x,y,-t+z],[t+x,y,t+z]], lc);
+  lineStrip([[t+x,t+y,z],[-t+x,t+y,z],[-t+x,-t+y,z],[t+x,-t+y,z],[t+x,t+y,z]], lc);
+} else if (pic === 75) {
+  // obstacle: filled cross (+ shape)
+  q([[.3*t+x,.1*t+y,-e+z],[-.3*t+x,.1*t+y,-e+z],[-.3*t+x,-.1*t+y,-e+z],[.3*t+x,-.1*t+y,-e+z]]);
+  q([[.3*t+x,.1*t+y,e+z],[-.3*t+x,.1*t+y,e+z],[-.3*t+x,-.1*t+y,e+z],[.3*t+x,-.1*t+y,e+z]]);
+  q([[.1*t+x,.3*t+y,-e+z],[-.1*t+x,.3*t+y,-e+z],[-.1*t+x,-.3*t+y,-e+z],[.1*t+x,-.3*t+y,-e+z]]);
+  q([[.1*t+x,.3*t+y,e+z],[-.1*t+x,.3*t+y,e+z],[-.1*t+x,-.3*t+y,e+z],[.1*t+x,-.3*t+y,e+z]]);
+} else if (pic === 66) {
+  lineStrip([[.3*t+x,-.4*t+y,-e+z],[.3*t+x,.2*t+y,-e+z],[x,.4*t+y,-e+z],[-.3*t+x,.2*t+y,-e+z],[-.3*t+x,-.4*t+y,-e+z]], lc);
+  lineStrip([[.3*t+x,-.4*t+y,e+z],[.3*t+x,.2*t+y,e+z],[x,.4*t+y,e+z],[-.3*t+x,.2*t+y,e+z],[-.3*t+x,-.4*t+y,e+z]], lc);
+} else if (pic === 68) {
+  lineStrip([[.4*t+x,.4*t+y,e+z],[-.4*t+x,.4*t+y,e+z],[-.4*t+x,-.4*t+y,e+z],[.4*t+x,-.4*t+y,e+z]], lc);
+  lines([[x,.5*t+y,e+z],[x,-.5*t+y,e+z]], lc);
+  lineStrip([[.4*t+x,.4*t+y,-e+z],[-.4*t+x,.4*t+y,-e+z],[-.4*t+x,-.4*t+y,-e+z],[.4*t+x,-.4*t+y,-e+z]], lc);
+  lines([[x,.5*t+y,-e+z],[x,-.5*t+y,-e+z]], lc);
+} else if (pic === 69) {
+  lines([[.4*t+x,.4*t+y,e+z],[.2*t+x,.2*t+y,e+z],[.4*t+x,-.4*t+y,e+z],[.2*t+x,-.2*t+y,e+z],
+    [-.4*t+x,.4*t+y,e+z],[-.2*t+x,.2*t+y,e+z],[-.4*t+x,-.4*t+y,e+z],[-.2*t+x,-.2*t+y,e+z],
+    [.4*t+x,.4*t+y,-e+z],[.2*t+x,.2*t+y,-e+z],[.4*t+x,-.4*t+y,-e+z],[.2*t+x,-.2*t+y,-e+z],
+    [-.4*t+x,.4*t+y,-e+z],[-.2*t+x,.2*t+y,-e+z],[-.4*t+x,-.4*t+y,-e+z],[-.2*t+x,-.2*t+y,-e+z]], lc);
+} else if (pic === 70) {
+  lineStrip([[-.2*t+x,-.4*t+y,e+z],[-.2*t+x,.4*t+y,e+z],[.2*t+x,-.4*t+y,e+z],[.2*t+x,.4*t+y,e+z]], lc);
+  lines([[.5*t+x,.5*t+y,e+z],[-.5*t+x,-.5*t+y,e+z],[-.5*t+x,.5*t+y,e+z],[.5*t+x,-.5*t+y,e+z]], lc);
+  lineStrip([[-.2*t+x,-.4*t+y,-e+z],[-.2*t+x,.4*t+y,-e+z],[.2*t+x,-.4*t+y,-e+z],[.2*t+x,.4*t+y,-e+z]], lc);
+  lines([[.5*t+x,.5*t+y,-e+z],[-.5*t+x,-.5*t+y,-e+z],[-.5*t+x,.5*t+y,-e+z],[.5*t+x,-.5*t+y,-e+z]], lc);
+} else if (pic === 94) {
+  lines([[.3*t+x,.4*t+y,-e+z],[-.3*t+x,.4*t+y,-e+z],[x,.4*t+y,-e+z],[x,.1*t+y,-e+z]], lc);
+  lineStrip([[-.3*t+x,.1*t+y,-e+z],[-.3*t+x,-.4*t+y,-e+z],[.3*t+x,-.4*t+y,-e+z],[.3*t+x,.1*t+y,-e+z],[-.3*t+x,.1*t+y,-e+z]], lc);
+  lines([[.3*t+x,.4*t+y,e+z],[-.3*t+x,.4*t+y,e+z],[x,.4*t+y,e+z],[x,.1*t+y,e+z]], lc);
+  lineStrip([[-.3*t+x,.1*t+y,e+z],[-.3*t+x,-.4*t+y,e+z],[.3*t+x,-.4*t+y,e+z],[.3*t+x,.1*t+y,e+z],[-.3*t+x,.1*t+y,e+z]], lc);
+} else if (pic === 27) {
+  lineStrip([[.6*t+x,-.6*t+y,e+z],[.6*t+x,.6*t+y,e+z],[-.6*t+x,.6*t+y,e+z],[-.6*t+x,-.6*t+y,e+z],[.2*t+x,-.6*t+y,e+z],[-.1*t+x,-.4*t+y,e+z],[.2*t+x,-.6*t+y,e+z],[-.1*t+x,-.8*t+y,e+z]], lc);
+  lines([[.8*t+x,.8*t+y,e+z],[-.8*t+x,-.8*t+y,e+z],[-.8*t+x,.8*t+y,e+z],[.8*t+x,-.8*t+y,e+z]], lc);
+  lineStrip([[.6*t+x,-.6*t+y,-e+z],[.6*t+x,.6*t+y,-e+z],[-.6*t+x,.6*t+y,-e+z],[-.6*t+x,-.6*t+y,-e+z],[.2*t+x,-.6*t+y,-e+z],[-.1*t+x,-.4*t+y,-e+z],[.2*t+x,-.6*t+y,-e+z],[-.1*t+x,-.8*t+y,-e+z]], lc);
+  lines([[.8*t+x,.8*t+y,-e+z],[-.8*t+x,-.8*t+y,-e+z],[-.8*t+x,.8*t+y,-e+z],[.8*t+x,-.8*t+y,-e+z]], lc);
+} else if (pic === 38) {
+  // updel: half-face quads on top/sides/front/back
+  const e2=1.15*t;
+  q([[-t*.7+x,e2+y,t*.7+z],[t*.7+x,e2+y,t*.7+z],[t*.7+x,e2+y,-t*.7+z],[-t*.7+x,e2+y,-t*.7+z]]);
+  q([[e2+x,y,t*.7+z],[e2+x,t*.7+y,t*.7+z],[e2+x,t*.7+y,-t*.7+z],[e2+x,y,-t*.7+z]]);
+  q([[-e2+x,y,t*.7+z],[-e2+x,t*.7+y,t*.7+z],[-e2+x,t*.7+y,-t*.7+z],[-e2+x,y,-t*.7+z]]);
+  q([[-t*.7+x,y,e2+z],[t*.7+x,y,e2+z],[t*.7+x,t*.7+y,e2+z],[-t*.7+x,t*.7+y,e2+z]]);
+  q([[-t*.7+x,y,-e2+z],[t*.7+x,y,-e2+z],[t*.7+x,t*.7+y,-e2+z],[-t*.7+x,t*.7+y,-e2+z]]);
+} else if (pic === 40) {
+  const e2=1.15*t;
+  lineStrip([[-t*.6+x,-e2+y,t*.6+z],[t*.6+x,-e2+y,t*.6+z],[t*.6+x,-e2+y,-t*.6+z],[-t*.6+x,-e2+y,-t*.6+z],[-t*.6+x,-e2+y,t*.6+z]], lc);
+  lineStrip([[-t*.6+x,e2+y,t*.6+z],[t*.6+x,e2+y,t*.6+z],[t*.6+x,e2+y,-t*.6+z],[-t*.6+x,e2+y,-t*.6+z],[-t*.6+x,e2+y,t*.6+z]], lc);
+  lineStrip([[e2+x,-t*.6+y,t*.6+z],[e2+x,t*.6+y,t*.6+z],[e2+x,t*.6+y,-t*.6+z],[e2+x,-t*.6+y,-t*.6+z],[e2+x,-t*.6+y,t*.6+z]], lc);
+  lineStrip([[-e2+x,-t*.6+y,t*.6+z],[-e2+x,t*.6+y,t*.6+z],[-e2+x,t*.6+y,-t*.6+z],[-e2+x,-t*.6+y,-t*.6+z],[-e2+x,-t*.6+y,t*.6+z]], lc);
+  lineStrip([[-t*.6+x,-t*.6+y,e2+z],[t*.6+x,-t*.6+y,e2+z],[t*.6+x,t*.6+y,e2+z],[-t*.6+x,t*.6+y,e2+z],[-t*.6+x,-t*.6+y,e2+z]], lc);
+  lineStrip([[-t*.6+x,-t*.6+y,-e2+z],[t*.6+x,-t*.6+y,-e2+z],[t*.6+x,t*.6+y,-e2+z],[-t*.6+x,t*.6+y,-e2+z],[-t*.6+x,-t*.6+y,-e2+z]], lc);
+} else if (pic === 41) {
+  const e2=1.15*t;
+  lineStrip([[-e2+x,t*.5+y,-t*.3+z],[-e2+x,t*.7+y,z],[-e2+x,-t*.7+y,z],[-e2+x,-t*.5+y,t*.3+z]], lc);
+  lineStrip([[-e2+x,t*.5+y,t*.3+z],[-e2+x,t*.7+y,z],[-e2+x,-t*.7+y,z],[-e2+x,-t*.5+y,-t*.3+z]], lc);
+  lineStrip([[e2+x,t*.5+y,-t*.3+z],[e2+x,t*.7+y,z],[e2+x,-t*.7+y,z],[e2+x,-t*.5+y,t*.3+z]], lc);
+  lineStrip([[e2+x,t*.5+y,t*.3+z],[e2+x,t*.7+y,z],[e2+x,-t*.7+y,z],[e2+x,-t*.5+y,-t*.3+z]], lc);
+  lineStrip([[-e2+x,-t*.3+y,t*.5+z],[-e2+x,y,t*.7+z],[-e2+x,y,-t*.7+z],[-e2+x,t*.3+y,-t*.5+z]], lc);
+  lineStrip([[-e2+x,t*.3+y,t*.5+z],[-e2+x,y,t*.7+z],[-e2+x,y,-t*.7+z],[-e2+x,-t*.3+y,-t*.5+z]], lc);
+  lineStrip([[e2+x,-t*.3+y,t*.5+z],[e2+x,y,t*.7+z],[e2+x,y,-t*.7+z],[e2+x,t*.3+y,-t*.5+z]], lc);
+  lineStrip([[e2+x,t*.3+y,t*.5+z],[e2+x,y,t*.7+z],[e2+x,y,-t*.7+z],[e2+x,-t*.3+y,-t*.5+z]], lc);
+} else if (pic === 52) {
+  const e2=1.15*t;
+  q([[-t*.8+x,-e2+y,t*.1+z],[-t*.2+x,-e2+y,t*.1+z],[-t*.2+x,-e2+y,-t*.1+z],[-t*.8+x,-e2+y,-t*.1+z]]);
+  q([[t*.2+x,-e2+y,t*.1+z],[t*.8+x,-e2+y,t*.1+z],[t*.8+x,-e2+y,-t*.1+z],[t*.2+x,-e2+y,-t*.1+z]]);
+  q([[-t*.8+x,t*.1+y,-e2+z],[-t*.2+x,t*.1+y,-e2+z],[-t*.2+x,-t*.1+y,-e2+z],[-t*.8+x,-t*.1+y,-e2+z]]);
+  q([[t*.8+x,t*.1+y,-e2+z],[t*.2+x,t*.1+y,-e2+z],[t*.2+x,-t*.1+y,-e2+z],[t*.8+x,-t*.1+y,-e2+z]]);
+  q([[-e2+x,t*.1+y,-t*.8+z],[-e2+x,t*.1+y,-t*.2+z],[-e2+x,-t*.1+y,-t*.2+z],[-e2+x,-t*.1+y,-t*.8+z]]);
+  q([[-e2+x,t*.1+y,t*.8+z],[-e2+x,t*.1+y,t*.2+z],[-e2+x,-t*.1+y,t*.2+z],[-e2+x,-t*.1+y,t*.8+z]]);
+  q([[-t*.8+x,e2+y,t*.1+z],[-t*.2+x,e2+y,t*.1+z],[-t*.2+x,e2+y,-t*.1+z],[-t*.8+x,e2+y,-t*.1+z]]);
+  q([[t*.2+x,e2+y,t*.1+z],[t*.8+x,e2+y,t*.1+z],[t*.8+x,e2+y,-t*.1+z],[t*.2+x,e2+y,-t*.1+z]]);
+  q([[-t*.8+x,t*.1+y,e2+z],[-t*.2+x,t*.1+y,e2+z],[-t*.2+x,-t*.1+y,e2+z],[-t*.8+x,-t*.1+y,e2+z]]);
+  q([[t*.8+x,t*.1+y,e2+z],[t*.2+x,t*.1+y,e2+z],[t*.2+x,-t*.1+y,e2+z],[t*.8+x,-t*.1+y,e2+z]]);
+  q([[e2+x,t*.1+y,-t*.8+z],[e2+x,t*.1+y,-t*.2+z],[e2+x,-t*.1+y,-t*.2+z],[e2+x,-t*.1+y,-t*.8+z]]);
+  q([[e2+x,t*.1+y,t*.8+z],[e2+x,t*.1+y,t*.2+z],[e2+x,-t*.1+y,t*.2+z],[e2+x,-t*.1+y,t*.8+z]]);
+} else if (pic === 53) {
+  // Two crosses on each face - same arm size as plus2 (arm=0.3t, width=0.1t), centers at ±0.35
+  const e2=1.15*t, A=t*.245, W=t*.084, C=t*.35;
+  // Helper: draw cross at (cx,cz) on a face with fixed axis
+  function cross2(face, c1, c2) {
+    // face: which axis is fixed. c1,c2: center in the two free axes
+    if (face==='y-') { q([[-A+c1+x,-e2+y,W+c2+z],[A+c1+x,-e2+y,W+c2+z],[A+c1+x,-e2+y,-W+c2+z],[-A+c1+x,-e2+y,-W+c2+z]]); q([[W+c1+x,-e2+y,-A+c2+z],[W+c1+x,-e2+y,A+c2+z],[-W+c1+x,-e2+y,A+c2+z],[-W+c1+x,-e2+y,-A+c2+z]]); }
+    if (face==='y+') { q([[-A+c1+x,e2+y,W+c2+z],[A+c1+x,e2+y,W+c2+z],[A+c1+x,e2+y,-W+c2+z],[-A+c1+x,e2+y,-W+c2+z]]); q([[W+c1+x,e2+y,-A+c2+z],[W+c1+x,e2+y,A+c2+z],[-W+c1+x,e2+y,A+c2+z],[-W+c1+x,e2+y,-A+c2+z]]); }
+    if (face==='z-') { q([[-A+c1+x,W+c2+y,-e2+z],[A+c1+x,W+c2+y,-e2+z],[A+c1+x,-W+c2+y,-e2+z],[-A+c1+x,-W+c2+y,-e2+z]]); q([[W+c1+x,-A+c2+y,-e2+z],[W+c1+x,A+c2+y,-e2+z],[-W+c1+x,A+c2+y,-e2+z],[-W+c1+x,-A+c2+y,-e2+z]]); }
+    if (face==='z+') { q([[-A+c1+x,W+c2+y,e2+z],[A+c1+x,W+c2+y,e2+z],[A+c1+x,-W+c2+y,e2+z],[-A+c1+x,-W+c2+y,e2+z]]); q([[W+c1+x,-A+c2+y,e2+z],[W+c1+x,A+c2+y,e2+z],[-W+c1+x,A+c2+y,e2+z],[-W+c1+x,-A+c2+y,e2+z]]); }
+    if (face==='x-') { q([[-e2+x,W+c1+y,-A+c2+z],[-e2+x,W+c1+y,A+c2+z],[-e2+x,-W+c1+y,A+c2+z],[-e2+x,-W+c1+y,-A+c2+z]]); q([[-e2+x,-A+c1+y,W+c2+z],[-e2+x,A+c1+y,W+c2+z],[-e2+x,A+c1+y,-W+c2+z],[-e2+x,-A+c1+y,-W+c2+z]]); }
+    if (face==='x+') { q([[e2+x,W+c1+y,-A+c2+z],[e2+x,W+c1+y,A+c2+z],[e2+x,-W+c1+y,A+c2+z],[e2+x,-W+c1+y,-A+c2+z]]); q([[e2+x,-A+c1+y,W+c2+z],[e2+x,A+c1+y,W+c2+z],[e2+x,A+c1+y,-W+c2+z],[e2+x,-A+c1+y,-W+c2+z]]); }
+  }
+  for (const f of ['y-','y+','z-','z+','x-','x+']) { cross2(f,-C,0); cross2(f,C,0); }
+} else if (pic === 54) {
+  const e2=1.15*t;
+  lineStrip([[-t*.3+x,t*.5+y,-e2+z],[x,t*.7+y,-e2+z],[x,-t*.7+y,-e2+z],[t*.3+x,-t*.5+y,-e2+z]], lc);
+  lineStrip([[t*.3+x,t*.5+y,-e2+z],[x,t*.7+y,-e2+z],[x,-t*.7+y,-e2+z],[-t*.3+x,-t*.5+y,-e2+z]], lc);
+  lineStrip([[-t*.3+x,t*.5+y,e2+z],[x,t*.7+y,e2+z],[x,-t*.7+y,e2+z],[t*.3+x,-t*.5+y,e2+z]], lc);
+  lineStrip([[t*.3+x,t*.5+y,e2+z],[x,t*.7+y,e2+z],[x,-t*.7+y,e2+z],[-t*.3+x,-t*.5+y,e2+z]], lc);
+  lineStrip([[-e2+x,t*.5+y,-t*.3+z],[-e2+x,t*.7+y,z],[-e2+x,-t*.7+y,z],[-e2+x,-t*.5+y,t*.3+z]], lc);
+  lineStrip([[-e2+x,t*.5+y,t*.3+z],[-e2+x,t*.7+y,z],[-e2+x,-t*.7+y,z],[-e2+x,-t*.5+y,-t*.3+z]], lc);
+  lineStrip([[e2+x,t*.5+y,-t*.3+z],[e2+x,t*.7+y,z],[e2+x,-t*.7+y,z],[e2+x,-t*.5+y,t*.3+z]], lc);
+  lineStrip([[e2+x,t*.5+y,t*.3+z],[e2+x,t*.7+y,z],[e2+x,-t*.7+y,z],[e2+x,-t*.5+y,-t*.3+z]], lc);
+} else if (pic === 55) {
+  const e2=1.15*t;
+  q([[t*.5+x,-e2+y,t*.5+z],[-t*.5+x,-e2+y,t*.5+z],[-t*.5+x,-e2+y,t*.3+z],[t*.5+x,-e2+y,t*.3+z]]);
+  q([[t*.5+x,-e2+y,-t*.5+z],[-t*.5+x,-e2+y,-t*.5+z],[-t*.5+x,-e2+y,-t*.3+z],[t*.5+x,-e2+y,-t*.3+z]]);
+  q([[-t*.5+x,-e2+y,t*.5+z],[-t*.3+x,-e2+y,t*.5+z],[-t*.3+x,-e2+y,-t*.5+z],[-t*.5+x,-e2+y,-t*.5+z]]);
+  q([[t*.5+x,e2+y,t*.5+z],[-t*.5+x,e2+y,t*.5+z],[-t*.5+x,e2+y,t*.3+z],[t*.5+x,e2+y,t*.3+z]]);
+  q([[t*.5+x,e2+y,-t*.5+z],[-t*.5+x,e2+y,-t*.5+z],[-t*.5+x,e2+y,-t*.3+z],[t*.5+x,e2+y,-t*.3+z]]);
+  q([[-t*.5+x,e2+y,t*.5+z],[-t*.3+x,e2+y,t*.5+z],[-t*.3+x,e2+y,-t*.5+z],[-t*.5+x,e2+y,-t*.5+z]]);
+  q([[t*.5+x,t*.5+y,-e2+z],[-t*.5+x,t*.5+y,-e2+z],[-t*.5+x,t*.3+y,-e2+z],[t*.5+x,t*.3+y,-e2+z]]);
+  q([[t*.5+x,-t*.5+y,-e2+z],[-t*.5+x,-t*.5+y,-e2+z],[-t*.5+x,-t*.3+y,-e2+z],[t*.5+x,-t*.3+y,-e2+z]]);
+  q([[t*.5+x,t*.5+y,-e2+z],[t*.3+x,t*.5+y,-e2+z],[t*.3+x,-t*.5+y,-e2+z],[t*.5+x,-t*.5+y,-e2+z]]);
+  q([[t*.5+x,t*.5+y,e2+z],[-t*.5+x,t*.5+y,e2+z],[-t*.5+x,t*.3+y,e2+z],[t*.5+x,t*.3+y,e2+z]]);
+  q([[t*.5+x,-t*.5+y,e2+z],[-t*.5+x,-t*.5+y,e2+z],[-t*.5+x,-t*.3+y,e2+z],[t*.5+x,-t*.3+y,e2+z]]);
+  q([[-t*.5+x,t*.5+y,e2+z],[-t*.3+x,t*.5+y,e2+z],[-t*.3+x,-t*.5+y,e2+z],[-t*.5+x,-t*.5+y,e2+z]]);
+} else if (pic === 60) {
+  const e2=1.15*t;
+  q([[-t*.8+x,-e2+y,t*.1+z],[-t*.4+x,-e2+y,t*.1+z],[-t*.4+x,-e2+y,-t*.1+z],[-t*.8+x,-e2+y,-t*.1+z]]);
+  q([[t*.4+x,-e2+y,t*.1+z],[t*.8+x,-e2+y,t*.1+z],[t*.8+x,-e2+y,-t*.1+z],[t*.4+x,-e2+y,-t*.1+z]]);
+  q([[-t*.8+x,t*.1+y,-e2+z],[-t*.4+x,t*.1+y,-e2+z],[-t*.4+x,-t*.1+y,-e2+z],[-t*.8+x,-t*.1+y,-e2+z]]);
+  q([[t*.8+x,t*.1+y,-e2+z],[t*.4+x,t*.1+y,-e2+z],[t*.4+x,-t*.1+y,-e2+z],[t*.8+x,-t*.1+y,-e2+z]]);
+  q([[-e2+x,t*.1+y,-t*.8+z],[-e2+x,t*.1+y,-t*.4+z],[-e2+x,-t*.1+y,-t*.4+z],[-e2+x,-t*.1+y,-t*.8+z]]);
+  q([[-e2+x,t*.1+y,t*.8+z],[-e2+x,t*.1+y,t*.4+z],[-e2+x,-t*.1+y,t*.4+z],[-e2+x,-t*.1+y,t*.8+z]]);
+  q([[-t*.8+x,e2+y,t*.1+z],[-t*.4+x,e2+y,t*.1+z],[-t*.4+x,e2+y,-t*.1+z],[-t*.8+x,e2+y,-t*.1+z]]);
+  q([[t*.4+x,e2+y,t*.1+z],[t*.8+x,e2+y,t*.1+z],[t*.8+x,e2+y,-t*.1+z],[t*.4+x,e2+y,-t*.1+z]]);
+  q([[-t*.8+x,t*.1+y,e2+z],[-t*.4+x,t*.1+y,e2+z],[-t*.4+x,-t*.1+y,e2+z],[-t*.8+x,-t*.1+y,e2+z]]);
+  q([[t*.8+x,t*.1+y,e2+z],[t*.4+x,t*.1+y,e2+z],[t*.4+x,-t*.1+y,e2+z],[t*.8+x,-t*.1+y,e2+z]]);
+  q([[e2+x,t*.1+y,-t*.8+z],[e2+x,t*.1+y,-t*.4+z],[e2+x,-t*.1+y,-t*.4+z],[e2+x,-t*.1+y,-t*.8+z]]);
+  q([[e2+x,t*.1+y,t*.8+z],[e2+x,t*.1+y,t*.4+z],[e2+x,-t*.1+y,t*.4+z],[e2+x,-t*.1+y,t*.8+z]]);
+  q([[-t*.2+x,-e2+y,t*.1+z],[t*.2+x,-e2+y,t*.1+z],[t*.2+x,-e2+y,-t*.1+z],[-t*.2+x,-e2+y,-t*.1+z]]);
+  q([[-t*.2+x,t*.1+y,-e2+z],[t*.2+x,t*.1+y,-e2+z],[t*.2+x,-t*.1+y,-e2+z],[-t*.2+x,-t*.1+y,-e2+z]]);
+  q([[-e2+x,t*.1+y,-t*.2+z],[-e2+x,t*.1+y,t*.2+z],[-e2+x,-t*.1+y,t*.2+z],[-e2+x,-t*.1+y,-t*.2+z]]);
+  q([[-t*.2+x,e2+y,t*.1+z],[t*.2+x,e2+y,t*.1+z],[t*.2+x,e2+y,-t*.1+z],[-t*.2+x,e2+y,-t*.1+z]]);
+  q([[-t*.2+x,t*.1+y,e2+z],[t*.2+x,t*.1+y,e2+z],[t*.2+x,-t*.1+y,e2+z],[-t*.2+x,-t*.1+y,e2+z]]);
+  q([[e2+x,t*.1+y,-t*.2+z],[e2+x,t*.1+y,t*.2+z],[e2+x,-t*.1+y,t*.2+z],[e2+x,-t*.1+y,-t*.2+z]]);
+} else if (pic === 61) {
+  const e2=1.15*t;
+  q([[t*.3+x,-e2+y,t*.1+z],[-t*.3+x,-e2+y,t*.1+z],[-t*.3+x,-e2+y,-t*.1+z],[t*.3+x,-e2+y,-t*.1+z]]);
+  q([[-t*.3+x,e2+y,t*.1+z],[t*.3+x,e2+y,t*.1+z],[t*.3+x,e2+y,-t*.1+z],[-t*.3+x,e2+y,-t*.1+z]]);
+  q([[t*.3+x,t*.1+y,-e2+z],[-t*.3+x,t*.1+y,-e2+z],[-t*.3+x,-t*.1+y,-e2+z],[t*.3+x,-t*.1+y,-e2+z]]);
+  q([[t*.3+x,t*.1+y,e2+z],[-t*.3+x,t*.1+y,e2+z],[-t*.3+x,-t*.1+y,e2+z],[t*.3+x,-t*.1+y,e2+z]]);
+  q([[-e2+x,t*.1+y,t*.3+z],[-e2+x,t*.1+y,-t*.3+z],[-e2+x,-t*.1+y,-t*.3+z],[-e2+x,-t*.1+y,t*.3+z]]);
+  q([[e2+x,t*.1+y,t*.3+z],[e2+x,t*.1+y,-t*.3+z],[e2+x,-t*.1+y,-t*.3+z],[e2+x,-t*.1+y,t*.3+z]]);
+  q([[t*.1+x,-e2+y,t*.3+z],[-t*.1+x,-e2+y,t*.3+z],[-t*.1+x,-e2+y,-t*.3+z],[t*.1+x,-e2+y,-t*.3+z]]);
+  q([[-t*.1+x,e2+y,t*.3+z],[t*.1+x,e2+y,t*.3+z],[t*.1+x,e2+y,-t*.3+z],[-t*.1+x,e2+y,-t*.3+z]]);
+  q([[t*.1+x,t*.3+y,-e2+z],[-t*.1+x,t*.3+y,-e2+z],[-t*.1+x,-t*.3+y,-e2+z],[t*.1+x,-t*.3+y,-e2+z]]);
+  q([[t*.1+x,t*.3+y,e2+z],[-t*.1+x,t*.3+y,e2+z],[-t*.1+x,-t*.3+y,e2+z],[t*.1+x,-t*.3+y,e2+z]]);
+  q([[-e2+x,t*.3+y,t*.1+z],[-e2+x,t*.3+y,-t*.1+z],[-e2+x,-t*.3+y,-t*.1+z],[-e2+x,-t*.3+y,t*.1+z]]);
+  q([[e2+x,t*.3+y,t*.1+z],[e2+x,t*.3+y,-t*.1+z],[e2+x,-t*.3+y,-t*.1+z],[e2+x,-t*.3+y,t*.1+z]]);
+} else if (pic === 62) {
+  const e2=1.15*t;
+  lineStrip([[t*.3+x,t*.5+y,-e2+z],[x,t*.7+y,-e2+z],[x,-t*.7+y,-e2+z],[-t*.3+x,-t*.5+y,-e2+z]], lc);
+  lineStrip([[-t*.3+x,t*.5+y,e2+z],[x,t*.7+y,e2+z],[x,-t*.7+y,e2+z],[t*.3+x,-t*.5+y,e2+z]], lc);
+  lineStrip([[t*.3+x,t*.5+y,e2+z],[x,t*.7+y,e2+z],[x,-t*.7+y,e2+z],[-t*.3+x,-t*.5+y,e2+z]], lc);
+  lineStrip([[t*.5+x,-t*.3+y,-e2+z],[t*.7+x,y,-e2+z],[-t*.7+x,y,-e2+z],[-t*.5+x,t*.3+y,-e2+z]], lc);
+  lineStrip([[t*.5+x,t*.3+y,-e2+z],[t*.7+x,y,-e2+z],[-t*.7+x,y,-e2+z],[-t*.5+x,-t*.3+y,-e2+z]], lc);
+  lineStrip([[t*.5+x,-t*.3+y,e2+z],[t*.7+x,y,e2+z],[-t*.7+x,y,e2+z],[-t*.5+x,t*.3+y,e2+z]], lc);
+  lineStrip([[t*.5+x,t*.3+y,e2+z],[t*.7+x,y,e2+z],[-t*.7+x,y,e2+z],[-t*.5+x,-t*.3+y,e2+z]], lc);
+} else if (pic === 72) {
+  // speedup >>: double right arrows on two faces
+  lineStrip([[-.5*t+x,-.5*t+y,e+z],[x,y,e+z],[-.5*t+x,.5*t+y,e+z]], lc);
+  lineStrip([[x,-.5*t+y,e+z],[.5*t+x,y,e+z],[x,.5*t+y,e+z]], lc);
+  lineStrip([[-.5*t+x,-.5*t+y,-e+z],[x,y,-e+z],[-.5*t+x,.5*t+y,-e+z]], lc);
+  lineStrip([[x,-.5*t+y,-e+z],[.5*t+x,y,-e+z],[x,.5*t+y,-e+z]], lc);
+} else if (pic === 73) {
+  // speeddown <<: double left arrows on two faces
+  lineStrip([[.5*t+x,-.5*t+y,e+z],[x,y,e+z],[.5*t+x,.5*t+y,e+z]], lc);
+  lineStrip([[x,-.5*t+y,e+z],[-.5*t+x,y,e+z],[x,.5*t+y,e+z]], lc);
+  lineStrip([[.5*t+x,-.5*t+y,-e+z],[x,y,-e+z],[.5*t+x,.5*t+y,-e+z]], lc);
+  lineStrip([[x,-.5*t+y,-e+z],[-.5*t+x,y,-e+z],[x,.5*t+y,-e+z]], lc);
+} else if (pic === 74) {
+  // holdlock HX: H with X on two faces
+  lines([[-.5*t+x,-.5*t+y,e+z],[-.5*t+x,.5*t+y,e+z]], lc);
+  lines([[-.5*t+x,y,e+z],[.5*t+x,y,e+z]], lc);
+  lines([[.5*t+x,-.5*t+y,e+z],[.5*t+x,.5*t+y,e+z]], lc);
+  lines([[-.3*t+x,-.3*t+y,e+z],[.3*t+x,.3*t+y,e+z],[.3*t+x,-.3*t+y,e+z],[-.3*t+x,.3*t+y,e+z]], lc);
+  lines([[-.5*t+x,-.5*t+y,-e+z],[-.5*t+x,.5*t+y,-e+z]], lc);
+  lines([[-.5*t+x,y,-e+z],[.5*t+x,y,-e+z]], lc);
+  lines([[.5*t+x,-.5*t+y,-e+z],[.5*t+x,.5*t+y,-e+z]], lc);
+  lines([[-.3*t+x,-.3*t+y,-e+z],[.3*t+x,.3*t+y,-e+z],[.3*t+x,-.3*t+y,-e+z],[-.3*t+x,.3*t+y,-e+z]], lc);
+} else if (pic === 85) {
+  lineStrip([[-0.5*t+x,-0.3*t+y,e+z],[-.05*t+x,-0.3*t+y,e+z],[-.05*t+x,0.3*t+y,e+z],[-0.5*t+x,0.3*t+y,e+z],[-0.5*t+x,-0.3*t+y,e+z]], lc);
+  lineStrip([[0.05*t+x,-0.3*t+y,e+z],[0.5*t+x,-0.3*t+y,e+z],[0.5*t+x,0.3*t+y,e+z],[0.05*t+x,0.3*t+y,e+z],[0.05*t+x,-0.3*t+y,e+z]], lc);
+  lineStrip([[-0.5*t+x,-0.3*t+y,-e+z],[-.05*t+x,-0.3*t+y,-e+z],[-.05*t+x,0.3*t+y,-e+z],[-0.5*t+x,0.3*t+y,-e+z],[-0.5*t+x,-0.3*t+y,-e+z]], lc);
+  lineStrip([[0.05*t+x,-0.3*t+y,-e+z],[0.5*t+x,-0.3*t+y,-e+z],[0.5*t+x,0.3*t+y,-e+z],[0.05*t+x,0.3*t+y,-e+z],[0.05*t+x,-0.3*t+y,-e+z]], lc);
+} else if (pic === 86) {
+  lineStrip([[-0.55*t+x,-0.55*t+y,e+z],[-0.22*t+x,-0.55*t+y,e+z],[-0.22*t+x,-0.1*t+y,e+z],[-0.55*t+x,-0.1*t+y,e+z],[-0.55*t+x,-0.55*t+y,e+z]], lc);
+  lineStrip([[-0.165*t+x,-0.55*t+y,e+z],[0.165*t+x,-0.55*t+y,e+z],[0.165*t+x,-0.1*t+y,e+z],[-0.165*t+x,-0.1*t+y,e+z],[-0.165*t+x,-0.55*t+y,e+z]], lc);
+  lineStrip([[0.22*t+x,-0.55*t+y,e+z],[0.55*t+x,-0.55*t+y,e+z],[0.55*t+x,-0.1*t+y,e+z],[0.22*t+x,-0.1*t+y,e+z],[0.22*t+x,-0.55*t+y,e+z]], lc);
+  lineStrip([[-0.4*t+x,0.05*t+y,e+z],[-0.03*t+x,0.05*t+y,e+z],[-0.03*t+x,0.5*t+y,e+z],[-0.4*t+x,0.5*t+y,e+z],[-0.4*t+x,0.05*t+y,e+z]], lc);
+  lineStrip([[0.03*t+x,0.05*t+y,e+z],[0.4*t+x,0.05*t+y,e+z],[0.4*t+x,0.5*t+y,e+z],[0.03*t+x,0.5*t+y,e+z],[0.03*t+x,0.05*t+y,e+z]], lc);
+  lineStrip([[-0.55*t+x,-0.55*t+y,-e+z],[-0.22*t+x,-0.55*t+y,-e+z],[-0.22*t+x,-0.1*t+y,-e+z],[-0.55*t+x,-0.1*t+y,-e+z],[-0.55*t+x,-0.55*t+y,-e+z]], lc);
+  lineStrip([[-0.165*t+x,-0.55*t+y,-e+z],[0.165*t+x,-0.55*t+y,-e+z],[0.165*t+x,-0.1*t+y,-e+z],[-0.165*t+x,-0.1*t+y,-e+z],[-0.165*t+x,-0.55*t+y,-e+z]], lc);
+  lineStrip([[0.22*t+x,-0.55*t+y,-e+z],[0.55*t+x,-0.55*t+y,-e+z],[0.55*t+x,-0.1*t+y,-e+z],[0.22*t+x,-0.1*t+y,-e+z],[0.22*t+x,-0.55*t+y,-e+z]], lc);
+  lineStrip([[-0.4*t+x,0.05*t+y,-e+z],[-0.03*t+x,0.05*t+y,-e+z],[-0.03*t+x,0.5*t+y,-e+z],[-0.4*t+x,0.5*t+y,-e+z],[-0.4*t+x,0.05*t+y,-e+z]], lc);
+  lineStrip([[0.03*t+x,0.05*t+y,-e+z],[0.4*t+x,0.05*t+y,-e+z],[0.4*t+x,0.5*t+y,-e+z],[0.03*t+x,0.5*t+y,-e+z],[0.03*t+x,0.05*t+y,-e+z]], lc);
+} else if (pic === 84) {
+  // 빈공간삭제: thick down arrow
+  lines([[-0.25*t+x,0.6*t+y,e+z],[-0.25*t+x,-0.1*t+y,e+z]], lc);
+  lines([[0.25*t+x,0.6*t+y,e+z],[0.25*t+x,-0.1*t+y,e+z]], lc);
+  lineStrip([[-0.5*t+x,-0.1*t+y,e+z],[x,-0.6*t+y,e+z],[0.5*t+x,-0.1*t+y,e+z]], lc);
+  lines([[-0.25*t+x,0.6*t+y,-e+z],[-0.25*t+x,-0.1*t+y,-e+z]], lc);
+  lines([[0.25*t+x,0.6*t+y,-e+z],[0.25*t+x,-0.1*t+y,-e+z]], lc);
+  lineStrip([[-0.5*t+x,-0.1*t+y,-e+z],[x,-0.6*t+y,-e+z],[0.5*t+x,-0.1*t+y,-e+z]], lc);
+} else if (pic === 81) {
+  // bombnext: 品 shape
+  lineStrip([[-0.2*t+x,-0.6*t+y,e+z],[0.2*t+x,-0.6*t+y,e+z],[0.2*t+x,-0.2*t+y,e+z],[-0.2*t+x,-0.2*t+y,e+z],[-0.2*t+x,-0.6*t+y,e+z]], lc);
+  lineStrip([[-0.5*t+x,0+y,e+z],[-0.1*t+x,0+y,e+z],[-0.1*t+x,0.4*t+y,e+z],[-0.5*t+x,0.4*t+y,e+z],[-0.5*t+x,0+y,e+z]], lc);
+  lineStrip([[0.1*t+x,0+y,e+z],[0.5*t+x,0+y,e+z],[0.5*t+x,0.4*t+y,e+z],[0.1*t+x,0.4*t+y,e+z],[0.1*t+x,0+y,e+z]], lc);
+  lineStrip([[-0.2*t+x,-0.6*t+y,-e+z],[0.2*t+x,-0.6*t+y,-e+z],[0.2*t+x,-0.2*t+y,-e+z],[-0.2*t+x,-0.2*t+y,-e+z],[-0.2*t+x,-0.6*t+y,-e+z]], lc);
+  lineStrip([[-0.5*t+x,0+y,-e+z],[-0.1*t+x,0+y,-e+z],[-0.1*t+x,0.4*t+y,-e+z],[-0.5*t+x,0.4*t+y,-e+z],[-0.5*t+x,0+y,-e+z]], lc);
+  lineStrip([[0.1*t+x,0+y,-e+z],[0.5*t+x,0+y,-e+z],[0.5*t+x,0.4*t+y,-e+z],[0.1*t+x,0.4*t+y,-e+z],[0.1*t+x,0+y,-e+z]], lc);
+} else if (pic === 80) {
+  // blindboard: horizontal eye with X
+  const eyeTop = [], eyeBot = [];
+  for (let i = 0; i <= 8; i++) {
+    const f = i / 8;
+    const ex = (-0.7 + 1.4 * f) * t + x;
+    const ey = -0.5 * t * Math.sin(f * Math.PI) + y;
+    eyeTop.push([ex, ey, e + z]);
+  }
+  for (let i = 0; i <= 8; i++) {
+    const f = i / 8;
+    const ex = (0.7 - 1.4 * f) * t + x;
+    const ey = 0.5 * t * Math.sin(f * Math.PI) + y;
+    eyeBot.push([ex, ey, e + z]);
+  }
+  lineStrip(eyeTop, lc);
+  lineStrip(eyeBot, lc);
+  lines([[-0.4*t+x,-0.4*t+y,e+z],[0.4*t+x,0.4*t+y,e+z],[0.4*t+x,-0.4*t+y,e+z],[-0.4*t+x,0.4*t+y,e+z]], lc);
+  lineStrip(eyeTop.map(p=>[p[0],p[1],-e+z]), lc);
+  lineStrip(eyeBot.map(p=>[p[0],p[1],-e+z]), lc);
+  lines([[-0.4*t+x,-0.4*t+y,-e+z],[0.4*t+x,0.4*t+y,-e+z],[0.4*t+x,-0.4*t+y,-e+z],[-0.4*t+x,0.4*t+y,-e+z]], lc);
+} else if (pic === 8) {
+  // Mirror: trapezoid (| on front/back z faces
+  const lc2 = [1,1,1,0.8];
+  lineStrip([[0.4*t+x,-0.8*t+y,e+z],[0.4*t+x,0.8*t+y,e+z]], lc2);
+  lineStrip([[-0.2*t+x,-0.8*t+y,e+z],[-0.7*t+x,-0.3*t+y,e+z],[-0.7*t+x,0.3*t+y,e+z],[-0.2*t+x,0.8*t+y,e+z]], lc2);
+  lineStrip([[0.4*t+x,-0.8*t+y,-e+z],[0.4*t+x,0.8*t+y,-e+z]], lc2);
+  lineStrip([[-0.2*t+x,-0.8*t+y,-e+z],[-0.7*t+x,-0.3*t+y,-e+z],[-0.7*t+x,0.3*t+y,-e+z],[-0.2*t+x,0.8*t+y,-e+z]], lc2);
+} else if ([56,57,58,59,63,96].includes(pic)) {
+  lineStrip([[x,t+y,t+z],[x,-t+y,t+z],[x,-t+y,-t+z],[x,t+y,-t+z],[x,t+y,t+z]], lc);
+  lineStrip([[t+x,y,t+z],[-t+x,y,t+z],[-t+x,y,-t+z],[t+x,y,-t+z],[t+x,y,t+z]], lc);
+  lineStrip([[t+x,t+y,z],[-t+x,t+y,z],[-t+x,-t+y,z],[t+x,-t+y,z],[t+x,t+y,z]], lc);
+} else {
+  // Default face quads
+  const tlf = s * 0.85;
+  const bright = [cr*1.2, cg*1.2, cb*1.2, 1];
+  fillQuad([-tlf+x,-e+y,tlf+z],[tlf+x,-e+y,tlf+z],[tlf+x,-e+y,-tlf+z],[-tlf+x,-e+y,-tlf+z], bright);
+  fillQuad([-tlf+x,e+y,tlf+z],[tlf+x,e+y,tlf+z],[tlf+x,e+y,-tlf+z],[-tlf+x,e+y,-tlf+z], bright);
+  fillQuad([e+x,-tlf+y,tlf+z],[e+x,tlf+y,tlf+z],[e+x,tlf+y,-tlf+z],[e+x,-tlf+y,-tlf+z], bright);
+  fillQuad([-e+x,-tlf+y,tlf+z],[-e+x,tlf+y,tlf+z],[-e+x,tlf+y,-tlf+z],[-e+x,-tlf+y,-tlf+z], bright);
+  fillQuad([-tlf+x,-tlf+y,e+z],[tlf+x,-tlf+y,e+z],[tlf+x,tlf+y,e+z],[-tlf+x,tlf+y,e+z], bright);
+  fillQuad([-tlf+x,-tlf+y,-e+z],[tlf+x,-tlf+y,-e+z],[tlf+x,tlf+y,-e+z],[-tlf+x,tlf+y,-e+z], bright);
+}
+} // close else for pic !== 95
+
+document.title = 'done';
+} // close else for single-cell mode
+</script>
+</body></html>

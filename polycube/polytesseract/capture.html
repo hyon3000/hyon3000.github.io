@@ -1,0 +1,24 @@
+<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<title>Polytesseract Capture</title>
+<style>
+html,body{margin:0;background:#000;overflow:hidden}
+canvas{display:block}
+</style>
+</head>
+<body>
+<canvas id="captureCanvas" width="400" height="700"></canvas>
+<script src="web/fixed-pipeline.js"></script>
+<script src="web/texture-data.js"></script>
+<script src="web/rawblock-data.js"></script>
+<script src="web/app.js"></script>
+<script>
+// After app initializes, expose capture function
+window.captureFrame = function() {
+  const canvas = document.getElementById('captureCanvas');
+  return canvas.toDataURL('image/png');
+};
+</script>
+</body>
+</html>
