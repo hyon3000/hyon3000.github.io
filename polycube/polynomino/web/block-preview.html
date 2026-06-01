@@ -1,0 +1,517 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style>
+</head><body>
+<canvas id="c" width="120" height="120"></canvas>
+<script src="./rawblock-data.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const idx = parseInt(params.get('i') || '0', 10);
+const singleVal = parseInt(params.get('v') || '0', 10);
+const ctx = document.getElementById('c').getContext('2d');
+const blocks = window.RAWBLOCK_DATA_2D;
+const b = blocks[idx];
+ctx.fillStyle = '#000';
+ctx.fillRect(0, 0, 120, 120);
+if (singleVal > 0) {
+  // Render single cell with given value + decoration
+  const cs = 80;
+  const ox = (120 - cs) / 2, oy = (120 - cs) / 2;
+  let pic = (singleVal & 127) ^ 64;
+  const R = pic >> 4, G = (pic >> 2) & 3, B = pic & 3;
+  const cr = Math.round((R+0.6)/4.8*255), cg = Math.round((G+0.8)/4.4*255), cb = Math.round((B+0.8)/4.4*255);
+  const code = singleVal & 255;
+  // val 31 (상쇄): white wireframe
+  if (code === 31) {
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = Math.max(1, cs * 0.06);
+    ctx.strokeRect(ox + 2, oy + 2, cs - 4, cs - 4);
+  }
+  else {
+  ctx.fillStyle = 'rgb('+cr+','+cg+','+cb+')';
+  ctx.fillRect(ox, oy, cs, cs);
+  const m = cs * 0.13;
+  ctx.fillStyle = 'rgb('+Math.min(255,Math.round(cr*1.2))+','+Math.min(255,Math.round(cg*1.2))+','+Math.min(255,Math.round(cb*1.2))+')';
+  ctx.fillRect(ox+m, oy+m, cs-m*2, cs-m*2);
+  // Decoration (polycube XZ-face vectors, same as app.js drawCellDecoration)
+  const code = singleVal & 255;
+  const cx = ox + cs/2, cy = oy + cs/2, s = cs * 0.45;
+  ctx.lineWidth = Math.max(1, cs * 0.04);
+  ctx.lineCap = 'round';
+if (code === 1) {
+// self-destruct: 3 perpendicular squares/cross (same as bombs)
+ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+ctx.beginPath();
+ctx.moveTo(cx + s, cy - s); ctx.lineTo(cx - s, cy - s);
+ctx.lineTo(cx - s, cy + s); ctx.lineTo(cx + s, cy + s); ctx.closePath(); ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx, cy - s); ctx.lineTo(cx, cy + s);
+ctx.moveTo(cx + s, cy); ctx.lineTo(cx - s, cy); ctx.stroke();
+}
+if (code === 11) {
+// obstacle: filled cross (+ shape)
+ctx.fillStyle = 'rgba(0,0,0,0.4)';
+ctx.beginPath();
+ctx.moveTo(cx + 0.3*s, cy - 0.1*s); ctx.lineTo(cx - 0.3*s, cy - 0.1*s);
+ctx.lineTo(cx - 0.3*s, cy + 0.1*s); ctx.lineTo(cx + 0.3*s, cy + 0.1*s); ctx.fill();
+ctx.beginPath();
+ctx.moveTo(cx + 0.1*s, cy - 0.3*s); ctx.lineTo(cx - 0.1*s, cy - 0.3*s);
+ctx.lineTo(cx - 0.1*s, cy + 0.3*s); ctx.lineTo(cx + 0.1*s, cy + 0.3*s); ctx.fill();
+}
+if (code === 2) {
+ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+ctx.beginPath();
+ctx.moveTo(cx + 0.3*s, cy + 0.4*s);
+ctx.lineTo(cx + 0.3*s, cy - 0.2*s);
+ctx.lineTo(cx,          cy - 0.4*s);
+ctx.lineTo(cx - 0.3*s, cy - 0.2*s);
+ctx.lineTo(cx - 0.3*s, cy + 0.4*s);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx - 0.15*s, cy - 0.1*s);
+ctx.lineTo(cx - 0.05*s, cy - 0.1*s);
+ctx.lineTo(cx - 0.05*s, cy + 0.1*s);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx + 0.05*s, cy - 0.1*s);
+ctx.lineTo(cx + 0.15*s, cy - 0.1*s);
+ctx.stroke();
+}
+if (code === 4) {
+ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+ctx.beginPath();
+ctx.moveTo(cx + 0.4*s, cy - 0.4*s);
+ctx.lineTo(cx - 0.4*s, cy - 0.4*s);
+ctx.lineTo(cx - 0.4*s, cy + 0.4*s);
+ctx.lineTo(cx + 0.4*s, cy + 0.4*s);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx, cy - 0.5*s);
+ctx.lineTo(cx, cy + 0.5*s);
+ctx.stroke();
+}
+if (code === 5) {
+ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+ctx.beginPath();
+ctx.moveTo(cx + 0.4*s, cy - 0.4*s); ctx.lineTo(cx + 0.2*s, cy - 0.2*s);
+ctx.moveTo(cx + 0.4*s, cy + 0.4*s); ctx.lineTo(cx + 0.2*s, cy + 0.2*s);
+ctx.moveTo(cx - 0.4*s, cy - 0.4*s); ctx.lineTo(cx - 0.2*s, cy - 0.2*s);
+ctx.moveTo(cx - 0.4*s, cy + 0.4*s); ctx.lineTo(cx - 0.2*s, cy + 0.2*s);
+ctx.stroke();
+}
+if (code === 6) {
+ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+ctx.beginPath();
+ctx.moveTo(cx - 0.2*s, cy + 0.4*s);
+ctx.lineTo(cx - 0.2*s, cy - 0.4*s);
+ctx.lineTo(cx + 0.2*s, cy + 0.4*s);
+ctx.lineTo(cx + 0.2*s, cy - 0.4*s);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx + 0.5*s, cy - 0.5*s); ctx.lineTo(cx - 0.5*s, cy + 0.5*s);
+ctx.moveTo(cx - 0.5*s, cy - 0.5*s); ctx.lineTo(cx + 0.5*s, cy + 0.5*s);
+ctx.stroke();
+}
+if (code === 91) {
+ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+ctx.beginPath();
+ctx.moveTo(cx + 0.6*s, cy + 0.6*s);
+ctx.lineTo(cx + 0.6*s, cy - 0.6*s);
+ctx.lineTo(cx - 0.6*s, cy - 0.6*s);
+ctx.lineTo(cx - 0.6*s, cy + 0.6*s);
+ctx.lineTo(cx + 0.2*s, cy + 0.6*s);
+ctx.lineTo(cx - 0.1*s, cy + 0.4*s);
+ctx.moveTo(cx + 0.2*s, cy + 0.6*s);
+ctx.lineTo(cx - 0.1*s, cy + 0.8*s);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx + 0.8*s, cy - 0.8*s); ctx.lineTo(cx - 0.8*s, cy + 0.8*s);
+ctx.moveTo(cx - 0.8*s, cy - 0.8*s); ctx.lineTo(cx + 0.8*s, cy + 0.8*s);
+ctx.stroke();
+}
+if (code === 91) {
+ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+ctx.beginPath();
+ctx.moveTo(cx + 0.6*s, cy + 0.6*s);
+ctx.lineTo(cx + 0.6*s, cy - 0.6*s);
+ctx.lineTo(cx - 0.6*s, cy - 0.6*s);
+ctx.lineTo(cx - 0.6*s, cy + 0.6*s);
+ctx.lineTo(cx + 0.2*s, cy + 0.6*s);
+ctx.lineTo(cx - 0.1*s, cy + 0.4*s);
+ctx.moveTo(cx + 0.2*s, cy + 0.6*s);
+ctx.lineTo(cx - 0.1*s, cy + 0.8*s);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx + 0.8*s, cy - 0.8*s); ctx.lineTo(cx - 0.8*s, cy + 0.8*s);
+ctx.moveTo(cx - 0.8*s, cy - 0.8*s); ctx.lineTo(cx + 0.8*s, cy + 0.8*s);
+ctx.stroke();
+}
+if (code === 8) {
+ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+ctx.lineWidth = Math.max(1, cs * 0.05);
+ctx.beginPath();
+ctx.moveTo(cx - 0.5*s, cy - 0.5*s); ctx.lineTo(cx, cy); ctx.lineTo(cx - 0.5*s, cy + 0.5*s);
+ctx.moveTo(cx, cy - 0.5*s); ctx.lineTo(cx + 0.5*s, cy); ctx.lineTo(cx, cy + 0.5*s);
+ctx.stroke();
+}
+if (code === 9) {
+ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+ctx.lineWidth = Math.max(1, cs * 0.05);
+ctx.beginPath();
+ctx.moveTo(cx + 0.5*s, cy - 0.5*s); ctx.lineTo(cx, cy); ctx.lineTo(cx + 0.5*s, cy + 0.5*s);
+ctx.moveTo(cx, cy - 0.5*s); ctx.lineTo(cx - 0.5*s, cy); ctx.lineTo(cx, cy + 0.5*s);
+ctx.stroke();
+}
+if (code === 10) {
+ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+ctx.lineWidth = Math.max(1, cs * 0.05);
+ctx.beginPath();
+ctx.moveTo(cx - 0.5*s, cy - 0.5*s); ctx.lineTo(cx - 0.5*s, cy + 0.5*s);
+ctx.moveTo(cx - 0.5*s, cy); ctx.lineTo(cx + 0.5*s, cy);
+ctx.moveTo(cx + 0.5*s, cy - 0.5*s); ctx.lineTo(cx + 0.5*s, cy + 0.5*s);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx - 0.3*s, cy - 0.3*s); ctx.lineTo(cx + 0.3*s, cy + 0.3*s);
+ctx.moveTo(cx + 0.3*s, cy - 0.3*s); ctx.lineTo(cx - 0.3*s, cy + 0.3*s);
+ctx.stroke();
+}
+if (code === 21) {
+ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+ctx.lineWidth = Math.max(1, cs * 0.05);
+ctx.strokeRect(cx - 0.5*s, cy - 0.3*s, 0.45*s, 0.6*s);
+ctx.strokeRect(cx + 0.05*s, cy - 0.3*s, 0.45*s, 0.6*s);
+}
+if (code === 22) {
+ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+ctx.lineWidth = Math.max(1, cs * 0.05);
+ctx.strokeRect(cx - 0.55*s, cy - 0.55*s, 0.33*s, 0.45*s);
+ctx.strokeRect(cx - 0.165*s, cy - 0.55*s, 0.33*s, 0.45*s);
+ctx.strokeRect(cx + 0.22*s, cy - 0.55*s, 0.33*s, 0.45*s);
+ctx.strokeRect(cx - 0.4*s, cy + 0.05*s, 0.37*s, 0.45*s);
+ctx.strokeRect(cx + 0.03*s, cy + 0.05*s, 0.37*s, 0.45*s);
+}
+if (code === 20) {
+ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+ctx.lineWidth = Math.max(2, cs * 0.06);
+ctx.beginPath();
+ctx.moveTo(cx - 0.25*s, cy - 0.6*s); ctx.lineTo(cx - 0.25*s, cy + 0.1*s);
+ctx.moveTo(cx + 0.25*s, cy - 0.6*s); ctx.lineTo(cx + 0.25*s, cy + 0.1*s);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx - 0.5*s, cy + 0.1*s); ctx.lineTo(cx, cy + 0.6*s); ctx.lineTo(cx + 0.5*s, cy + 0.1*s);
+ctx.stroke();
+}
+if (code === 17) {
+ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+ctx.lineWidth = Math.max(1, cs * 0.05);
+ctx.strokeRect(cx - 0.2*s, cy - 0.6*s, 0.4*s, 0.4*s);
+ctx.strokeRect(cx - 0.5*s, cy + 0.0*s, 0.4*s, 0.4*s);
+ctx.strokeRect(cx + 0.1*s, cy + 0.0*s, 0.4*s, 0.4*s);
+}
+if (code === 16) {
+ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+ctx.lineWidth = Math.max(1, cs * 0.05);
+// Horizontal eye shape
+ctx.beginPath();
+ctx.moveTo(cx - 0.7*s, cy);
+ctx.quadraticCurveTo(cx, cy - 0.5*s, cx + 0.7*s, cy);
+ctx.quadraticCurveTo(cx, cy + 0.5*s, cx - 0.7*s, cy);
+ctx.stroke();
+// Pupil
+ctx.beginPath();
+ctx.arc(cx, cy, 0.15*s, 0, Math.PI*2);
+ctx.stroke();
+// X cross
+ctx.beginPath();
+ctx.moveTo(cx - 0.4*s, cy - 0.4*s); ctx.lineTo(cx + 0.4*s, cy + 0.4*s);
+ctx.moveTo(cx + 0.4*s, cy - 0.4*s); ctx.lineTo(cx - 0.4*s, cy + 0.4*s);
+ctx.stroke();
+}
+if (code === 102) {
+ctx.fillStyle = 'rgba(0,0,0,0.4)';
+ctx.beginPath();
+ctx.moveTo(cx - 0.7*s, cy);
+ctx.lineTo(cx + 0.7*s, cy);
+ctx.lineTo(cx + 0.7*s, cy - 0.7*s);
+ctx.lineTo(cx - 0.7*s, cy - 0.7*s);
+ctx.fill();
+}
+if (code === 104) {
+ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+ctx.beginPath();
+ctx.moveTo(cx - 0.6*s, cy + 0.6*s);
+ctx.lineTo(cx + 0.6*s, cy + 0.6*s);
+ctx.lineTo(cx + 0.6*s, cy - 0.6*s);
+ctx.lineTo(cx - 0.6*s, cy - 0.6*s);
+ctx.closePath();
+ctx.stroke();
+}
+if (code === 116) {
+ctx.fillStyle = 'rgba(0,0,0,0.4)';
+ctx.beginPath();
+ctx.moveTo(cx - 0.8*s, cy - 0.1*s);
+ctx.lineTo(cx - 0.2*s, cy - 0.1*s);
+ctx.lineTo(cx - 0.2*s, cy + 0.1*s);
+ctx.lineTo(cx - 0.8*s, cy + 0.1*s);
+ctx.fill();
+ctx.beginPath();
+ctx.moveTo(cx + 0.8*s, cy - 0.1*s);
+ctx.lineTo(cx + 0.2*s, cy - 0.1*s);
+ctx.lineTo(cx + 0.2*s, cy + 0.1*s);
+ctx.lineTo(cx + 0.8*s, cy + 0.1*s);
+ctx.fill();
+}
+if (code === 117) {
+ctx.fillStyle = 'rgba(0,0,0,0.4)';
+ctx.beginPath();
+ctx.moveTo(cx - 0.8*s, cy - 0.1*s);
+ctx.lineTo(cx - 0.2*s, cy - 0.1*s);
+ctx.lineTo(cx - 0.2*s, cy + 0.1*s);
+ctx.lineTo(cx - 0.8*s, cy + 0.1*s);
+ctx.fill();
+ctx.beginPath();
+ctx.moveTo(cx + 0.8*s, cy - 0.1*s);
+ctx.lineTo(cx + 0.2*s, cy - 0.1*s);
+ctx.lineTo(cx + 0.2*s, cy + 0.1*s);
+ctx.lineTo(cx + 0.8*s, cy + 0.1*s);
+ctx.fill();
+ctx.beginPath();
+ctx.moveTo(cx - 0.6*s, cy - 0.3*s);
+ctx.lineTo(cx - 0.4*s, cy - 0.3*s);
+ctx.lineTo(cx - 0.4*s, cy + 0.3*s);
+ctx.lineTo(cx - 0.6*s, cy + 0.3*s);
+ctx.fill();
+ctx.beginPath();
+ctx.moveTo(cx + 0.6*s, cy - 0.3*s);
+ctx.lineTo(cx + 0.4*s, cy - 0.3*s);
+ctx.lineTo(cx + 0.4*s, cy + 0.3*s);
+ctx.lineTo(cx + 0.6*s, cy + 0.3*s);
+ctx.fill();
+}
+if (code === 118) {
+ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+ctx.beginPath();
+ctx.moveTo(cx - 0.3*s, cy - 0.5*s);
+ctx.lineTo(cx,          cy - 0.7*s);
+ctx.lineTo(cx,          cy + 0.7*s);
+ctx.lineTo(cx + 0.3*s, cy + 0.5*s);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx + 0.3*s, cy - 0.5*s);
+ctx.lineTo(cx,          cy - 0.7*s);
+ctx.lineTo(cx,          cy + 0.7*s);
+ctx.lineTo(cx - 0.3*s, cy + 0.5*s);
+ctx.stroke();
+}
+if (code === 119) {
+ctx.fillStyle = 'rgba(0,0,0,0.4)';
+ctx.beginPath();
+ctx.moveTo(cx + 0.5*s, cy - 0.5*s);
+ctx.lineTo(cx - 0.5*s, cy - 0.5*s);
+ctx.lineTo(cx - 0.5*s, cy - 0.3*s);
+ctx.lineTo(cx + 0.5*s, cy - 0.3*s);
+ctx.fill();
+ctx.beginPath();
+ctx.moveTo(cx + 0.5*s, cy + 0.5*s);
+ctx.lineTo(cx - 0.5*s, cy + 0.5*s);
+ctx.lineTo(cx - 0.5*s, cy + 0.3*s);
+ctx.lineTo(cx + 0.5*s, cy + 0.3*s);
+ctx.fill();
+ctx.beginPath();
+ctx.moveTo(cx - 0.5*s, cy - 0.5*s);
+ctx.lineTo(cx - 0.3*s, cy - 0.5*s);
+ctx.lineTo(cx - 0.3*s, cy + 0.5*s);
+ctx.lineTo(cx - 0.5*s, cy + 0.5*s);
+ctx.fill();
+}
+if (code >= 120 && code <= 123) {
+ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+ctx.beginPath();
+ctx.moveTo(cx + s, cy - s);
+ctx.lineTo(cx - s, cy - s);
+ctx.lineTo(cx - s, cy + s);
+ctx.lineTo(cx + s, cy + s);
+ctx.closePath();
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx, cy - s); ctx.lineTo(cx, cy + s);
+ctx.moveTo(cx + s, cy); ctx.lineTo(cx - s, cy);
+ctx.stroke();
+}
+if (code === 124) {
+ctx.fillStyle = 'rgba(0,0,0,0.4)';
+ctx.beginPath();
+ctx.moveTo(cx - 0.8*s, cy - 0.1*s);
+ctx.lineTo(cx - 0.4*s, cy - 0.1*s);
+ctx.lineTo(cx - 0.4*s, cy + 0.1*s);
+ctx.lineTo(cx - 0.8*s, cy + 0.1*s);
+ctx.fill();
+ctx.beginPath();
+ctx.moveTo(cx + 0.8*s, cy - 0.1*s);
+ctx.lineTo(cx + 0.4*s, cy - 0.1*s);
+ctx.lineTo(cx + 0.4*s, cy + 0.1*s);
+ctx.lineTo(cx + 0.8*s, cy + 0.1*s);
+ctx.fill();
+ctx.beginPath();
+ctx.moveTo(cx - 0.2*s, cy - 0.1*s);
+ctx.lineTo(cx + 0.2*s, cy - 0.1*s);
+ctx.lineTo(cx + 0.2*s, cy + 0.1*s);
+ctx.lineTo(cx - 0.2*s, cy + 0.1*s);
+ctx.fill();
+}
+if (code === 125) {
+ctx.fillStyle = 'rgba(0,0,0,0.4)';
+ctx.beginPath();
+ctx.moveTo(cx + 0.3*s, cy - 0.1*s);
+ctx.lineTo(cx - 0.3*s, cy - 0.1*s);
+ctx.lineTo(cx - 0.3*s, cy + 0.1*s);
+ctx.lineTo(cx + 0.3*s, cy + 0.1*s);
+ctx.fill();
+ctx.beginPath();
+ctx.moveTo(cx + 0.1*s, cy - 0.3*s);
+ctx.lineTo(cx - 0.1*s, cy - 0.3*s);
+ctx.lineTo(cx - 0.1*s, cy + 0.3*s);
+ctx.lineTo(cx + 0.1*s, cy + 0.3*s);
+ctx.fill();
+}
+if (code === 126) {
+ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+ctx.beginPath();
+ctx.moveTo(cx - 0.3*s, cy - 0.5*s);
+ctx.lineTo(cx,          cy - 0.7*s);
+ctx.lineTo(cx,          cy + 0.7*s);
+ctx.lineTo(cx + 0.3*s, cy + 0.5*s);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx + 0.3*s, cy - 0.5*s);
+ctx.lineTo(cx,          cy - 0.7*s);
+ctx.lineTo(cx,          cy + 0.7*s);
+ctx.lineTo(cx - 0.3*s, cy + 0.5*s);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx + 0.5*s, cy + 0.3*s);
+ctx.lineTo(cx + 0.7*s, cy);
+ctx.lineTo(cx - 0.7*s, cy);
+ctx.lineTo(cx - 0.5*s, cy - 0.3*s);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx + 0.5*s, cy - 0.3*s);
+ctx.lineTo(cx + 0.7*s, cy);
+ctx.lineTo(cx - 0.7*s, cy);
+ctx.lineTo(cx - 0.5*s, cy + 0.3*s);
+ctx.stroke();
+}
+if (code === 30) {
+ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+ctx.lineWidth = Math.max(1, cs * 0.04);
+ctx.beginPath();
+ctx.moveTo(cx + 0.3*s, cy - 0.4*s);
+ctx.lineTo(cx - 0.3*s, cy - 0.4*s);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx, cy - 0.4*s);
+ctx.lineTo(cx, cy - 0.1*s);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx - 0.3*s, cy - 0.1*s);
+ctx.lineTo(cx - 0.3*s, cy + 0.4*s);
+ctx.lineTo(cx + 0.3*s, cy + 0.4*s);
+ctx.lineTo(cx + 0.3*s, cy - 0.1*s);
+ctx.closePath();
+ctx.stroke();
+}
+if (code === 127) {
+ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+ctx.beginPath();
+ctx.moveTo(cx + s, cy - s);
+ctx.lineTo(cx - s, cy - s);
+ctx.lineTo(cx - s, cy + s);
+ctx.lineTo(cx + s, cy + s);
+ctx.closePath();
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx, cy - s); ctx.lineTo(cx, cy + s);
+ctx.moveTo(cx + s, cy); ctx.lineTo(cx - s, cy);
+ctx.stroke();
+}
+if (code === 200) {
+ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+ctx.lineWidth = Math.max(1, cs * 0.07);
+ctx.beginPath();
+ctx.moveTo(cx + s*0.4, cy - s*0.8); ctx.lineTo(cx + s*0.4, cy + s*0.8);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx - s*0.2, cy - s*0.8);
+ctx.lineTo(cx - s*0.7, cy - s*0.3);
+ctx.lineTo(cx - s*0.7, cy + s*0.3);
+ctx.lineTo(cx - s*0.2, cy + s*0.8);
+ctx.stroke();
+}
+} // end else (normal solid cell)
+} else if (b) {
+  let minR=99,maxR=-99,minC=99,maxC=-99;
+  for (const [r,c] of b.cells) { minR=Math.min(minR,r);maxR=Math.max(maxR,r);minC=Math.min(minC,c);maxC=Math.max(maxC,c); }
+  const bw=maxC-minC+1, bh=maxR-minR+1;
+  const cs = Math.floor(100/Math.max(bw,bh));
+  const ox=(120-bw*cs)/2, oy=(120-bh*cs)/2;
+  let pic=(b.val&127)^64;
+  const R=pic>>4, G=(pic>>2)&3, B=pic&3;
+  let cr=Math.round((R+0.6)/4.8*255), cg=Math.round((G+0.8)/4.4*255), cb=Math.round((B+0.8)/4.4*255);
+  if ((b.val & 255) > 127) { cr=Math.floor(cr*0.65); cg=Math.floor(cg*0.65); cb=Math.floor(cb*0.65); }
+  for (const [r,c] of b.cells) {
+    const x=ox+(c-minC)*cs, y=oy+(r-minR)*cs;
+    ctx.fillStyle='rgb('+cr+','+cg+','+cb+')';
+    ctx.fillRect(x,y,cs,cs);
+    const m=cs*0.13;
+    ctx.fillStyle='rgb('+Math.min(255,Math.round(cr*1.2))+','+Math.min(255,Math.round(cg*1.2))+','+Math.min(255,Math.round(cb*1.2))+')';
+    ctx.fillRect(x+m,y+m,cs-m*2,cs-m*2);
+    // Grid outline
+    ctx.strokeStyle='rgba(0,0,0,0.3)';
+    ctx.lineWidth=1;
+    ctx.strokeRect(x,y,cs,cs);
+  }
+}
+// Random block mode: ?r=CNT generates a random polyomino with CNT cells
+const rndCnt = parseInt(params.get('r') || '0', 10);
+if (rndCnt > 0) {
+  // Seeded RNG for reproducibility (seed = cell count)
+  let _seed = rndCnt * 12345 + 67890;
+  function srand() { _seed = (_seed * 1103515245 + 12345) & 0x7fffffff; return _seed; }
+  const grid = [];
+  for (let i = 0; i < 7; i++) { grid[i] = []; for (let j = 0; j < 7; j++) grid[i][j] = 0; }
+  let rr = 3, cc = 3, cnt = 0;
+  const _rv3={6:207,7:206,8:205,9:203,10:202,11:201,12:199,13:198,14:197}; const val = _rv3[rndCnt] || (158+rndCnt);
+  while (cnt < rndCnt) {
+    if (grid[rr][cc] === 0) { grid[rr][cc] = val; cnt++; }
+    switch (srand() % 4) {
+      case 0: rr = Math.min(6, rr + 1); break;
+      case 1: rr = Math.max(0, rr - 1); break;
+      case 2: cc = Math.min(6, cc + 1); break;
+      default: cc = Math.max(0, cc - 1); break;
+    }
+  }
+  const cells = [];
+  let rMin=99,rMax=-99,cMin=99,cMax=-99;
+  for (let r=0;r<7;r++) for(let c=0;c<7;c++) if(grid[r][c]!==0) {
+    cells.push([r,c]); rMin=Math.min(rMin,r); rMax=Math.max(rMax,r); cMin=Math.min(cMin,c); cMax=Math.max(cMax,c);
+  }
+  const bw=cMax-cMin+1, bh=rMax-rMin+1;
+  const cs = Math.floor(100/Math.max(bw,bh));
+  const ox=(120-bw*cs)/2, oy=(120-bh*cs)/2;
+  let rpic = (val & 127) ^ 64;
+  const rR=rpic>>4, rG=(rpic>>2)&3, rB=rpic&3;
+  let rcr=Math.round((rR+0.6)/4.8*255), rcg=Math.round((rG+0.8)/4.4*255), rcb=Math.round((rB+0.8)/4.4*255);
+  if ((val & 255) > 127) { rcr=Math.floor(rcr*0.65); rcg=Math.floor(rcg*0.65); rcb=Math.floor(rcb*0.65); }
+  ctx.fillStyle = '#000'; ctx.fillRect(0,0,120,120);
+  for (const [r,c] of cells) {
+    const x=ox+(c-cMin)*cs, y=oy+(r-rMin)*cs;
+    ctx.fillStyle='rgb('+rcr+','+rcg+','+rcb+')';
+    ctx.fillRect(x,y,cs,cs);
+    const m=cs*0.13;
+    ctx.fillStyle='rgb('+Math.min(255,Math.round(rcr*1.2))+','+Math.min(255,Math.round(rcg*1.2))+','+Math.min(255,Math.round(rcb*1.2))+')';
+    ctx.fillRect(x+m,y+m,cs-m*2,cs-m*2);
+    ctx.strokeStyle='rgba(0,0,0,0.3)'; ctx.lineWidth=1; ctx.strokeRect(x,y,cs,cs);
+  }
+}
+</script>
+</body></html>

@@ -1,0 +1,24 @@
+<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style>
+</head>
+<body>
+<canvas id="canvas" width="400" height="500"></canvas>
+<script src="web/fixed-pipeline.js"></script>
+<script src="web/texture-data.js"></script>
+<script src="web/rawblock-data.js"></script>
+<script src="web/app.js"></script>
+<script>
+// After boot, render a dense block scene and expose it
+window.addEventListener('load', function() {
+  setTimeout(function() {
+    // Force render a block scene
+    if (typeof renderBlockScene === 'function') {
+      renderBlockScene();
+    }
+  }, 2000);
+});
+</script>
+</body>
+</html>

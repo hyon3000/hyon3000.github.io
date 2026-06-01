@@ -1,0 +1,107 @@
+<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{width:360px;height:500px}</style>
+</head><body>
+<canvas id="c" width="360" height="500"></canvas>
+<script src="./rawblock-data.js"></script>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const blocks = window.RAWBLOCK_DATA_2D;
+const W = 10, H = 14;
+const board = [];
+for (let r = 0; r < H; r++) board.push(new Array(W).fill(0));
+const cellSize = Math.floor(canvas.width / W);
+const offsetX = (canvas.width - cellSize * W) / 2;
+const offsetY = canvas.height - cellSize * H;
+
+function valToColor(val) {
+  let pic = (val & 127) ^ 64;
+  const R = pic >> 4, G = (pic >> 2) & 3, B = pic & 3;
+  return `rgb(${Math.round((R+0.6)/4.8*255)},${Math.round((G+0.8)/4.4*255)},${Math.round((B+0.8)/4.4*255)})`;
+}
+function brighten(val) {
+  let pic = (val & 127) ^ 64;
+  const R = pic >> 4, G = (pic >> 2) & 3, B = pic & 3;
+  return `rgb(${Math.min(255,Math.round((R+0.6)/4.8*255*1.2))},${Math.min(255,Math.round((G+0.8)/4.4*255*1.2))},${Math.min(255,Math.round((B+0.8)/4.4*255*1.2))})`;
+}
+
+// Fill board with random blocks stacked up
+let seed = 42;
+function rand() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed; }
+
+for (let attempt = 0; attempt < 200; attempt++) {
+  const bi = rand() % blocks.length;
+  const block = blocks[bi];
+  const col = rand() % (W - 1);
+  // Find lowest row this block can go
+  let bestRow = -1;
+  for (let startRow = 0; startRow < H; startRow++) {
+    let fits = true;
+    for (const [r, c] of block.cells) {
+      const br = startRow + r, bc = col + c;
+      if (br < 0 || br >= H || bc < 0 || bc >= W) { fits = false; break; }
+      if (board[br][bc] !== 0) { fits = false; break; }
+    }
+    if (fits) bestRow = startRow;
+    else break;
+  }
+  if (bestRow >= 0) {
+    for (const [r, c] of block.cells) {
+      const br = bestRow + r, bc = col + c;
+      if (br >= 0 && br < H && bc >= 0 && bc < W) board[br][bc] = block.val;
+    }
+  }
+}
+
+// Draw
+ctx.fillStyle = '#000';
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+for (let r = 0; r < H; r++) {
+  for (let c = 0; c < W; c++) {
+    if (board[r][c] === 0) continue;
+    const x = offsetX + c * cellSize;
+    const y = offsetY + (H - 1 - r) * cellSize;
+    ctx.fillStyle = valToColor(board[r][c]);
+    ctx.fillRect(x, y, cellSize, cellSize);
+    // Bright inner face
+    const m = cellSize * 0.12;
+    ctx.fillStyle = brighten(board[r][c]);
+    ctx.fillRect(x + m, y + m, cellSize - m * 2, cellSize - m * 2);
+  }
+}
+
+// Grid lines
+ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+ctx.lineWidth = 0.5;
+for (let r = 0; r <= H; r++) {
+  ctx.beginPath();
+  ctx.moveTo(offsetX, offsetY + r * cellSize);
+  ctx.lineTo(offsetX + W * cellSize, offsetY + r * cellSize);
+  ctx.stroke();
+}
+for (let c = 0; c <= W; c++) {
+  ctx.beginPath();
+  ctx.moveTo(offsetX + c * cellSize, offsetY);
+  ctx.lineTo(offsetX + c * cellSize, offsetY + H * cellSize);
+  ctx.stroke();
+}
+
+// Add a falling block at top
+const falling = blocks[6]; // T-tetromino
+const fCol = 4, fRow = H + 1;
+for (const [r, c] of falling.cells) {
+  const x = offsetX + (fCol + c) * cellSize;
+  const y = offsetY + (H - 1 - (fRow + r)) * cellSize;
+  ctx.fillStyle = valToColor(falling.val);
+  ctx.fillRect(x, y, cellSize, cellSize);
+  const m = cellSize * 0.12;
+  ctx.fillStyle = brighten(falling.val);
+  ctx.fillRect(x + m, y + m, cellSize - m * 2, cellSize - m * 2);
+}
+
+document.title = 'done';
+</script>
+</body></html>
