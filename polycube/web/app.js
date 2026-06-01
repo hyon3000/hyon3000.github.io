@@ -851,7 +851,8 @@ function rotate(pos, deg) {
       if (tx < 0 || tx >= 7 || ty < 0 || ty >= 7 || tz < 0 || tz >= 7) { canShift = false; break; }
     }
     if (canShift) {
-      const temp2 = state.b[3] || (state.b[3] = Array.from({ length: 7 }, () => Array.from({ length: 7 }, () => new Array(7).fill(0))));
+      if (!rotate._temp2) rotate._temp2 = Array.from({ length: 7 }, () => Array.from({ length: 7 }, () => new Array(7).fill(0)));
+      const temp2 = rotate._temp2;
       clear3d(temp2, 0);
       for (let x = 0; x < 7; x++) for (let y = 0; y < 7; y++) for (let z = 0; z < 7; z++) {
         if (temp[x][y][z]) temp2[x + comDx][y + comDy][z + comDz] = temp[x][y][z];
