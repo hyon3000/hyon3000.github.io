@@ -665,35 +665,35 @@ function assignCellFromProbability(baseIndex, x, y, z, w) {
   if (u < 100) return 116;
   if (u < 400) return 117;
   if (u < 700) return 118;
-  if (u < 710) return 119;
-  if (u < 1510) return 104;
-  if (u < 2010) return 120;
-  if (u < 3010) return 121;
-  if (u < 3710) return 122;
-  if (u < 4010) return 123;
-  if (u < 4020) return 124;
-  if (u < 4820) return 125;
-  if (u < 5070) return 91;
-  if (u < 5170) return 102;
-  if (u < 5370) return 126;
-  if (u < 5570) return 105;
-  if (u < 5770) return 106;
-  if (u < 5870) return 127;
-  if (u < 5970) return 17;
-  if (u < 6170) return 20;
-  if (u < 6570) return 21;
-  if (u < 7370) return 22;
-  if (u < 7620) return 16;
-  if (u < 7820) return 11;
-  if (u < 8070) return 2;
-  if (u < 9070) return 8;
-  if (u < 10070) return 9;
-  if (u < 10320) return 10;
-  if (u < 11320) return 5;
-  if (u < 11570) return 6;
-  if (u < 13820) return 120;
-  if (u < 23820) return 4;
-  if (u < 24320) return 200; // mirror 0.05%
+  if (u < 720) return 119;
+  if (u < 1520) return 104;
+  if (u < 2020) return 120;
+  if (u < 3020) return 121;
+  if (u < 3720) return 122;
+  if (u < 4020) return 123;
+  if (u < 4070) return 124;
+  if (u < 4870) return 125;
+  if (u < 5120) return 91;
+  if (u < 5220) return 102;
+  if (u < 5420) return 126;
+  if (u < 5620) return 105;
+  if (u < 5820) return 106;
+  if (u < 6120) return 127;
+  if (u < 6220) return 17;
+  if (u < 6420) return 20;
+  if (u < 6820) return 21;
+  if (u < 7620) return 22;
+  if (u < 7870) return 16;
+  if (u < 8070) return 11;
+  if (u < 8320) return 2;
+  if (u < 9320) return 8;
+  if (u < 10320) return 9;
+  if (u < 10570) return 10;
+  if (u < 11570) return 5;
+  if (u < 11820) return 6;
+  if (u < 14070) return 120;
+  if (u < 24070) return 4;
+  if (u < 24370) return 200; // mirror 0.03%
   if (baseIndex === 0 && randInt(10) === 0) return 1;
   if (baseIndex === 0 && randInt(20) === 0) {
     state.nexthb = 1;
@@ -1165,7 +1165,7 @@ function processLine(cells, z, coords4d) {
     else if (code === 17) { state.bombnext += 3; state.blk[x][y][z][w] = 256; }
     else if (code === 20) { state.compactPending = true; state.blk[x][y][z][w] = 256; }
     else if (code === 21) { state.monoonly = 0; state.pentaForce = 0; state.simplify2 += 15; state.blk[x][y][z][w] = 256; }
-    else if (code === 22) { state.monoonly = 0; state.simplify2 = 0; state.pentaForce += 6; state.blk[x][y][z][w] = 256; }
+    else if (code === 22) { state.monoonly = 0; state.simplify2 = 0; state.pentaForce += 8; state.blk[x][y][z][w] = 256; }
     else if (code === 2) { state.hideblock += 10; state.blk[x][y][z][w] = 256; }
     else if (code === 6) { state.hidenext += 10; state.blk[x][y][z][w] = 256; }
     else if (code === 5) {
@@ -1260,8 +1260,8 @@ function processLine(cells, z, coords4d) {
         for (let y2 = 0; y2 < 7; y2 += 1) {
           for (let z2 = 0; z2 < 26; z2 += 1) {
             for (let w2 = 0; w2 < 7; w2 += 1) {
-            if ((state.blk[x2][y2][z2][w2] & 255) !== 0 && randInt(10) === 0) {
-              state.blk[x2][y2][z2][w2] = (state.blk[x2][y2][z2][w2] & 256) + 120;
+            if ((state.blk[x2][y2][z2][w2] & 255) !== 0 && randInt(2) === 0) {
+              state.blk[x2][y2][z2][w2] = (state.blk[x2][y2][z2][w2] & 256) + 120 + randInt(4);
             }
             }
           }

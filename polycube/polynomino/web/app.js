@@ -462,34 +462,34 @@ function assignCellValue(baseVal) {
   if (u < 100) return 116;
   if (u < 400) return 117;
   if (u < 700) return 118;
-  if (u < 710) return 119;
-  if (u < 1510) return 104;
-  if (u < 2010) return 120;
-  if (u < 3010) return 121;
-  if (u < 3710) return 122;
-  if (u < 4010) return 123;
-  if (u < 4020) return 124;
-  if (u < 4820) return 125;
-  if (u < 5070) return 91;
-  if (u < 5170) return 102;
-  if (u < 5570) return 126;
-  if (u < 5670) return 127;
-  if (u < 5770) return 17;
-  if (u < 5970) return 20;
-  if (u < 6370) return 21;
-  if (u < 7170) return 22;
-  if (u < 7420) return 16;
-  if (u < 7620) return 11;
-  if (u < 8020) return baseVal;
-  if (u < 8270) return 2;
-  if (u < 9270) return 8;
-  if (u < 10270) return 9;
-  if (u < 10520) return 10;
-  if (u < 11520) return 5;
-  if (u < 11770) return 6;
-  if (u < 14020) return 120;
-  if (u < 24020) return 4;
-  if (u < 24520) return 200; // mirror 0.05%
+  if (u < 720) return 119;
+  if (u < 1520) return 104;
+  if (u < 2020) return 120;
+  if (u < 3020) return 121;
+  if (u < 3720) return 122;
+  if (u < 4020) return 123;
+  if (u < 4070) return 124;
+  if (u < 4870) return 125;
+  if (u < 5120) return 91;
+  if (u < 5220) return 102;
+  if (u < 5620) return 126;
+  if (u < 5920) return 127;
+  if (u < 6020) return 17;
+  if (u < 6220) return 20;
+  if (u < 6620) return 21;
+  if (u < 7420) return 22;
+  if (u < 7670) return 16;
+  if (u < 7870) return 11;
+  if (u < 8270) return baseVal;
+  if (u < 8520) return 2;
+  if (u < 9520) return 8;
+  if (u < 10520) return 9;
+  if (u < 10770) return 10;
+  if (u < 11770) return 5;
+  if (u < 12020) return 6;
+  if (u < 14270) return 120;
+  if (u < 24270) return 4;
+  if (u < 24570) return 200; // mirror 0.03%
   if (state._assignIsMonoBlock && randInt(10) === 0) return 1;
   if (state._assignIsMonoBlock && randInt(20) === 0) {
     state.nexthb = 1;
@@ -963,7 +963,7 @@ function processLine(row) {
     else if (code === 17) { state.bombnext += 3; state.board[row][c] = 256; }
     else if (code === 20) { state.compactPending = true; state.board[row][c] = 256; }
     else if (code === 21) { state.monoonly = 0; state.pentaForce = 0; state.simplify2 += 15; state.board[row][c] = 256; }
-    else if (code === 22) { state.monoonly = 0; state.simplify2 = 0; state.pentaForce += 6; state.board[row][c] = 256; }
+    else if (code === 22) { state.monoonly = 0; state.simplify2 = 0; state.pentaForce += 8; state.board[row][c] = 256; }
     else if (code === 2) { state.hideblock += 10; state.board[row][c] = 256; }
     else if (code === 6) { state.hidenext += 10; state.board[row][c] = 256; }
     else if (code === 5) {
@@ -1029,8 +1029,8 @@ function processLine(row) {
       state.board[row][c] |= 256;
       for (let r2 = 0; r2 < BOARD_H; r2++) {
         for (let c2 = 0; c2 < BOARD_W; c2++) {
-          if ((state.board[r2][c2] & 255) !== 0 && randInt(10) === 0) {
-            state.board[r2][c2] = (state.board[r2][c2] & 256) + 120;
+          if ((state.board[r2][c2] & 255) !== 0 && randInt(2) === 0) {
+            state.board[r2][c2] = (state.board[r2][c2] & 256) + 120 + randInt(4);
           }
         }
       }
@@ -1342,7 +1342,7 @@ function handleTouches() {
 // ====== UPDATE ======
 function updateFallingLogic() {
   // NES Tetris standard gravity (frames per drop at 60fps → ms)
-  const gravityTable = [800,717,633,550,467,383,300,133];
+  const gravityTable = [800,717,633,550,467,383,300,217,133];
   const fallSpeed = gravityTable[Math.min(state.level - 1, gravityTable.length - 1)];
   // vkspace2 (Space/drop button) = fast drop (not instant), softDrop (ArrowDown) = medium speed
   let speedMult = state.vkspace2 ? 0.025 : 1;
