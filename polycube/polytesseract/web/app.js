@@ -3726,15 +3726,15 @@ function drawStartScreen() {
     const fs = Math.max(10, Math.floor(cw * 0.035));
     ctx2d.save();
     ctx2d.font = `bold ${fs}px 'Noto Sans KR','Malgun Gothic',sans-serif`;
-    ctx2d.fillStyle = '#888';
+    ctx2d.fillStyle = '#fff';
     ctx2d.textAlign = 'center';
     ctx2d.textBaseline = 'top';
     ctx2d.fillText('4D Polycube', cw / 2, ch * 0.17 + fs);
     ctx2d.restore();
     // Other games hint
     const _fs2 = Math.max(9, Math.floor(cw * 0.028));
-    ctx2d.font = _fs2 + 'px monospace';
-    ctx2d.fillStyle = '#556';
+    ctx2d.font = 'bold ' + _fs2 + 'px monospace';
+    ctx2d.fillStyle = '#fff';
     ctx2d.textAlign = 'center';
     ctx2d.fillText('Also: Polynomino (2D) · Polycube (3D)', cw / 2, ch * 0.78);
     ctx2d.fillText('Switch in Game > Theme', cw / 2, ch * 0.78 + _fs2 * 1.3);

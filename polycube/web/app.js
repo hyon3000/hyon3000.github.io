@@ -3035,8 +3035,8 @@ function drawStartScreen() {
     // Other games hint
     const _cw = overlayCanvas.width, _ch = overlayCanvas.height;
     const _fs = Math.max(9, Math.floor(_cw * 0.028));
-    ctx2d.font = _fs + 'px monospace';
-    ctx2d.fillStyle = '#556';
+    ctx2d.font = 'bold ' + _fs + 'px monospace';
+    ctx2d.fillStyle = '#fff';
     ctx2d.textAlign = 'center';
     ctx2d.fillText('Also: Polynomino (2D) · Polytesseract (4D)', _cw / 2, _ch * 0.78);
     ctx2d.fillText('Switch in Game > Theme', _cw / 2, _ch * 0.78 + _fs * 1.3);

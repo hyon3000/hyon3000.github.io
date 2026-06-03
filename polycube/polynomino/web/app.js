@@ -2596,8 +2596,8 @@ function drawStartScreen() {
 
     // Other games hint
     const _fs = Math.max(9, Math.floor(cw * 0.028));
-    ctx.font = _fs + 'px monospace';
-    ctx.fillStyle = '#556';
+    ctx.font = 'bold ' + _fs + 'px monospace';
+    ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
     ctx.fillText('Also: Polycube (3D) · Polytesseract (4D)', cw / 2, ch * 0.78);
     ctx.fillText('Switch in Game > Theme', cw / 2, ch * 0.78 + _fs * 1.3);
