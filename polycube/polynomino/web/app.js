@@ -777,6 +777,16 @@ function moveDown() {
           restart = true;
           break;
         }
+        if (state.nowblock.vals[i] === 31 && cell !== 0 && cell !== 31) {
+          // cancel cell hits normal block: mutual destruction, keep falling
+          state.board[br][bc] = 0;
+          state.nowblock.cells.splice(i, 1);
+          state.nowblock.vals.splice(i, 1);
+          state.score += 40;
+          if (state.nowblock.cells.length === 0) { setnextblock(); return 2; }
+          restart = true;
+          break;
+        }
         if (cell !== 0) return 1; // normal collision → stick
       }
       // 상쇄 block

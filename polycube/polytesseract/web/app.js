@@ -1114,6 +1114,16 @@ function move(pos, deg) {
               restart = true;
               break outer;
             }
+            if (state.nowblock[x][y][z][w] === 31 && cell !== 0 && cell !== 31) {
+              state.blk[bx][by][bz][bw] = 0;
+              state.nowblock[x][y][z][w] = 0;
+              let hasAny2 = false;
+              for (let x2 = 0; x2 < 7 && !hasAny2; x2 += 1) for (let y2 = 0; y2 < 7 && !hasAny2; y2 += 1) for (let z2 = 0; z2 < 7 && !hasAny2; z2 += 1) for (let w2 = 0; w2 < 7; w2 += 1) { if (state.nowblock[x2][y2][z2][w2] !== 0) { hasAny2 = true; break; } }
+              if (!hasAny2) setnextblock();
+              state.score += 40;
+              restart = true;
+              break outer;
+            }
             if (cell) return 1;
           } else if (state.nowhb === 1) {
             if (cell === 31) {
