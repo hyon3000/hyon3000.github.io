@@ -159,21 +159,21 @@ const ctx2d = overlayCanvas.getContext('2d');
 
 const _isKo = /^ko/i.test(navigator.language || '');
 const ITEM_DESC = _isKo ? {
-  1:'자폭: 착지 시 주변 삭제', 2:'은폐: 현재 블록 숨김', 200:'거울상: 보드 좌우반전', 19:'지그재그: 각 층 블록 재배치', 4:'득점강화: 점수 2배',
+  1:'자폭: 착지 즉시 주변 파괴', 2:'은폐: 현재 블록 숨김', 200:'거울상: 보드 좌우반전', 19:'지그재그: 각 층 블록 재배치', 4:'득점강화: 점수 4배 (중첩 16배)',
   5:'아이템제거: 판 위 아이템 제거', 6:'예측차단: 다음 블록 숨김', 8:'속도증가: x2.5', 9:'속도감소: x0.4',
-  10:'홀드봉인: 10턴간 홀드 불가', 11:'장애물: 장애물블록 3개 추가', 16:'시야봉인: 보드 숨김', 17:'폭탄블록5개: 5블록에 폭탄', 18:'구멍: 블록 30% 제거',
-  91:'회전봉인: 10턴간 회전 불가', 20:'빈공간삭제: 갭 제거 후 압축', 21:'소형화: 8턴간 3칸 이하', 22:'대형화: 8턴간 5칸 이상', 30:'관통: 낙하경로 블록파괴', 31:'상쇄: 블록과 닿으면 상호삭제',
-  102:'상단삭제: 위의 블록 제거', 104:'모노전용: 1칸 블록만', 105:'종렬삭제: 해당 열 삭제', 106:'W열삭제', 116:'-2줄: 바닥 2줄 제거', 117:'+2줄: 추가 2줄 클리어',
-  118:'범위삭제: 주변 영역 삭제', 119:'전체삭제: 판 전체 클리어', 120:'시한폭탄: 3턴후 폭발', 121:'시한폭탄: 2턴후 폭발', 122:'시한폭탄: 1턴후 폭발',
-  123:'시한폭탄: 폭발 임박', 124:'-3줄: 바닥 3줄 제거', 125:'+1줄: 추가 1줄 클리어', 126:'횡렬삭제: 해당 행 삭제', 127:'폭탄변환: 30%확률 폭탄화',
+  10:'홀드봉인: 10턴간 홀드 불가', 11:'장애물: 랜덤 위치 장애물 3개', 16:'시야봉인: 보드 숨김', 17:'폭탄블록5개: 5블록에 폭탄', 18:'구멍: 블록 30% 제거',
+  91:'회전봉인: 10턴간 회전 불가', 20:'빈공간삭제: 모든 빈공간 정리', 21:'소형화: 8턴간 3칸 이하', 22:'대형화: 8턴간 5칸 이상', 30:'관통: 낙하경로 블록파괴', 31:'상쇄: 블록과 닿으면 상호삭제',
+  102:'상단삭제: 위의 블록 모두 제거', 104:'모노전용: 1칸 블록만', 105:'종렬삭제: 해당 열 삭제', 106:'W열삭제', 116:'-2줄: 바닥 2줄 제거', 117:'+2줄: 바닥에 2줄 추가',
+  118:'범위삭제: 주변 열 전체삭제', 119:'전체삭제: 판 전체 클리어', 120:'시한폭탄: 3턴후 폭발', 121:'시한폭탄: 2턴후 폭발', 122:'시한폭탄: 1턴후 폭발',
+  123:'시한폭탄: 폭발 임박', 124:'-3줄: 바닥 3줄 제거', 125:'+1줄: 바닥에 1줄 추가', 126:'횡렬삭제: 해당 행 삭제', 127:'폭탄변환: 30%확률 폭탄화',
 } : {
-  1:'Self-Destruct: 3x3 boom', 2:'Conceal: Hide block', 200:'Mirror: Flip board', 19:'Zigzag: Shuffle each layer', 4:'Score Boost: 2x', 5:'Item Clear: Remove items',
-  6:'No Preview: Hide next', 8:'Speed Up: x2.5', 9:'Slow Down: x0.4', 10:'Hold Lock: 10 turns', 11:'Obstacle: Add 3 obstacle blocks',
-  16:'Blind: Hide board 10s', 17:'Bomb x5: Next 5 have bombs', 18:'Hole: Remove 30% blocks', 91:'Rot Lock: 10 turns', 20:'Gap Clear: Compact', 21:'Simplify: ≤3 cells 8 turns',
-  22:'PentaForce: ≥5 cells 8t', 30:'Pierce: Destroy in path', 31:'Cancel: Mutual delete', 102:'Top Clear: Del above', 104:'Mono Only: 1-cell 10t',
-  105:'Col Del: Delete column', 106:'W Del', 116:'-2 Lines: Remove 2', 117:'+2 Lines: Bonus clear', 118:'Range Del: Area clear', 119:'Full Clear: Wipe board',
+  1:'Self-Destruct: 3x3x3 boom', 2:'Conceal: Hide piece 10t', 200:'Mirror: Flip board', 19:'Zigzag: Shuffle each layer', 4:'Score Boost: x4 (stack x16)', 5:'Item Clear: Remove items',
+  6:'No Preview: Hide next 10t', 8:'Speed Up: x2.5', 9:'Slow Down: x0.4', 10:'Hold Lock: 10 turns', 11:'Obstacle: 3 random',
+  16:'Blind: Hide board 10sec', 17:'Bomb x5: Next 5 have bombs', 18:'Hole: Remove 30% blocks', 91:'Rot Lock: 10 turns', 20:'Gap Clear: Remove gaps', 21:'Simplify: ≤3 cells 8 turns',
+  22:'PentaForce: ≥5 cells 8 turns', 30:'Pierce: Destroy in path', 31:'Cancel: Mutual delete', 102:'Top Clear: All above', 104:'Mono Only: 1-cell 10 turns',
+  105:'Col Del: Delete column', 106:'W Del', 116:'-2 Lines: Remove 2', 117:'+2 Lines: Add 2 lines', 118:'Range Del: 3x3 columns', 119:'Full Clear: Wipe board',
   120:'Time Bomb: 3t to blow', 121:'Time Bomb: 2t to blow', 122:'Time Bomb: 1t to blow', 123:'Time Bomb: Imminent',
-  124:'-3 Lines: Remove 3', 125:'+1 Line: Bonus clear', 126:'Row Del: Delete row', 127:'Bomb Convert: 30% bomb',
+  124:'-3 Lines: Remove 3', 125:'+1 Line: Add 1 line', 126:'Row Del: Delete row', 127:'Bomb Convert: 30% bomb',
 };
 const ITEM_GOOD = new Set([1,4,9,20,21,30,31,102,104,105,106,116,117,118,119,124,125,126]);
 
