@@ -490,7 +490,7 @@ function assignCellValue(baseVal) {
   if (u < 14270) return 120;
   if (u < 24270) return 4;
   if (u < 24570) return 200; // mirror 0.03%
-  if (u < 24870) return 3; // zigzag 0.03%
+  if (u < 24870) return 19; // zigzag 0.03%
   if (u < 25170) return 18; // hole 0.03%
   if (state._assignIsMonoBlock && randInt(10) === 0) return 1;
   if (state._assignIsMonoBlock && randInt(20) === 0) {
@@ -509,7 +509,7 @@ function assignCellValue(baseVal) {
       [4900, 116], [14700, 117], [14700, 118], [499, 119], [14700, 104],
       [171500, 120], [49000, 121], [34300, 122], [14700, 123], [1497, 124],
       [39200, 125], [12250, 91], [4900, 102], [9800, 126], [9800, 105],
-      [4900, 127], [9800, 1], [12250, 2], [49000, 5], [12250, 6], [40000, 4], [4900, 3], [4900, 18],
+      [4900, 127], [9800, 1], [12250, 2], [49000, 5], [12250, 6], [40000, 4], [4900, 19], [4900, 18],
     ];
     const dp = getDateP();
     const entry = bonus[dp] || bonus[20];
@@ -1046,7 +1046,7 @@ function processLine(row) {
           }
         }
       }
-    } else if (code === 3) {
+    } else if (code === 19) {
       // Zigzag: shuffle blocks within each row
       state.board[row][c] |= 256;
       for (let r2 = 0; r2 < BOARD_H; r2++) {
@@ -2048,7 +2048,7 @@ function drawCellDecoration(x, y, w, h, val) {
     ctx.stroke();
   }
   // Zigzag: Z letter
-  if (code === 3) {
+  if (code === 19) {
     ctx.strokeStyle = 'rgba(0,0,0,0.6)';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -2507,7 +2507,7 @@ function drawPauseScreen() {
 // --- Item info overlay ---
 const _isKo = /^ko/i.test(navigator.language || '');
 const ITEM_DESC = _isKo ? {
-  1:'자폭: 착지 시 주변 삭제', 2:'은폐: 현재 블록 숨김', 200:'거울상: 보드 좌우반전', 3:'지그재그: 각 행 블록 재배치', 4:'득점강화: 점수 2배',
+  1:'자폭: 착지 시 주변 삭제', 2:'은폐: 현재 블록 숨김', 200:'거울상: 보드 좌우반전', 19:'지그재그: 각 행 블록 재배치', 4:'득점강화: 점수 2배',
   5:'아이템제거', 6:'예측차단: 다음 블록 숨김', 8:'속도두배', 9:'속도절반',
   10:'홀드봉인', 11:'장애물 추가', 16:'시야봉인: 보드 숨김', 17:'폭탄블록 추가', 18:'구멍: 블록 30% 제거',
   91:'회전봉인', 20:'빈공간삭제', 21:'소형화', 22:'대형화', 30:'관통', 31:'상쇄',
@@ -2515,7 +2515,7 @@ const ITEM_DESC = _isKo ? {
   118:'범위삭제', 119:'전체삭제', 120:'시한폭탄', 121:'시한폭탄', 122:'시한폭탄',
   123:'시한폭탄', 124:'-3줄', 125:'+1줄', 126:'횡렬삭제', 127:'폭탄변환',
 } : {
-  1:'Self-Destruct', 2:'Conceal', 200:'Mirror', 3:'Zigzag: Shuffle each row', 4:'Score Boost: 2x', 5:'Item Clear',
+  1:'Self-Destruct', 2:'Conceal', 200:'Mirror', 19:'Zigzag: Shuffle each row', 4:'Score Boost: 2x', 5:'Item Clear',
   6:'No Preview', 8:'Speed Up', 9:'Slow Down', 10:'Hold Lock', 11:'Obstacle',
   16:'Blind', 17:'Bomb x3', 18:'Hole: Remove 30% blocks', 91:'Rot Lock', 20:'Gap Clear', 21:'Simplify',
   22:'PentaForce', 30:'Pierce', 31:'Cancel', 102:'Top Clear', 104:'Mono Only',
