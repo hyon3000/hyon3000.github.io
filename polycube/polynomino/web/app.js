@@ -676,6 +676,8 @@ function initBlockState() {
     else { const _u = randInt(250000); if(_u<100)_hv=116;else if(_u<400)_hv=117;else if(_u<700)_hv=118;else if(_u<720)_hv=119;else if(_u<1520)_hv=104;else if(_u<2020)_hv=120;else if(_u<3020)_hv=121;else if(_u<3720)_hv=122;else if(_u<4020)_hv=123;else if(_u<4070)_hv=124;else if(_u<4870)_hv=125;else if(_u<5120)_hv=91;else if(_u<5220)_hv=102;else if(_u<5620)_hv=126;else if(_u<5920)_hv=127;else if(_u<6020)_hv=17;else if(_u<6220)_hv=20;else if(_u<7020)_hv=21;else if(_u<7820)_hv=22;else if(_u<8070)_hv=16;else if(_u<8270)_hv=11;else if(_u<8920)_hv=2;else if(_u<9920)_hv=8;else if(_u<10920)_hv=9;else if(_u<11170)_hv=10;else if(_u<12170)_hv=5;else if(_u<12420)_hv=6;else if(_u<14670)_hv=120;else if(_u<24970)_hv=200;else if(_u<25270)_hv=19;else if(_u<25570)_hv=18; }
   } else { _hv = 65; }
   state.holdblock = { cells: [[0, 0]], vals: [_hv] };
+  if (_hv === 30) state.holdhb = 1;
+  else if (_hv === 31) state.holdib = 1;
   state.nextblock = generateBlock();
   setnextblock();
 }
@@ -1346,6 +1348,16 @@ function tryHoldSwap() {
   const tmpib = state.nowib;
   state.nowib = state.holdib;
   state.holdib = tmpib;
+  // Pierce: immediately destroy overlapping board cells
+  if (state.nowhb === 1) {
+    for (let i = 0; i < state.nowblock.cells.length; i++) {
+      const [r, c] = state.nowblock.cells[i];
+      const br = state.blockpos[0] + r, bc = state.blockpos[1] + c;
+      if (br >= 0 && br < BOARD_H && bc >= 0 && bc < BOARD_W && state.board[br][bc] !== 0) {
+        state.board[br][bc] = 0;
+      }
+    }
+  }
 }
 
 // ====== TOUCH CONTROLS ======
