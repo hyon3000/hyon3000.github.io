@@ -778,6 +778,43 @@ function move(dcol) {
   return 1;
 }
 
+// Resolve interactions in a column array (bottom to top)
+// pierce(30): destroys normal below, mutual destruction with pierce/cancel
+// cancel(31): mutual destruction with normal (not cancel-cancel)
+function resolveColumn(col) {
+  const result = [];
+  for (let k = 0; k < col.length; k++) {
+    result.push(col[k]);
+    let changed = true;
+    while (changed && result.length >= 2) {
+      changed = false;
+      const top = result[result.length - 1];
+      const below = result[result.length - 2];
+      const topIs30 = (top & 255) === 30, topIs31 = (top & 255) === 31;
+      const belowIs30 = (below & 255) === 30, belowIs31 = (below & 255) === 31;
+      const topSpecial = topIs30 || topIs31, belowSpecial = belowIs30 || belowIs31;
+      if (topIs30 && !belowSpecial) {
+        // pierce above normal: destroy normal, pierce stays
+        result.splice(result.length - 2, 1);
+        changed = true;
+      } else if (topIs30 && belowIs30) {
+        // pierce + pierce: both destroyed
+        result.pop(); result.pop();
+        changed = true;
+      } else if ((topIs30 && belowIs31) || (topIs31 && belowIs30)) {
+        // pierce + cancel: both destroyed
+        result.pop(); result.pop();
+        changed = true;
+      } else if ((topIs31 && !belowSpecial) || (!topSpecial && belowIs31)) {
+        // cancel + normal or normal + cancel: both destroyed
+        result.pop(); result.pop();
+        changed = true;
+      }
+    }
+  }
+  return result;
+}
+
 function moveDown() {
   const newRow = state.blockpos[0] - 1;
   let restart;
@@ -814,22 +851,13 @@ function moveDown() {
       // Below board bottom
       if (br < 0) {
         if (state.nowhb) {
-          // 상쇄 at bottom: compact columns, cancel adjacent 관통/normal pairs
+          // Pierce at bottom: compact columns with interaction resolution
           for (let cc = 0; cc < BOARD_W; cc++) {
             const col = [];
             for (let rr = 0; rr < BOARD_H; rr++) {
               if (state.board[rr][cc] !== 0) col.push(state.board[rr][cc]);
             }
-            const result = [];
-            for (let k = 0; k < col.length; k++) {
-              result.push(col[k]);
-              if (result.length >= 2) {
-                const a = result[result.length - 1], b = result[result.length - 2];
-                if ((a === 31 && b !== 0 && b !== 31) || (b === 31 && a !== 0 && a !== 31)) {
-                  result.pop(); result.pop();
-                }
-              }
-            }
+            const result = resolveColumn(col);
             for (let rr = 0; rr < BOARD_H; rr++) {
               state.board[rr][cc] = rr < result.length ? result[rr] : 0;
             }
@@ -1221,18 +1249,18 @@ function removeline() {
     }
   }
 
-  // 빈공간삭제: compact all columns (remove gaps), then count extra filled lines
+  // 빈공간삭제: compact all columns with interaction resolution
   if (state.compactPending) {
     state.compactPending = false;
     for (let c = 0; c < BOARD_W; c++) {
-      let t = 0;
+      const col = [];
       for (let r = 0; r < BOARD_H; r++) {
-        if (state.board[r][c] !== 0) {
-          state.board[t][c] = state.board[r][c];
-          t++;
-        }
+        if (state.board[r][c] !== 0) col.push(state.board[r][c]);
       }
-      for (; t < BOARD_H; t++) state.board[t][c] = 0;
+      const resolved = resolveColumn(col);
+      for (let r = 0; r < BOARD_H; r++) {
+        state.board[r][c] = r < resolved.length ? resolved[r] : 0;
+      }
     }
     // Count and remove filled lines (no score multiplier, just base 20 per line)
     let compactLines = 0;

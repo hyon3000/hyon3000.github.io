@@ -938,6 +938,43 @@ function rotate(pos, deg) {
   return 1;
 }
 
+// Resolve interactions in a column array (bottom to top)
+// pierce(30): destroys normal below, mutual destruction with pierce/cancel
+// cancel(31): mutual destruction with non-cancel (not cancel-cancel)
+function resolveColumn(col) {
+  const result = [];
+  for (let k = 0; k < col.length; k++) {
+    result.push(col[k]);
+    let changed = true;
+    while (changed && result.length >= 2) {
+      changed = false;
+      const top = result[result.length - 1];
+      const below = result[result.length - 2];
+      const topIs30 = (top & 255) === 30, topIs31 = (top & 255) === 31;
+      const belowIs30 = (below & 255) === 30, belowIs31 = (below & 255) === 31;
+      const topSpecial = topIs30 || topIs31, belowSpecial = belowIs30 || belowIs31;
+      if (topIs30 && !belowSpecial) {
+        // pierce above normal: destroy normal, pierce stays
+        result.splice(result.length - 2, 1);
+        changed = true;
+      } else if (topIs30 && belowIs30) {
+        // pierce + pierce: both destroyed
+        result.pop(); result.pop();
+        changed = true;
+      } else if ((topIs30 && belowIs31) || (topIs31 && belowIs30)) {
+        // pierce + cancel: both destroyed
+        result.pop(); result.pop();
+        changed = true;
+      } else if ((topIs31 && !belowSpecial) || (!topSpecial && belowIs31)) {
+        // cancel + non-cancel: both destroyed
+        result.pop(); result.pop();
+        changed = true;
+      }
+    }
+  }
+  return result;
+}
+
 function move(pos, deg) {
   // Pre-check: if ANY cell hard-stops, reject move without cancellation
   if (state.nowhb === 0) {
@@ -974,30 +1011,10 @@ function move(pos, deg) {
             if (state.nowhb) {
               for (let cx = 0; cx < 7; cx += 1) {
                 for (let cy = 0; cy < 7; cy += 1) {
-                  let src = 0;
-                  let dst = 0;
-                  while (src < 25) {
-                    if (state.blk[cx][cy][src] !== 0) {
-                      state.blk[cx][cy][dst] = state.blk[cx][cy][src];
-                      if (
-                        dst !== 0 &&
-                        (
-                          (state.blk[cx][cy][dst] === 31 && state.blk[cx][cy][dst - 1] !== 0 && state.blk[cx][cy][dst - 1] !== 31) ||
-                          (state.blk[cx][cy][dst - 1] === 31 && state.blk[cx][cy][dst] !== 0 && state.blk[cx][cy][dst] !== 31)
-                        )
-                      ) {
-                        state.blk[cx][cy][dst] = 0;
-                        state.blk[cx][cy][dst - 1] = 0;
-                        dst -= 2;
-                      }
-                      dst += 1;
-                    }
-                    src += 1;
-                  }
-                  while (dst < 25) {
-                    state.blk[cx][cy][dst] = 0;
-                    dst += 1;
-                  }
+                  const col = [];
+                  for (let cz = 0; cz < 26; cz++) { if (state.blk[cx][cy][cz] !== 0) col.push(state.blk[cx][cy][cz]); }
+                  const resolved = resolveColumn(col);
+                  for (let cz = 0; cz < 26; cz++) { state.blk[cx][cy][cz] = cz < resolved.length ? resolved[cz] : 0; }
                 }
               }
               removeline();
@@ -1302,14 +1319,10 @@ function removeline() {
     state.compactPending = false;
     for (let x = 0; x < 7; x++) {
       for (let y = 0; y < 7; y++) {
-        let t = 0;
-        for (let z = 0; z < 26; z++) {
-          if (state.blk[x][y][z] !== 0) {
-            state.blk[x][y][t] = state.blk[x][y][z];
-            t++;
-          }
-        }
-        for (; t < 26; t++) state.blk[x][y][t] = 0;
+        const col = [];
+        for (let z = 0; z < 26; z++) { if (state.blk[x][y][z] !== 0) col.push(state.blk[x][y][z]); }
+        const resolved = resolveColumn(col);
+        for (let z = 0; z < 26; z++) { state.blk[x][y][z] = z < resolved.length ? resolved[z] : 0; }
       }
     }
     // Count and remove filled lines (x-rows and y-rows at each z)
@@ -1329,14 +1342,13 @@ function removeline() {
       }
     }
     if (compactLines > 0) {
-      // Re-compact
+      // Re-compact with resolve
       for (let x = 0; x < 7; x++) {
         for (let y = 0; y < 7; y++) {
-          let t = 0;
-          for (let z = 0; z < 26; z++) {
-            if (state.blk[x][y][z] !== 0) { state.blk[x][y][t] = state.blk[x][y][z]; t++; }
-          }
-          for (; t < 26; t++) state.blk[x][y][t] = 0;
+          const col = [];
+          for (let z = 0; z < 26; z++) { if (state.blk[x][y][z] !== 0) col.push(state.blk[x][y][z]); }
+          const resolved = resolveColumn(col);
+          for (let z = 0; z < 26; z++) { state.blk[x][y][z] = z < resolved.length ? resolved[z] : 0; }
         }
       }
       state.lines += compactLines;
