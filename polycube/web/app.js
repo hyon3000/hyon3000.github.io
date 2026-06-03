@@ -285,8 +285,8 @@ const _KEY_ARR = 50;
 const _rotTicket = {};
 
 function _execKey(code) {
-  if (code === "ShiftRight" || code === "ShiftLeft") { state.vkspace2 = true; return; }
-  if (code === "Space") {
+  if (code === "Space") { state.vkspace2 = true; return; }
+  if (code === "Enter") {
     // Hard drop: move down until stuck, then place block
     const _hb = state.nowblock;
     while (!move(2, -1)) { if (state.nowblock !== _hb) break; }
@@ -354,7 +354,7 @@ window.addEventListener("keyup", (event) => {
     if (_keyRepeatTimers[code]) { clearTimeout(_keyRepeatTimers[code]); clearInterval(_keyRepeatTimers[code]); delete _keyRepeatTimers[code]; }
   }
   if (_isRotKey(code)) _rotTicket['_t' + code] = setTimeout(() => { _rotTicket[code] = true; }, 15);
-  if (code === "ShiftRight" || code === "ShiftLeft") state.vkspace2 = false;
+  if (code === "Space") state.vkspace2 = false;
 });
 
 async function loadTexture(path) {
@@ -3032,6 +3032,14 @@ function drawStartScreen() {
       drawTexture(textureIndex, variants[state.about], [0.5, 0.5, 0.5, 1]);
     }
     drawStartMenuGlyphs();
+    // Other games hint
+    const _cw = overlayCanvas.width, _ch = overlayCanvas.height;
+    const _fs = Math.max(9, Math.floor(_cw * 0.028));
+    ctx2d.font = _fs + 'px monospace';
+    ctx2d.fillStyle = '#556';
+    ctx2d.textAlign = 'center';
+    ctx2d.fillText('Also: Polynomino (2D) · Polytesseract (4D)', _cw / 2, _ch * 0.78);
+    ctx2d.fillText('Switch in Game > Theme', _cw / 2, _ch * 0.78 + _fs * 1.3);
   }
 }
 

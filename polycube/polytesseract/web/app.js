@@ -315,8 +315,8 @@ const _KEY_ARR = 50;
 const _rotTicket = {};  // true = can rotate (ticket available)
 
 function _execKey(code) {
-  if (code === "ShiftRight" || code === "ShiftLeft") { state.vkspace2 = true; return; }
-  if (code === "Space") {
+  if (code === "Space") { state.vkspace2 = true; return; }
+  if (code === "Enter") {
     if (state.pause) return;
     const _hb = state.nowblock;
     while (!move(2, -1)) { if (state.nowblock !== _hb) break; }
@@ -410,7 +410,7 @@ window.addEventListener("keyup", (event) => {
     }
   }
   if (_isRotKey(code)) _rotTicket['_t' + code] = setTimeout(() => { _rotTicket[code] = true; }, 15);
-  if (code === "ShiftRight" || code === "ShiftLeft") {
+  if (code === "Space") {
     state.vkspace2 = false;
   }
 });
@@ -3731,6 +3731,13 @@ function drawStartScreen() {
     ctx2d.textBaseline = 'top';
     ctx2d.fillText('4D Polycube', cw / 2, ch * 0.17 + fs);
     ctx2d.restore();
+    // Other games hint
+    const _fs2 = Math.max(9, Math.floor(cw * 0.028));
+    ctx2d.font = _fs2 + 'px monospace';
+    ctx2d.fillStyle = '#556';
+    ctx2d.textAlign = 'center';
+    ctx2d.fillText('Also: Polynomino (2D) · Polycube (3D)', cw / 2, ch * 0.78);
+    ctx2d.fillText('Switch in Game > Theme', cw / 2, ch * 0.78 + _fs2 * 1.3);
   }
 }
 

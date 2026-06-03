@@ -263,7 +263,7 @@ const _KEY_ARR = 50;
 const _rotTicket = {};
 
 function _execKey(code) {
-  if (code === "Space") {
+  if (code === "Enter") {
     // Hard drop: move down until stuck, then lock (continue through cancels)
     const _hb = state.nowblock;
     let mr;
@@ -278,7 +278,7 @@ function _execKey(code) {
     state.timestamp = now();
     return;
   }
-  if (code === "ShiftRight" || code === "ShiftLeft") { state.vkspace2 = true; return; }
+  if (code === "Space") { state.vkspace2 = true; return; }
   if (code === "ArrowLeft") { move(-1); return; }
   if (code === "ArrowRight") { move(1); return; }
   if (code === "ArrowUp" || code === "KeyZ") { rotate(1); return; }
@@ -324,7 +324,7 @@ window.addEventListener("keyup", (event) => {
     if (_keyRepeatTimers[code]) { clearTimeout(_keyRepeatTimers[code]); clearInterval(_keyRepeatTimers[code]); delete _keyRepeatTimers[code]; }
   }
   if (_isRotKey(code)) _rotTicket['_t' + code] = setTimeout(() => { _rotTicket[code] = true; }, 15);
-  if (code === "ShiftRight" || code === "ShiftLeft") state.vkspace2 = false;
+  if (code === "Space") state.vkspace2 = false;
 });
 
 // Resize
@@ -1547,7 +1547,7 @@ function updateFallingLogic() {
   // NES Tetris standard gravity (frames per drop at 60fps → ms)
   const gravityTable = [800,717,633,550,467,383,300,217,133];
   const fallSpeed = gravityTable[Math.min(state.level - 1, gravityTable.length - 1)];
-  // vkspace2 (ShiftRight) = fast drop (not instant), softDrop = medium speed
+  // vkspace2 (Space) = fast drop (not instant), softDrop = medium speed
   let speedMult = state.vkspace2 ? 0.025 : 1;
   if (state.speedup > 0 && speedMult === 1) speedMult = 0.4;
   if (state.speeddown > 0 && speedMult === 1) speedMult = 2.5;
@@ -2593,6 +2593,14 @@ function drawStartScreen() {
     ctx.lineWidth = 1;
     ctx.strokeRect(cw / 2 - btnW / 2, ch * 0.62, btnW, btnH);
     drawLineStringCentered(ctx, cw / 2, ch * 0.62 + btnH * 0.25, btnLabelScale, 'ABOUT', '#fff');
+
+    // Other games hint
+    const _fs = Math.max(9, Math.floor(cw * 0.028));
+    ctx.font = _fs + 'px monospace';
+    ctx.fillStyle = '#556';
+    ctx.textAlign = 'center';
+    ctx.fillText('Also: Polycube (3D) · Polytesseract (4D)', cw / 2, ch * 0.78);
+    ctx.fillText('Switch in Game > Theme', cw / 2, ch * 0.78 + _fs * 1.3);
   }
 }
 
