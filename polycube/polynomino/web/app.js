@@ -1247,7 +1247,7 @@ function tryHoldSwap() {
     return;
   }
   // Check if hold block fits at current position (skip for pierce/cancel)
-  if (state.holdhb === 0 && checkCollision(state.holdblock, state.blockpos[0], state.blockpos[1])) return;
+  if (checkCollision(state.holdblock, state.blockpos[0], state.blockpos[1])) return;
   const tmp = state.nowblock;
   state.nowblock = state.holdblock;
   state.holdblock = tmp;

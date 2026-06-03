@@ -1440,7 +1440,7 @@ function tryHoldSwap() {
           if (x + state.blockpos[0] < 0 || x + state.blockpos[0] > 6) return;
           if (y + state.blockpos[1] < 0 || y + state.blockpos[1] > 6) return;
           if (z + state.blockpos[2] < 0) return;
-          if (state.holdhb === 0 && state.blk[x + state.blockpos[0]][y + state.blockpos[1]][z + state.blockpos[2]] !== 0) return;
+          if (state.blk[x + state.blockpos[0]][y + state.blockpos[1]][z + state.blockpos[2]] !== 0) return;
         }
       }
     }
