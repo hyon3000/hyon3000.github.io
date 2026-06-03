@@ -285,7 +285,15 @@ const _KEY_ARR = 50;
 const _rotTicket = {};
 
 function _execKey(code) {
-  if (code === "Space") { state.vkspace2 = true; return; }
+  if (code === "ShiftRight") { state.vkspace2 = true; return; }
+  if (code === "Space") {
+    // Hard drop: move down until stuck, then place block
+    while (!move(2, -1)) {}
+    if (stickblock()) { gover(); initBlockState(); return; }
+    calculatescore(removeline());
+    state.timestamp = now();
+    return;
+  }
   if (code === "ArrowLeft" || code === "ArrowRight" ||
       code === "ArrowUp" || code === "ArrowDown") {
     if (!state.pause) {
@@ -344,7 +352,7 @@ window.addEventListener("keyup", (event) => {
     if (_keyRepeatTimers[code]) { clearTimeout(_keyRepeatTimers[code]); clearInterval(_keyRepeatTimers[code]); delete _keyRepeatTimers[code]; }
   }
   if (_isRotKey(code)) _rotTicket['_t' + code] = setTimeout(() => { _rotTicket[code] = true; }, 15);
-  if (code === "Space") state.vkspace2 = false;
+  if (code === "ShiftRight") state.vkspace2 = false;
 });
 
 async function loadTexture(path) {
@@ -629,21 +637,21 @@ function assignCellFromProbability(baseIndex, x, y, z) {
   if (u < 5920) return 127;
   if (u < 6020) return 17;
   if (u < 6220) return 20;
-  if (u < 6820) return 21;
-  if (u < 7620) return 22;
-  if (u < 7870) return 16;
-  if (u < 8070) return 11;
-  if (u < 8320) return 2;
-  if (u < 9320) return 8;
-  if (u < 10320) return 9;
-  if (u < 10570) return 10;
-  if (u < 11570) return 5;
-  if (u < 11820) return 6;
-  if (u < 14070) return 120;
-  if (u < 24070) return 4;
-  if (u < 24370) return 200; // mirror 0.03%
-  if (u < 24670) return 19; // zigzag 0.03%
-  if (u < 24970) return 18; // hole 0.03%
+  if (u < 7020) return 21;
+  if (u < 7820) return 22;
+  if (u < 8070) return 16;
+  if (u < 8270) return 11;
+  if (u < 8520) return 2;
+  if (u < 9520) return 8;
+  if (u < 10520) return 9;
+  if (u < 10770) return 10;
+  if (u < 11770) return 5;
+  if (u < 12020) return 6;
+  if (u < 14270) return 120;
+  if (u < 24270) return 4;
+  if (u < 24570) return 200; // mirror 0.03%
+  if (u < 24870) return 19; // zigzag 0.03%
+  if (u < 25170) return 18; // hole 0.03%
   if (baseIndex === 0 && randInt(10) === 0) return 1;
   if (baseIndex === 0 && randInt(20) === 0) {
     state.nexthb = 1;

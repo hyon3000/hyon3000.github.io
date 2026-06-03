@@ -263,7 +263,25 @@ const _KEY_ARR = 50;
 const _rotTicket = {};
 
 function _execKey(code) {
-  if (code === "Space") { state.vkspace2 = true; return; }
+  if (code === "Space") {
+    // Hard drop: move down until stuck, then lock
+    let mr;
+    while ((mr = moveDown()) === 0) { /* keep falling */ }
+    if (mr === 2) {
+      // Block destroyed (cancel interaction) — next block already spawned
+      state.timestamp = now();
+      return;
+    }
+    if (stickblock()) {
+      gover();
+      initBlockState();
+      return;
+    }
+    calculatescore(removeline());
+    state.timestamp = now();
+    return;
+  }
+  if (code === "ShiftRight") { state.vkspace2 = true; return; }
   if (code === "ArrowLeft") { move(-1); return; }
   if (code === "ArrowRight") { move(1); return; }
   if (code === "ArrowUp" || code === "KeyZ") { rotate(1); return; }
@@ -309,7 +327,7 @@ window.addEventListener("keyup", (event) => {
     if (_keyRepeatTimers[code]) { clearTimeout(_keyRepeatTimers[code]); clearInterval(_keyRepeatTimers[code]); delete _keyRepeatTimers[code]; }
   }
   if (_isRotKey(code)) _rotTicket['_t' + code] = setTimeout(() => { _rotTicket[code] = true; }, 15);
-  if (code === "Space") state.vkspace2 = false;
+  if (code === "ShiftRight") state.vkspace2 = false;
 });
 
 // Resize
@@ -476,22 +494,22 @@ function assignCellValue(baseVal) {
   if (u < 5920) return 127;
   if (u < 6020) return 17;
   if (u < 6220) return 20;
-  if (u < 6820) return 21;
-  if (u < 7620) return 22;
-  if (u < 7870) return 16;
-  if (u < 8070) return 11;
-  if (u < 8470) return baseVal;
-  if (u < 8720) return 2;
-  if (u < 9720) return 8;
-  if (u < 10720) return 9;
-  if (u < 10970) return 10;
-  if (u < 11970) return 5;
-  if (u < 12220) return 6;
-  if (u < 14470) return 120;
-  if (u < 24470) return 4;
-  if (u < 24770) return 200; // mirror 0.03%
-  if (u < 25070) return 19; // zigzag 0.03%
-  if (u < 25370) return 18; // hole 0.03%
+  if (u < 7020) return 21;
+  if (u < 7820) return 22;
+  if (u < 8070) return 16;
+  if (u < 8270) return 11;
+  if (u < 8670) return baseVal;
+  if (u < 8920) return 2;
+  if (u < 9920) return 8;
+  if (u < 10920) return 9;
+  if (u < 11170) return 10;
+  if (u < 12170) return 5;
+  if (u < 12420) return 6;
+  if (u < 14670) return 120;
+  if (u < 24670) return 4;
+  if (u < 24970) return 200; // mirror 0.03%
+  if (u < 25270) return 19; // zigzag 0.03%
+  if (u < 25570) return 18; // hole 0.03%
   if (state._assignIsMonoBlock && randInt(10) === 0) return 1;
   if (state._assignIsMonoBlock && randInt(20) === 0) {
     state.nexthb = 1;
@@ -1403,7 +1421,7 @@ function updateFallingLogic() {
   // NES Tetris standard gravity (frames per drop at 60fps → ms)
   const gravityTable = [800,717,633,550,467,383,300,217,133];
   const fallSpeed = gravityTable[Math.min(state.level - 1, gravityTable.length - 1)];
-  // vkspace2 (Space/drop button) = fast drop (not instant), softDrop (ArrowDown) = medium speed
+  // vkspace2 (ShiftRight) = fast drop (not instant), softDrop = medium speed
   let speedMult = state.vkspace2 ? 0.025 : 1;
   if (state.speedup > 0 && speedMult === 1) speedMult = 0.5;
   if (state.speeddown > 0 && speedMult === 1) speedMult = 2;
@@ -2537,13 +2555,13 @@ const ITEM_DESC = _isKo ? {
   118:'범위삭제', 119:'전체삭제', 120:'시한폭탄', 121:'시한폭탄', 122:'시한폭탄',
   123:'시한폭탄', 124:'-3줄', 125:'+1줄', 126:'횡렬삭제', 127:'폭탄변환',
 } : {
-  1:'Self-Destruct', 2:'Conceal', 200:'Mirror', 19:'Zigzag: Shuffle each row', 4:'Score Boost: 2x', 5:'Item Clear',
-  6:'No Preview', 8:'Speed Up', 9:'Slow Down', 10:'Hold Lock', 11:'Obstacle',
-  16:'Blind', 17:'Bomb x3', 18:'Hole: Remove 30% blocks', 91:'Rot Lock', 20:'Gap Clear', 21:'Simplify',
-  22:'PentaForce', 30:'Pierce', 31:'Cancel', 102:'Top Clear', 104:'Mono Only',
-  105:'Col Del', 116:'-2 Lines', 117:'+2 Lines', 118:'Range Del', 119:'Full Clear',
-  120:'Time Bomb', 121:'Time Bomb', 122:'Time Bomb', 123:'Time Bomb',
-  124:'-3 Lines', 125:'+1 Line', 126:'Row Del', 127:'Bomb Convert',
+  1:'Self-Destruct: Delete nearby on land', 2:'Conceal: Hide current block', 200:'Mirror: Flip board L/R', 19:'Zigzag: Shuffle each row', 4:'Score Boost: 2x points', 5:'Item Clear: Remove all items',
+  6:'No Preview: Hide next block', 8:'Speed Up: 2x drop speed', 9:'Slow Down: 0.5x drop speed', 10:'Hold Lock: Disable hold', 11:'Obstacle: Add junk row',
+  16:'Blind: Hide board', 17:'Bomb x3: Add bomb blocks', 18:'Hole: Remove 30% blocks', 91:'Rot Lock: Disable rotation', 20:'Gap Clear: Remove empty gaps', 21:'Simplify: Smaller blocks',
+  22:'PentaForce: Larger blocks', 30:'Pierce: Pass through blocks', 31:'Cancel: Erase on contact', 102:'Top Clear: Delete top rows', 104:'Mono Only: 1-cell blocks',
+  105:'Col Del: Delete a column', 116:'-2 Lines: Remove 2 rows', 117:'+2 Lines: Add 2 rows', 118:'Range Del: Area delete', 119:'Full Clear: Clear entire board',
+  120:'Time Bomb: Explodes later', 121:'Time Bomb: Explodes later', 122:'Time Bomb: Explodes later', 123:'Time Bomb: Explodes later',
+  124:'-3 Lines: Remove 3 rows', 125:'+1 Line: Add 1 row', 126:'Row Del: Delete a row', 127:'Bomb Convert: Turn blocks to bombs',
 };
 // 유리=beneficial(cyan), 불리=harmful(orange) — matches about section
 const ITEM_GOOD = new Set([1,4,9,20,21,30,31,102,104,105,116,117,118,119,124,125,126]);
