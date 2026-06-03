@@ -60,6 +60,7 @@ li.menu_polytheme > ul.menu, li.menu_polyothergames > ul.menu {
               <li class="poly-theme-polytesseract" onclick="return runMenu(function(){ switchToPolytesseract(); });"><a href="#">　폴리테서렉트 (4D)</a></li>
             </ul>
           </li>
+          <li class="poly-fullscreen" onclick="return runMenu(function(){ goFullscreen(); });"><a href="#">　전체화면</a></li>
           <li class="separator"></li>
           <li class="poly-item-toggle" onclick="return runMenu(function(){ toggleItems(); });"><a href="#">✓ 아이템 사용</a></li>
           <li class="separator"></li>
@@ -142,6 +143,7 @@ window.addEventListener('blur', closeAllMenus);
     st('li.poly-theme-polytesseract', '\u3000Polytesseract (4D)');
     st('li.poly-theme-modern', '\u3000Modern');
     st('li.poly-theme-classic', '\u3000Classic');
+    st('li.poly-fullscreen', '\u3000Fullscreen');
     st('li.poly-item-toggle', '\u2713 Items');
     st('li.poly-menuclose', '\u3000Exit');
     st('li.menu_polyothergames', '\u3000Other Games');
@@ -195,6 +197,41 @@ function switchToPolytesseract() {
   var icon = document.querySelector('.polycube-window .title-icon');
   if (icon) icon.style.backgroundImage = 'url(polytesseract/polytesseract_icon.png)';
   updateThemeChecks('polytesseract');
+}
+
+function goFullscreen() {
+  var iframe = document.getElementById('game');
+  if (!iframe) return;
+  // Hide win98 shell
+  document.querySelector('.polycube-window').style.visibility = 'hidden';
+  // Make iframe fullscreen
+  iframe.style.position = 'fixed';
+  iframe.style.left = '0';
+  iframe.style.top = '0';
+  iframe.style.width = '100vw';
+  iframe.style.height = '100vh';
+  iframe.style.zIndex = '99999';
+  iframe.style.border = 'none';
+  document.body.style.overflow = 'hidden';
+  // Request browser fullscreen
+  var el = document.documentElement;
+  if (el.requestFullscreen) el.requestFullscreen();
+  else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  else if (el.msRequestFullscreen) el.msRequestFullscreen();
+  // ESC to exit
+  document.addEventListener('fullscreenchange', function onFSC() {
+    if (!document.fullscreenElement) {
+      iframe.style.position = '';
+      iframe.style.left = '';
+      iframe.style.top = '';
+      iframe.style.width = '';
+      iframe.style.height = '';
+      iframe.style.zIndex = '';
+      document.body.style.overflow = '';
+      document.querySelector('.polycube-window').style.visibility = '';
+      document.removeEventListener('fullscreenchange', onFSC);
+    }
+  });
 }
 </script>
 </body>

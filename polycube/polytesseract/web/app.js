@@ -161,14 +161,14 @@ const _isKo = /^ko/i.test(navigator.language || '');
 const ITEM_DESC = _isKo ? {
   1:'자폭: 착지 시 주변 삭제', 2:'은폐: 현재 블록 숨김', 200:'거울상: 보드 좌우반전', 19:'지그재그: 각 층 블록 재배치', 4:'득점강화: 점수 2배',
   5:'아이템제거', 6:'예측차단: 다음 블록 숨김', 8:'속도두배', 9:'속도절반',
-  10:'홀드봉인', 11:'장애물 추가', 16:'시야봉인: 보드 숨김', 17:'폭탄블록5개: 5블록에 폭탄', 18:'구멍: 블록 30% 제거',
+  10:'홀드봉인', 11:'장애물: 장애물블록 3개 추가', 16:'시야봉인: 보드 숨김', 17:'폭탄블록5개: 5블록에 폭탄', 18:'구멍: 블록 30% 제거',
   91:'회전봉인', 20:'빈공간삭제', 21:'소형화: 3칸 이하 블록만', 22:'대형화', 30:'관통', 31:'상쇄',
   102:'상단삭제', 104:'모노전용: 1칸 블록만', 105:'종렬삭제', 106:'W열삭제', 116:'-2줄', 117:'+2줄',
   118:'범위삭제', 119:'전체삭제', 120:'시한폭탄', 121:'시한폭탄', 122:'시한폭탄',
   123:'시한폭탄', 124:'-3줄', 125:'+1줄', 126:'횡렬삭제', 127:'폭탄변환',
 } : {
   1:'Self-Destruct', 2:'Conceal', 200:'Mirror', 19:'Zigzag: Shuffle each layer', 4:'Score Boost: 2x', 5:'Item Clear',
-  6:'No Preview', 8:'Speed Up', 9:'Slow Down', 10:'Hold Lock', 11:'Obstacle',
+  6:'No Preview', 8:'Speed Up', 9:'Slow Down', 10:'Hold Lock', 11:'Obstacle: Add 3 obstacle blocks',
   16:'Blind', 17:'Bomb x5: Next 5 have bombs', 18:'Hole: Remove 30% blocks', 91:'Rot Lock', 20:'Gap Clear', 21:'Simplify: ≤3 cell blocks only',
   22:'PentaForce', 30:'Pierce', 31:'Cancel', 102:'Top Clear', 104:'Mono Only',
   105:'Col Del', 106:'W Del', 116:'-2 Lines', 117:'+2 Lines', 118:'Range Del', 119:'Full Clear',

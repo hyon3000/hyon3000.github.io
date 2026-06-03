@@ -472,13 +472,19 @@ if (pic === 95) {
   lines([[0.25*t+x,0.6*t+y,-e+z],[0.25*t+x,-0.1*t+y,-e+z]], lc);
   lineStrip([[-0.5*t+x,-0.1*t+y,-e+z],[x,-0.6*t+y,-e+z],[0.5*t+x,-0.1*t+y,-e+z]], lc);
 } else if (pic === 81) {
-  // bombnext: 品 shape
+  // bombnext: 田田田 (밭 x3)
   lineStrip([[-0.2*t+x,-0.6*t+y,e+z],[0.2*t+x,-0.6*t+y,e+z],[0.2*t+x,-0.2*t+y,e+z],[-0.2*t+x,-0.2*t+y,e+z],[-0.2*t+x,-0.6*t+y,e+z]], lc);
+  lines([[0+x,-0.6*t+y,e+z],[0+x,-0.2*t+y,e+z],[-0.2*t+x,-0.4*t+y,e+z],[0.2*t+x,-0.4*t+y,e+z]], lc);
   lineStrip([[-0.5*t+x,0+y,e+z],[-0.1*t+x,0+y,e+z],[-0.1*t+x,0.4*t+y,e+z],[-0.5*t+x,0.4*t+y,e+z],[-0.5*t+x,0+y,e+z]], lc);
+  lines([[-0.3*t+x,0+y,e+z],[-0.3*t+x,0.4*t+y,e+z],[-0.5*t+x,0.2*t+y,e+z],[-0.1*t+x,0.2*t+y,e+z]], lc);
   lineStrip([[0.1*t+x,0+y,e+z],[0.5*t+x,0+y,e+z],[0.5*t+x,0.4*t+y,e+z],[0.1*t+x,0.4*t+y,e+z],[0.1*t+x,0+y,e+z]], lc);
+  lines([[0.3*t+x,0+y,e+z],[0.3*t+x,0.4*t+y,e+z],[0.1*t+x,0.2*t+y,e+z],[0.5*t+x,0.2*t+y,e+z]], lc);
   lineStrip([[-0.2*t+x,-0.6*t+y,-e+z],[0.2*t+x,-0.6*t+y,-e+z],[0.2*t+x,-0.2*t+y,-e+z],[-0.2*t+x,-0.2*t+y,-e+z],[-0.2*t+x,-0.6*t+y,-e+z]], lc);
+  lines([[0+x,-0.6*t+y,-e+z],[0+x,-0.2*t+y,-e+z],[-0.2*t+x,-0.4*t+y,-e+z],[0.2*t+x,-0.4*t+y,-e+z]], lc);
   lineStrip([[-0.5*t+x,0+y,-e+z],[-0.1*t+x,0+y,-e+z],[-0.1*t+x,0.4*t+y,-e+z],[-0.5*t+x,0.4*t+y,-e+z],[-0.5*t+x,0+y,-e+z]], lc);
+  lines([[-0.3*t+x,0+y,-e+z],[-0.3*t+x,0.4*t+y,-e+z],[-0.5*t+x,0.2*t+y,-e+z],[-0.1*t+x,0.2*t+y,-e+z]], lc);
   lineStrip([[0.1*t+x,0+y,-e+z],[0.5*t+x,0+y,-e+z],[0.5*t+x,0.4*t+y,-e+z],[0.1*t+x,0.4*t+y,-e+z],[0.1*t+x,0+y,-e+z]], lc);
+  lines([[0.3*t+x,0+y,-e+z],[0.3*t+x,0.4*t+y,-e+z],[0.1*t+x,0.2*t+y,-e+z],[0.5*t+x,0.2*t+y,-e+z]], lc);
 } else if (pic === 80) {
   // blindboard: horizontal eye with X
   const eyeTop = [], eyeBot = [];
