@@ -566,7 +566,7 @@ function initBlockState() {
   if (itemsEnabled) {
     let _hv = 4;
     if (randInt(10) === 0) { _hv = [1,30,31][randInt(3)]; }
-    else { const _u = randInt(500000); if(_u<100)_hv=116;else if(_u<400)_hv=117;else if(_u<700)_hv=118;else if(_u<720)_hv=119;else if(_u<1520)_hv=104;else if(_u<2020)_hv=120;else if(_u<3020)_hv=121;else if(_u<3720)_hv=122;else if(_u<4020)_hv=123;else if(_u<4070)_hv=124;else if(_u<4870)_hv=125;else if(_u<5120)_hv=91;else if(_u<5220)_hv=102;else if(_u<5420)_hv=126;else if(_u<5620)_hv=105;else if(_u<5820)_hv=106;else if(_u<6120)_hv=127;else if(_u<6220)_hv=17;else if(_u<6420)_hv=20;else if(_u<6820)_hv=21;else if(_u<7620)_hv=22;else if(_u<7870)_hv=16;else if(_u<8070)_hv=11;else if(_u<8320)_hv=2;else if(_u<9320)_hv=8;else if(_u<10320)_hv=9;else if(_u<10570)_hv=10;else if(_u<11570)_hv=5;else if(_u<11820)_hv=6;else if(_u<14070)_hv=120;else if(_u<24370)_hv=200;else if(_u<24670)_hv=19;else if(_u<24970)_hv=18; }
+    else { const _u = randInt(250000); if(_u<100)_hv=116;else if(_u<400)_hv=117;else if(_u<700)_hv=118;else if(_u<720)_hv=119;else if(_u<1520)_hv=104;else if(_u<2020)_hv=120;else if(_u<3020)_hv=121;else if(_u<3720)_hv=122;else if(_u<4020)_hv=123;else if(_u<4070)_hv=124;else if(_u<4870)_hv=125;else if(_u<5120)_hv=91;else if(_u<5220)_hv=102;else if(_u<5420)_hv=126;else if(_u<5620)_hv=105;else if(_u<5820)_hv=106;else if(_u<6120)_hv=127;else if(_u<6220)_hv=17;else if(_u<6420)_hv=20;else if(_u<6820)_hv=21;else if(_u<7620)_hv=22;else if(_u<7870)_hv=16;else if(_u<8070)_hv=11;else if(_u<8320)_hv=2;else if(_u<9320)_hv=8;else if(_u<10320)_hv=9;else if(_u<10570)_hv=10;else if(_u<11570)_hv=5;else if(_u<11820)_hv=6;else if(_u<14070)_hv=120;else if(_u<24370)_hv=200;else if(_u<24670)_hv=19;else if(_u<24970)_hv=18; }
     state.holdblock[3][3][3][3] = _hv;
   } else { state.holdblock[3][3][3][3] = 65; }
   setnextblock();
@@ -1648,7 +1648,7 @@ function tryHoldSwap() {
           if (y + state.blockpos[1] < 0 || y + state.blockpos[1] > 6) return;
           if (z + state.blockpos[2] < 0) return;
           if (w + state.blockpos[3] < 0 || w + state.blockpos[3] > 6) return;
-          if (state.blk[x + state.blockpos[0]][y + state.blockpos[1]][z + state.blockpos[2]][w + state.blockpos[3]] !== 0) return;
+          if (state.holdhb === 0 && state.blk[x + state.blockpos[0]][y + state.blockpos[1]][z + state.blockpos[2]][w + state.blockpos[3]] !== 0) return;
         }
         }
       }
