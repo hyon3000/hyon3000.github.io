@@ -720,14 +720,11 @@ function assignCellFromProbability(baseIndex, x, y, z, w) {
   if (u < 24770) return 200; // mirror 0.03%
   if (u < 25070) return 19; // zigzag 0.03%
   if (u < 25370) return 18; // hole 0.03%
-  if (baseIndex === 0 && randInt(10) === 0) return 1;
-  if (baseIndex === 0 && randInt(10) === 0) {
-    state.nexthb = 1;
-    return 30;
-  }
-  if (baseIndex === 0 && randInt(10) === 1) return 1;
-  if (baseIndex === 0 && randInt(5) < 2) {
-    return 31;
+  if (baseIndex === 0) {
+    const _mr = randInt(100);
+    if (_mr < 10) return 1; // selfdestruct 10%
+    if (_mr < 20) { state.nexthb = 1; return 30; } // pierce 10%
+    if (_mr < 60) return 31; // cancel 40%
   }
   if (state.monoonly || (state.simplify2 > 0 && baseIndex === 0)) return 12 + randInt(4);
   if (u > 20000 && u < 60000 && getHour() === 0 && getMinute() === 0) {

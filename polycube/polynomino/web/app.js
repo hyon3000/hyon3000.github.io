@@ -509,14 +509,11 @@ function assignCellValue(baseVal) {
   if (u < 24970) return 200; // mirror 0.03%
   if (u < 25270) return 19; // zigzag 0.03%
   if (u < 25570) return 18; // hole 0.03%
-  if (state._assignIsMonoBlock && randInt(10) === 0) return 1;
-  if (state._assignIsMonoBlock && randInt(10) === 0) {
-    state.nexthb = 1;
-    return 30;
-  }
-  if (state._assignIsMonoBlock && randInt(10) === 1) return 1;
-  if (state._assignIsMonoBlock && randInt(5) < 2) {
-    return 31;
+  if (state._assignIsMonoBlock) {
+    const _mr = randInt(100);
+    if (_mr < 10) return 1; // selfdestruct 10%
+    if (_mr < 20) { state.nexthb = 1; return 30; } // pierce 10%
+    if (_mr < 60) return 31; // cancel 40%
   }
   if (state.monoonly || (state.simplify2 > 0 && state._assignIsMonoBlock)) return 12 + randInt(4);
   if (u > 20000 && u < 60000 && getHour() === 0 && getMinute() === 0) {
