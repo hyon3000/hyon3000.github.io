@@ -1046,7 +1046,7 @@ function processLine(row) {
       // All clear
       state.board = create2d(BOARD_W, BOARD_H);
       return { filled, tline: 0, hardReset: true };
-    } else if (code === 104) { state.simplify2 = 0; state.pentaForce = 0; state.monoonly += 10; state.board[row][c] = 256; }
+    } else if (code === 104) { state.simplify2 = 0; state.pentaForce = 0; state.monoonly += 11; state.board[row][c] = 256; }
     else if (code === 124) { tline -= 3; state.board[row][c] = 256; }
     else if (code === 125) { tline += 1; state.board[row][c] = 256; }
     else if (code === 91) { state.spinlock += 10; state.board[row][c] = 256; }
@@ -1054,10 +1054,10 @@ function processLine(row) {
     else if (code === 9) { state.speeddown += 10; state.board[row][c] = 256; }
     else if (code === 10) { state.holdlock += 10; state.board[row][c] = 256; }
     else if (code === 16) { state.blindboard = now() + 10000; state.board[row][c] = 256; }
-    else if (code === 17) { state.bombnext += 5; state.board[row][c] = 256; }
+    else if (code === 17) { state.bombnext += 6; state.board[row][c] = 256; }
     else if (code === 20) { state.compactPending = true; state.board[row][c] = 256; }
-    else if (code === 21) { state.monoonly = 0; state.pentaForce = 0; state.simplify2 += 15; state.board[row][c] = 256; }
-    else if (code === 22) { state.monoonly = 0; state.simplify2 = 0; state.pentaForce += 8; state.board[row][c] = 256; }
+    else if (code === 21) { state.monoonly = 0; state.pentaForce = 0; state.simplify2 += 16; state.board[row][c] = 256; }
+    else if (code === 22) { state.monoonly = 0; state.simplify2 = 0; state.pentaForce += 9; state.board[row][c] = 256; }
     else if (code === 2) { state.hideblock += 10; state.board[row][c] = 256; }
     else if (code === 6) { state.hidenext += 10; state.board[row][c] = 256; }
     else if (code === 5) {
@@ -1484,8 +1484,8 @@ function updateFallingLogic() {
   const fallSpeed = gravityTable[Math.min(state.level - 1, gravityTable.length - 1)];
   // vkspace2 (ShiftRight) = fast drop (not instant), softDrop = medium speed
   let speedMult = state.vkspace2 ? 0.025 : 1;
-  if (state.speedup > 0 && speedMult === 1) speedMult = 0.5;
-  if (state.speeddown > 0 && speedMult === 1) speedMult = 2;
+  if (state.speedup > 0 && speedMult === 1) speedMult = 0.4;
+  if (state.speeddown > 0 && speedMult === 1) speedMult = 2.5;
   const doFall = state.timestamp + fallSpeed * speedMult < now();
   if (doFall) {
     const mr = moveDown();
@@ -2626,7 +2626,7 @@ function drawPauseScreen() {
 const _isKo = /^ko/i.test(navigator.language || '');
 const ITEM_DESC = _isKo ? {
   1:'자폭: 착지 시 주변 삭제', 2:'은폐: 현재 블록 숨김', 200:'거울상: 보드 좌우반전', 19:'지그재그: 각 행 블록 재배치', 4:'득점강화: 점수 2배',
-  5:'아이템제거', 6:'예측차단: 다음 블록 숨김', 8:'속도두배', 9:'속도절반',
+  5:'아이템제거', 6:'예측차단: 다음 블록 숨김', 8:'속도증가: x2.5', 9:'속도감소: x0.4',
   10:'홀드봉인', 11:'장애물: 장애물블록 3개 추가', 16:'시야봉인: 보드 숨김', 17:'폭탄블록5개: 5블록에 폭탄', 18:'구멍: 블록 30% 제거',
   91:'회전봉인', 20:'빈공간삭제', 21:'소형화: 3칸 이하 블록만', 22:'대형화', 30:'관통', 31:'상쇄',
   102:'상단삭제', 104:'모노전용: 1칸 블록만', 105:'종렬삭제', 116:'-2줄', 117:'+2줄',
@@ -2634,7 +2634,7 @@ const ITEM_DESC = _isKo ? {
   123:'시한폭탄', 124:'-3줄', 125:'+1줄', 126:'횡렬삭제', 127:'폭탄변환',
 } : {
   1:'Self-Destruct: Delete nearby on land', 2:'Conceal: Hide current block', 200:'Mirror: Flip board L/R', 19:'Zigzag: Shuffle each row', 4:'Score Boost: 2x points', 5:'Item Clear: Remove all items',
-  6:'No Preview: Hide next block', 8:'Speed Up: 2x drop speed', 9:'Slow Down: 0.5x drop speed', 10:'Hold Lock: Disable hold', 11:'Obstacle: Add 3 obstacle blocks',
+  6:'No Preview: Hide next block', 8:'Speed Up: x2.5 drop speed', 9:'Slow Down: x0.4 drop speed', 10:'Hold Lock: Disable hold', 11:'Obstacle: Add 3 obstacle blocks',
   16:'Blind: Hide board', 17:'Bomb x5: Next 5 have bombs', 18:'Hole: Remove 30% blocks', 91:'Rot Lock: Disable rotation', 20:'Gap Clear: Remove empty gaps', 21:'Simplify: ≤3 cell blocks only',
   22:'PentaForce: Larger blocks', 30:'Pierce: Pass through blocks', 31:'Cancel: Erase on contact', 102:'Top Clear: Delete top rows', 104:'Mono Only: 1-cell blocks only',
   105:'Col Del: Delete a column', 116:'-2 Lines: Remove 2 rows', 117:'+2 Lines: Add 2 rows', 118:'Range Del: Area delete', 119:'Full Clear: Clear entire board',

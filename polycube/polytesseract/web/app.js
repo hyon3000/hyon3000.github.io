@@ -160,7 +160,7 @@ const ctx2d = overlayCanvas.getContext('2d');
 const _isKo = /^ko/i.test(navigator.language || '');
 const ITEM_DESC = _isKo ? {
   1:'자폭: 착지 시 주변 삭제', 2:'은폐: 현재 블록 숨김', 200:'거울상: 보드 좌우반전', 19:'지그재그: 각 층 블록 재배치', 4:'득점강화: 점수 2배',
-  5:'아이템제거', 6:'예측차단: 다음 블록 숨김', 8:'속도두배', 9:'속도절반',
+  5:'아이템제거', 6:'예측차단: 다음 블록 숨김', 8:'속도증가: x2.5', 9:'속도감소: x0.4',
   10:'홀드봉인', 11:'장애물: 장애물블록 3개 추가', 16:'시야봉인: 보드 숨김', 17:'폭탄블록5개: 5블록에 폭탄', 18:'구멍: 블록 30% 제거',
   91:'회전봉인', 20:'빈공간삭제', 21:'소형화: 3칸 이하 블록만', 22:'대형화', 30:'관통', 31:'상쇄',
   102:'상단삭제', 104:'모노전용: 1칸 블록만', 105:'종렬삭제', 106:'W열삭제', 116:'-2줄', 117:'+2줄',
@@ -168,7 +168,7 @@ const ITEM_DESC = _isKo ? {
   123:'시한폭탄', 124:'-3줄', 125:'+1줄', 126:'횡렬삭제', 127:'폭탄변환',
 } : {
   1:'Self-Destruct', 2:'Conceal', 200:'Mirror', 19:'Zigzag: Shuffle each layer', 4:'Score Boost: 2x', 5:'Item Clear',
-  6:'No Preview', 8:'Speed Up', 9:'Slow Down', 10:'Hold Lock', 11:'Obstacle: Add 3 obstacle blocks',
+  6:'No Preview', 8:'Speed Up: x2.5', 9:'Slow Down: x0.4', 10:'Hold Lock', 11:'Obstacle: Add 3 obstacle blocks',
   16:'Blind', 17:'Bomb x5: Next 5 have bombs', 18:'Hole: Remove 30% blocks', 91:'Rot Lock', 20:'Gap Clear', 21:'Simplify: ≤3 cell blocks only',
   22:'PentaForce', 30:'Pierce', 31:'Cancel', 102:'Top Clear', 104:'Mono Only',
   105:'Col Del', 106:'W Del', 116:'-2 Lines', 117:'+2 Lines', 118:'Range Del', 119:'Full Clear',
@@ -1217,7 +1217,7 @@ function processLine(cells, z, coords4d) {
     } else if (code === 119) {
       clear4d(state.blk, 0);
       return { hardReset: true, filled };
-    } else if (code === 104) { state.simplify2 = 0; state.pentaForce = 0; state.monoonly += 10; state.blk[x][y][z][w] = 256; }
+    } else if (code === 104) { state.simplify2 = 0; state.pentaForce = 0; state.monoonly += 11; state.blk[x][y][z][w] = 256; }
     else if (code === 124) { cells.tline -= 3; state.blk[x][y][z][w] = 256; }
     else if (code === 125) { cells.tline += 1; state.blk[x][y][z][w] = 256; }
     else if (code === 91) { state.spinlock += 10; state.blk[x][y][z][w] = 256; }
@@ -1225,10 +1225,10 @@ function processLine(cells, z, coords4d) {
     else if (code === 9) { state.speeddown += 10; state.blk[x][y][z][w] = 256; }
     else if (code === 10) { state.holdlock += 10; state.blk[x][y][z][w] = 256; }
     else if (code === 16) { state.blindboard = now() + 10000; state.blk[x][y][z][w] = 256; }
-    else if (code === 17) { state.bombnext += 5; state.blk[x][y][z][w] = 256; }
+    else if (code === 17) { state.bombnext += 6; state.blk[x][y][z][w] = 256; }
     else if (code === 20) { state.compactPending = true; state.blk[x][y][z][w] = 256; }
-    else if (code === 21) { state.monoonly = 0; state.pentaForce = 0; state.simplify2 += 15; state.blk[x][y][z][w] = 256; }
-    else if (code === 22) { state.monoonly = 0; state.simplify2 = 0; state.pentaForce += 8; state.blk[x][y][z][w] = 256; }
+    else if (code === 21) { state.monoonly = 0; state.pentaForce = 0; state.simplify2 += 16; state.blk[x][y][z][w] = 256; }
+    else if (code === 22) { state.monoonly = 0; state.simplify2 = 0; state.pentaForce += 9; state.blk[x][y][z][w] = 256; }
     else if (code === 2) { state.hideblock += 10; state.blk[x][y][z][w] = 256; }
     else if (code === 6) { state.hidenext += 10; state.blk[x][y][z][w] = 256; }
     else if (code === 5) {
@@ -1897,7 +1897,7 @@ function handleTouches() {
 }
 
 function updateFallingLogic() {
-  if (state.timestamp + 6000 / (state.level / 3 + 5) < now() || state.vkspace2 || state.vkspace) {
+  if (state.timestamp + 6000 / (state.level / 3 + 5) * (state.speedup > 0 ? 0.4 : 1) * (state.speeddown > 0 ? 2.5 : 1) < now() || state.vkspace2 || state.vkspace) {
     if (move(2, -1)) {
       if (stickblock()) {
         gover();
