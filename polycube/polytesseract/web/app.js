@@ -1729,11 +1729,11 @@ function clickbutton(x, y) {
     return 0;
   }
   if (state.startscreen === 1 && -0.25 < x && x < 0.25 && -0.51 > y && y > -0.66) {
-    state.about = (state.about + 1) % 5;
+    state.about = (state.about + 1) % 6;
     return 0;
   }
   if (state.startscreen === 1 && state.about !== 0) {
-    state.about = (state.about + 1) % 5;
+    state.about = (state.about + 1) % 6;
     return 0;
   }
   // Minimap hit test: center (0.5, -0.34)
@@ -1763,9 +1763,7 @@ function clickbutton(x, y) {
     if (ry < -bh) row = -1; else if (ry > bh) row = 1; else row = 0;
     if (!state.pause) {
       if (col === 0 && row === 0) {
-        // Center: split into 4 XY directions, no W
-        if (Math.abs(rx) > Math.abs(ry)) { if (rx > 0) move(0, 1); else move(0, -1); }
-        else { if (ry < 0) move(1, 1); else move(1, -1); }
+        state.vkspace2 = true; return 0; // Center = soft drop
       }
       else if (row === -1 && col === 0) move(1, 1);       // N: Y+
       else if (row === 1 && col === 0) move(1, -1);  // S: Y-
@@ -1795,11 +1793,21 @@ function clickbutton(x, y) {
   if (rc1 < x && x < rc2 && rr3 < y && y < rr4) { rotate(4,  1); return 2; }  // YW CCW
   if (rc2 < x && x < rc3 && rr3 < y && y < rr4) { rotate(5,  1); return 2; }  // ZW CCW
   // Right-side buttons — expanded touch areas
-  if (0.15 > x && x > -0.10 && -1.50 < y && y < -1.28) { state.vkspace2 = true; return 0; }  // drop
-  if (0.15 > x && x > -0.10 && -1.28 < y && y < -0.98) { tryHoldSwap(); return 0; }          // hold
+  if (0.15 > x && x > -0.10 && -1.50 < y && y < -1.28) {
+    // Hard drop
+    if (state.pause) return 0;
+    const _hb = state.nowblock;
+    while (!move(2, -1)) { if (state.nowblock !== _hb) break; }
+    if (state.nowblock !== _hb) { state.timestamp = now(); return 0; }
+    if (stickblock()) { gover(); initBlockState(); return 0; }
+    calculatescore(removeline());
+    state.timestamp = now();
+    return 0;
+  }
+  if (0.15 > x && x > -0.10 && -1.28 < y && y < -1.08) { tryHoldSwap(); return 0; }          // hold
   if (0.65 > x && x > 0.25 && 1.40 > y && y > 1.00) { state.pause = !state.pause; return 0; } // pause
-  if (0.15 > x && x > -0.10 && -0.81 > y && y > -1.00) { state.depthColor = !state.depthColor; return 0; } // W color
-  if (0.15 > x && x > -0.10 && -0.58 > y && y > -0.82) { state.rotMode4D = !state.rotMode4D; return 0; }   // XYZ/XYW
+  if (0.15 > x && x > -0.10 && -0.88 > y && y > -1.08) { state.depthColor = !state.depthColor; return 0; } // W color
+  if (0.15 > x && x > -0.10 && -0.67 > y && y > -0.88) { state.rotMode4D = !state.rotMode4D; return 0; }   // XYZ/XYW
   if (-0.60 > y) return 0;
   return 1;
 }
@@ -1913,7 +1921,8 @@ function handleTouches() {
 }
 
 function updateFallingLogic() {
-  if (state.timestamp + 6000 / (state.level / 3 + 5) * (state.speedup > 0 ? 0.4 : 1) * (state.speeddown > 0 ? 2.5 : 1) < now() || state.vkspace2 || state.vkspace) {
+  const _fallInt = 6000 / (state.level / 3 + 5) * (state.speedup > 0 ? 0.4 : 1) * (state.speeddown > 0 ? 2.5 : 1) * (state.vkspace2 ? 0.05 : 1);
+  if (state.timestamp + _fallInt < now()) {
     if (move(2, -1)) {
       if (stickblock()) {
         gover();
@@ -2417,11 +2426,21 @@ function drawControlOverlay() {
     [[-0.170, -0.130, 1], [-0.150, -0.170, 1], [-0.130, -0.130, 1]],
     [[-0.150, -0.170, 1], [-0.150, -0.130, 1]],
   ], [1, 1, 0, 1]);
+  // D-pad center: soft drop (white square)
+  drawPolylines([
+    [[-0.065, -0.065, 1], [0.065, -0.065, 1], [0.065, 0.065, 1], [-0.065, 0.065, 1], [-0.065, -0.065, 1]],
+  ], [1, 1, 1, 1]);
   renderer.popMatrix();
+  // Soft drop V caret at D-pad center (not rotated)
+  drawPolylines([
+    [[0.46, -1.10, 1], [0.50, -1.15, 1], [0.54, -1.10, 1]],
+  ], [1, 1, 1, 1]);
 
-  // Drop button (white rectangle)
+  // Hard drop button (white rectangle + ▼▼ stacked)
   drawPolylines([
     [[0.13, -1.30, 1], [-0.07, -1.30, 1], [-0.07, -1.50, 1], [0.13, -1.50, 1], [0.13, -1.30, 1]],
+    [[-0.01, -1.36, 1], [0.03, -1.40, 1], [0.07, -1.36, 1]],
+    [[-0.01, -1.40, 1], [0.03, -1.44, 1], [0.07, -1.40, 1]],
   ], [1, 1, 1, 1]);
 
   // Pause button
@@ -2435,21 +2454,20 @@ function drawControlOverlay() {
   ], [1, 1, 1, 1]);
   renderer.popMatrix();
 
-  // XYZ/XYW rotation mode toggle (red, y=-0.60~-0.80)
+  // XYZ/XYW rotation mode toggle (red, hold-button sized)
   const rmColor = state.rotMode4D ? [1, 0.3, 0.3, 1] : [0.5, 0, 0, 1];
   drawPolylines([
-    [[-0.07, -0.60, 1], [0.13, -0.60, 1], [0.13, -0.80, 1], [-0.07, -0.80, 1], [-0.07, -0.60, 1]],
+    [[-0.06, -0.69, 1], [0.12, -0.69, 1], [0.12, -0.87, 1], [-0.06, -0.87, 1], [-0.06, -0.69, 1]],
   ], rmColor);
-  // XYZ/XYW label drawn via ctx2d in drawScene3d
 
-  // Depth color toggle button (green square, y=-0.83~-1.00)
+  // Depth color toggle button (green, hold-button sized)
   const dcColor = state.depthColor ? [0, 1, 0.2, 1] : [0, 0.6, 0.1, 1];
   drawPolylines([
-    [[-0.07, -0.83, 1], [0.13, -0.83, 1], [0.13, -1.00, 1], [-0.07, -1.00, 1], [-0.07, -0.83, 1]],
+    [[-0.06, -0.89, 1], [0.12, -0.89, 1], [0.12, -1.07, 1], [-0.06, -1.07, 1], [-0.06, -0.89, 1]],
   ], dcColor);
   // "W" letter inside
   drawPolylines([
-    [[-0.01, -0.85, 1], [0.01, -0.97, 1], [0.03, -0.88, 1], [0.05, -0.97, 1], [0.07, -0.85, 1]],
+    [[-0.01, -0.91, 1], [0.01, -1.05, 1], [0.03, -0.93, 1], [0.05, -1.05, 1], [0.07, -0.91, 1]],
   ], dcColor);
 }
 
@@ -3514,7 +3532,7 @@ function drawScene3d() {
     drawItemInfo3d(_itemCode);
     // XYZ/XYW button label via ctx2d
     const cw = overlayCanvas.width, ch = overlayCanvas.height;
-    const [rbx, rby] = overlayToPixel(0.03, -0.70);
+    const [rbx, rby] = overlayToPixel(-0.02, -0.77);
     const rfs = Math.max(8, Math.floor(cw * 0.035));
     ctx2d.save();
     ctx2d.font = `bold ${rfs}px monospace`;
@@ -3684,13 +3702,6 @@ function drawPauseScreen() {
   renderer.viewport(0, state.activitysizey / 40, state.activitysizex, (state.activitysizey * 41) / 40);
   renderer.translatef(0, 0, -4);
   drawTexture(0, [-1, 2, -1, -1, -2, -1, 1, -2, -1, 1, 2, -1], [0.15, 0.15, 0.15, 1]);
-  if (state.textures[6]) {
-    const gl = renderer.gl;
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    { const bw = 1.6875 * 0.5, bh = bw * 1.3; drawTexture(6, [-bw, bh + 0.0, -0.99, -bw, -bh + 0.0, -0.99, bw, -bh + 0.0, -0.99, bw, bh + 0.0, -0.99], [0.5, 0.5, 0.5, 1]); }
-    gl.disable(gl.BLEND);
-  }
   drawPauseGlyph();
 }
 
@@ -3750,14 +3761,8 @@ function drawGameOverScreen() {
   renderer.clear(renderer.gl.COLOR_BUFFER_BIT | renderer.gl.DEPTH_BUFFER_BIT);
   renderer.viewport(0, state.activitysizey / 40, state.activitysizex, (state.activitysizey * 41) / 40);
   renderer.translatef(0, 0, -4);
-  drawTexture(0, [-1, 2, -1, -1, -2, -1, 1, -2, -1, 1, 2, -1], [0.5, 0.5, 0.5, 1]);
-  if (state.textures[6]) {
-    const gl = renderer.gl;
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    { const bw = 1.6875 * 0.5, bh = bw * 1.3; drawTexture(6, [-bw, bh + 0.0, -0.99, -bw, -bh + 0.0, -0.99, bw, -bh + 0.0, -0.99, bw, bh + 0.0, -0.99], [0.5, 0.5, 0.5, 1]); }
-    gl.disable(gl.BLEND);
-  }
+  // Background same size as start screen
+  { const bw = 1.6875 * 0.5, bh = bw * 1.3; drawTexture(0, [-bw, bh, -1, -bw, -bh, -1, bw, -bh, -1, bw, bh, -1], [0.5, 0.5, 0.5, 1]); }
   drawGameOverGlyphs();
 }
 

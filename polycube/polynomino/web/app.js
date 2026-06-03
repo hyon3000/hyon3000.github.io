@@ -1419,13 +1419,13 @@ function getButtonLayout() {
   const moveX = cw * 0.75;
   const moveLeftBtn = { x: moveX - btnSize - gap, y: bottomY - btnSize - gap / 2, w: btnSize, h: btnSize, action: 'moveLeft', label: '<' };
   const moveRightBtn = { x: moveX + gap, y: bottomY - btnSize - gap / 2, w: btnSize, h: btnSize, action: 'moveRight', label: '>' };
-  // Hard drop button below (same height as hold)
-  const hardDropBtn = { x: moveX - btnSize / 2, y: bottomY + gap / 2, w: btnSize, h: btnSize, action: 'hardDrop', label: '▼▼' };
+  // Soft drop button below (same height as hold)
+  const dropBtn = { x: moveX - btnSize / 2, y: bottomY + gap / 2, w: btnSize, h: btnSize, action: 'drop', label: 'DROP' };
 
-  // Center: drop + hold (shifted left)
+  // Center: hold (top) + hard drop (bottom, shifted left)
   const centerX = cw * 0.44;
-  const dropBtn = { x: centerX - btnSize / 2, y: bottomY - btnSize - gap / 2, w: btnSize, h: btnSize, action: 'drop', label: 'DROP' };
-  const holdBtn = { x: centerX - btnSize / 2, y: bottomY + gap / 2, w: btnSize, h: btnSize, action: 'hold', label: 'HOLD', color: '#cc4488' };
+  const holdBtn = { x: centerX - btnSize / 2, y: bottomY - btnSize - gap / 2, w: btnSize, h: btnSize, action: 'hold', label: 'HOLD', color: '#cc4488' };
+  const hardDropBtn = { x: centerX - btnSize / 2, y: bottomY + gap / 2, w: btnSize, h: btnSize, action: 'hardDrop', label: '▼▼' };
 
   // Pause button (top right)
   const pauseSize = btnSize * 0.9;
@@ -1547,8 +1547,8 @@ function updateFallingLogic() {
   // NES Tetris standard gravity (frames per drop at 60fps → ms)
   const gravityTable = [800,717,633,550,467,383,300,217,133];
   const fallSpeed = gravityTable[Math.min(state.level - 1, gravityTable.length - 1)];
-  // vkspace2 (Space) = fast drop (not instant), softDrop = medium speed
-  let speedMult = state.vkspace2 ? 0.025 : 1;
+  // vkspace2 (Space) = soft drop (20× speed, Tetris guideline standard)
+  let speedMult = state.vkspace2 ? 0.05 : 1;
   if (state.speedup > 0 && speedMult === 1) speedMult = 0.4;
   if (state.speeddown > 0 && speedMult === 1) speedMult = 2.5;
   const doFall = state.timestamp + fallSpeed * speedMult < now();
@@ -2481,7 +2481,7 @@ function drawTouchButtons() {
       ctx.stroke();
     } else if (isHardDrop) {
       // Draw double downward arrow ▼▼
-      ctx.strokeStyle = '#ff0';
+      ctx.strokeStyle = '#fff';
       ctx.lineWidth = 2;
       const a = arrowSize * 0.8;
       ctx.beginPath();

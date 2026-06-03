@@ -1545,6 +1545,7 @@ function clickbutton(x, y) {
     return 2;
   }
   if ((x - 0.45) * (x - 0.45) + (y + 1.095) * (y + 1.095) < 0.09) {
+    if ((x - 0.45) * (x - 0.45) + (y + 1.095) * (y + 1.095) < 0.006) { state.vkspace2 = true; return 0; }
     let deg = Math.atan2(y + 1.095, x - 0.45) - state.r1o;
     while (deg < -PI) deg += 2 * PI;
     while (deg > PI) deg -= 2 * PI;
@@ -1565,7 +1566,16 @@ function clickbutton(x, y) {
   if (-0.495 < x && x < -0.305 && -1.085 < y && y < -0.895) { rotate(1, 1); return 2; }
   if (-0.705 < x && x < -0.505 && -1.295 < y && y < -1.105) { rotate(2, -1); return 2; }
   if (-0.705 < x && x < -0.505 && -1.085 < y && y < -0.895) { rotate(2, 1); return 2; }
-  if (0.13 > x && x > -0.07 && -1.30 < y && y < -1.10) { state.vkspace2 = true; return 0; }
+  if (0.13 > x && x > -0.07 && -1.30 < y && y < -1.10) {
+    // Hard drop
+    const _hb = state.nowblock;
+    while (!move(2, -1)) { if (state.nowblock !== _hb) break; }
+    if (state.nowblock !== _hb) { state.timestamp = now(); return 0; }
+    if (stickblock()) { gover(); initBlockState(); return 0; }
+    calculatescore(removeline());
+    state.timestamp = now();
+    return 0;
+  }
   if (0.13 > x && x > -0.07 && -1.10 < y && y < -0.80) { tryHoldSwap(); return 0; }
   if (0.6 > x && x > 0.3 && 1.35 > y && y > 1.05) { state.pause = !state.pause; return 0; }
   if (-0.60 > y) return 0;
@@ -1628,7 +1638,8 @@ function updateFallingLogic() {
   let fallInterval = 6000 / (state.level / 3 + 5);
   if (state.speedup > 0) fallInterval *= 0.4;
   if (state.speeddown > 0) fallInterval *= 2.5;
-  if (state.timestamp + fallInterval < now() || state.vkspace2 || state.vkspace) {
+  if (state.vkspace2) fallInterval *= 0.05; // soft drop: 20× speed (Tetris guideline)
+  if (state.timestamp + fallInterval < now()) {
     if (move(2, -1)) {
       if (stickblock()) {
         gover();
@@ -2034,10 +2045,21 @@ function drawControlOverlay() {
     [[0.225 - 0.375, -0.945 + 0.925, 1], [0.205 - 0.375, -0.925 + 0.925, 1], [0.225 - 0.375, -0.905 + 0.925, 1]],
     [[0.525 - 0.375, -0.945 + 0.925, 1], [0.545 - 0.375, -0.925 + 0.925, 1], [0.525 - 0.375, -0.905 + 0.925, 1]],
   ], [1, 1, 0, 1]);
+  // D-pad center: soft drop (white square)
+  drawPolylines([
+    [[-0.065, -0.065, 1], [0.065, -0.065, 1], [0.065, 0.065, 1], [-0.065, 0.065, 1], [-0.065, -0.065, 1]],
+  ], [1, 1, 1, 1]);
   renderer.popMatrix();
+  // Soft drop V caret at D-pad center (not rotated)
+  drawPolylines([
+    [[0.46, -1.10, 1], [0.50, -1.15, 1], [0.54, -1.10, 1]],
+  ], [1, 1, 1, 1]);
 
+  // Hard drop button (white rectangle + ▼▼ stacked)
   drawPolylines([
     [[0.13, -1.10, 1], [-0.07, -1.10, 1], [-0.07, -1.30, 1], [0.13, -1.30, 1], [0.13, -1.10, 1]],
+    [[-0.01, -1.16, 1], [0.03, -1.20, 1], [0.07, -1.16, 1]],
+    [[-0.01, -1.20, 1], [0.03, -1.24, 1], [0.07, -1.20, 1]],
   ], [1, 1, 1, 1]);
 
   renderer.pushMatrix();

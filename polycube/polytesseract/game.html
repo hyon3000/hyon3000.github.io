@@ -90,19 +90,22 @@ canvas{display:block;width:100%;height:100%;touch-action:none;background:#000}
 <span class="lang-en" style="display:none">Toggle rainbow coloring by W-axis depth. When ON, W=0(red)~W=6(violet) shows 4D position as color.</span></p>
 
 <p><span style="color:#ff0;font-weight:bold">D-pad <span class="lang-ko">(방향패드)</span></span><br>
-<span class="lang-ko">8방향 원형 패드. 상(Y−)·하(Y+)·좌(X−)·우(X+): XY 이동.<br>우상(W+)·좌하(W−): W축 이동. 좌상·우하는 미사용.</span>
-<span class="lang-en" style="display:none">8-way circular pad. N(Y−)·S(Y+)·W(X−)·E(X+): XY movement.<br>NE(W+)·SW(W−): W-axis. NW·SE unused.</span></p>
+<span class="lang-ko">6방향 격자 패드. 상(Y−)·하(Y+)·좌(X−)·우(X+): XY 이동.<br>우상(W+)·좌하(W−): W축 이동. <b style="color:#fff">중심: 소프트드롭</b></span>
+<span class="lang-en" style="display:none">6-way grid pad. N(Y−)·S(Y+)·W(X−)·E(X+): XY movement.<br>NE(W+)·SW(W−): W-axis. <b style="color:#fff">Center: Soft Drop</b></span></p>
 
-<p><span style="color:#fff;font-weight:bold">&#9632; <span class="lang-ko">드롭</span><span class="lang-en" style="display:none">Drop</span></span>
+<p><span style="color:#fff;font-weight:bold">&#9660;&#9660; <span class="lang-ko">하드드롭</span><span class="lang-en" style="display:none">Hard Drop</span></span>
  · <span style="color:#f0f;font-weight:bold">&#9632; <span class="lang-ko">홀드</span><span class="lang-en" style="display:none">Hold</span></span><br>
-<span class="lang-ko">드롭: 블록을 바닥까지 즉시 낙하. 홀드: 현재 블록을 보관하고 다음 블록 또는 보관된 블록과 교체.</span>
-<span class="lang-en" style="display:none">Drop: instant hard drop. Hold: store current block and swap with held/next block.</span></p>
+<span class="lang-ko">하드드롭: 블록을 바닥까지 즉시 낙하. 홀드: 현재 블록을 보관하고 다음 블록 또는 보관된 블록과 교체.</span>
+<span class="lang-en" style="display:none">Hard Drop: instant drop to floor. Hold: store current block and swap with held/next block.</span></p>
 
 <p><span class="lang-ko">드래그: 카메라 회전 | 핀치/휠: 줌</span>
 <span class="lang-en" style="display:none">Drag: camera rotation | Pinch/Wheel: zoom</span></p>
 
 </div>
 
+<p class="hint"><span class="lang-ko">터치하면 다음 &rarr;</span><span class="lang-en" style="display:none">Tap for next &rarr;</span></p></div></div>
+
+<div id="about3" class="ao"><div class="ai">
 <h3><span class="lang-ko">미니맵</span><span class="lang-en" style="display:none">Minimap</span></h3>
 <div style="text-align:center"><img src="assets/minimap.png" alt="minimap" style="width:35%;image-rendering:pixelated;border:1px solid #555"></div>
 <p style="font-size:0.72em"><span class="lang-ko">우측 미니맵은 <b>W=3 슬라이스</b>의 Z ≥ floor 블록 상태를 위에서 내려다본 XY 평면도.<br>미니맵을 터치하면 <b>floor = (floor+1) mod 7</b>로 표시 층이 순환됨.</span>
@@ -113,7 +116,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;background:#000}
 <p style="font-size:0.65em"><span class="key">Z</span><span class="key">X</span> XY | <span class="key">C</span><span class="key">V</span> YZ | <span class="key">R</span><span class="key">T</span> XZ<br><span class="key">A</span><span class="key">S</span> XW | <span class="key">D</span><span class="key">F</span> YW | <span class="key">G</span><span class="key">H</span> ZW</p>
 <p class="hint"><span class="lang-ko">터치하면 다음 &rarr;</span><span class="lang-en" style="display:none">Tap for next &rarr;</span></p></div></div>
 
-<div id="about3" class="ao"><div class="ai">
+<div id="about4" class="ao"><div class="ai">
 <h2><span class="lang-ko">IV. 일반 블록</span><span class="lang-en" style="display:none">IV. Blocks</span></h2>
 <p style="font-size:0.72em;color:#aaa"><span class="lang-ko">Lv1: 모노10% 디20% 트리30% 테트라40%</span><span class="lang-en" style="display:none">Lv1: Mono10% Di20% Tri30% Tetra40%</span></p>
 <div class="sg5">
@@ -184,7 +187,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;background:#000}
 </div>
 <p class="hint"><span class="lang-ko">터치하면 다음 &rarr;</span><span class="lang-en" style="display:none">Tap for next &rarr;</span></p></div></div>
 
-<div id="about4" class="ao"><div class="ai">
+<div id="about5" class="ao"><div class="ai">
 <h2><span class="lang-ko">V. 특수 블록 — </span><span class="lang-en" style="display:none">V. Special Blocks — </span><span style="color:#8f8"><span class="lang-ko">유리</span><span class="lang-en" style="display:none">Buff</span></span> / <span style="color:#f88"><span class="lang-ko">불리</span><span class="lang-en" style="display:none">Debuff</span></span></h2>
 <h3 style="color:#8f8;margin:0.2em 0 0.1em"><span class="lang-ko">유리한 아이템</span><span class="lang-en" style="display:none">Buff</span></h3>
 <div class="ig">
@@ -256,7 +259,7 @@ function doResize(){fitViewport();if(window.__ptResize)window.__ptResize();}
 doResize();window.addEventListener('resize',doResize);
 (function poll(){
 var a=window.__polytesseractAbout;
-for(var i=1;i<=4;i++){var el=document.getElementById('about'+i);if(el){if(a===i)el.classList.add('v');else el.classList.remove('v')}}
+for(var i=1;i<=5;i++){var el=document.getElementById('about'+i);if(el){if(a===i)el.classList.add('v');else el.classList.remove('v')}}
 requestAnimationFrame(poll);
 })();
 </script>
