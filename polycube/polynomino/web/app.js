@@ -2699,12 +2699,12 @@ function drawPauseScreen() {
 const _isKo = /^ko/i.test(navigator.language || '');
 const ITEM_DESC = _isKo ? {
   1:'자폭: 착지 시 주변 삭제', 2:'은폐: 현재 블록 숨김', 200:'거울상: 보드 좌우반전', 19:'지그재그: 각 행 블록 재배치', 4:'득점강화: 점수 2배',
-  5:'아이템제거', 6:'예측차단: 다음 블록 숨김', 8:'속도증가: x2.5', 9:'속도감소: x0.4',
-  10:'홀드봉인', 11:'장애물: 장애물블록 3개 추가', 16:'시야봉인: 보드 숨김', 17:'폭탄블록5개: 5블록에 폭탄', 18:'구멍: 블록 30% 제거',
-  91:'회전봉인', 20:'빈공간삭제', 21:'소형화: 8턴간 3칸 이하', 22:'대형화', 30:'관통', 31:'상쇄',
-  102:'상단삭제', 104:'모노전용: 1칸 블록만', 105:'종렬삭제', 116:'-2줄', 117:'+2줄',
-  118:'범위삭제', 119:'전체삭제', 120:'시한폭탄', 121:'시한폭탄', 122:'시한폭탄',
-  123:'시한폭탄', 124:'-3줄', 125:'+1줄', 126:'횡렬삭제', 127:'폭탄변환',
+  5:'아이템제거: 판 위 아이템 제거', 6:'예측차단: 다음 블록 숨김', 8:'속도증가: x2.5', 9:'속도감소: x0.4',
+  10:'홀드봉인: 10턴간 홀드 불가', 11:'장애물: 장애물블록 3개 추가', 16:'시야봉인: 보드 숨김', 17:'폭탄블록5개: 5블록에 폭탄', 18:'구멍: 블록 30% 제거',
+  91:'회전봉인: 10턴간 회전 불가', 20:'빈공간삭제: 갭 제거 후 압축', 21:'소형화: 8턴간 3칸 이하', 22:'대형화: 8턴간 5칸 이상', 30:'관통: 낙하경로 블록파괴', 31:'상쇄: 블록과 닿으면 상호삭제',
+  102:'상단삭제: 위의 블록 제거', 104:'모노전용: 1칸 블록만', 105:'종렬삭제: 해당 열 삭제', 116:'-2줄: 바닥 2줄 제거', 117:'+2줄: 추가 2줄 클리어',
+  118:'범위삭제: 주변 영역 삭제', 119:'전체삭제: 판 전체 클리어', 120:'시한폭탄: 3턴후 폭발', 121:'시한폭탄: 2턴후 폭발', 122:'시한폭탄: 1턴후 폭발',
+  123:'시한폭탄: 폭발 임박', 124:'-3줄: 바닥 3줄 제거', 125:'+1줄: 추가 1줄 클리어', 126:'횡렬삭제: 해당 행 삭제', 127:'폭탄변환: 30%확률 폭탄화',
 } : {
   1:'Self-Destruct: Delete nearby on land', 2:'Conceal: Hide current block', 200:'Mirror: Flip board L/R', 19:'Zigzag: Shuffle each row', 4:'Score Boost: 2x points', 5:'Item Clear: Remove all items',
   6:'No Preview: Hide next block', 8:'Speed Up: x2.5 drop speed', 9:'Slow Down: x0.4 drop speed', 10:'Hold Lock: Disable hold', 11:'Obstacle: Add 3 obstacle blocks',
@@ -2759,7 +2759,7 @@ function drawItemInfo() {
 
   const textY = boardBottom + gapH * 0.5;
   const blockSize = Math.min(gapH * 0.65, state.cellSize * 0.9);
-  const startX = state.boardX;
+  const startX = Math.max(state.canvasW * 0.02, state.boardX);
 
   drawCell(startX, textY - blockSize / 2, blockSize, blockSize, code);
 
@@ -2767,8 +2767,9 @@ function drawItemInfo() {
   ctx.save();
   ctx.font = `bold ${Math.floor(fontSize)}px sans-serif`;
   ctx.fillStyle = ITEM_GOOD.has(code) ? '#0ff' : '#f90';
+  ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  const maxTextW = state.cellSize * BOARD_W - blockSize - fontSize * 0.5;
+  const maxTextW = state.canvasW - startX - blockSize - fontSize * 0.5;
   const txt = ctx.measureText(desc).width > maxTextW ? desc.substring(0, Math.floor(desc.length * maxTextW / ctx.measureText(desc).width)) : desc;
   ctx.fillText(txt, startX + blockSize + fontSize * 0.3, textY);
   ctx.restore();
