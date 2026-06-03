@@ -447,6 +447,28 @@ ctx.lineTo(cx - s*0.7, cy + s*0.3);
 ctx.lineTo(cx - s*0.2, cy + s*0.8);
 ctx.stroke();
 }
+if (code === 3) {
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx - 0.5*s, cy - 0.5*s);
+  ctx.lineTo(cx + 0.5*s, cy - 0.5*s);
+  ctx.lineTo(cx - 0.5*s, cy + 0.5*s);
+  ctx.lineTo(cx + 0.5*s, cy + 0.5*s);
+  ctx.stroke();
+}
+if (code === 18) {
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx - 0.15*s, cy - 0.55*s);
+  ctx.lineTo(cx + 0.15*s, cy - 0.55*s);
+  ctx.moveTo(cx + 0.33*s, cy + 0.17*s);
+  ctx.lineTo(cx + 0.48*s, cy + 0.43*s);
+  ctx.moveTo(cx - 0.48*s, cy + 0.43*s);
+  ctx.lineTo(cx - 0.33*s, cy + 0.17*s);
+  ctx.stroke();
+}
 } // end else (normal solid cell)
 } else if (b) {
   let minR=99,maxR=-99,minC=99,maxC=-99;

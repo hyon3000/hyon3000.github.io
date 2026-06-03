@@ -490,6 +490,8 @@ function assignCellValue(baseVal) {
   if (u < 14270) return 120;
   if (u < 24270) return 4;
   if (u < 24570) return 200; // mirror 0.03%
+  if (u < 24870) return 3; // zigzag 0.03%
+  if (u < 25170) return 18; // hole 0.03%
   if (state._assignIsMonoBlock && randInt(10) === 0) return 1;
   if (state._assignIsMonoBlock && randInt(20) === 0) {
     state.nexthb = 1;
@@ -507,7 +509,7 @@ function assignCellValue(baseVal) {
       [4900, 116], [14700, 117], [14700, 118], [499, 119], [14700, 104],
       [171500, 120], [49000, 121], [34300, 122], [14700, 123], [1497, 124],
       [39200, 125], [12250, 91], [4900, 102], [9800, 126], [9800, 105],
-      [4900, 127], [9800, 1], [12250, 2], [49000, 5], [12250, 6], [40000, 4],
+      [4900, 127], [9800, 1], [12250, 2], [49000, 5], [12250, 6], [40000, 4], [4900, 3], [4900, 18],
     ];
     const dp = getDateP();
     const entry = bonus[dp] || bonus[20];
@@ -1032,6 +1034,41 @@ function processLine(row) {
           if ((state.board[r2][c2] & 255) !== 0 && randInt(2) === 0) {
             state.board[r2][c2] = (state.board[r2][c2] & 256) + 120 + randInt(4);
           }
+        }
+      }
+    } else if (code === 18) {
+      // Hole: remove 30% of all blocks
+      state.board[row][c] |= 256;
+      for (let r2 = 0; r2 < BOARD_H; r2++) {
+        for (let c2 = 0; c2 < BOARD_W; c2++) {
+          if ((state.board[r2][c2] & 255) !== 0 && randInt(100) < 30) {
+            state.board[r2][c2] = state.board[r2][c2] & 256;
+          }
+        }
+      }
+    } else if (code === 3) {
+      // Zigzag: shuffle blocks within each row
+      state.board[row][c] |= 256;
+      for (let r2 = 0; r2 < BOARD_H; r2++) {
+        const vals = [];
+        const cols = [];
+        for (let c2 = 0; c2 < BOARD_W; c2++) {
+          const v = state.board[r2][c2] & 255;
+          if (v !== 0) vals.push(v);
+          cols.push(c2);
+        }
+        // Clear all cells in this row
+        for (const c2 of cols) {
+          state.board[r2][c2] = state.board[r2][c2] & 256;
+        }
+        // Shuffle column positions
+        for (let i = cols.length - 1; i > 0; i--) {
+          const j = randInt(i + 1);
+          [cols[i], cols[j]] = [cols[j], cols[i]];
+        }
+        // Place blocks at first N shuffled positions
+        for (let i = 0; i < vals.length; i++) {
+          state.board[r2][cols[i]] = (state.board[r2][cols[i]] & 256) + vals[i];
         }
       }
     } else {
@@ -1994,6 +2031,33 @@ function drawCellDecoration(x, y, w, h, val) {
     ctx.lineTo(cx - s * 0.2, cy + s * 0.8);
     ctx.stroke();
   }
+  // Hole: three dashes at 12, 4, 8 o'clock
+  if (code === 18) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    // 12 o'clock
+    ctx.moveTo(cx - 0.15*s, cy - 0.55*s);
+    ctx.lineTo(cx + 0.15*s, cy - 0.55*s);
+    // 4 o'clock (lower-right)
+    ctx.moveTo(cx + 0.33*s, cy + 0.17*s);
+    ctx.lineTo(cx + 0.48*s, cy + 0.43*s);
+    // 8 o'clock (lower-left)
+    ctx.moveTo(cx - 0.48*s, cy + 0.43*s);
+    ctx.lineTo(cx - 0.33*s, cy + 0.17*s);
+    ctx.stroke();
+  }
+  // Zigzag: Z letter
+  if (code === 3) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - 0.5*s, cy - 0.5*s);
+    ctx.lineTo(cx + 0.5*s, cy - 0.5*s);
+    ctx.lineTo(cx - 0.5*s, cy + 0.5*s);
+    ctx.lineTo(cx + 0.5*s, cy + 0.5*s);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -2443,17 +2507,17 @@ function drawPauseScreen() {
 // --- Item info overlay ---
 const _isKo = /^ko/i.test(navigator.language || '');
 const ITEM_DESC = _isKo ? {
-  1:'자폭: 착지 시 주변 삭제', 2:'은폐: 현재 블록 숨김', 200:'거울상: 보드 좌우반전', 4:'득점강화: 점수 2배',
+  1:'자폭: 착지 시 주변 삭제', 2:'은폐: 현재 블록 숨김', 200:'거울상: 보드 좌우반전', 3:'지그재그: 각 행 블록 재배치', 4:'득점강화: 점수 2배',
   5:'아이템제거', 6:'예측차단: 다음 블록 숨김', 8:'속도두배', 9:'속도절반',
-  10:'홀드봉인', 11:'장애물 추가', 16:'시야봉인: 보드 숨김', 17:'폭탄블록 추가',
+  10:'홀드봉인', 11:'장애물 추가', 16:'시야봉인: 보드 숨김', 17:'폭탄블록 추가', 18:'구멍: 블록 30% 제거',
   91:'회전봉인', 20:'빈공간삭제', 21:'소형화', 22:'대형화', 30:'관통', 31:'상쇄',
   102:'상단삭제', 104:'단순화: 1칸 블록', 105:'종렬삭제', 116:'-2줄', 117:'+2줄',
   118:'범위삭제', 119:'전체삭제', 120:'시한폭탄', 121:'시한폭탄', 122:'시한폭탄',
   123:'시한폭탄', 124:'-3줄', 125:'+1줄', 126:'횡렬삭제', 127:'폭탄변환',
 } : {
-  1:'Self-Destruct', 2:'Conceal', 200:'Mirror', 4:'Score Boost: 2x', 5:'Item Clear',
+  1:'Self-Destruct', 2:'Conceal', 200:'Mirror', 3:'Zigzag: Shuffle each row', 4:'Score Boost: 2x', 5:'Item Clear',
   6:'No Preview', 8:'Speed Up', 9:'Slow Down', 10:'Hold Lock', 11:'Obstacle',
-  16:'Blind', 17:'Bomb x3', 91:'Rot Lock', 20:'Gap Clear', 21:'Simplify',
+  16:'Blind', 17:'Bomb x3', 18:'Hole: Remove 30% blocks', 91:'Rot Lock', 20:'Gap Clear', 21:'Simplify',
   22:'PentaForce', 30:'Pierce', 31:'Cancel', 102:'Top Clear', 104:'Mono Only',
   105:'Col Del', 116:'-2 Lines', 117:'+2 Lines', 118:'Range Del', 119:'Full Clear',
   120:'Time Bomb', 121:'Time Bomb', 122:'Time Bomb', 123:'Time Bomb',

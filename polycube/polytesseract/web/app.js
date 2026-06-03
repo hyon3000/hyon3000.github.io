@@ -159,17 +159,17 @@ const ctx2d = overlayCanvas.getContext('2d');
 
 const _isKo = /^ko/i.test(navigator.language || '');
 const ITEM_DESC = _isKo ? {
-  1:'자폭: 착지 시 주변 삭제', 2:'은폐: 현재 블록 숨김', 200:'거울상: 보드 좌우반전', 4:'득점강화: 점수 2배',
+  1:'자폭: 착지 시 주변 삭제', 2:'은폐: 현재 블록 숨김', 200:'거울상: 보드 좌우반전', 3:'지그재그: 각 층 블록 재배치', 4:'득점강화: 점수 2배',
   5:'아이템제거', 6:'예측차단: 다음 블록 숨김', 8:'속도두배', 9:'속도절반',
-  10:'홀드봉인', 11:'장애물 추가', 16:'시야봉인: 보드 숨김', 17:'폭탄블록 추가',
+  10:'홀드봉인', 11:'장애물 추가', 16:'시야봉인: 보드 숨김', 17:'폭탄블록 추가', 18:'구멍: 블록 30% 제거',
   91:'회전봉인', 20:'빈공간삭제', 21:'소형화', 22:'대형화', 30:'관통', 31:'상쇄',
   102:'상단삭제', 104:'단순화: 1칸 블록', 105:'종렬삭제', 106:'W열삭제', 116:'-2줄', 117:'+2줄',
   118:'범위삭제', 119:'전체삭제', 120:'시한폭탄', 121:'시한폭탄', 122:'시한폭탄',
   123:'시한폭탄', 124:'-3줄', 125:'+1줄', 126:'횡렬삭제', 127:'폭탄변환',
 } : {
-  1:'Self-Destruct', 2:'Conceal', 200:'Mirror', 4:'Score Boost: 2x', 5:'Item Clear',
+  1:'Self-Destruct', 2:'Conceal', 200:'Mirror', 3:'Zigzag: Shuffle each layer', 4:'Score Boost: 2x', 5:'Item Clear',
   6:'No Preview', 8:'Speed Up', 9:'Slow Down', 10:'Hold Lock', 11:'Obstacle',
-  16:'Blind', 17:'Bomb x3', 91:'Rot Lock', 20:'Gap Clear', 21:'Simplify',
+  16:'Blind', 17:'Bomb x3', 18:'Hole: Remove 30% blocks', 91:'Rot Lock', 20:'Gap Clear', 21:'Simplify',
   22:'PentaForce', 30:'Pierce', 31:'Cancel', 102:'Top Clear', 104:'Mono Only',
   105:'Col Del', 106:'W Del', 116:'-2 Lines', 117:'+2 Lines', 118:'Range Del', 119:'Full Clear',
   120:'Time Bomb', 121:'Time Bomb', 122:'Time Bomb', 123:'Time Bomb',
@@ -694,6 +694,8 @@ function assignCellFromProbability(baseIndex, x, y, z, w) {
   if (u < 14070) return 120;
   if (u < 24070) return 4;
   if (u < 24370) return 200; // mirror 0.03%
+  if (u < 24670) return 3; // zigzag 0.03%
+  if (u < 24970) return 18; // hole 0.03%
   if (baseIndex === 0 && randInt(10) === 0) return 1;
   if (baseIndex === 0 && randInt(20) === 0) {
     state.nexthb = 1;
@@ -711,7 +713,7 @@ function assignCellFromProbability(baseIndex, x, y, z, w) {
       [4900, 116], [14700, 117], [14700, 118], [499, 119], [14700, 104],
       [171500, 120], [49000, 121], [34300, 122], [14700, 123], [1497, 124],
       [39200, 125], [12250, 91], [4900, 102], [9800, 126], [9800, 105],
-      [4900, 127], [9800, 106], [9800, 1], [12250, 2], [49000, 5], [12250, 6], [40000, 4],
+      [4900, 127], [9800, 106], [9800, 1], [12250, 2], [49000, 5], [12250, 6], [40000, 4], [4900, 3], [4900, 18],
     ];
     const dp = getDateP();
     const entry = bonus[dp] || bonus[20];
@@ -1265,6 +1267,50 @@ function processLine(cells, z, coords4d) {
             }
             }
           }
+        }
+      }
+    } else if (code === 18) {
+      // Hole: remove 30% of all blocks
+      state.blk[x][y][z][w] |= 256;
+      for (let x2 = 0; x2 < 7; x2 += 1) {
+        for (let y2 = 0; y2 < 7; y2 += 1) {
+          for (let z2 = 0; z2 < 26; z2 += 1) {
+            for (let w2 = 0; w2 < 7; w2 += 1) {
+              if ((state.blk[x2][y2][z2][w2] & 255) !== 0 && randInt(100) < 30) {
+                state.blk[x2][y2][z2][w2] = state.blk[x2][y2][z2][w2] & 256;
+              }
+            }
+          }
+        }
+      }
+    } else if (code === 3) {
+      // Zigzag: shuffle blocks within each z-layer
+      state.blk[x][y][z][w] |= 256;
+      for (let z2 = 0; z2 < 26; z2 += 1) {
+        const vals = [];
+        const positions = [];
+        for (let x2 = 0; x2 < 7; x2 += 1) {
+          for (let y2 = 0; y2 < 7; y2 += 1) {
+            for (let w2 = 0; w2 < 7; w2 += 1) {
+              const v = state.blk[x2][y2][z2][w2] & 255;
+              if (v !== 0) vals.push(v);
+              positions.push([x2, y2, w2]);
+            }
+          }
+        }
+        // Clear all positions in this layer
+        for (const [px, py, pw] of positions) {
+          state.blk[px][py][z2][pw] = state.blk[px][py][z2][pw] & 256;
+        }
+        // Shuffle positions
+        for (let i = positions.length - 1; i > 0; i--) {
+          const j = randInt(i + 1);
+          [positions[i], positions[j]] = [positions[j], positions[i]];
+        }
+        // Place blocks at first N shuffled positions
+        for (let i = 0; i < vals.length; i++) {
+          const [px, py, pw] = positions[i];
+          state.blk[px][py][z2][pw] = (state.blk[px][py][z2][pw] & 256) + vals[i];
         }
       }
     } else {
@@ -2913,6 +2959,20 @@ function drawSpecialPic(pic, x, y, z, t, color, val) {
     q([[e + x, 0.3 * t + y, 0.6 * t + z], [e + x, 0.3 * t + y, 0.4 * t + z], [e + x, -0.3 * t + y, 0.4 * t + z], [e + x, -0.3 * t + y, 0.6 * t + z]]);
     return true;
   }
+  // pic 82 (hole): three dashes at 12, 4, 8 o'clock positions
+  if (pic === 82) {
+    // 12 o'clock
+    lines([[-0.15*t+x, -0.55*t+y, e+z], [0.15*t+x, -0.55*t+y, e+z]], lc);
+    // 4 o'clock
+    lines([[0.33*t+x, 0.17*t+y, e+z], [0.48*t+x, 0.43*t+y, e+z]], lc);
+    // 8 o'clock
+    lines([[-0.48*t+x, 0.43*t+y, e+z], [-0.33*t+x, 0.17*t+y, e+z]], lc);
+    // Back face
+    lines([[-0.15*t+x, -0.55*t+y, -e+z], [0.15*t+x, -0.55*t+y, -e+z]], lc);
+    lines([[0.33*t+x, 0.17*t+y, -e+z], [0.48*t+x, 0.43*t+y, -e+z]], lc);
+    lines([[-0.48*t+x, 0.43*t+y, -e+z], [-0.33*t+x, 0.17*t+y, -e+z]], lc);
+    return true;
+  }
   if (pic === 67) {
     specialColor = [1, 1, 1, 0.8];
     const faces = [
@@ -2927,6 +2987,12 @@ function drawSpecialPic(pic, x, y, z, t, color, val) {
       lineStrip(faces[i], specialColor);
       lineStrip(faces[i+1], specialColor);
     }
+    return true;
+  }
+  // pic 67 (zigzag): Z letter on front and back
+  if (pic === 67) {
+    lineStrip([[-0.5*t+x, 0.5*t+y, e+z], [0.5*t+x, 0.5*t+y, e+z], [-0.5*t+x, -0.5*t+y, e+z], [0.5*t+x, -0.5*t+y, e+z]], lc);
+    lineStrip([[-0.5*t+x, 0.5*t+y, -e+z], [0.5*t+x, 0.5*t+y, -e+z], [-0.5*t+x, -0.5*t+y, -e+z], [0.5*t+x, -0.5*t+y, -e+z]], lc);
     return true;
   }
   if (pic === 8 && (val & 255) === 200) {

@@ -254,7 +254,7 @@ else if (pic === 40) lc = [jR(), jR(), jR(), 1];
 else if ([38,41,52,54,55,60,62].includes(pic)) lc = [jG(), jG(), jR(), 1];
 else if (pic === 65 || pic === 75) lc = [0.4, 0.03, 0.03, 1];
 else if ([53,56,57,58,59,61,63,66,69,94,96].includes(pic)) lc = [jR(), jG(), jG(), 1];
-else if (pic === 72 || pic === 73 || pic === 74 || pic === 80 || pic === 81 || pic === 84 || pic === 85 || pic === 86) lc = [jR(), Math.min(1, Math.random()*0.5), jG(), 1];
+else if (pic === 72 || pic === 73 || pic === 74 || pic === 80 || pic === 81 || pic === 82 || pic === 84 || pic === 85 || pic === 86 || pic === 67) lc = [jR(), Math.min(1, Math.random()*0.5), jG(), 1];
 else lc = color;
 
 const q = (verts) => fillQuad(verts[0], verts[1], verts[2], verts[3], lc);
@@ -511,6 +511,20 @@ if (pic === 95) {
   lineStrip([[x,t+y,t+z],[x,-t+y,t+z],[x,-t+y,-t+z],[x,t+y,-t+z],[x,t+y,t+z]], lc);
   lineStrip([[t+x,y,t+z],[-t+x,y,t+z],[-t+x,y,-t+z],[t+x,y,-t+z],[t+x,y,t+z]], lc);
   lineStrip([[t+x,t+y,z],[-t+x,t+y,z],[-t+x,-t+y,z],[t+x,-t+y,z],[t+x,t+y,z]], lc);
+} else if (pic === 67) {
+  // zigzag: Z letter on front and back
+  const dc = [0.1, 0.0, 0.05, 1];
+  lineStrip([[-0.5*t+x, 0.5*t+y, e+z], [0.5*t+x, 0.5*t+y, e+z], [-0.5*t+x, -0.5*t+y, e+z], [0.5*t+x, -0.5*t+y, e+z]], dc);
+  lineStrip([[-0.5*t+x, 0.5*t+y, -e+z], [0.5*t+x, 0.5*t+y, -e+z], [-0.5*t+x, -0.5*t+y, -e+z], [0.5*t+x, -0.5*t+y, -e+z]], dc);
+} else if (pic === 82) {
+  // hole: three dashes at 12, 4, 8 o'clock
+  const dc = [0.1, 0.0, 0.05, 1];
+  lines([[-0.15*t+x, -0.55*t+y, e+z], [0.15*t+x, -0.55*t+y, e+z]], dc);
+  lines([[0.33*t+x, 0.17*t+y, e+z], [0.48*t+x, 0.43*t+y, e+z]], dc);
+  lines([[-0.48*t+x, 0.43*t+y, e+z], [-0.33*t+x, 0.17*t+y, e+z]], dc);
+  lines([[-0.15*t+x, -0.55*t+y, -e+z], [0.15*t+x, -0.55*t+y, -e+z]], dc);
+  lines([[0.33*t+x, 0.17*t+y, -e+z], [0.48*t+x, 0.43*t+y, -e+z]], dc);
+  lines([[-0.48*t+x, 0.43*t+y, -e+z], [-0.33*t+x, 0.17*t+y, -e+z]], dc);
 } else {
   // Default face quads
   const tlf = s * 0.85;
