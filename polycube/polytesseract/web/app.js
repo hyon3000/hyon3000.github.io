@@ -162,14 +162,14 @@ const ITEM_DESC = _isKo ? {
   1:'자폭: 착지 시 주변 삭제', 2:'은폐: 현재 블록 숨김', 200:'거울상: 보드 좌우반전', 19:'지그재그: 각 층 블록 재배치', 4:'득점강화: 점수 2배',
   5:'아이템제거', 6:'예측차단: 다음 블록 숨김', 8:'속도증가: x2.5', 9:'속도감소: x0.4',
   10:'홀드봉인', 11:'장애물: 장애물블록 3개 추가', 16:'시야봉인: 보드 숨김', 17:'폭탄블록5개: 5블록에 폭탄', 18:'구멍: 블록 30% 제거',
-  91:'회전봉인', 20:'빈공간삭제', 21:'소형화: 3칸 이하 블록만', 22:'대형화', 30:'관통', 31:'상쇄',
+  91:'회전봉인', 20:'빈공간삭제', 21:'소형화: 8턴간 3칸 이하', 22:'대형화', 30:'관통', 31:'상쇄',
   102:'상단삭제', 104:'모노전용: 1칸 블록만', 105:'종렬삭제', 106:'W열삭제', 116:'-2줄', 117:'+2줄',
   118:'범위삭제', 119:'전체삭제', 120:'시한폭탄', 121:'시한폭탄', 122:'시한폭탄',
   123:'시한폭탄', 124:'-3줄', 125:'+1줄', 126:'횡렬삭제', 127:'폭탄변환',
 } : {
   1:'Self-Destruct', 2:'Conceal', 200:'Mirror', 19:'Zigzag: Shuffle each layer', 4:'Score Boost: 2x', 5:'Item Clear',
   6:'No Preview', 8:'Speed Up: x2.5', 9:'Slow Down: x0.4', 10:'Hold Lock', 11:'Obstacle: Add 3 obstacle blocks',
-  16:'Blind', 17:'Bomb x5: Next 5 have bombs', 18:'Hole: Remove 30% blocks', 91:'Rot Lock', 20:'Gap Clear', 21:'Simplify: ≤3 cell blocks only',
+  16:'Blind', 17:'Bomb x5: Next 5 have bombs', 18:'Hole: Remove 30% blocks', 91:'Rot Lock', 20:'Gap Clear', 21:'Simplify: ≤3 cells 8 turns',
   22:'PentaForce', 30:'Pierce', 31:'Cancel', 102:'Top Clear', 104:'Mono Only',
   105:'Col Del', 106:'W Del', 116:'-2 Lines', 117:'+2 Lines', 118:'Range Del', 119:'Full Clear',
   120:'Time Bomb', 121:'Time Bomb', 122:'Time Bomb', 123:'Time Bomb',
@@ -315,7 +315,7 @@ const _KEY_ARR = 50;
 const _rotTicket = {};  // true = can rotate (ticket available)
 
 function _execKey(code) {
-  if (code === "ShiftRight") { state.vkspace2 = true; return; }
+  if (code === "ShiftRight" || code === "ShiftLeft") { state.vkspace2 = true; return; }
   if (code === "Space") {
     if (state.pause) return;
     const _hb = state.nowblock;
@@ -410,7 +410,7 @@ window.addEventListener("keyup", (event) => {
     }
   }
   if (_isRotKey(code)) _rotTicket['_t' + code] = setTimeout(() => { _rotTicket[code] = true; }, 15);
-  if (code === "ShiftRight") {
+  if (code === "ShiftRight" || code === "ShiftLeft") {
     state.vkspace2 = false;
   }
 });
@@ -765,19 +765,15 @@ function setnextblock() {
     }
   }
 
+  // simplify2: special block assignment
   if (state.simplify2 > 0) {
-    let _cellCount = 0;
-    for (let x = 0; x < 7; x++)
-      for (let y = 0; y < 7; y++)
-        for (let z = 0; z < 7; z++)
-          for (let w = 0; w < 7; w++)
-            if (state.nextblock[x][y][z][w] !== 0) _cellCount++;
-    if ((_cellCount === 2 || _cellCount === 3) && randInt(10) < 4) {
-      for (let x = 0; x < 7; x++)
-        for (let y = 0; y < 7; y++)
-          for (let z = 0; z < 7; z++)
-            for (let w = 0; w < 7; w++)
-              if (state.nextblock[x][y][z][w] !== 0) state.nextblock[x][y][z][w] = 31;
+    const _sr = randInt(100);
+    if (_sr < 40) {
+      for (let x=0;x<7;x++) for (let y=0;y<7;y++) for (let z=0;z<7;z++) for (let w=0;w<7;w++) if (state.nextblock[x][y][z][w] !== 0) state.nextblock[x][y][z][w] = 31;
+    } else if (_sr < 50) { // 10%: all pierce or selfdestruct
+      const _sv = randInt(2) === 0 ? 30 : 1;
+      if (_sv === 30) state.nexthb = 1;
+      for (let x=0;x<7;x++) for (let y=0;y<7;y++) for (let z=0;z<7;z++) for (let w=0;w<7;w++) if (state.nextblock[x][y][z][w] !== 0) state.nextblock[x][y][z][w] = _sv;
     }
   }
 
@@ -1103,6 +1099,15 @@ function move(pos, deg) {
       if (cell !== 0) return 1;
     }
   }
+  else if (state.nowhb === 1) {
+    const _tp = [state.blockpos[0], state.blockpos[1], state.blockpos[2], state.blockpos[3]];
+    _tp[pos] += deg;
+    for (let x = 0; x < 7; x++) for (let y = 0; y < 7; y++) for (let z = 0; z < 7; z++) for (let w = 0; w < 7; w++) {
+      if (state.nowblock[x][y][z][w] === 0) continue;
+      const bx = x + _tp[0], by = y + _tp[1], bz = z + _tp[2], bw = w + _tp[3];
+      if (bx < 0 || bx > 6 || by < 0 || by > 6 || bw < 0 || bw > 6 || bz < 0 || bz > 25) return 1;
+    }
+  }
 
   for (;;) {
     let restart = false;
@@ -1124,19 +1129,6 @@ function move(pos, deg) {
           const bw = w + state.blockpostmp[3];
           if (bx < 0 || bx > 6 || by < 0 || by > 6 || bw < 0 || bw > 6) return 1;
           if (bz < 0) {
-            if (state.nowhb) {
-              for (let cx = 0; cx < 7; cx += 1) {
-                for (let cy = 0; cy < 7; cy += 1) {
-                  for (let cw = 0; cw < 7; cw += 1) {
-                    const col = [];
-                    for (let cz = 0; cz < 26; cz++) { if (state.blk[cx][cy][cz][cw] !== 0) col.push(state.blk[cx][cy][cz][cw]); }
-                    const resolved = resolveColumn(col);
-                    for (let cz = 0; cz < 26; cz++) { state.blk[cx][cy][cz][cw] = cz < resolved.length ? resolved[cz] : 0; }
-                  }
-                }
-              }
-              removeline();
-            }
             return 1;
           }
           if (bz > 25) return 1;
@@ -1246,7 +1238,7 @@ function processLine(cells, z, coords4d) {
     else if (code === 16) { state.blindboard = now() + 10000; state.blk[x][y][z][w] = 256; }
     else if (code === 17) { state.bombnext += 6; state.blk[x][y][z][w] = 256; }
     else if (code === 20) { state.compactPending = true; state.blk[x][y][z][w] = 256; }
-    else if (code === 21) { state.monoonly = 0; state.pentaForce = 0; state.simplify2 += 16; state.blk[x][y][z][w] = 256; }
+    else if (code === 21) { state.monoonly = 0; state.pentaForce = 0; state.simplify2 += 9; state.blk[x][y][z][w] = 256; }
     else if (code === 22) { state.monoonly = 0; state.simplify2 = 0; state.pentaForce += 9; state.blk[x][y][z][w] = 256; }
     else if (code === 2) { state.hideblock += 10; state.blk[x][y][z][w] = 256; }
     else if (code === 6) { state.hidenext += 10; state.blk[x][y][z][w] = 256; }
@@ -1631,6 +1623,18 @@ function stickblock() {
             }
           }
         }
+        }
+      }
+    }
+  }
+  if (state.nowhb === 1) {
+    for (let x = 0; x < 7; x++) {
+      for (let y = 0; y < 7; y++) {
+        for (let w = 0; w < 7; w++) {
+          const col = [];
+          for (let z = 0; z < 26; z++) { if (state.blk[x][y][z][w] !== 0) col.push(state.blk[x][y][z][w]); }
+          const resolved = resolveColumn(col);
+          for (let z = 0; z < 26; z++) { state.blk[x][y][z][w] = z < resolved.length ? resolved[z] : 0; }
         }
       }
     }

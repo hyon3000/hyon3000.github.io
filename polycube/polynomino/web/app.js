@@ -278,7 +278,7 @@ function _execKey(code) {
     state.timestamp = now();
     return;
   }
-  if (code === "ShiftRight") { state.vkspace2 = true; return; }
+  if (code === "ShiftRight" || code === "ShiftLeft") { state.vkspace2 = true; return; }
   if (code === "ArrowLeft") { move(-1); return; }
   if (code === "ArrowRight") { move(1); return; }
   if (code === "ArrowUp" || code === "KeyZ") { rotate(1); return; }
@@ -324,7 +324,7 @@ window.addEventListener("keyup", (event) => {
     if (_keyRepeatTimers[code]) { clearTimeout(_keyRepeatTimers[code]); clearInterval(_keyRepeatTimers[code]); delete _keyRepeatTimers[code]; }
   }
   if (_isRotKey(code)) _rotTicket['_t' + code] = setTimeout(() => { _rotTicket[code] = true; }, 15);
-  if (code === "ShiftRight") state.vkspace2 = false;
+  if (code === "ShiftRight" || code === "ShiftLeft") state.vkspace2 = false;
 });
 
 // Resize
@@ -574,8 +574,16 @@ function generateBlock() {
     }
     state.bombnext -= 1;
   }
-  if (state.simplify2 > 0 && piece.cells.length >= 2 && piece.cells.length <= 3 && randInt(10) < 4) {
-    piece.vals = piece.vals.map(() => 31);
+  // simplify2: special block assignment
+  if (state.simplify2 > 0) {
+    const _sr = randInt(100);
+    if (_sr < 40) {
+      piece.vals = piece.vals.map(() => 31); // 40%: all cancel
+    } else if (_sr < 50) { // 10%: all pierce or selfdestruct
+      const _sv = randInt(2) === 0 ? 30 : 1;
+      if (_sv === 30) state.nexthb = 1;
+      piece.vals = piece.vals.map(() => _sv); // all pierce or selfdestruct
+    }
   }
   return piece;
 }
@@ -760,16 +768,26 @@ function move(dcol) {
     return 0;
   }
   if (state.nowhb === 1) {
-    // Pierce horizontal: destroy normal blocks, blocked by cancel(31)/pierce(30)
+    // Pierce horizontal: destroy normals, mutual destruction with cancel/pierce
     for (let i = 0; i < state.nowblock.cells.length; i++) {
       const [r, c] = state.nowblock.cells[i];
-      const br = state.blockpos[0] + r, bc = newCol + c;
-      if (bc < 0 || bc >= BOARD_W || br < 0) return 1;
-      if (br >= BOARD_H) continue;
-      const cell = state.board[br][bc];
-      if (cell === 31 || cell === 30) return 1;
-      if (cell !== 0) state.board[br][bc] = 0;
+      if (newCol + c < 0 || newCol + c >= BOARD_W || state.blockpos[0] + r < 0) return 1;
     }
+    for (let i = state.nowblock.cells.length - 1; i >= 0; i--) {
+      const [r, c] = state.nowblock.cells[i];
+      const br = state.blockpos[0] + r, bc = newCol + c;
+      if (br >= BOARD_H || br < 0) continue;
+      const cell = state.board[br][bc];
+      if (cell === 31 || cell === 30) {
+        state.board[br][bc] = 0;
+        state.nowblock.cells.splice(i, 1);
+        state.nowblock.vals.splice(i, 1);
+        state.score += 40;
+      } else if (cell !== 0) {
+        state.board[br][bc] = 0;
+      }
+    }
+    if (state.nowblock.cells.length === 0) { setnextblock(); return 2; }
     state.blockpos[1] = newCol;
     return 0;
   }
@@ -831,10 +849,16 @@ function moveDown() {
       if (br >= BOARD_H) continue;
       const cell = state.board[br][bc];
       const myVal = state.nowblock.vals[i];
-      // cancel-vs-normal: not a hard stop (would cancel if moving)
       if ((cell === 31 && myVal !== 31) || (myVal === 31 && cell !== 0 && cell !== 31)) continue;
-      // anything else non-empty: hard stop
       if (cell !== 0) return 1;
+    }
+  } else if (state.nowhb === 1) {
+    // Pierce pre-check: only floor/boundary is hard stop
+    for (let i = 0; i < state.nowblock.cells.length; i++) {
+      const [r, c] = state.nowblock.cells[i];
+      const br = newRow + r;
+      const bc = state.blockpos[1] + c;
+      if (bc < 0 || bc >= BOARD_W || br < 0) return 1;
     }
   }
 
@@ -852,21 +876,7 @@ function moveDown() {
 
       // Below board bottom
       if (br < 0) {
-        if (state.nowhb) {
-          // Pierce at bottom: compact columns with interaction resolution
-          for (let cc = 0; cc < BOARD_W; cc++) {
-            const col = [];
-            for (let rr = 0; rr < BOARD_H; rr++) {
-              if (state.board[rr][cc] !== 0) col.push(state.board[rr][cc]);
-            }
-            const result = resolveColumn(col);
-            for (let rr = 0; rr < BOARD_H; rr++) {
-              state.board[rr][cc] = rr < result.length ? result[rr] : 0;
-            }
-          }
-          removeline();
-        }
-        return 1; // can't go below board
+        return 1;
       }
 
       // Above board top - ok
@@ -1041,6 +1051,15 @@ function stickblock() {
       }
     }
   }
+  // After placing pierce block, resolve column interactions
+  if (state.nowhb === 1) {
+    for (let c = 0; c < BOARD_W; c++) {
+      const col = [];
+      for (let r = 0; r < BOARD_H; r++) { if (state.board[r][c] !== 0) col.push(state.board[r][c]); }
+      const resolved = resolveColumn(col);
+      for (let r = 0; r < BOARD_H; r++) { state.board[r][c] = r < resolved.length ? resolved[r] : 0; }
+    }
+  }
   return setnextblock();
 }
 
@@ -1086,7 +1105,7 @@ function processLine(row) {
     else if (code === 16) { state.blindboard = now() + 10000; state.board[row][c] = 256; }
     else if (code === 17) { state.bombnext += 6; state.board[row][c] = 256; }
     else if (code === 20) { state.compactPending = true; state.board[row][c] = 256; }
-    else if (code === 21) { state.monoonly = 0; state.pentaForce = 0; state.simplify2 += 16; state.board[row][c] = 256; }
+    else if (code === 21) { state.monoonly = 0; state.pentaForce = 0; state.simplify2 += 9; state.board[row][c] = 256; }
     else if (code === 22) { state.monoonly = 0; state.simplify2 = 0; state.pentaForce += 9; state.board[row][c] = 256; }
     else if (code === 2) { state.hideblock += 10; state.board[row][c] = 256; }
     else if (code === 6) { state.hidenext += 10; state.board[row][c] = 256; }
@@ -2674,14 +2693,14 @@ const ITEM_DESC = _isKo ? {
   1:'자폭: 착지 시 주변 삭제', 2:'은폐: 현재 블록 숨김', 200:'거울상: 보드 좌우반전', 19:'지그재그: 각 행 블록 재배치', 4:'득점강화: 점수 2배',
   5:'아이템제거', 6:'예측차단: 다음 블록 숨김', 8:'속도증가: x2.5', 9:'속도감소: x0.4',
   10:'홀드봉인', 11:'장애물: 장애물블록 3개 추가', 16:'시야봉인: 보드 숨김', 17:'폭탄블록5개: 5블록에 폭탄', 18:'구멍: 블록 30% 제거',
-  91:'회전봉인', 20:'빈공간삭제', 21:'소형화: 3칸 이하 블록만', 22:'대형화', 30:'관통', 31:'상쇄',
+  91:'회전봉인', 20:'빈공간삭제', 21:'소형화: 8턴간 3칸 이하', 22:'대형화', 30:'관통', 31:'상쇄',
   102:'상단삭제', 104:'모노전용: 1칸 블록만', 105:'종렬삭제', 116:'-2줄', 117:'+2줄',
   118:'범위삭제', 119:'전체삭제', 120:'시한폭탄', 121:'시한폭탄', 122:'시한폭탄',
   123:'시한폭탄', 124:'-3줄', 125:'+1줄', 126:'횡렬삭제', 127:'폭탄변환',
 } : {
   1:'Self-Destruct: Delete nearby on land', 2:'Conceal: Hide current block', 200:'Mirror: Flip board L/R', 19:'Zigzag: Shuffle each row', 4:'Score Boost: 2x points', 5:'Item Clear: Remove all items',
   6:'No Preview: Hide next block', 8:'Speed Up: x2.5 drop speed', 9:'Slow Down: x0.4 drop speed', 10:'Hold Lock: Disable hold', 11:'Obstacle: Add 3 obstacle blocks',
-  16:'Blind: Hide board', 17:'Bomb x5: Next 5 have bombs', 18:'Hole: Remove 30% blocks', 91:'Rot Lock: Disable rotation', 20:'Gap Clear: Remove empty gaps', 21:'Simplify: ≤3 cell blocks only',
+  16:'Blind: Hide board', 17:'Bomb x5: Next 5 have bombs', 18:'Hole: Remove 30% blocks', 91:'Rot Lock: Disable rotation', 20:'Gap Clear: Remove empty gaps', 21:'Simplify: ≤3 cells 8 turns',
   22:'PentaForce: Larger blocks', 30:'Pierce: Pass through blocks', 31:'Cancel: Erase on contact', 102:'Top Clear: Delete top rows', 104:'Mono Only: 1-cell blocks only',
   105:'Col Del: Delete a column', 116:'-2 Lines: Remove 2 rows', 117:'+2 Lines: Add 2 rows', 118:'Range Del: Area delete', 119:'Full Clear: Clear entire board',
   120:'Time Bomb: Explodes later', 121:'Time Bomb: Explodes later', 122:'Time Bomb: Explodes later', 123:'Time Bomb: Explodes later',
