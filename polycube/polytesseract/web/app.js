@@ -2973,22 +2973,6 @@ function drawSpecialPic(pic, x, y, z, t, color, val) {
     lines([[-0.48*t+x, 0.43*t+y, -e+z], [-0.33*t+x, 0.17*t+y, -e+z]], lc);
     return true;
   }
-  if (pic === 67) {
-    specialColor = [1, 1, 1, 0.8];
-    const faces = [
-      [[0.4*t+x, -e+y, -0.8*t+z], [0.4*t+x, -e+y, 0.8*t+z]],
-      [[-0.2*t+x, -e+y, -0.8*t+z], [-0.7*t+x, -e+y, -0.3*t+z], [-0.7*t+x, -e+y, 0.3*t+z], [-0.2*t+x, -e+y, 0.8*t+z]],
-      [[0.4*t+x, e+y, -0.8*t+z], [0.4*t+x, e+y, 0.8*t+z]],
-      [[-0.2*t+x, e+y, -0.8*t+z], [-0.7*t+x, e+y, -0.3*t+z], [-0.7*t+x, e+y, 0.3*t+z], [-0.2*t+x, e+y, 0.8*t+z]],
-      [[0.4*t+x, -0.8*t+y, -e+z], [0.4*t+x, 0.8*t+y, -e+z]],
-      [[-0.2*t+x, -0.8*t+y, -e+z], [-0.7*t+x, -0.3*t+y, -e+z], [-0.7*t+x, 0.3*t+y, -e+z], [-0.2*t+x, 0.8*t+y, -e+z]],
-    ];
-    for (let i = 0; i < faces.length; i += 2) {
-      lineStrip(faces[i], specialColor);
-      lineStrip(faces[i+1], specialColor);
-    }
-    return true;
-  }
   // pic 67 (zigzag): Z letter on front and back
   if (pic === 67) {
     lineStrip([[-0.5*t+x, 0.5*t+y, e+z], [0.5*t+x, 0.5*t+y, e+z], [-0.5*t+x, -0.5*t+y, e+z], [0.5*t+x, -0.5*t+y, e+z]], lc);
