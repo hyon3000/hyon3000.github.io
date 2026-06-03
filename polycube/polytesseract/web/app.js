@@ -686,21 +686,21 @@ function assignCellFromProbability(baseIndex, x, y, z, w) {
   if (u < 6120) return 127;
   if (u < 6220) return 17;
   if (u < 6420) return 20;
-  if (u < 6820) return 21;
-  if (u < 7620) return 22;
-  if (u < 7870) return 16;
-  if (u < 8070) return 11;
-  if (u < 8320) return 2;
-  if (u < 9320) return 8;
-  if (u < 10320) return 9;
-  if (u < 10570) return 10;
-  if (u < 11570) return 5;
-  if (u < 11820) return 6;
-  if (u < 14070) return 120;
-  if (u < 24070) return 4;
-  if (u < 24370) return 200; // mirror 0.03%
-  if (u < 24670) return 19; // zigzag 0.03%
-  if (u < 24970) return 18; // hole 0.03%
+  if (u < 7020) return 21;
+  if (u < 7820) return 22;
+  if (u < 8070) return 16;
+  if (u < 8270) return 11;
+  if (u < 8520) return 2;
+  if (u < 9520) return 8;
+  if (u < 10520) return 9;
+  if (u < 10770) return 10;
+  if (u < 11770) return 5;
+  if (u < 12020) return 6;
+  if (u < 14270) return 120;
+  if (u < 24270) return 4;
+  if (u < 24570) return 200; // mirror 0.03%
+  if (u < 24870) return 19; // zigzag 0.03%
+  if (u < 25170) return 18; // hole 0.03%
   if (baseIndex === 0 && randInt(10) === 0) return 1;
   if (baseIndex === 0 && randInt(20) === 0) {
     state.nexthb = 1;
@@ -1093,7 +1093,7 @@ function move(pos, deg) {
 
           const cell = state.blk[bx][by][bz][bw];
           if (state.nowhb === 0 && state.nowib === 0) {
-            if (cell === 31) {
+            if (cell === 31 && state.nowblock[x][y][z][w] !== 31) {
               state.blk[bx][by][bz][bw] = 0;
               state.nowblock[x][y][z][w] = 0;
               let hasAny = false;

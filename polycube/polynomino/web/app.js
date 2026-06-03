@@ -476,22 +476,22 @@ function assignCellValue(baseVal) {
   if (u < 5920) return 127;
   if (u < 6020) return 17;
   if (u < 6220) return 20;
-  if (u < 6620) return 21;
-  if (u < 7420) return 22;
-  if (u < 7670) return 16;
-  if (u < 7870) return 11;
-  if (u < 8270) return baseVal;
-  if (u < 8520) return 2;
-  if (u < 9520) return 8;
-  if (u < 10520) return 9;
-  if (u < 10770) return 10;
-  if (u < 11770) return 5;
-  if (u < 12020) return 6;
-  if (u < 14270) return 120;
-  if (u < 24270) return 4;
-  if (u < 24570) return 200; // mirror 0.03%
-  if (u < 24870) return 19; // zigzag 0.03%
-  if (u < 25170) return 18; // hole 0.03%
+  if (u < 6820) return 21;
+  if (u < 7620) return 22;
+  if (u < 7870) return 16;
+  if (u < 8070) return 11;
+  if (u < 8470) return baseVal;
+  if (u < 8720) return 2;
+  if (u < 9720) return 8;
+  if (u < 10720) return 9;
+  if (u < 10970) return 10;
+  if (u < 11970) return 5;
+  if (u < 12220) return 6;
+  if (u < 14470) return 120;
+  if (u < 24470) return 4;
+  if (u < 24770) return 200; // mirror 0.03%
+  if (u < 25070) return 19; // zigzag 0.03%
+  if (u < 25370) return 18; // hole 0.03%
   if (state._assignIsMonoBlock && randInt(10) === 0) return 1;
   if (state._assignIsMonoBlock && randInt(20) === 0) {
     state.nexthb = 1;
@@ -767,8 +767,8 @@ function moveDown() {
 
       // Normal block (not 상쇄, not 관통)
       if (state.nowhb === 0 && state.nowib === 0) {
-        if (cell === 31) {
-          // Normal block cell hits 관통 on board: mutual destruction
+        if (cell === 31 && state.nowblock.vals[i] !== 31) {
+          // Normal block cell hits cancel on board: mutual destruction
           state.board[br][bc] = 0;
           state.nowblock.cells.splice(i, 1);
           state.nowblock.vals.splice(i, 1);
