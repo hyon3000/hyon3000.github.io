@@ -505,7 +505,7 @@ function initBlockState() {
   state.nextblock = state.b[1];
   state.holdblock = state.b[3];
   clear3d(state.holdblock, 0);
-  state.holdblock[3][3][3] = itemsEnabled ? 4 : 65;
+  state.holdblock[3][3][3] = itemsEnabled ? (randInt(2) === 0 ? 19 : 18) : 65;
   setnextblock();
   setnextblock();
 }

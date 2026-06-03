@@ -647,7 +647,7 @@ function initBlockState() {
   state.simplify2 = 0;
   state.pentaForce = 0;
   // Start with score x2 item in hold (like polycube's holdblock[3][3][3]=4)
-  state.holdblock = { cells: [[0, 0]], vals: [itemsEnabled ? 4 : 65] };
+  state.holdblock = { cells: [[0, 0]], vals: [itemsEnabled ? (randInt(2) === 0 ? 19 : 18) : 65] };
   state.nextblock = generateBlock();
   setnextblock();
 }
