@@ -566,7 +566,7 @@ function initBlockState() {
   if (itemsEnabled) {
     let _hv = 4;
     if (randInt(10) === 0) { _hv = [1,30,31][randInt(3)]; }
-    else { const _u = randInt(1000000); if(_u<100)_hv=116;else if(_u<400)_hv=117;else if(_u<700)_hv=118;else if(_u<720)_hv=119;else if(_u<1520)_hv=104;else if(_u<2020)_hv=120;else if(_u<3020)_hv=121;else if(_u<3720)_hv=122;else if(_u<4020)_hv=123;else if(_u<4070)_hv=124;else if(_u<4870)_hv=125;else if(_u<5120)_hv=91;else if(_u<5220)_hv=102;else if(_u<5420)_hv=126;else if(_u<5620)_hv=105;else if(_u<5820)_hv=106;else if(_u<6120)_hv=127;else if(_u<6220)_hv=17;else if(_u<6420)_hv=20;else if(_u<6820)_hv=21;else if(_u<7620)_hv=22;else if(_u<7870)_hv=16;else if(_u<8070)_hv=11;else if(_u<8320)_hv=2;else if(_u<9320)_hv=8;else if(_u<10320)_hv=9;else if(_u<10570)_hv=10;else if(_u<11570)_hv=5;else if(_u<11820)_hv=6;else if(_u<14070)_hv=120;else if(_u<24370)_hv=200;else if(_u<24670)_hv=19;else if(_u<24970)_hv=18; }
+    else { const _u = randInt(500000); if(_u<100)_hv=116;else if(_u<400)_hv=117;else if(_u<700)_hv=118;else if(_u<720)_hv=119;else if(_u<1520)_hv=104;else if(_u<2020)_hv=120;else if(_u<3020)_hv=121;else if(_u<3720)_hv=122;else if(_u<4020)_hv=123;else if(_u<4070)_hv=124;else if(_u<4870)_hv=125;else if(_u<5120)_hv=91;else if(_u<5220)_hv=102;else if(_u<5420)_hv=126;else if(_u<5620)_hv=105;else if(_u<5820)_hv=106;else if(_u<6120)_hv=127;else if(_u<6220)_hv=17;else if(_u<6420)_hv=20;else if(_u<6820)_hv=21;else if(_u<7620)_hv=22;else if(_u<7870)_hv=16;else if(_u<8070)_hv=11;else if(_u<8320)_hv=2;else if(_u<9320)_hv=8;else if(_u<10320)_hv=9;else if(_u<10570)_hv=10;else if(_u<11570)_hv=5;else if(_u<11820)_hv=6;else if(_u<14070)_hv=120;else if(_u<24370)_hv=200;else if(_u<24670)_hv=19;else if(_u<24970)_hv=18; }
     state.holdblock[3][3][3][3] = _hv;
   } else { state.holdblock[3][3][3][3] = 65; }
   setnextblock();
@@ -744,6 +744,22 @@ function setnextblock() {
           state.nextblock[x][y][z][w] = assignCellFromProbability(baseIndex, x, y, z, w);
         }
       }
+    }
+  }
+
+  if (state.simplify2 > 0) {
+    let _cellCount = 0;
+    for (let x = 0; x < 7; x++)
+      for (let y = 0; y < 7; y++)
+        for (let z = 0; z < 7; z++)
+          for (let w = 0; w < 7; w++)
+            if (state.nextblock[x][y][z][w] !== 0) _cellCount++;
+    if ((_cellCount === 2 || _cellCount === 3) && randInt(10) < 4) {
+      for (let x = 0; x < 7; x++)
+        for (let y = 0; y < 7; y++)
+          for (let z = 0; z < 7; z++)
+            for (let w = 0; w < 7; w++)
+              if (state.nextblock[x][y][z][w] !== 0) state.nextblock[x][y][z][w] = 31;
     }
   }
 
@@ -1143,6 +1159,11 @@ function processLine(cells, z, coords4d) {
     if (state.blk[x][y][z][w] < 256) tline2 += 1;
   }
   let filled = tline2 ? 1 : 0;
+  // Pre-scan for mirror before processing (early returns skip it)
+  let _mirrorFlag = false;
+  for (const [x2, y2, w2] of coords4d) {
+    if ((state.blk[x2][y2][z][w2] & 255) === 200) { _mirrorFlag = true; state.blk[x2][y2][z][w2] = (state.blk[x2][y2][z][w2] & 256); }
+  }
   for (const [x, y, w] of coords4d) {
     const code = state.blk[x][y][z][w] & 255;
     if (code === 116) { cells.tline -= 2; state.blk[x][y][z][w] = 256; }
@@ -1189,21 +1210,6 @@ function processLine(cells, z, coords4d) {
       }
       state.blk[x][y][z][w] = 256;
     } else if (code === 4) { state.score2x += 1; state.blk[x][y][z][w] = 256; }
-    else if (code === 200) {
-      // mirror board horizontally (flip x-axis)
-      state.blk[x][y][z][w] = 256;
-      for (let mz = 0; mz < 26; mz++) {
-        for (let my = 0; my < 7; my++) {
-          for (let mw = 0; mw < 7; mw++) {
-            for (let mx = 0; mx < 3; mx++) {
-              const tmp = state.blk[mx][my][mz][mw];
-              state.blk[mx][my][mz][mw] = state.blk[6 - mx][my][mz][mw];
-              state.blk[6 - mx][my][mz][mw] = tmp;
-            }
-          }
-        }
-      }
-    }
     else if (code === 11) {
       state.blk[x][y][z][w] = 256;
       let count2 = 0;
@@ -1320,6 +1326,19 @@ function processLine(cells, z, coords4d) {
       }
     } else {
       state.blk[x][y][z][w] |= 256;
+    }
+  }
+  if (_mirrorFlag) {
+    for (let z2 = 0; z2 < 26; z2++) {
+      for (let y2 = 0; y2 < 7; y2++) {
+        for (let w2 = 0; w2 < 7; w2++) {
+          for (let i = 0; i < 3; i++) {
+            const tmp = state.blk[i][y2][z2][w2];
+            state.blk[i][y2][z2][w2] = state.blk[6-i][y2][z2][w2];
+            state.blk[6-i][y2][z2][w2] = tmp;
+          }
+        }
+      }
     }
   }
   return { filled };

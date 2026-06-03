@@ -508,7 +508,7 @@ function initBlockState() {
   if (itemsEnabled) {
     let _hv = 4;
     if (randInt(10) === 0) { _hv = [1,30,31][randInt(3)]; }
-    else { const _u = randInt(1000000); if(_u<100)_hv=116;else if(_u<400)_hv=117;else if(_u<700)_hv=118;else if(_u<720)_hv=119;else if(_u<1520)_hv=104;else if(_u<2020)_hv=120;else if(_u<3020)_hv=121;else if(_u<3720)_hv=122;else if(_u<4020)_hv=123;else if(_u<4070)_hv=124;else if(_u<4870)_hv=125;else if(_u<5120)_hv=91;else if(_u<5220)_hv=102;else if(_u<5420)_hv=126;else if(_u<5620)_hv=105;else if(_u<5920)_hv=127;else if(_u<6020)_hv=17;else if(_u<6220)_hv=20;else if(_u<6620)_hv=21;else if(_u<7420)_hv=22;else if(_u<7670)_hv=16;else if(_u<7870)_hv=11;else if(_u<8120)_hv=2;else if(_u<9120)_hv=8;else if(_u<10120)_hv=9;else if(_u<10370)_hv=10;else if(_u<11370)_hv=5;else if(_u<11620)_hv=6;else if(_u<13870)_hv=120;else if(_u<24170)_hv=200;else if(_u<24470)_hv=19;else if(_u<24770)_hv=18; }
+    else { const _u = randInt(500000); if(_u<100)_hv=116;else if(_u<400)_hv=117;else if(_u<700)_hv=118;else if(_u<720)_hv=119;else if(_u<1520)_hv=104;else if(_u<2020)_hv=120;else if(_u<3020)_hv=121;else if(_u<3720)_hv=122;else if(_u<4020)_hv=123;else if(_u<4070)_hv=124;else if(_u<4870)_hv=125;else if(_u<5120)_hv=91;else if(_u<5220)_hv=102;else if(_u<5420)_hv=126;else if(_u<5620)_hv=105;else if(_u<5920)_hv=127;else if(_u<6020)_hv=17;else if(_u<6220)_hv=20;else if(_u<6620)_hv=21;else if(_u<7420)_hv=22;else if(_u<7670)_hv=16;else if(_u<7870)_hv=11;else if(_u<8120)_hv=2;else if(_u<9120)_hv=8;else if(_u<10120)_hv=9;else if(_u<10370)_hv=10;else if(_u<11370)_hv=5;else if(_u<11620)_hv=6;else if(_u<13870)_hv=120;else if(_u<24170)_hv=200;else if(_u<24470)_hv=19;else if(_u<24770)_hv=18; }
     state.holdblock[3][3][3] = _hv;
   } else { state.holdblock[3][3][3] = 65; }
   setnextblock();
@@ -686,6 +686,21 @@ function setnextblock() {
       for (let z = 0; z < 7; z += 1) {
         state.nextblock[x][y][z] = assignCellFromProbability(baseIndex, x, y, z);
       }
+    }
+  }
+
+  // simplify2 cancel: 40% chance to turn 2-3 cell blocks into cancel (code 31)
+  if (state.simplify2 > 0) {
+    let _cellCount = 0;
+    for (let x = 0; x < 7; x++)
+      for (let y = 0; y < 7; y++)
+        for (let z = 0; z < 7; z++)
+          if (state.nextblock[x][y][z] !== 0) _cellCount++;
+    if ((_cellCount === 2 || _cellCount === 3) && randInt(10) < 4) {
+      for (let x = 0; x < 7; x++)
+        for (let y = 0; y < 7; y++)
+          for (let z = 0; z < 7; z++)
+            if (state.nextblock[x][y][z] !== 0) state.nextblock[x][y][z] = 31;
     }
   }
 
@@ -1029,6 +1044,11 @@ function processLine(cells, z, coords) {
     if (state.blk[x][y][z] < 256) tline2 += 1;
   }
   let filled = tline2 ? 1 : 0;
+  // Pre-scan for mirror (code 200) before processing - early returns might skip it
+  let _mirrorFlag = false;
+  for (const [x2, y2] of coords) {
+    if ((state.blk[x2][y2][z] & 255) === 200) { _mirrorFlag = true; state.blk[x2][y2][z] = (state.blk[x2][y2][z] & 256); }
+  }
   for (const [x, y] of coords) {
     const code = state.blk[x][y][z] & 255;
     if (code === 116) { cells.tline -= 2; state.blk[x][y][z] = 256; }
@@ -1071,19 +1091,7 @@ function processLine(cells, z, coords) {
       }
       state.blk[x][y][z] = 256;
     } else if (code === 4) { state.score2x += 1; state.blk[x][y][z] = 256; }
-    else if (code === 200) {
-      // 거울상: mirror board horizontally (flip x-axis)
-      state.blk[x][y][z] = 256;
-      for (let mz = 0; mz < 26; mz++) {
-        for (let my = 0; my < 7; my++) {
-          for (let mx = 0; mx < 3; mx++) {
-            const tmp = state.blk[mx][my][mz];
-            state.blk[mx][my][mz] = state.blk[6 - mx][my][mz];
-            state.blk[6 - mx][my][mz] = tmp;
-          }
-        }
-      }
-    }
+    // code 200 (mirror) handled by pre-scan above
     else if (code === 11) {
       state.blk[x][y][z] = 256;
       let count2 = 0;
@@ -1179,6 +1187,17 @@ function processLine(cells, z, coords) {
       }
     } else {
       state.blk[x][y][z] |= 256;
+    }
+  }
+  if (_mirrorFlag) {
+    for (let z2 = 0; z2 < 26; z2++) {
+      for (let y2 = 0; y2 < 7; y2++) {
+        for (let i = 0; i < 3; i++) {
+          const tmp = state.blk[i][y2][z2];
+          state.blk[i][y2][z2] = state.blk[6-i][y2][z2];
+          state.blk[6-i][y2][z2] = tmp;
+        }
+      }
     }
   }
   return { filled };
