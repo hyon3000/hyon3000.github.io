@@ -202,8 +202,11 @@ function switchToPolytesseract() {
 function goFullscreen() {
   var iframe = document.getElementById('game');
   if (!iframe) return;
-  // Hide win98 shell
-  document.querySelector('.polycube-window').style.visibility = 'hidden';
+  var win98 = document.querySelector('.polycube-window');
+  var parent = iframe.parentNode;
+  // Move iframe out of win98 shell to body
+  document.body.appendChild(iframe);
+  win98.style.display = 'none';
   // Make iframe fullscreen
   iframe.style.position = 'fixed';
   iframe.style.left = '0';
@@ -212,6 +215,7 @@ function goFullscreen() {
   iframe.style.height = '100vh';
   iframe.style.zIndex = '99999';
   iframe.style.border = 'none';
+  iframe.style.background = '#000';
   document.body.style.overflow = 'hidden';
   // Request browser fullscreen
   var el = document.documentElement;
@@ -219,7 +223,7 @@ function goFullscreen() {
   else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
   else if (el.msRequestFullscreen) el.msRequestFullscreen();
   // ESC to exit
-  document.addEventListener('fullscreenchange', function onFSC() {
+  function onFSC() {
     if (!document.fullscreenElement) {
       iframe.style.position = '';
       iframe.style.left = '';
@@ -227,11 +231,16 @@ function goFullscreen() {
       iframe.style.width = '';
       iframe.style.height = '';
       iframe.style.zIndex = '';
+      iframe.style.border = '';
+      iframe.style.background = '';
       document.body.style.overflow = '';
-      document.querySelector('.polycube-window').style.visibility = '';
+      // Move iframe back into win98 shell
+      parent.appendChild(iframe);
+      win98.style.display = '';
       document.removeEventListener('fullscreenchange', onFSC);
     }
-  });
+  }
+  document.addEventListener('fullscreenchange', onFSC);
 }
 </script>
 </body>

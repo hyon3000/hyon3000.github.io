@@ -738,6 +738,23 @@ function moveDown() {
   const newRow = state.blockpos[0] - 1;
   let restart;
 
+  // Pre-check: if ANY cell would hard-stop, lock entire block without cancellation
+  if (state.nowhb === 0 && state.nowib === 0) {
+    for (let i = 0; i < state.nowblock.cells.length; i++) {
+      const [r, c] = state.nowblock.cells[i];
+      const br = newRow + r;
+      const bc = state.blockpos[1] + c;
+      if (bc < 0 || bc >= BOARD_W || br < 0) return 1;
+      if (br >= BOARD_H) continue;
+      const cell = state.board[br][bc];
+      const myVal = state.nowblock.vals[i];
+      // cancel-vs-normal: not a hard stop (would cancel if moving)
+      if ((cell === 31 && myVal !== 31) || (myVal === 31 && cell !== 0 && cell !== 31)) continue;
+      // anything else non-empty: hard stop
+      if (cell !== 0) return 1;
+    }
+  }
+
   // Polycube-matching collision loop (while + restart)
   while (true) {
     restart = false;

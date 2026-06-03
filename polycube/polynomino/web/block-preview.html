@@ -205,8 +205,11 @@ if (code === 17) {
 ctx.strokeStyle = 'rgba(0,0,0,0.6)';
 ctx.lineWidth = Math.max(1, cs * 0.05);
 ctx.strokeRect(cx - 0.2*s, cy - 0.6*s, 0.4*s, 0.4*s);
+ctx.beginPath(); ctx.moveTo(cx, cy - 0.6*s); ctx.lineTo(cx, cy - 0.2*s); ctx.moveTo(cx - 0.2*s, cy - 0.4*s); ctx.lineTo(cx + 0.2*s, cy - 0.4*s); ctx.stroke();
 ctx.strokeRect(cx - 0.5*s, cy + 0.0*s, 0.4*s, 0.4*s);
+ctx.beginPath(); ctx.moveTo(cx - 0.3*s, cy); ctx.lineTo(cx - 0.3*s, cy + 0.4*s); ctx.moveTo(cx - 0.5*s, cy + 0.2*s); ctx.lineTo(cx - 0.1*s, cy + 0.2*s); ctx.stroke();
 ctx.strokeRect(cx + 0.1*s, cy + 0.0*s, 0.4*s, 0.4*s);
+ctx.beginPath(); ctx.moveTo(cx + 0.3*s, cy); ctx.lineTo(cx + 0.3*s, cy + 0.4*s); ctx.moveTo(cx + 0.1*s, cy + 0.2*s); ctx.lineTo(cx + 0.5*s, cy + 0.2*s); ctx.stroke();
 }
 if (code === 16) {
 ctx.strokeStyle = 'rgba(0,0,0,0.6)';

@@ -1042,6 +1042,20 @@ function rotate(pos, deg) {
 }
 
 function move(pos, deg) {
+  // Pre-check for downward move: if ANY cell hard-stops, lock without cancellation
+  if (pos === 2 && deg === -1 && state.nowhb === 0 && state.nowib === 0) {
+    const _tp = [state.blockpos[0], state.blockpos[1], state.blockpos[2] - 1, state.blockpos[3]];
+    for (let x = 0; x < 7; x += 1) for (let y = 0; y < 7; y += 1) for (let z = 0; z < 7; z += 1) for (let w = 0; w < 7; w += 1) {
+      if (state.nowblock[x][y][z][w] === 0) continue;
+      const bx = x + _tp[0], by = y + _tp[1], bz = z + _tp[2], bw = w + _tp[3];
+      if (bx < 0 || bx > 6 || by < 0 || by > 6 || bw < 0 || bw > 6 || bz < 0 || bz > 25) return 1;
+      const cell = state.blk[bx][by][bz][bw];
+      const myVal = state.nowblock[x][y][z][w];
+      if ((cell === 31 && myVal !== 31) || (myVal === 31 && cell !== 0 && cell !== 31)) continue;
+      if (cell !== 0) return 1;
+    }
+  }
+
   for (;;) {
     let restart = false;
     state.blockpostmp[0] = state.blockpos[0];
