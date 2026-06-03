@@ -449,9 +449,11 @@ function chooseBaseBlockIndex() {
     state.monoonly -= 1;
   }
   if (state.simplify2 > 0) {
+    state.simplify2 -= 1;
     return randInt(4);
   }
   if (state.pentaForce > 0) {
+    state.pentaForce -= 1;
     return 11 + randInt(18); // penta (index 11-28)
   }
   let t = randInt(100);
@@ -859,8 +861,8 @@ function moveDown() {
       }
       // 상쇄 block
       else if (state.nowhb === 1) {
-        if (cell === 31) {
-          // 상쇄 hits 관통: mutual destruction
+        if (cell === 31 || cell === 30) {
+          // pierce/cancel hits pierce: mutual destruction
           state.board[br][bc] = 0;
           state.nowblock.cells.splice(i, 1);
           state.nowblock.vals.splice(i, 1);
@@ -1175,8 +1177,6 @@ function removeline() {
   if (state.speedup > 0) state.speedup -= 1;
   if (state.speeddown > 0) state.speeddown -= 1;
   if (state.holdlock > 0) state.holdlock -= 1;
-  if (state.simplify2 > 0) state.simplify2 -= 1;
-  if (state.pentaForce > 0) state.pentaForce -= 1;
 
   let filledline = 0;
   let totalTline = 0;
@@ -1324,8 +1324,19 @@ function tryHoldSwap() {
     setnextblock();
     return;
   }
-  // Check if hold block fits at current position (skip for pierce/cancel)
-  if (checkCollision(state.holdblock, state.blockpos[0], state.blockpos[1])) return;
+  // Check if hold block fits at current position
+  if (state.holdhb === 1) {
+    // Pierce: only blocked by cancel(31) and boundaries
+    for (let i = 0; i < state.holdblock.cells.length; i++) {
+      const [r, c] = state.holdblock.cells[i];
+      const br = state.blockpos[0] + r, bc = state.blockpos[1] + c;
+      if (bc < 0 || bc >= BOARD_W || br < 0) return;
+      if (br >= BOARD_H) continue;
+      if (state.board[br][bc] === 31 || state.board[br][bc] === 30) return;
+    }
+  } else {
+    if (checkCollision(state.holdblock, state.blockpos[0], state.blockpos[1])) return;
+  }
   const tmp = state.nowblock;
   state.nowblock = state.holdblock;
   state.holdblock = tmp;

@@ -559,9 +559,11 @@ function chooseBaseBlockIndex() {
     state.monoonly -= 1;
   }
   if (state.simplify2 > 0) {
+    state.simplify2 -= 1;
     return randInt(4);
   }
   if (state.pentaForce > 0) {
+    state.pentaForce -= 1;
     return 12 + randInt(29); // penta+ (index 12-40)
   }
   let t = randInt(100);
@@ -1040,10 +1042,12 @@ function move(pos, deg) {
             }
             if (cell) return 1;
           } else if (state.nowhb === 1) {
-            if (cell === 31) {
+            if (cell === 31 || cell === 30) {
               state.blk[bx][by][bz] = 0;
               state.nowblock[x][y][z] = 0;
-              setnextblock();
+              let hasAny3 = false;
+              for (let x2 = 0; x2 < 7 && !hasAny3; x2 += 1) for (let y2 = 0; y2 < 7 && !hasAny3; y2 += 1) for (let z2 = 0; z2 < 7; z2 += 1) { if (state.nowblock[x2][y2][z2] !== 0) { hasAny3 = true; break; } }
+              if (!hasAny3) setnextblock();
               state.score += 40;
               restart = true;
               break outer;
@@ -1246,8 +1250,6 @@ function removeline() {
   if (state.speedup > 0) state.speedup -= 1;
   if (state.speeddown > 0) state.speeddown -= 1;
   if (state.holdlock > 0) state.holdlock -= 1;
-  if (state.simplify2 > 0) state.simplify2 -= 1;
-  if (state.pentaForce > 0) state.pentaForce -= 1;
 
   let filledline = 0;
   const cells = { tline: 0 };
@@ -1476,7 +1478,8 @@ function tryHoldSwap() {
           if (x + state.blockpos[0] < 0 || x + state.blockpos[0] > 6) return;
           if (y + state.blockpos[1] < 0 || y + state.blockpos[1] > 6) return;
           if (z + state.blockpos[2] < 0) return;
-          if (state.blk[x + state.blockpos[0]][y + state.blockpos[1]][z + state.blockpos[2]] !== 0) return;
+          const _hc = state.blk[x + state.blockpos[0]][y + state.blockpos[1]][z + state.blockpos[2]];
+          if (_hc !== 0) { if (state.holdhb === 1 && _hc !== 31 && _hc !== 30) continue; return; }
         }
       }
     }
