@@ -727,6 +727,39 @@ function checkCollision(piece, row, col) {
 
 function move(dcol) {
   const newCol = state.blockpos[1] + dcol;
+  if (state.nowhb === 0 && state.nowib === 0) {
+    // Cancel-aware collision check
+    let hasHard = false, hasSoft = false;
+    for (let i = 0; i < state.nowblock.cells.length; i++) {
+      const [r, c] = state.nowblock.cells[i];
+      const br = state.blockpos[0] + r, bc = newCol + c;
+      if (bc < 0 || bc >= BOARD_W || br < 0) { hasHard = true; break; }
+      if (br >= BOARD_H) continue;
+      const cell = state.board[br][bc];
+      if (cell === 0) continue;
+      const myVal = state.nowblock.vals[i];
+      if ((cell === 31 && myVal !== 31) || (myVal === 31 && cell !== 0 && cell !== 31)) { hasSoft = true; continue; }
+      hasHard = true; break;
+    }
+    if (hasHard) return 1;
+    if (hasSoft) {
+      for (let i = state.nowblock.cells.length - 1; i >= 0; i--) {
+        const [r, c] = state.nowblock.cells[i];
+        const br = state.blockpos[0] + r, bc = newCol + c;
+        if (br < 0 || br >= BOARD_H) continue;
+        const cell = state.board[br][bc], myVal = state.nowblock.vals[i];
+        if ((cell === 31 && myVal !== 31) || (myVal === 31 && cell !== 0 && cell !== 31)) {
+          state.board[br][bc] = 0;
+          state.nowblock.cells.splice(i, 1);
+          state.nowblock.vals.splice(i, 1);
+          state.score += 40;
+        }
+      }
+      if (state.nowblock.cells.length === 0) { setnextblock(); return 2; }
+    }
+    state.blockpos[1] = newCol;
+    return 0;
+  }
   if (!checkCollision(state.nowblock, state.blockpos[0], newCol)) {
     state.blockpos[1] = newCol;
     return 0;
@@ -1318,10 +1351,12 @@ function getButtonLayout() {
   const rotCWBtn = { x: rotX - btnSize / 2, y: bottomY - btnSize - gap / 2, w: btnSize, h: btnSize, action: 'rotateCW', label: 'CW' };
   const rotCCWBtn = { x: rotX - btnSize / 2, y: bottomY + gap / 2, w: btnSize, h: btnSize, action: 'rotateCCW', label: 'CCW' };
 
-  // Right side: move buttons (shifted left)
+  // Right side: move buttons (same height as soft drop)
   const moveX = cw * 0.75;
-  const moveLeftBtn = { x: moveX - btnSize - gap, y: bottomY - btnSize / 2, w: btnSize, h: btnSize, action: 'moveLeft', label: '<' };
-  const moveRightBtn = { x: moveX + gap, y: bottomY - btnSize / 2, w: btnSize, h: btnSize, action: 'moveRight', label: '>' };
+  const moveLeftBtn = { x: moveX - btnSize - gap, y: bottomY - btnSize - gap / 2, w: btnSize, h: btnSize, action: 'moveLeft', label: '<' };
+  const moveRightBtn = { x: moveX + gap, y: bottomY - btnSize - gap / 2, w: btnSize, h: btnSize, action: 'moveRight', label: '>' };
+  // Hard drop button below (same height as hold)
+  const hardDropBtn = { x: moveX - btnSize / 2, y: bottomY + gap / 2, w: btnSize, h: btnSize, action: 'hardDrop', label: '▼▼' };
 
   // Center: drop + hold (shifted left)
   const centerX = cw * 0.44;
@@ -1332,7 +1367,7 @@ function getButtonLayout() {
   const pauseSize = btnSize * 0.9;
   const pauseBtn = { x: cw - pauseSize - 4 - pauseSize / 4, y: 4 + pauseSize / 4, w: pauseSize, h: pauseSize, action: 'pause', label: '||' };
 
-  return [rotCWBtn, rotCCWBtn, moveLeftBtn, moveRightBtn, dropBtn, holdBtn, pauseBtn];
+  return [rotCWBtn, rotCCWBtn, moveLeftBtn, moveRightBtn, hardDropBtn, dropBtn, holdBtn, pauseBtn];
 }
 
 function hitTestButtons(px, py) {
@@ -1396,6 +1431,15 @@ function clickbutton(px, py) {
   if (action === 'rotateCCW') { rotate(-1); return 0; }
   if (action === 'moveLeft') { move(-1); return 0; }
   if (action === 'moveRight') { move(1); return 0; }
+  if (action === 'hardDrop') {
+    let mr;
+    while ((mr = moveDown()) === 0) {}
+    if (mr === 2) { state.timestamp = now(); return 0; }
+    if (stickblock()) { gover(); initBlockState(); return 0; }
+    calculatescore(removeline());
+    state.timestamp = now();
+    return 0;
+  }
   if (action === 'drop') { state.vkspace2 = true; return 0; }
   if (action === 'hold') { tryHoldSwap(); return 0; }
   if (action === 'pause') { state.pause = !state.pause; return 0; }
@@ -2326,6 +2370,7 @@ function drawTouchButtons() {
     const isMoveLeft = btn.action === 'moveLeft';
     const isMoveRight = btn.action === 'moveRight';
     const isDrop = btn.action === 'drop';
+    const isHardDrop = btn.action === 'hardDrop';
 
     // Background fill
     ctx.fillStyle = isHold ? 'rgba(200,60,120,0.3)' : 'rgba(60,60,80,0.35)';
@@ -2369,8 +2414,21 @@ function drawTouchButtons() {
       ctx.lineTo(cx + arrowSize, cy);
       ctx.lineTo(cx - arrowSize, cy + arrowSize);
       ctx.stroke();
+    } else if (isHardDrop) {
+      // Draw double downward arrow ▼▼
+      ctx.strokeStyle = '#ff0';
+      ctx.lineWidth = 2;
+      const a = arrowSize * 0.8;
+      ctx.beginPath();
+      ctx.moveTo(cx - a, cy - a * 0.8);
+      ctx.lineTo(cx, cy);
+      ctx.lineTo(cx + a, cy - a * 0.8);
+      ctx.moveTo(cx - a, cy + a * 0.2);
+      ctx.lineTo(cx, cy + a);
+      ctx.lineTo(cx + a, cy + a * 0.2);
+      ctx.stroke();
     } else if (isDrop) {
-      // Draw downward arrow
+      // Draw downward arrow (soft drop)
       ctx.strokeStyle = '#aab';
       ctx.lineWidth = 1.5;
       ctx.beginPath();

@@ -937,10 +937,10 @@ function rotate(pos, deg) {
 }
 
 function move(pos, deg) {
-  // Pre-check for downward move: if ANY cell hard-stops, lock without cancellation
-  if (pos === 2 && deg === -1 && state.nowhb === 0 && state.nowib === 0) {
+  // Pre-check: if ANY cell hard-stops, reject move without cancellation
+  if (state.nowhb === 0 && state.nowib === 0) {
     const _tp = [state.blockpos[0], state.blockpos[1], state.blockpos[2]];
-    _tp[2] -= 1;
+    _tp[pos] += deg;
     for (let x = 0; x < 7; x += 1) for (let y = 0; y < 7; y += 1) for (let z = 0; z < 7; z += 1) {
       if (state.nowblock[x][y][z] === 0) continue;
       const bx = x + _tp[0], by = y + _tp[1], bz = z + _tp[2];
