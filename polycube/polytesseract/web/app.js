@@ -318,7 +318,9 @@ function _execKey(code) {
   if (code === "ShiftRight") { state.vkspace2 = true; return; }
   if (code === "Space") {
     if (state.pause) return;
-    while (!move(2, -1)) {}
+    const _hb = state.nowblock;
+    while (!move(2, -1)) { if (state.nowblock !== _hb) break; }
+    if (state.nowblock !== _hb) { state.timestamp = now(); return; }
     if (stickblock()) { gover(); initBlockState(); return; }
     calculatescore(removeline());
     state.timestamp = now();
