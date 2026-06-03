@@ -658,7 +658,7 @@ function assignCellFromProbability(baseIndex, x, y, z) {
   if (u < 24870) return 19; // zigzag 0.03%
   if (u < 25170) return 18; // hole 0.03%
   if (baseIndex === 0 && randInt(10) === 0) return 1;
-  if (baseIndex === 0 && randInt(20) === 0) {
+  if (baseIndex === 0 && randInt(10) === 0) {
     state.nexthb = 1;
     return 30;
   }
@@ -666,7 +666,7 @@ function assignCellFromProbability(baseIndex, x, y, z) {
   if (baseIndex === 0 && randInt(5) < 2) {
     return 31;
   }
-  if (state.monoonly) return 12 + randInt(4);
+  if (state.monoonly || (state.simplify2 > 0 && baseIndex === 0)) return 12 + randInt(4);
   if (u > 20000 && u < 60000 && getHour() === 0 && getMinute() === 0) {
     const du = u - 20000;
     const bonus = [

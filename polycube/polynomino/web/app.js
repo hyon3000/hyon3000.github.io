@@ -510,7 +510,7 @@ function assignCellValue(baseVal) {
   if (u < 25270) return 19; // zigzag 0.03%
   if (u < 25570) return 18; // hole 0.03%
   if (state._assignIsMonoBlock && randInt(10) === 0) return 1;
-  if (state._assignIsMonoBlock && randInt(20) === 0) {
+  if (state._assignIsMonoBlock && randInt(10) === 0) {
     state.nexthb = 1;
     return 30;
   }
@@ -518,7 +518,7 @@ function assignCellValue(baseVal) {
   if (state._assignIsMonoBlock && randInt(5) < 2) {
     return 31;
   }
-  if (state.monoonly) return 12 + randInt(4);
+  if (state.monoonly || (state.simplify2 > 0 && state._assignIsMonoBlock)) return 12 + randInt(4);
   if (u > 20000 && u < 60000 && getHour() === 0 && getMinute() === 0) {
     const du = u - 20000;
     const bonus = [
