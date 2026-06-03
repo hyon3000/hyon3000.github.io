@@ -764,6 +764,40 @@ function move(dcol) {
     state.blockpos[1] = newCol;
     return 0;
   }
+  if (state.nowhb === 1) {
+    // Pierce horizontal: destroy normal blocks, blocked by cancel(31)/pierce(30)
+    for (let i = 0; i < state.nowblock.cells.length; i++) {
+      const [r, c] = state.nowblock.cells[i];
+      const br = state.blockpos[0] + r, bc = newCol + c;
+      if (bc < 0 || bc >= BOARD_W || br < 0) return 1;
+      if (br >= BOARD_H) continue;
+      const cell = state.board[br][bc];
+      if (cell === 31 || cell === 30) return 1;
+      if (cell !== 0) state.board[br][bc] = 0;
+    }
+    state.blockpos[1] = newCol;
+    return 0;
+  }
+  if (state.nowib === 1) {
+    // Cancel horizontal: mutual destruction with normal, blocked by cancel(31)
+    for (let i = state.nowblock.cells.length - 1; i >= 0; i--) {
+      const [r, c] = state.nowblock.cells[i];
+      const br = state.blockpos[0] + r, bc = newCol + c;
+      if (bc < 0 || bc >= BOARD_W || br < 0) return 1;
+      if (br >= BOARD_H) continue;
+      const cell = state.board[br][bc];
+      if (cell === 31) return 1;
+      if (cell !== 0) {
+        state.board[br][bc] = 0;
+        state.nowblock.cells.splice(i, 1);
+        state.nowblock.vals.splice(i, 1);
+        state.score += 40;
+      }
+    }
+    if (state.nowblock.cells.length === 0) { setnextblock(); return 2; }
+    state.blockpos[1] = newCol;
+    return 0;
+  }
   if (!checkCollision(state.nowblock, state.blockpos[0], newCol)) {
     state.blockpos[1] = newCol;
     return 0;
