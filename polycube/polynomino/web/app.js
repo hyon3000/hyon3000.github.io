@@ -265,13 +265,10 @@ const _rotTicket = {};
 function _execKey(code) {
   if (code === "Space") {
     // Hard drop: move down until stuck, then lock (continue through cancels)
+    const _hb = state.nowblock;
     let mr;
-    while ((mr = moveDown()) !== 1) { if (state.nowblock.cells.length === 0) break; }
-    if (state.nowblock.cells.length === 0) {
-      setnextblock();
-      state.timestamp = now();
-      return;
-    }
+    while ((mr = moveDown()) !== 1) { if (state.nowblock !== _hb) break; }
+    if (state.nowblock !== _hb) { state.timestamp = now(); return; }
     if (stickblock()) {
       gover();
       initBlockState();
@@ -1489,9 +1486,10 @@ function clickbutton(px, py) {
   if (action === 'moveLeft') { move(-1); return 0; }
   if (action === 'moveRight') { move(1); return 0; }
   if (action === 'hardDrop') {
+    const _hb = state.nowblock;
     let mr;
-    while ((mr = moveDown()) !== 1) { if (state.nowblock.cells.length === 0) break; }
-    if (state.nowblock.cells.length === 0) { setnextblock(); state.timestamp = now(); return 0; }
+    while ((mr = moveDown()) !== 1) { if (state.nowblock !== _hb) break; }
+    if (state.nowblock !== _hb) { state.timestamp = now(); return 0; }
     if (stickblock()) { gover(); initBlockState(); return 0; }
     calculatescore(removeline());
     state.timestamp = now();
