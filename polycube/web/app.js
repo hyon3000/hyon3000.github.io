@@ -538,24 +538,15 @@ function chooseBaseBlockIndex() {
   let b4;
   let b5;
   switch (state.level) {
-    case 0: b1 = 50; b2 = 100; b3 = 100; b4 = 100; b5 = 100; break;
-    case 1: b1 = 10; b2 = 30; b3 = 60; b4 = 100; b5 = 100; break;
-    case 2: b1 = 6; b2 = 20; b3 = 40; b4 = 98; b5 = 100; break;
-    case 3: b1 = 4; b2 = 10; b3 = 30; b4 = 95; b5 = 100; break;
-    case 4: b1 = 3; b2 = 8; b3 = 34; b4 = 93; b5 = 99; break;
-    case 5: b1 = 3; b2 = 7; b3 = 32; b4 = 90; b5 = 99; break;
-    case 6: b1 = 2; b2 = 6; b3 = 31; b4 = 88; b5 = 99; break;
-    case 7: b1 = 2; b2 = 5; b3 = 30; b4 = 86; b5 = 98; break;
-    case 8: b1 = 2; b2 = 5; b3 = 29; b4 = 84; b5 = 98; break;
-    case 9: b1 = 2; b2 = 5; b3 = 29; b4 = 82; b5 = 98; break;
-    case 10: b1 = 2; b2 = 5; b3 = 28; b4 = 81; b5 = 97; break;
-    case 11: b1 = 2; b2 = 5; b3 = 28; b4 = 80; b5 = 97; break;
-    case 12: b1 = 2; b2 = 5; b3 = 28; b4 = 79; b5 = 97; break;
-    case 13: b1 = 2; b2 = 5; b3 = 28; b4 = 78; b5 = 96; break;
-    case 14: b1 = 2; b2 = 5; b3 = 27; b4 = 78; b5 = 96; break;
-    case 15: b1 = 2; b2 = 5; b3 = 27; b4 = 77; b5 = 96; break;
-    case 16: b1 = 2; b2 = 5; b3 = 27; b4 = 76; b5 = 96; break;
-    default: b1 = 2; b2 = 5; b3 = 27; b4 = 75; b5 = 95; break;
+    case 1:  b1=10; b2=30; b3=60; b4=100; b5=100; break;
+    case 2:  b1=6;  b2=20; b3=40; b4=98;  b5=100; break;
+    case 3:  b1=4;  b2=10; b3=30; b4=95;  b5=100; break;
+    case 4:  b1=3;  b2=8;  b3=34; b4=93;  b5=99;  break;
+    case 5: case 6:   b1=3;  b2=7;  b3=32; b4=90;  b5=99;  break;
+    case 7: case 8:   b1=2;  b2=6;  b3=31; b4=88;  b5=99;  break;
+    case 9: case 10: case 11:  b1=2;  b2=5;  b3=30; b4=86;  b5=98;  break;
+    case 12: case 13: case 14: case 15:  b1=2;  b2=5;  b3=29; b4=84;  b5=98;  break;
+    default: b1=2;  b2=5;  b3=29; b4=82;  b5=98;  break;
   }
   if (state.monoonly) {
     b1 = 100;
