@@ -682,40 +682,39 @@ function assignCellFromProbability(baseIndex, x, y, z, w) {
   }
   if (!itemsEnabled) return raw;
   let u = (randInt(16384) + randInt(16384) * 16384) % 1000000;
-  if (u < 100) return 116;
-  if (u < 400) return 117;
-  if (u < 700) return 118;
-  if (u < 720) return 119;
-  if (u < 1520) return 104;
-  if (u < 2020) return 120;
-  if (u < 3020) return 121;
-  if (u < 3720) return 122;
-  if (u < 4020) return 123;
-  if (u < 4070) return 124;
-  if (u < 4870) return 125;
-  if (u < 5120) return 91;
-  if (u < 5220) return 102;
-  if (u < 5420) return 126;
-  if (u < 5620) return 105;
-  if (u < 5820) return 106;
-  if (u < 6120) return 127;
-  if (u < 6220) return 17;
-  if (u < 6420) return 20;
-  if (u < 7220) return 21;
-  if (u < 8020) return 22;
-  if (u < 8270) return 16;
-  if (u < 8470) return 11;
-  if (u < 8720) return 2;
-  if (u < 9720) return 8;
-  if (u < 10720) return 9;
-  if (u < 10970) return 10;
-  if (u < 11970) return 5;
-  if (u < 12220) return 6;
-  if (u < 14470) return 120;
-  if (u < 24470) return 4;
-  if (u < 24770) return 200; // mirror 0.03%
-  if (u < 25070) return 19; // zigzag 0.03%
-  if (u < 25370) return 18; // hole 0.03%
+  if (u < 100) return 116;    // 2-: 0.01%
+  if (u < 400) return 117;    // 2+: 0.03%
+  if (u < 700) return 118;    // 범위삭제: 0.03%
+  if (u < 720) return 119;    // 전체삭제: 0.002%
+  if (u < 1520) return 104;   // 모노전용: 0.08%
+  if (u < 4020) return 120;   // 시한폭탄0: 0.25%
+  if (u < 5270) return 121;   // 시한폭탄1: 0.125%
+  if (u < 6120) return 122;   // 시한폭탄2: 0.085%
+  if (u < 6520) return 123;   // 시한폭탄3: 0.04%
+  if (u < 6570) return 124;   // 3-: 0.005%
+  if (u < 7370) return 125;   // 1+: 0.08%
+  if (u < 7620) return 91;    // 회전봉인: 0.025%
+  if (u < 7720) return 102;   // 상단삭제: 0.01%
+  if (u < 7870) return 126;   // 횡렬삭제: 0.015%
+  if (u < 8020) return 105;   // 종렬삭제: 0.015%
+  if (u < 8120) return 106;   // W열삭제: 0.01%
+  if (u < 8420) return 127;   // 폭탄변환: 0.03%
+  if (u < 8520) return 17;    // 폭탄블록5개: 0.01%
+  if (u < 8720) return 20;    // 빈공간삭제: 0.02%
+  if (u < 9520) return 21;    // 소형화: 0.08%
+  if (u < 10320) return 22;   // 대형화: 0.08%
+  if (u < 10570) return 16;   // 시야봉인: 0.025%
+  if (u < 10770) return 11;   // 장애물: 0.02%
+  if (u < 11020) return 2;    // 은폐: 0.025%
+  if (u < 12020) return 8;    // 속도증가: 0.1%
+  if (u < 13020) return 9;    // 속도감소: 0.1%
+  if (u < 13270) return 10;   // 홀드봉인: 0.025%
+  if (u < 14270) return 5;    // 아이템제거: 0.1%
+  if (u < 14520) return 6;    // 예측차단: 0.025%
+  if (u < 24520) return 4;    // 득점강화: ~1%
+  if (u < 24820) return 200;  // 거울상: 0.03%
+  if (u < 25120) return 19;   // 지그재그: 0.03%
+  if (u < 25420) return 18;   // 구멍: 0.03%
   if (baseIndex === 0) {
     const _mr = randInt(100);
     if (_mr < 10) return 1; // selfdestruct 10%
@@ -1912,7 +1911,7 @@ function handleTouches() {
 }
 
 function updateFallingLogic() {
-  const _fallInt = 6000 / (state.level / 3 + 5) * (state.speedup > 0 ? 0.4 : 1) * (state.speeddown > 0 ? 2.5 : 1) * (state.vkspace2 ? 0.05 : 1);
+  const _fallInt = 6000 / (Math.min(state.level, 12) / 3 + 5) * (state.speedup > 0 ? 0.4 : 1) * (state.speeddown > 0 ? 2.5 : 1) * (state.vkspace2 ? 0.05 : 1);
   if (state.timestamp + _fallInt < now()) {
     if (move(2, -1)) {
       if (stickblock()) {
