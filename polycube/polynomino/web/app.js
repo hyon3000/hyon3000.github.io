@@ -98,6 +98,7 @@ const state = {
   compactPending: false,
   simplify2: 0,
   pentaForce: 0,
+  reinforce: 0,
   score: 0,
   lines: 0,
   level: 1,
@@ -284,6 +285,7 @@ function _execKey(code) {
   if (code === "ArrowUp" || code === "KeyZ") { rotate(1); return; }
   if (code === "KeyX") { rotate(-1); return; }
   if (code === "ArrowDown") { rotate(-1); return; }
+  if (code === "ShiftLeft" || code === "ShiftRight") { tryHoldSwap(); return; }
 }
 
 function _isRotKey(code) { return code === "ArrowUp" || code === "ArrowDown" || code === "KeyZ" || code === "KeyX"; }
@@ -494,15 +496,22 @@ function assignCellValue(baseVal) {
   if (u < 13270) return 10;   // 홀드봉인: 0.025%
   if (u < 14270) return 5;    // 아이템제거: 0.1%
   if (u < 14520) return 6;    // 예측차단: 0.025%
-  if (u < 24520) return 4;    // 득점강화: ~1%
-  if (u < 24820) return 200;  // 거울상: 0.03%
-  if (u < 25120) return 19;   // 지그재그: 0.03%
-  if (u < 25420) return 18;   // 구멍: 0.03%
+  if (u < 14820) return 157;  // 강화: 0.03%
+  if (u < 24820) return 4;    // 득점강화: ~1%
+  if (u < 25120) return 200;  // 거울상: 0.03%
+  if (u < 25420) return 19;   // 지그재그: 0.03%
+  if (u < 25720) return 18;   // 구멍: 0.03%
   if (state._assignIsMonoBlock) {
     const _mr = randInt(100);
     if (_mr < 10) return 1; // selfdestruct 10%
-    if (_mr < 20) { state.nexthb = 1; return 30; } // pierce 10%
-    if (_mr < 60) return 31; // cancel 40%
+    if (_mr < 20) {
+      if (state.reinforce > 0) { state._rfUpgrade = 30; return baseVal; } // defer to multi-cell
+      state.nexthb = 1; return 30; // pierce 10%
+    }
+    if (_mr < 60) {
+      if (state.reinforce > 0) { state._rfUpgrade = 31; return baseVal; } // defer to multi-cell
+      return 31; // cancel 40%
+    }
   }
   if (state.monoonly || (state.simplify2 > 0 && state._assignIsMonoBlock)) return 12 + randInt(4);
   if (u > 20000 && u < 60000 && getHour() === 0 && getMinute() === 0) {
@@ -510,7 +519,7 @@ function assignCellValue(baseVal) {
     const bonus = [
       [4900, 116], [14700, 117], [14700, 118], [499, 119], [14700, 104],
       [171500, 120], [49000, 121], [34300, 122], [14700, 123], [1497, 124],
-      [39200, 125], [12250, 91], [4900, 102], [9800, 126], [9800, 105],
+      [39200, 125], [12250, 91], [4900, 102], [9800, 126],
       [4900, 127], [9800, 1], [12250, 2], [49000, 5], [12250, 6], [40000, 4], [4900, 19], [4900, 18],
     ];
     const dp = getDateP();
@@ -572,6 +581,20 @@ function generateBlock() {
       const _sv = randInt(2) === 0 ? 30 : 1;
       if (_sv === 30) state.nexthb = 1;
       piece.vals = piece.vals.map(() => _sv); // all pierce or selfdestruct
+    }
+  }
+  // Reinforce upgrade: mono pierce/cancel → 2-3 cell pierce/cancel
+  if (state._rfUpgrade) {
+    const _rfCode = state._rfUpgrade;
+    state._rfUpgrade = 0;
+    const _rfIdx = 2 + randInt(2); // tri(2) or tri(3) = 2-3 cell block
+    if (state.rawblock && _rfIdx < state.rawblock.length) {
+      const src = state.rawblock[_rfIdx];
+      piece.cells = src.cells.map(c => [...c]);
+      piece.vals = piece.cells.map(() => _rfCode);
+      if (_rfCode === 30) state.nexthb = 1;
+      const rr = randInt(4);
+      for (let i = 0; i < rr; i++) rotateCellsCW(piece);
     }
   }
   return piece;
@@ -659,6 +682,7 @@ function initBlockState() {
   state.compactPending = false;
   state.simplify2 = 0;
   state.pentaForce = 0;
+  state.reinforce = 0;
   // Start with random special item in hold (monomino)
   let _hv = 4;
   if (itemsEnabled) {
@@ -668,7 +692,7 @@ function initBlockState() {
     else if (_mr < 60) _hv = 31;
     else {
       const _u = randInt(250000);
-      if(_u<100)_hv=116;else if(_u<400)_hv=117;else if(_u<700)_hv=118;else if(_u<720)_hv=119;else if(_u<1520)_hv=104;else if(_u<2020)_hv=120;else if(_u<3020)_hv=121;else if(_u<3720)_hv=122;else if(_u<4020)_hv=123;else if(_u<4070)_hv=124;else if(_u<4870)_hv=125;else if(_u<5120)_hv=91;else if(_u<5220)_hv=102;else if(_u<5620)_hv=126;else if(_u<5920)_hv=127;else if(_u<6020)_hv=17;else if(_u<6220)_hv=20;else if(_u<7020)_hv=21;else if(_u<7820)_hv=22;else if(_u<8070)_hv=16;else if(_u<8270)_hv=11;else if(_u<8920)_hv=2;else if(_u<9920)_hv=8;else if(_u<10920)_hv=9;else if(_u<11170)_hv=10;else if(_u<12170)_hv=5;else if(_u<12420)_hv=6;else if(_u<14670)_hv=120;else if(_u<24670)_hv=200;else if(_u<24970)_hv=19;else if(_u<25270)_hv=18;
+      if(_u<100)_hv=116;else if(_u<400)_hv=117;else if(_u<700)_hv=118;else if(_u<720)_hv=119;else if(_u<1520)_hv=104;else if(_u<2020)_hv=120;else if(_u<3020)_hv=121;else if(_u<3720)_hv=122;else if(_u<4020)_hv=123;else if(_u<4070)_hv=124;else if(_u<4870)_hv=125;else if(_u<5120)_hv=91;else if(_u<5220)_hv=102;else if(_u<5620)_hv=126;else if(_u<5920)_hv=127;else if(_u<6020)_hv=17;else if(_u<6220)_hv=20;else if(_u<7020)_hv=21;else if(_u<7820)_hv=22;else if(_u<8070)_hv=16;else if(_u<8270)_hv=11;else if(_u<8920)_hv=2;else if(_u<9920)_hv=8;else if(_u<10920)_hv=9;else if(_u<11170)_hv=10;else if(_u<12170)_hv=5;else if(_u<12420)_hv=6;else if(_u<12720)_hv=157;else if(_u<14970)_hv=120;else if(_u<24970)_hv=200;else if(_u<25270)_hv=19;else if(_u<25570)_hv=18;
     }
   } else { _hv = 65; }
   state.holdblock = { cells: [[0, 0]], vals: [_hv] };
@@ -955,9 +979,10 @@ function applySpecialAging() {
       if (120 <= value && value < 123) {
         state.board[r][c] += 1;
       } else if (value === 123) {
-        // Bomb explodes 3x3
-        for (let r2 = r - 1; r2 <= r + 1; r2++) {
-          for (let c2 = c - 1; c2 <= c + 1; c2++) {
+        // Bomb explodes 3x3 (reinforce: 5x5)
+        const _bRange = state.reinforce > 0 ? 2 : 1;
+        for (let r2 = r - _bRange; r2 <= r + _bRange; r2++) {
+          for (let c2 = c - _bRange; c2 <= c + _bRange; c2++) {
             if (r2 >= 0 && r2 < BOARD_H && c2 >= 0 && c2 < BOARD_W) {
               state.board[r2][c2] = randInt(4) !== 0 ? 98 : 0;
             }
@@ -1026,13 +1051,14 @@ function stickblock() {
       state.board[br][bc] = state.nowblock.vals[i];
     }
   }
-  // 자폭: placed immediately triggers 3x3 destruction
+  // 자폭: placed immediately triggers 3x3 destruction (reinforce: 5x5)
+  const _sdRange = state.reinforce > 0 ? 2 : 1;
   for (let i = 0; i < state.nowblock.cells.length; i++) {
     if ((state.nowblock.vals[i] & 255) === 1) {
       const br = state.blockpos[0] + state.nowblock.cells[i][0];
       const bc = state.blockpos[1] + state.nowblock.cells[i][1];
-      for (let r2 = br - 1; r2 <= br + 1; r2++) {
-        for (let c2 = bc - 1; c2 <= bc + 1; c2++) {
+      for (let r2 = br - _sdRange; r2 <= br + _sdRange; r2++) {
+        for (let c2 = bc - _sdRange; c2 <= bc + _sdRange; c2++) {
           if (r2 >= 0 && r2 < BOARD_H && c2 >= 0 && c2 < BOARD_W) {
             state.board[r2][c2] = 0;
           }
@@ -1068,14 +1094,16 @@ function processLine(row) {
     if ((state.board[row][c2] & 255) === 200) { _mirrorFlag = true; state.board[row][c2] = (state.board[row][c2] & 256); }
   }
 
+  const _enf = state.reinforce > 0;
   for (let c = 0; c < BOARD_W; c++) {
     const code = state.board[row][c] & 255;
-    if (code === 116) { tline -= 2; state.board[row][c] = 256; }
-    else if (code === 117) { tline += 2; state.board[row][c] = 256; }
+    if (code === 116) { tline -= (_enf ? 4 : 2); state.board[row][c] = 256; }
+    else if (code === 117) { tline += (_enf ? 4 : 2); state.board[row][c] = 256; }
     else if (code === 118) {
-      // 범위삭제: x좌표 +-1열 삭제
+      // 범위삭제: x좌표 +-1열 삭제 (reinforce: +-2)
       state.board[row][c] = 256;
-      for (let c2 = c - 1; c2 <= c + 1; c2++) {
+      const _rdRange = _enf ? 2 : 1;
+      for (let c2 = c - _rdRange; c2 <= c + _rdRange; c2++) {
         if (c2 >= 0 && c2 < BOARD_W) {
           for (let r2 = 0; r2 < BOARD_H; r2++) state.board[r2][c2] |= 256;
         }
@@ -1084,34 +1112,58 @@ function processLine(row) {
       // All clear
       state.board = create2d(BOARD_W, BOARD_H);
       return { filled, tline: 0, hardReset: true };
-    } else if (code === 104) { state.simplify2 = 0; state.pentaForce = 0; state.monoonly += 11; state.board[row][c] = 256; }
-    else if (code === 124) { tline -= 3; state.board[row][c] = 256; }
-    else if (code === 125) { tline += 1; state.board[row][c] = 256; }
-    else if (code === 91) { state.spinlock += 10; state.board[row][c] = 256; }
-    else if (code === 8) { state.speedup += 10; state.board[row][c] = 256; }
-    else if (code === 9) { state.speeddown += 10; state.board[row][c] = 256; }
-    else if (code === 10) { state.holdlock += 10; state.board[row][c] = 256; }
-    else if (code === 16) { state.blindboard = now() + 10000; state.board[row][c] = 256; }
-    else if (code === 17) { state.bombnext += 6; state.board[row][c] = 256; }
+    } else if (code === 104) { state.simplify2 = 0; state.pentaForce = 0; state.monoonly += (_enf ? 22 : 11); state.board[row][c] = 256; }
+    else if (code === 124) { tline -= (_enf ? 6 : 3); state.board[row][c] = 256; }
+    else if (code === 125) { tline += (_enf ? 2 : 1); state.board[row][c] = 256; }
+    else if (code === 91) { state.spinlock += (_enf ? 20 : 10); state.board[row][c] = 256; }
+    else if (code === 8) { state.speedup += (_enf ? 20 : 10); state.board[row][c] = 256; }
+    else if (code === 9) { state.speeddown += (_enf ? 20 : 10); state.board[row][c] = 256; }
+    else if (code === 10) { state.holdlock += (_enf ? 20 : 10); state.board[row][c] = 256; }
+    else if (code === 16) { state.blindboard = now() + (_enf ? 20000 : 10000); state.board[row][c] = 256; }
+    else if (code === 17) { state.bombnext += (_enf ? 12 : 6); state.board[row][c] = 256; }
     else if (code === 20) { state.compactPending = true; state.board[row][c] = 256; }
-    else if (code === 21) { state.monoonly = 0; state.pentaForce = 0; state.simplify2 += 9; state.board[row][c] = 256; }
-    else if (code === 22) { state.monoonly = 0; state.simplify2 = 0; state.pentaForce += 9; state.board[row][c] = 256; }
-    else if (code === 2) { state.hideblock += 10; state.board[row][c] = 256; }
-    else if (code === 6) { state.hidenext += 10; state.board[row][c] = 256; }
+    else if (code === 21) { state.monoonly = 0; state.pentaForce = 0; state.simplify2 += (_enf ? 18 : 9); state.board[row][c] = 256; }
+    else if (code === 22) { state.monoonly = 0; state.simplify2 = 0; state.pentaForce += (_enf ? 18 : 9); state.board[row][c] = 256; }
+    else if (code === 2) { state.hideblock += (_enf ? 20 : 10); state.board[row][c] = 256; }
+    else if (code === 6) { state.hidenext += (_enf ? 20 : 10); state.board[row][c] = 256; }
     else if (code === 5) {
-      // Erase items
-      for (let r2 = 0; r2 < BOARD_H; r2++) {
-        for (let c2 = 0; c2 < BOARD_W; c2++) {
-          if (state.board[r2][c2] !== 0 && state.board[r2][c2] !== 256) {
-            state.board[r2][c2] = 33 + (state.board[r2][c2] % 31);
+      // Erase items (reinforce: unify all to min value)
+      if (_enf) {
+        let _minV = 999;
+        for (let r2 = 0; r2 < BOARD_H; r2++) {
+          for (let c2 = 0; c2 < BOARD_W; c2++) {
+            const _v = state.board[r2][c2];
+            if (_v !== 0 && _v < 256 && _v < _minV) _minV = _v;
+          }
+        }
+        if (_minV < 999) {
+          for (let r2 = 0; r2 < BOARD_H; r2++) {
+            for (let c2 = 0; c2 < BOARD_W; c2++) {
+              if (state.board[r2][c2] !== 0 && state.board[r2][c2] < 256) {
+                state.board[r2][c2] = _minV;
+              }
+            }
+          }
+        }
+      } else {
+        for (let r2 = 0; r2 < BOARD_H; r2++) {
+          for (let c2 = 0; c2 < BOARD_W; c2++) {
+            if (state.board[r2][c2] !== 0 && state.board[r2][c2] !== 256) {
+              state.board[r2][c2] = 33 + (state.board[r2][c2] % 31);
+            }
           }
         }
       }
       state.board[row][c] = 256;
-    } else if (code === 4) { state.score2x += 1; state.board[row][c] = 256; }
-    else if (code === 11) {
-      // 장애물: 랜덤 위치 장애물 3개
+    } else if (code === 157) {
+      // Enforcement: enhance next 10 line clears
+      state.reinforce = 10;
       state.board[row][c] = 256;
+    } else if (code === 4) { state.score2x += (_enf ? 2 : 1); state.board[row][c] = 256; }
+    else if (code === 11) {
+      // 장애물: 랜덤 위치 장애물
+      state.board[row][c] = 256;
+      const _obsMax = _enf ? 5 : 3;
       let count = 0;
       for (let i = 0; i < 50; i++) {
         const rr = randInt(BOARD_H - 1);
@@ -1122,7 +1174,7 @@ function processLine(row) {
           count += 1;
           state.board[rr][cc] = 103;
         }
-        if (count === 3) break;
+        if (count === _obsMax) break;
       }
     } else if (code === 102) {
       // 상단삭제: clear above this row
@@ -1130,64 +1182,82 @@ function processLine(row) {
         for (let c2 = 0; c2 < BOARD_W; c2++) state.board[r2][c2] = 256;
       }
     } else if (code === 126) {
-      // xz del -> in 2D, clear +-1 rows
+      // xz del -> in 2D, clear +-1 rows (reinforce: +-2)
       state.board[row][c] = 256;
-      for (let r2 = row - 1; r2 <= row + 1; r2++) {
+      const _rdRng = _enf ? 2 : 1;
+      for (let r2 = row - _rdRng; r2 <= row + _rdRng; r2++) {
         if (r2 >= 0 && r2 < BOARD_H) {
           for (let c2 = 0; c2 < BOARD_W; c2++) state.board[r2][c2] |= 256;
         }
       }
-    } else if (code === 105) {
-      // 종렬삭제: clear +-1 columns
-      state.board[row][c] = 256;
-      for (let c2 = c - 1; c2 <= c + 1; c2++) {
-        if (c2 >= 0 && c2 < BOARD_W) {
-          for (let r2 = 0; r2 < BOARD_H; r2++) state.board[r2][c2] |= 256;
-        }
-      }
     } else if (code === 127) {
       // Bomb creator
+      const _bcRate = state.reinforce > 0 ? 50 : 20;
       state.board[row][c] |= 256;
       for (let r2 = 0; r2 < BOARD_H; r2++) {
         for (let c2 = 0; c2 < BOARD_W; c2++) {
-          if ((state.board[r2][c2] & 255) !== 0 && randInt(100) < 30) {
+          if ((state.board[r2][c2] & 255) !== 0 && randInt(100) < _bcRate) {
             state.board[r2][c2] = (state.board[r2][c2] & 256) + 120 + randInt(4);
           }
         }
       }
     } else if (code === 18) {
-      // Hole: remove 30% of all blocks
+      // Hole: remove 30% of all blocks (reinforce: 60%)
       state.board[row][c] |= 256;
       for (let r2 = 0; r2 < BOARD_H; r2++) {
         for (let c2 = 0; c2 < BOARD_W; c2++) {
-          if ((state.board[r2][c2] & 255) !== 0 && randInt(100) < 30) {
+          if ((state.board[r2][c2] & 255) !== 0 && randInt(100) < (_enf ? 60 : 30)) {
             state.board[r2][c2] = state.board[r2][c2] & 256;
           }
         }
       }
     } else if (code === 19) {
-      // Zigzag: shuffle blocks within each row
+      // Zigzag: shuffle blocks (reinforce: across all rows; normal: per-row)
       state.board[row][c] |= 256;
-      for (let r2 = 0; r2 < BOARD_H; r2++) {
-        const vals = [];
-        const cols = [];
-        for (let c2 = 0; c2 < BOARD_W; c2++) {
-          const v = state.board[r2][c2] & 255;
-          if (v !== 0) vals.push(v);
-          cols.push(c2);
+      if (_enf) {
+        // Collect all non-zero cell values and positions
+        const _allVals = [];
+        const _allPos = [];
+        for (let r2 = 0; r2 < BOARD_H; r2++) {
+          for (let c2 = 0; c2 < BOARD_W; c2++) {
+            const v = state.board[r2][c2] & 255;
+            if (v !== 0) { _allVals.push(v); _allPos.push([r2, c2]); }
+          }
         }
-        // Clear all cells in this row
-        for (const c2 of cols) {
-          state.board[r2][c2] = state.board[r2][c2] & 256;
-        }
-        // Shuffle column positions
-        for (let i = cols.length - 1; i > 0; i--) {
+        // Clear all
+        for (const [_r, _c] of _allPos) state.board[_r][_c] = state.board[_r][_c] & 256;
+        // Shuffle positions
+        for (let i = _allPos.length - 1; i > 0; i--) {
           const j = randInt(i + 1);
-          [cols[i], cols[j]] = [cols[j], cols[i]];
+          [_allPos[i], _allPos[j]] = [_allPos[j], _allPos[i]];
         }
-        // Place blocks at first N shuffled positions
-        for (let i = 0; i < vals.length; i++) {
-          state.board[r2][cols[i]] = (state.board[r2][cols[i]] & 256) + vals[i];
+        // Place back
+        for (let i = 0; i < _allVals.length; i++) {
+          const [_r, _c] = _allPos[i];
+          state.board[_r][_c] = (state.board[_r][_c] & 256) + _allVals[i];
+        }
+      } else {
+        for (let r2 = 0; r2 < BOARD_H; r2++) {
+          const vals = [];
+          const cols = [];
+          for (let c2 = 0; c2 < BOARD_W; c2++) {
+            const v = state.board[r2][c2] & 255;
+            if (v !== 0) vals.push(v);
+            cols.push(c2);
+          }
+          // Clear all cells in this row
+          for (const c2 of cols) {
+            state.board[r2][c2] = state.board[r2][c2] & 256;
+          }
+          // Shuffle column positions
+          for (let i = cols.length - 1; i > 0; i--) {
+            const j = randInt(i + 1);
+            [cols[i], cols[j]] = [cols[j], cols[i]];
+          }
+          // Place blocks at first N shuffled positions
+          for (let i = 0; i < vals.length; i++) {
+            state.board[r2][cols[i]] = (state.board[r2][cols[i]] & 256) + vals[i];
+          }
         }
       }
     } else {
@@ -1307,12 +1377,13 @@ function removeline() {
 
 function calculatescore(line) {
   state.lines += line;
-  if (state.score2x > 2) state.score2x = 2;
+  if (state.score2x > 3) state.score2x = 3;
   state.score += Math.floor(20 * line * Math.sqrt(line) * Math.pow(4, state.score2x)) * Math.pow(4, state.asc);
   if (state.score > 999999999) state.score = 999999999;
   state.score2x = 0;
   state.level = Math.floor((state.score + 600) / 800) + 1;
   if (state.level > 16) state.level = 16;
+  if (state.reinforce > 0 && line > 0) state.reinforce = Math.max(0, state.reinforce - line);
 }
 
 function gover() {
@@ -1441,6 +1512,10 @@ function clickbutton(px, py) {
   // Pause: any touch resumes
   if (state.pause) {
     state.pause = false;
+    if (state._pauseStart && state.blindboard > 0) {
+      state.blindboard += now() - state._pauseStart;
+    }
+    state._pauseStart = 0;
     return 0;
   }
 
@@ -1496,7 +1571,15 @@ function clickbutton(px, py) {
   }
   if (action === 'drop') { state.vkspace2 = true; return 0; }
   if (action === 'hold') { tryHoldSwap(); return 0; }
-  if (action === 'pause') { state.pause = !state.pause; return 0; }
+  if (action === 'pause') {
+    state.pause = !state.pause;
+    if (state.pause) state._pauseStart = now();
+    else if (state._pauseStart && state.blindboard > 0) {
+      state.blindboard += now() - state._pauseStart;
+      state._pauseStart = 0;
+    }
+    return 0;
+  }
 
   return 1;
 }
@@ -1538,8 +1621,8 @@ function updateFallingLogic() {
   const fallSpeed = gravityTable[Math.min(state.level - 1, gravityTable.length - 1)];
   // vkspace2 (Space) = soft drop (20× speed, Tetris guideline standard)
   let speedMult = state.vkspace2 ? 0.05 : 1;
-  if (state.speedup > 0 && speedMult === 1) speedMult = 0.4;
-  if (state.speeddown > 0 && speedMult === 1) speedMult = 2.5;
+  if (state.speedup > 0 && speedMult === 1) speedMult = state.reinforce > 0 ? 0.2 : 0.4;
+  if (state.speeddown > 0 && speedMult === 1) speedMult = state.reinforce > 0 ? 5.0 : 2.5;
   const doFall = state.timestamp + fallSpeed * speedMult < now();
   if (doFall) {
     const mr = moveDown();
@@ -2172,6 +2255,22 @@ function drawCellDecoration(x, y, w, h, val) {
     ctx.moveTo(cx + s, cy); ctx.lineTo(cx - s, cy);
     ctx.stroke();
   }
+  // pic 93 (reinforce): "x2" text
+  if (code === 157) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = Math.max(1, w * 0.05);
+    // "x" as two crossing lines
+    ctx.beginPath();
+    ctx.moveTo(cx - 0.25*s, cy - 0.2*s); ctx.lineTo(cx + 0.05*s, cy + 0.2*s);
+    ctx.moveTo(cx + 0.05*s, cy - 0.2*s); ctx.lineTo(cx - 0.25*s, cy + 0.2*s);
+    ctx.stroke();
+    // "2" as lines
+    ctx.beginPath();
+    ctx.moveTo(cx + 0.10*s, cy - 0.2*s); ctx.lineTo(cx + 0.30*s, cy - 0.2*s);
+    ctx.lineTo(cx + 0.30*s, cy); ctx.lineTo(cx + 0.10*s, cy);
+    ctx.lineTo(cx + 0.10*s, cy + 0.2*s); ctx.lineTo(cx + 0.30*s, cy + 0.2*s);
+    ctx.stroke();
+  }
   // code 200: 거울상 (mirror) — trapezoid (|
   if (code === 200) {
     ctx.strokeStyle = 'rgba(255,255,255,0.7)';
@@ -2248,7 +2347,6 @@ function drawBoard() {
 
   // Blind board: skip board cells, ghost, and current block rendering
   if (state.blindboard > now()) {
-    // Board outline only
     ctx.strokeStyle = '#445';
     ctx.lineWidth = 1;
     ctx.strokeRect(bx, by, cs * BOARD_W, cs * BOARD_H);
@@ -2289,15 +2387,31 @@ function drawBoard() {
   }
 
   // Current block
-  if (!state.hideblock && state.nowblock && state.nowblock.cells) {
-    for (let i = 0; i < state.nowblock.cells.length; i++) {
-      const [r, c] = state.nowblock.cells[i];
-      const br = state.blockpos[0] + r;
-      const bc = state.blockpos[1] + c;
-      if (br >= 0 && br < BOARD_H && bc >= 0 && bc < BOARD_W) {
-        const x = bx + bc * cs;
-        const y = by + (BOARD_H - 1 - br) * cs;
-        drawCell(x, y, cs, cs, state.nowblock.vals[i]);
+  if (state.nowblock && state.nowblock.cells) {
+    if (state.hideblock > 0) {
+      // Conceal: thin dark edge lines only, no fill/decoration
+      for (let i = 0; i < state.nowblock.cells.length; i++) {
+        const [r, c] = state.nowblock.cells[i];
+        const br = state.blockpos[0] + r;
+        const bc = state.blockpos[1] + c;
+        if (br >= 0 && br < BOARD_H && bc >= 0 && bc < BOARD_W) {
+          const x = bx + bc * cs;
+          const y = by + (BOARD_H - 1 - br) * cs;
+          ctx.strokeStyle = 'rgba(40,40,55,0.6)';
+          ctx.lineWidth = 0.5;
+          ctx.strokeRect(x, y, cs, cs);
+        }
+      }
+    } else {
+      for (let i = 0; i < state.nowblock.cells.length; i++) {
+        const [r, c] = state.nowblock.cells[i];
+        const br = state.blockpos[0] + r;
+        const bc = state.blockpos[1] + c;
+        if (br >= 0 && br < BOARD_H && bc >= 0 && bc < BOARD_W) {
+          const x = bx + bc * cs;
+          const y = by + (BOARD_H - 1 - br) * cs;
+          drawCell(x, y, cs, cs, state.nowblock.vals[i]);
+        }
       }
     }
   }
@@ -2691,20 +2805,22 @@ const ITEM_DESC = _isKo ? {
   5:'아이템제거: 판 위 아이템 제거', 6:'예측차단: 다음 블록 숨김', 8:'속도증가: x2.5', 9:'속도감소: x0.4',
   10:'홀드봉인: 10턴간 홀드 불가', 11:'장애물: 랜덤 위치 장애물 3개', 16:'시야봉인: 보드 숨김', 17:'폭탄블록5개: 5블록에 폭탄', 18:'구멍: 블록 30% 제거',
   91:'회전봉인: 10턴간 회전 불가', 20:'빈공간삭제: 모든 빈공간 정리', 21:'소형화: 8턴간 3칸 이하', 22:'대형화: 8턴간 5칸 이상', 30:'관통: 낙하경로 블록파괴', 31:'상쇄: 블록과 닿으면 상호삭제',
-  102:'상단삭제: 위의 블록 모두 제거', 104:'모노전용: 1칸 블록만', 105:'종렬삭제: 해당 열 삭제', 116:'-2줄: 바닥 2줄 제거', 117:'+2줄: 바닥에 2줄 추가',
+  102:'상단삭제: 위의 블록 모두 제거', 104:'모노전용: 1칸 블록만', 116:'-2줄: 바닥 2줄 제거', 117:'+2줄: 바닥에 2줄 추가',
   118:'범위삭제: 주변 열 전체삭제', 119:'전체삭제: 판 전체 클리어', 120:'시한폭탄: 3턴후 폭발', 121:'시한폭탄: 2턴후 폭발', 122:'시한폭탄: 1턴후 폭발',
   123:'시한폭탄: 폭발 임박', 124:'-3줄: 바닥 3줄 제거', 125:'+1줄: 바닥에 1줄 추가', 126:'횡렬삭제: 해당 행 삭제', 127:'폭탄변환: 30%확률 폭탄화',
+  157:'강화: 10턴간 효과 2배',
 } : {
   1:'Self-Destruct: 3x3 boom', 2:'Conceal: Hide piece 10t', 200:'Mirror: Flip board', 19:'Zigzag: Shuffle each row', 4:'Score Boost: x4 (stack x16)', 5:'Item Clear: Remove items',
   6:'No Preview: Hide next 10t', 8:'Speed Up: x2.5', 9:'Slow Down: x0.4', 10:'Hold Lock: 10 turns', 11:'Obstacle: 3 random',
   16:'Blind: Hide board 10sec', 17:'Bomb x5: Next 5 have bombs', 18:'Hole: Remove 30% blocks', 91:'Rot Lock: 10 turns', 20:'Gap Clear: Remove gaps', 21:'Simplify: ≤3 cells 8 turns',
   22:'PentaForce: ≥5 cells 8 turns', 30:'Pierce: Destroy in path', 31:'Cancel: Mutual delete', 102:'Top Clear: All above', 104:'Mono Only: 1-cell 10 turns',
-  105:'Col Del: Delete column', 116:'-2 Lines: Remove 2', 117:'+2 Lines: Add 2 lines', 118:'Range Del: ±1 columns', 119:'Full Clear: Wipe board',
+  116:'-2 Lines: Remove 2', 117:'+2 Lines: Add 2 lines', 118:'Range Del: ±1 columns', 119:'Full Clear: Wipe board',
   120:'Time Bomb: 3t to blow', 121:'Time Bomb: 2t to blow', 122:'Time Bomb: 1t to blow', 123:'Time Bomb: Imminent',
   124:'-3 Lines: Remove 3', 125:'+1 Line: Add 1 line', 126:'Row Del: Delete row', 127:'Bomb Convert: 30% bomb',
+  157:'Enforce: x2 effects 10 turns',
 };
 // 유리=beneficial(cyan), 불리=harmful(orange) — matches about section
-const ITEM_GOOD = new Set([1,4,9,20,21,30,31,102,104,105,116,117,118,119,124,125,126]);
+const ITEM_GOOD = new Set([1,4,9,20,21,30,31,102,104,116,117,118,119,124,125,126,157]);
 
 function getActiveItemCodes() {
   const codes = new Set();

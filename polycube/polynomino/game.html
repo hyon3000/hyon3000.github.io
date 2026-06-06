@@ -66,7 +66,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;background:#000}
 <h2>II. 조작법</h2>
 <img src="assets/images/img_000.png" alt="img_000" alt="buttons" style="width:100%">
 <div class="row" style="font-size:0.75em;margin:0.1em 0"><div style="flex:1;color:#0ff">&#9664; 회전 CW/CCW</div><div style="flex:1"><span style="color:#f0f">&#9632;</span> 홀드<br><span style="color:#fff">&#9660;&#9660;</span> 하드드롭</div><div style="flex:1">&lt; &gt; 이동<br><span style="color:#fff">V</span> 소프트드롭</div></div>
-<p style="font-size:0.82em"><span class="key">&larr;</span><span class="key">&rarr;</span> 이동 &nbsp; <span class="key">&uarr;</span><span class="key">Z</span> CW &nbsp; <span class="key">&darr;</span><span class="key">X</span> CCW &nbsp; <span class="key">Enter</span> 하드드롭 <span class="key">Space</span> 소프트드롭</p>
+<p style="font-size:0.82em"><span class="key">&larr;</span><span class="key">&rarr;</span> 이동 &nbsp; <span class="key">&uarr;</span><span class="key">Z</span> CW &nbsp; <span class="key">&darr;</span><span class="key">X</span> CCW &nbsp; <span class="key">Enter</span> 하드드롭 <span class="key">Space</span> 소프트드롭 <span class="key">Shift</span> 홀드</p>
 <p class="hint">터치하면 다음 &rarr;</p>
 </div><div class="lang-en" style="display:none">
 <h2>I. Polynomino</h2>
@@ -74,7 +74,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;background:#000}
 <h2>II. Controls</h2>
 <img src="assets/images/img_001.png" alt="img_001" alt="buttons" style="width:100%">
 <div class="row" style="font-size:0.75em;margin:0.1em 0"><div style="flex:1;color:#0ff">&#9664; Rotate CW/CCW</div><div style="flex:1"><span style="color:#f0f">&#9632;</span> Hold<br><span style="color:#fff">&#9660;&#9660;</span> Hard Drop</div><div style="flex:1">&lt; &gt; Move<br><span style="color:#fff">V</span> Soft Drop</div></div>
-<p style="font-size:0.82em"><span class="key">&larr;</span><span class="key">&rarr;</span> Move &nbsp; <span class="key">&uarr;</span><span class="key">Z</span> CW &nbsp; <span class="key">&darr;</span><span class="key">X</span> CCW &nbsp; <span class="key">Enter</span> Hard Drop <span class="key">Space</span> Soft Drop</p>
+<p style="font-size:0.82em"><span class="key">&larr;</span><span class="key">&rarr;</span> Move &nbsp; <span class="key">&uarr;</span><span class="key">Z</span> CW &nbsp; <span class="key">&darr;</span><span class="key">X</span> CCW &nbsp; <span class="key">Enter</span> Hard Drop <span class="key">Space</span> Soft Drop <span class="key">Shift</span> Hold</p>
 <p class="hint">Tap to continue &rarr;</p>
 </div></div></div>
 
@@ -147,6 +147,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;background:#000}
 <div class="it"><img src="assets/images/item_235.png" alt="item_235"><span><b style="color:#f88">거울상</b><br>보드를 좌우반전<br><span class="hint">확률 0.03%</span></span></div>
 <div class="it"><img src="assets/blocks/sp_zigzag.png" alt="sp_zigzag"><span><b style="color:#f88">지그재그</b><br>각 행 블록 위치 무작위 재배치<br><span class="hint">확률 0.03%</span></span></div>
 <div class="it"><img src="assets/blocks/sp_hole.png" alt="sp_hole"><span><b style="color:#f88">구멍</b><br>모든 블록 30% 확률로 제거<br><span class="hint">확률 0.03%</span></span></div>
+<div class="it"><img src="assets/blocks/sp_reinforce.png" alt="sp_reinforce"><span><b style="color:#f90">강화</b><br>10줄간 모든 아이템 효과 2배<br><span class="hint">확률 0.03%</span></span></div>
 </div>
 <p class="hint">터치하면 시작 화면으로 &rarr;</p>
 </div><div class="lang-en" style="display:none">
@@ -191,6 +192,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;background:#000}
 <div class="it"><img src="assets/images/item_267.png" alt="item_267"><span><b style="color:#f88">Mirror</b><br>Flips board horizontally<br><span class="hint">Prob. 0.03%</span></span></div>
 <div class="it"><img src="assets/blocks/sp_zigzag.png" alt="sp_zigzag"><span><b style="color:#f88">Zigzag</b><br>Shuffle blocks in each row<br><span class="hint">Prob. 0.03%</span></span></div>
 <div class="it"><img src="assets/blocks/sp_hole.png" alt="sp_hole"><span><b style="color:#f88">Hole</b><br>Remove 30% of all blocks<br><span class="hint">Prob. 0.03%</span></span></div>
+<div class="it"><img src="assets/blocks/sp_reinforce.png" alt="sp_reinforce"><span><b style="color:#f90">Reinforce</b><br>x2 all item effects for 10 lines<br><span class="hint">Prob. 0.03%</span></span></div>
 </div>
 <p class="hint">Tap to return &rarr;</p>
 </div></div></div>

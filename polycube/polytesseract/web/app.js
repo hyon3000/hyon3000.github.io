@@ -147,6 +147,7 @@ const state = window.__ptState = {
   oscore: 0,
   itemInfoIndex: 0,
   itemInfoLastSwitch: 0,
+  reinforce: 0,
 };
 
 // Item description overlay
@@ -166,6 +167,7 @@ const ITEM_DESC = _isKo ? {
   102:'상단삭제: 위의 블록 모두 제거', 104:'모노전용: 1칸 블록만', 105:'종렬삭제: 해당 열 삭제', 106:'W열삭제', 116:'-2줄: 바닥 2줄 제거', 117:'+2줄: 바닥에 2줄 추가',
   118:'범위삭제: 주변 열 전체삭제', 119:'전체삭제: 판 전체 클리어', 120:'시한폭탄: 3턴후 폭발', 121:'시한폭탄: 2턴후 폭발', 122:'시한폭탄: 1턴후 폭발',
   123:'시한폭탄: 폭발 임박', 124:'-3줄: 바닥 3줄 제거', 125:'+1줄: 바닥에 1줄 추가', 126:'횡렬삭제: 해당 행 삭제', 127:'폭탄변환: 30%확률 폭탄화',
+  157:'강화: 10턴간 효과 2배',
 } : {
   1:'Self-Destruct: 3x3x3 boom', 2:'Conceal: Hide piece 10t', 200:'Mirror: Flip board', 19:'Zigzag: Shuffle each layer', 4:'Score Boost: x4 (stack x16)', 5:'Item Clear: Remove items',
   6:'No Preview: Hide next 10t', 8:'Speed Up: x2.5', 9:'Slow Down: x0.4', 10:'Hold Lock: 10 turns', 11:'Obstacle: 3 random',
@@ -174,6 +176,7 @@ const ITEM_DESC = _isKo ? {
   105:'Col Del: Delete column', 106:'W Del', 116:'-2 Lines: Remove 2', 117:'+2 Lines: Add 2 lines', 118:'Range Del: 3x3 columns', 119:'Full Clear: Wipe board',
   120:'Time Bomb: 3t to blow', 121:'Time Bomb: 2t to blow', 122:'Time Bomb: 1t to blow', 123:'Time Bomb: Imminent',
   124:'-3 Lines: Remove 3', 125:'+1 Line: Add 1 line', 126:'Row Del: Delete row', 127:'Bomb Convert: 30% bomb',
+  157:'Enforcement: x2 effects 10t',
 };
 const ITEM_GOOD = new Set([1,4,9,20,21,30,31,102,104,105,106,116,117,118,119,124,125,126]);
 
@@ -322,7 +325,7 @@ function _execKey(code) {
     while (!move(2, -1)) { if (state.nowblock !== _hb) break; }
     if (state.nowblock !== _hb) { state.timestamp = now(); return; }
     if (stickblock()) { gover(); initBlockState(); return; }
-    calculatescore(removeline());
+    { const _rl = removeline(); calculatescore(_rl); if (state.reinforce > 0 && _rl > 0) state.reinforce = Math.max(0, state.reinforce - _rl); }
     state.timestamp = now();
     return;
   }
@@ -345,22 +348,23 @@ function _execKey(code) {
   if (code === "Slash") { state.depthColor = !state.depthColor; return; }
   if (code === "Comma") { move(3, -1); return; }
   if (code === "Period") { move(3, 1); return; }
-  if (code === "KeyZ") { rotate(0, -1); return; }
-  if (code === "KeyX") { rotate(0, 1); return; }
-  if (code === "KeyC") { rotate(1, -1); return; }
-  if (code === "KeyV") { rotate(1, 1); return; }
-  if (code === "KeyA") { rotate(3, -1); return; }
-  if (code === "KeyS") { rotate(3, 1); return; }
-  if (code === "KeyR") { rotate(2, -1); return; }
-  if (code === "KeyT") { rotate(2, 1); return; }
-  if (code === "KeyD") { rotate(4, -1); return; }
-  if (code === "KeyF") { rotate(4, 1); return; }
-  if (code === "KeyG") { rotate(5, -1); return; }
-  if (code === "KeyH") { rotate(5, 1); return; }
+  if (code === "KeyA") { rotate(0, -1); return; } // XY CW
+  if (code === "KeyZ") { rotate(0, 1); return; }  // XY CCW
+  if (code === "KeyS") { rotate(1, -1); return; } // YZ CW
+  if (code === "KeyX") { rotate(1, 1); return; }  // YZ CCW
+  if (code === "KeyD") { rotate(2, -1); return; } // XZ CW
+  if (code === "KeyC") { rotate(2, 1); return; }  // XZ CCW
+  if (code === "KeyF") { rotate(3, -1); return; } // XW CW
+  if (code === "KeyV") { rotate(3, 1); return; }  // XW CCW
+  if (code === "KeyG") { rotate(4, -1); return; } // YW CW
+  if (code === "KeyB") { rotate(4, 1); return; }  // YW CCW
+  if (code === "KeyH") { rotate(5, -1); return; } // ZW CW
+  if (code === "KeyN") { rotate(5, 1); return; }  // ZW CCW
+  if (code === "ShiftLeft" || code === "ShiftRight") { tryHoldSwap(); return; }
 }
 
 function _isRotKey(code) {
-  return "KeyZ KeyX KeyC KeyV KeyA KeyS KeyR KeyT KeyD KeyF KeyG KeyH".indexOf(code) >= 0;
+  return "KeyZ KeyX KeyC KeyV KeyA KeyS KeyB KeyN KeyD KeyF KeyG KeyH".indexOf(code) >= 0;
 }
 function _isMoveKey(code) {
   return "ArrowLeft ArrowRight ArrowUp ArrowDown Comma Period".indexOf(code) >= 0;
@@ -569,6 +573,7 @@ function initBlockState() {
   state.compactPending = false;
   state.simplify2 = 0;
   state.pentaForce = 0;
+  state.reinforce = 0;
   state.nowblock = state.b[0];
   state.nextblock = state.b[1];
   state.holdblock = state.b[3];
@@ -581,7 +586,7 @@ function initBlockState() {
     else if (_mr < 60) _hv = 31;
     else {
       const _u = randInt(250000);
-      if(_u<100)_hv=116;else if(_u<400)_hv=117;else if(_u<700)_hv=118;else if(_u<720)_hv=119;else if(_u<1520)_hv=104;else if(_u<2020)_hv=120;else if(_u<3020)_hv=121;else if(_u<3720)_hv=122;else if(_u<4020)_hv=123;else if(_u<4070)_hv=124;else if(_u<4870)_hv=125;else if(_u<5120)_hv=91;else if(_u<5220)_hv=102;else if(_u<5420)_hv=126;else if(_u<5620)_hv=105;else if(_u<5820)_hv=106;else if(_u<6120)_hv=127;else if(_u<6220)_hv=17;else if(_u<6420)_hv=20;else if(_u<7220)_hv=21;else if(_u<8020)_hv=22;else if(_u<8270)_hv=16;else if(_u<8470)_hv=11;else if(_u<8720)_hv=2;else if(_u<9720)_hv=8;else if(_u<10720)_hv=9;else if(_u<10970)_hv=10;else if(_u<11970)_hv=5;else if(_u<12220)_hv=6;else if(_u<14470)_hv=120;else if(_u<24470)_hv=200;else if(_u<24770)_hv=19;else if(_u<25070)_hv=18;
+      if(_u<100)_hv=116;else if(_u<400)_hv=117;else if(_u<700)_hv=118;else if(_u<720)_hv=119;else if(_u<1520)_hv=104;else if(_u<2020)_hv=120;else if(_u<3020)_hv=121;else if(_u<3720)_hv=122;else if(_u<4020)_hv=123;else if(_u<4070)_hv=124;else if(_u<4870)_hv=125;else if(_u<5120)_hv=91;else if(_u<5220)_hv=102;else if(_u<5420)_hv=126;else if(_u<5620)_hv=105;else if(_u<5820)_hv=106;else if(_u<6120)_hv=127;else if(_u<6220)_hv=17;else if(_u<6420)_hv=20;else if(_u<7220)_hv=21;else if(_u<8020)_hv=22;else if(_u<8270)_hv=16;else if(_u<8470)_hv=11;else if(_u<8720)_hv=2;else if(_u<9720)_hv=8;else if(_u<10720)_hv=9;else if(_u<10970)_hv=10;else if(_u<11970)_hv=5;else if(_u<12220)_hv=6;else if(_u<12520)_hv=157;else if(_u<14770)_hv=120;else if(_u<24770)_hv=200;else if(_u<25070)_hv=19;else if(_u<25370)_hv=18;
     }
     state.holdblock[3][3][3][3] = _hv;
   } else { state.holdblock[3][3][3][3] = 65; }
@@ -645,10 +650,11 @@ function applySpecialAging() {
         if (120 <= value && value < 123) {
           state.blk[x][y][z][w] += 1;
         } else if (value === 123) {
-          for (let x2 = x - 1; x2 <= x + 1; x2 += 1) {
-            for (let y2 = y - 1; y2 <= y + 1; y2 += 1) {
-              for (let z2 = z - 1; z2 <= z + 1; z2 += 1) {
-                for (let w2 = w - 1; w2 <= w + 1; w2 += 1) {
+          const _tbR = state.reinforce > 0 ? 2 : 1;
+          for (let x2 = x - _tbR; x2 <= x + _tbR; x2 += 1) {
+            for (let y2 = y - _tbR; y2 <= y + _tbR; y2 += 1) {
+              for (let z2 = z - _tbR; z2 <= z + _tbR; z2 += 1) {
+                for (let w2 = w - _tbR; w2 <= w + _tbR; w2 += 1) {
                 if (x2 >= 0 && x2 < 7 && y2 >= 0 && y2 < 7 && z2 >= 0 && z2 < 26 && w2 >= 0 && w2 < 7) {
                   state.blk[x2][y2][z2][w2] = randInt(4) !== 0 ? 98 : 0;
                 }
@@ -711,15 +717,22 @@ function assignCellFromProbability(baseIndex, x, y, z, w) {
   if (u < 13270) return 10;   // 홀드봉인: 0.025%
   if (u < 14270) return 5;    // 아이템제거: 0.1%
   if (u < 14520) return 6;    // 예측차단: 0.025%
-  if (u < 24520) return 4;    // 득점강화: ~1%
-  if (u < 24820) return 200;  // 거울상: 0.03%
-  if (u < 25120) return 19;   // 지그재그: 0.03%
-  if (u < 25420) return 18;   // 구멍: 0.03%
+  if (u < 14820) return 157;  // 강화: 0.03%
+  if (u < 24820) return 4;    // 득점강화: ~1%
+  if (u < 25120) return 200;  // 거울상: 0.03%
+  if (u < 25420) return 19;   // 지그재그: 0.03%
+  if (u < 25720) return 18;   // 구멍: 0.03%
   if (baseIndex === 0) {
     const _mr = randInt(100);
     if (_mr < 10) return 1; // selfdestruct 10%
-    if (_mr < 20) { state.nexthb = 1; return 30; } // pierce 10%
-    if (_mr < 60) return 31; // cancel 40%
+    if (_mr < 20) {
+      if (state.reinforce > 0) { state._rfUpgrade = 30; return raw; }
+      state.nexthb = 1; return 30;
+    }
+    if (_mr < 60) {
+      if (state.reinforce > 0) { state._rfUpgrade = 31; return raw; }
+      return 31;
+    }
   }
   if (state.monoonly || (state.simplify2 > 0 && baseIndex === 0)) return 12 + randInt(4);
   if (u > 20000 && u < 60000 && getHour() === 0 && getMinute() === 0) {
@@ -760,10 +773,23 @@ function setnextblock() {
     const _sr = randInt(100);
     if (_sr < 40) {
       for (let x=0;x<7;x++) for (let y=0;y<7;y++) for (let z=0;z<7;z++) for (let w=0;w<7;w++) if (state.nextblock[x][y][z][w] !== 0) state.nextblock[x][y][z][w] = 31;
-    } else if (_sr < 50) { // 10%: all pierce or selfdestruct
+    } else if (_sr < 50) {
       const _sv = randInt(2) === 0 ? 30 : 1;
       if (_sv === 30) state.nexthb = 1;
       for (let x=0;x<7;x++) for (let y=0;y<7;y++) for (let z=0;z<7;z++) for (let w=0;w<7;w++) if (state.nextblock[x][y][z][w] !== 0) state.nextblock[x][y][z][w] = _sv;
+    }
+  }
+  // Reinforce upgrade: mono pierce/cancel → 2-3 cell pierce/cancel
+  if (state._rfUpgrade) {
+    const _rfCode = state._rfUpgrade;
+    state._rfUpgrade = 0;
+    const _rfIdx = 2 + randInt(2);
+    if (state.rawblock && _rfIdx < state.rawblock.length) {
+      clear4d(state.nextblock, 0);
+      for (let x=0;x<7;x++) for (let y=0;y<7;y++) for (let z=0;z<7;z++) for (let w=0;w<7;w++) {
+        if (state.rawblock[_rfIdx][x][y][z][w] !== 0) state.nextblock[x][y][z][w] = _rfCode;
+      }
+      if (_rfCode === 30) state.nexthb = 1;
     }
   }
 
@@ -1202,13 +1228,14 @@ function processLine(cells, z, coords4d) {
   }
   for (const [x, y, w] of coords4d) {
     const code = state.blk[x][y][z][w] & 255;
-    if (code === 116) { cells.tline -= 2; state.blk[x][y][z][w] = 256; }
-    else if (code === 117) { cells.tline += 2; state.blk[x][y][z][w] = 256; }
+    if (code === 116) { cells.tline -= state.reinforce > 0 ? 4 : 2; state.blk[x][y][z][w] = 256; }
+    else if (code === 117) { cells.tline += state.reinforce > 0 ? 4 : 2; state.blk[x][y][z][w] = 256; }
     else if (code === 118) {
       state.blk[x][y][z][w] = 256;
-      for (let x2 = x - 1; x2 <= x + 1; x2 += 1) {
-        for (let y2 = y - 1; y2 <= y + 1; y2 += 1) {
-          for (let w2 = w - 1; w2 <= w + 1; w2 += 1) {
+      const _rdr = state.reinforce > 0 ? 2 : 1;
+      for (let x2 = x - _rdr; x2 <= x + _rdr; x2 += 1) {
+        for (let y2 = y - _rdr; y2 <= y + _rdr; y2 += 1) {
+          for (let w2 = w - _rdr; w2 <= w + _rdr; w2 += 1) {
             if (x2 >= 0 && x2 < 7 && y2 >= 0 && y2 < 7 && w2 >= 0 && w2 < 7) {
               for (let z2 = 0; z2 < 26; z2 += 1) state.blk[x2][y2][z2][w2] |= 256;
             }
@@ -1218,34 +1245,65 @@ function processLine(cells, z, coords4d) {
     } else if (code === 119) {
       clear4d(state.blk, 0);
       return { hardReset: true, filled };
-    } else if (code === 104) { state.simplify2 = 0; state.pentaForce = 0; state.monoonly += 11; state.blk[x][y][z][w] = 256; }
-    else if (code === 124) { cells.tline -= 3; state.blk[x][y][z][w] = 256; }
-    else if (code === 125) { cells.tline += 1; state.blk[x][y][z][w] = 256; }
-    else if (code === 91) { state.spinlock += 10; state.blk[x][y][z][w] = 256; }
-    else if (code === 8) { state.speedup += 10; state.blk[x][y][z][w] = 256; }
-    else if (code === 9) { state.speeddown += 10; state.blk[x][y][z][w] = 256; }
-    else if (code === 10) { state.holdlock += 10; state.blk[x][y][z][w] = 256; }
-    else if (code === 16) { state.blindboard = now() + 10000; state.blk[x][y][z][w] = 256; }
-    else if (code === 17) { state.bombnext += 6; state.blk[x][y][z][w] = 256; }
+    } else if (code === 104) { state.simplify2 = 0; state.pentaForce = 0; state.monoonly += state.reinforce > 0 ? 22 : 11; state.blk[x][y][z][w] = 256; }
+    else if (code === 124) { cells.tline -= state.reinforce > 0 ? 6 : 3; state.blk[x][y][z][w] = 256; }
+    else if (code === 125) { cells.tline += state.reinforce > 0 ? 2 : 1; state.blk[x][y][z][w] = 256; }
+    else if (code === 91) { state.spinlock += state.reinforce > 0 ? 20 : 10; state.blk[x][y][z][w] = 256; }
+    else if (code === 8) { state.speedup += state.reinforce > 0 ? 20 : 10; state.blk[x][y][z][w] = 256; }
+    else if (code === 9) { state.speeddown += state.reinforce > 0 ? 20 : 10; state.blk[x][y][z][w] = 256; }
+    else if (code === 10) { state.holdlock += state.reinforce > 0 ? 20 : 10; state.blk[x][y][z][w] = 256; }
+    else if (code === 16) { state.blindboard = now() + (state.reinforce > 0 ? 20000 : 10000); state.blk[x][y][z][w] = 256; }
+    else if (code === 17) { state.bombnext += state.reinforce > 0 ? 12 : 6; state.blk[x][y][z][w] = 256; }
     else if (code === 20) { state.compactPending = true; state.blk[x][y][z][w] = 256; }
-    else if (code === 21) { state.monoonly = 0; state.pentaForce = 0; state.simplify2 += 9; state.blk[x][y][z][w] = 256; }
-    else if (code === 22) { state.monoonly = 0; state.simplify2 = 0; state.pentaForce += 9; state.blk[x][y][z][w] = 256; }
-    else if (code === 2) { state.hideblock += 10; state.blk[x][y][z][w] = 256; }
-    else if (code === 6) { state.hidenext += 10; state.blk[x][y][z][w] = 256; }
+    else if (code === 21) { state.monoonly = 0; state.pentaForce = 0; state.simplify2 += state.reinforce > 0 ? 18 : 9; state.blk[x][y][z][w] = 256; }
+    else if (code === 22) { state.monoonly = 0; state.simplify2 = 0; state.pentaForce += state.reinforce > 0 ? 18 : 9; state.blk[x][y][z][w] = 256; }
+    else if (code === 2) { state.hideblock += state.reinforce > 0 ? 20 : 10; state.blk[x][y][z][w] = 256; }
+    else if (code === 6) { state.hidenext += state.reinforce > 0 ? 20 : 10; state.blk[x][y][z][w] = 256; }
     else if (code === 5) {
-      for (let x2 = 0; x2 < 7; x2 += 1) {
-        for (let y2 = 0; y2 < 7; y2 += 1) {
-          for (let z2 = 0; z2 < 26; z2 += 1) {
-            for (let w2 = 0; w2 < 7; w2 += 1) {
-            if (state.blk[x2][y2][z2][w2] !== 0 && state.blk[x2][y2][z2][w2] !== 256) {
-              state.blk[x2][y2][z2][w2] = 33 + (state.blk[x2][y2][z2][w2] % 31);
+      if (state.reinforce > 0) {
+        let minVal = Infinity;
+        for (let x2 = 0; x2 < 7; x2 += 1) {
+          for (let y2 = 0; y2 < 7; y2 += 1) {
+            for (let z2 = 0; z2 < 26; z2 += 1) {
+              for (let w2 = 0; w2 < 7; w2 += 1) {
+                const v = state.blk[x2][y2][z2][w2] & 255;
+                if (v !== 0 && v < minVal) minVal = v;
+              }
             }
+          }
+        }
+        if (minVal !== Infinity) {
+          for (let x2 = 0; x2 < 7; x2 += 1) {
+            for (let y2 = 0; y2 < 7; y2 += 1) {
+              for (let z2 = 0; z2 < 26; z2 += 1) {
+                for (let w2 = 0; w2 < 7; w2 += 1) {
+                  if ((state.blk[x2][y2][z2][w2] & 255) !== 0) {
+                    state.blk[x2][y2][z2][w2] = (state.blk[x2][y2][z2][w2] & 256) + minVal;
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else {
+        for (let x2 = 0; x2 < 7; x2 += 1) {
+          for (let y2 = 0; y2 < 7; y2 += 1) {
+            for (let z2 = 0; z2 < 26; z2 += 1) {
+              for (let w2 = 0; w2 < 7; w2 += 1) {
+              if (state.blk[x2][y2][z2][w2] !== 0 && state.blk[x2][y2][z2][w2] !== 256) {
+                state.blk[x2][y2][z2][w2] = 33 + (state.blk[x2][y2][z2][w2] % 31);
+              }
+              }
             }
           }
         }
       }
       state.blk[x][y][z][w] = 256;
-    } else if (code === 4) { state.score2x += 1; state.blk[x][y][z][w] = 256; }
+    } else if (code === 4) { state.score2x += state.reinforce > 0 ? 2 : 1; state.blk[x][y][z][w] = 256; }
+    else if (code === 157) {
+      state.reinforce = 10;
+      state.blk[x][y][z][w] = 256;
+    }
     else if (code === 11) {
       state.blk[x][y][z][w] = 256;
       let count2 = 0;
@@ -1263,7 +1321,7 @@ function processLine(cells, z, coords4d) {
           count2 += 1;
           state.blk[rx][ry][rz][rw] = 103;
         }
-        if (count2 === 3) break;
+        if (count2 === (state.reinforce > 0 ? 5 : 3)) break;
       }
     } else if (code === 102) {
       for (let x2 = 0; x2 < 7; x2 += 1) {
@@ -1274,7 +1332,8 @@ function processLine(cells, z, coords4d) {
       }
     } else if (code === 105) {
       state.blk[x][y][z][w] = 256;
-      for (let x2 = x - 1; x2 <= x + 1; x2 += 1) {
+      const _cd5r = state.reinforce > 0 ? 2 : 1;
+      for (let x2 = x - _cd5r; x2 <= x + _cd5r; x2 += 1) {
         if (x2 >= 0 && x2 < 7) {
           for (let y2 = 0; y2 < 7; y2 += 1) {
             for (let z2 = 0; z2 < 26; z2 += 1)
@@ -1284,8 +1343,9 @@ function processLine(cells, z, coords4d) {
       }
     } else if (code === 126) {
       state.blk[x][y][z][w] = 256;
+      const _rd6r = state.reinforce > 0 ? 2 : 1;
       for (let x2 = 0; x2 < 7; x2 += 1) {
-        for (let y2 = y - 1; y2 <= y + 1; y2 += 1) {
+        for (let y2 = y - _rd6r; y2 <= y + _rd6r; y2 += 1) {
           if (y2 >= 0 && y2 < 7) {
             for (let z2 = 0; z2 < 26; z2 += 1)
               for (let w2 = 0; w2 < 7; w2 += 1) state.blk[x2][y2][z2][w2] |= 256;
@@ -1294,7 +1354,8 @@ function processLine(cells, z, coords4d) {
       }
     } else if (code === 106) {
       state.blk[x][y][z][w] = 256;
-      for (let w2 = w - 1; w2 <= w + 1; w2 += 1) {
+      const _wd6r = state.reinforce > 0 ? 2 : 1;
+      for (let w2 = w - _wd6r; w2 <= w + _wd6r; w2 += 1) {
         if (w2 >= 0 && w2 < 7) {
           for (let x2 = 0; x2 < 7; x2 += 1) {
             for (let y2 = 0; y2 < 7; y2 += 1) {
@@ -1304,12 +1365,13 @@ function processLine(cells, z, coords4d) {
         }
       }
     } else if (code === 127) {
+      const _bcRate = state.reinforce > 0 ? 50 : 20;
       state.blk[x][y][z][w] |= 256;
       for (let x2 = 0; x2 < 7; x2 += 1) {
         for (let y2 = 0; y2 < 7; y2 += 1) {
           for (let z2 = 0; z2 < 26; z2 += 1) {
             for (let w2 = 0; w2 < 7; w2 += 1) {
-            if ((state.blk[x2][y2][z2][w2] & 255) !== 0 && randInt(100) < 30) {
+            if ((state.blk[x2][y2][z2][w2] & 255) !== 0 && randInt(100) < _bcRate) {
               state.blk[x2][y2][z2][w2] = (state.blk[x2][y2][z2][w2] & 256) + 120 + randInt(4);
             }
             }
@@ -1323,7 +1385,7 @@ function processLine(cells, z, coords4d) {
         for (let y2 = 0; y2 < 7; y2 += 1) {
           for (let z2 = 0; z2 < 26; z2 += 1) {
             for (let w2 = 0; w2 < 7; w2 += 1) {
-              if ((state.blk[x2][y2][z2][w2] & 255) !== 0 && randInt(100) < 30) {
+              if ((state.blk[x2][y2][z2][w2] & 255) !== 0 && randInt(100) < (state.reinforce > 0 ? 60 : 30)) {
                 state.blk[x2][y2][z2][w2] = state.blk[x2][y2][z2][w2] & 256;
               }
             }
@@ -1331,33 +1393,65 @@ function processLine(cells, z, coords4d) {
         }
       }
     } else if (code === 19) {
-      // Zigzag: shuffle blocks within each z-layer
+      // Zigzag: shuffle blocks within each z-layer (enforced: across ALL z-levels)
       state.blk[x][y][z][w] |= 256;
-      for (let z2 = 0; z2 < 26; z2 += 1) {
-        const vals = [];
-        const positions = [];
-        for (let x2 = 0; x2 < 7; x2 += 1) {
-          for (let y2 = 0; y2 < 7; y2 += 1) {
-            for (let w2 = 0; w2 < 7; w2 += 1) {
-              const v = state.blk[x2][y2][z2][w2] & 255;
-              if (v !== 0) vals.push(v);
-              positions.push([x2, y2, w2]);
+      if (state.reinforce > 0) {
+        // Find max occupied z
+        let maxZ = 0;
+        for (let x2 = 0; x2 < 7; x2++) for (let y2 = 0; y2 < 7; y2++) for (let z2 = 0; z2 < 26; z2++) for (let w2 = 0; w2 < 7; w2++) {
+          if ((state.blk[x2][y2][z2][w2] & 255) !== 0 && z2 > maxZ) maxZ = z2;
+        }
+        const allVals = [];
+        const allPos = [];
+        for (let z2 = 0; z2 <= maxZ; z2++) {
+          for (let x2 = 0; x2 < 7; x2++) {
+            for (let y2 = 0; y2 < 7; y2++) {
+              for (let w2 = 0; w2 < 7; w2++) {
+                const v = state.blk[x2][y2][z2][w2] & 255;
+                if (v !== 0) allVals.push(v);
+                allPos.push([x2, y2, z2, w2]);
+              }
             }
           }
         }
-        // Clear all positions in this layer
-        for (const [px, py, pw] of positions) {
-          state.blk[px][py][z2][pw] = state.blk[px][py][z2][pw] & 256;
+        for (const [px, py, pz, pw] of allPos) {
+          state.blk[px][py][pz][pw] = state.blk[px][py][pz][pw] & 256;
         }
-        // Shuffle positions
-        for (let i = positions.length - 1; i > 0; i--) {
+        for (let i = allPos.length - 1; i > 0; i--) {
           const j = randInt(i + 1);
-          [positions[i], positions[j]] = [positions[j], positions[i]];
+          [allPos[i], allPos[j]] = [allPos[j], allPos[i]];
         }
-        // Place blocks at first N shuffled positions
-        for (let i = 0; i < vals.length; i++) {
-          const [px, py, pw] = positions[i];
-          state.blk[px][py][z2][pw] = (state.blk[px][py][z2][pw] & 256) + vals[i];
+        for (let i = 0; i < allVals.length; i++) {
+          const [px, py, pz, pw] = allPos[i];
+          state.blk[px][py][pz][pw] = (state.blk[px][py][pz][pw] & 256) + allVals[i];
+        }
+      } else {
+        for (let z2 = 0; z2 < 26; z2 += 1) {
+          const vals = [];
+          const positions = [];
+          for (let x2 = 0; x2 < 7; x2 += 1) {
+            for (let y2 = 0; y2 < 7; y2 += 1) {
+              for (let w2 = 0; w2 < 7; w2 += 1) {
+                const v = state.blk[x2][y2][z2][w2] & 255;
+                if (v !== 0) vals.push(v);
+                positions.push([x2, y2, w2]);
+              }
+            }
+          }
+          // Clear all positions in this layer
+          for (const [px, py, pw] of positions) {
+            state.blk[px][py][z2][pw] = state.blk[px][py][z2][pw] & 256;
+          }
+          // Shuffle positions
+          for (let i = positions.length - 1; i > 0; i--) {
+            const j = randInt(i + 1);
+            [positions[i], positions[j]] = [positions[j], positions[i]];
+          }
+          // Place blocks at first N shuffled positions
+          for (let i = 0; i < vals.length; i++) {
+            const [px, py, pw] = positions[i];
+            state.blk[px][py][z2][pw] = (state.blk[px][py][z2][pw] & 256) + vals[i];
+          }
         }
       }
     } else {
@@ -1591,7 +1685,8 @@ function stickblock() {
       }
     }
   }
-  // 자폭: placed immediately triggers 3x3x3x3 destruction
+  // 자폭: placed immediately triggers destruction (radius 1 normal, 2 enforced)
+  const _sdR = state.reinforce > 0 ? 2 : 1;
   for (let x = 0; x < 7; x += 1) {
     for (let y = 0; y < 7; y += 1) {
       for (let z = 0; z < 7; z += 1) {
@@ -1601,10 +1696,10 @@ function stickblock() {
           const by = y + state.blockpos[1];
           const bz = z + state.blockpos[2];
           const bw = w + state.blockpos[3];
-          for (let x2 = bx - 1; x2 <= bx + 1; x2 += 1) {
-            for (let y2 = by - 1; y2 <= by + 1; y2 += 1) {
-              for (let z2 = bz - 1; z2 <= bz + 1; z2 += 1) {
-                for (let w2 = bw - 1; w2 <= bw + 1; w2 += 1) {
+          for (let x2 = bx - _sdR; x2 <= bx + _sdR; x2 += 1) {
+            for (let y2 = by - _sdR; y2 <= by + _sdR; y2 += 1) {
+              for (let z2 = bz - _sdR; z2 <= bz + _sdR; z2 += 1) {
+                for (let w2 = bw - _sdR; w2 <= bw + _sdR; w2 += 1) {
                 if (x2 >= 0 && x2 < 7 && y2 >= 0 && y2 < 7 && z2 >= 0 && z2 < 26 && w2 >= 0 && w2 < 7) {
                   state.blk[x2][y2][z2][w2] = 0;
                 }
@@ -1790,12 +1885,19 @@ function clickbutton(x, y) {
     while (!move(2, -1)) { if (state.nowblock !== _hb) break; }
     if (state.nowblock !== _hb) { state.timestamp = now(); return 0; }
     if (stickblock()) { gover(); initBlockState(); return 0; }
-    calculatescore(removeline());
+    { const _rl = removeline(); calculatescore(_rl); if (state.reinforce > 0 && _rl > 0) state.reinforce = Math.max(0, state.reinforce - _rl); }
     state.timestamp = now();
     return 0;
   }
   if (0.15 > x && x > -0.10 && -1.28 < y && y < -1.08) { tryHoldSwap(); return 0; }          // hold
-  if (0.65 > x && x > 0.25 && 1.40 > y && y > 1.00) { state.pause = !state.pause; return 0; } // pause
+  if (0.65 > x && x > 0.25 && 1.40 > y && y > 1.00) {
+    if (state.pause && state._pauseStart && state.blindboard > 0) {
+      state.blindboard += now() - state._pauseStart; state._pauseStart = 0;
+    }
+    state.pause = !state.pause;
+    if (state.pause) state._pauseStart = now();
+    return 0;
+  }
   if (0.15 > x && x > -0.10 && -0.88 > y && y > -1.08) { state.depthColor = !state.depthColor; return 0; } // W color
   if (0.15 > x && x > -0.10 && -0.67 > y && y > -0.88) { state.rotMode4D = !state.rotMode4D; return 0; }   // XYZ/XYW
   if (-0.60 > y) return 0;
@@ -1911,7 +2013,7 @@ function handleTouches() {
 }
 
 function updateFallingLogic() {
-  const _fallInt = 6000 / (Math.min(state.level, 12) / 3 + 5) * (state.speedup > 0 ? 0.4 : 1) * (state.speeddown > 0 ? 2.5 : 1) * (state.vkspace2 ? 0.05 : 1);
+  const _fallInt = 6000 / (Math.min(state.level, 12) / 3 + 5) * (state.speedup > 0 ? (state.reinforce > 0 ? 0.2 : 0.4) : 1) * (state.speeddown > 0 ? (state.reinforce > 0 ? 5.0 : 2.5) : 1) * (state.vkspace2 ? 0.05 : 1);
   if (state.timestamp + _fallInt < now()) {
     if (move(2, -1)) {
       if (stickblock()) {
@@ -1919,7 +2021,7 @@ function updateFallingLogic() {
         initBlockState();
         return;
       }
-      calculatescore(removeline());
+      { const _rl = removeline(); calculatescore(_rl); if (state.reinforce > 0 && _rl > 0) state.reinforce = Math.max(0, state.reinforce - _rl); }
     }
     state.timestamp = now();
   }
@@ -2688,7 +2790,7 @@ function drawSpecialPic(pic, x, y, z, t, color, val) {
     specialColor = jitterColor(16384, 16384, 16384, color);
   } else if (pic === 38 || pic === 41 || pic === 42 || pic === 52 || pic === 54 || pic === 55 || pic === 60 || pic === 62) {
     specialColor = jitterColor(65536, 65536, 16384, color);
-  } else if (pic === 53 || pic === 56 || pic === 57 || pic === 58 || pic === 59 || pic === 61 || pic === 63 || pic === 65 || pic === 66 || pic === 69 || pic === 75 || pic === 94 || pic === 96) {
+  } else if (pic === 53 || pic === 56 || pic === 57 || pic === 58 || pic === 59 || pic === 61 || pic === 63 || pic === 65 || pic === 66 || pic === 69 || pic === 75 || pic === 93 || pic === 94 || pic === 96) {
     specialColor = jitterColor(16384, 65536, 65536, color);
   } else if (pic === 72 || pic === 73 || pic === 74 || pic === 80 || pic === 81 || pic === 84 || pic === 85 || pic === 86) {
     specialColor = jitterColor(16384, 32768, 65536, color);
@@ -3132,6 +3234,18 @@ function drawBlockDecor(gridX, gridY, gridZ, gridW, value, scale) {
   const y = (gridZ - 4.5) * 2 * scale;
   const w = (gridW - 3) * 2 * scale;
   const base = state.depthColor ? depthColorFromW(gridW) : color;
+  if (pic === 93) {
+    const e = scale * 0.85;
+    const c = [0.1, 0.1, 0.1, 0.7];
+    // "x" on z+ face
+    lines([p4(x-0.2*e, y-0.15*e, z+scale*1.001, w), p4(x+0.05*e, y+0.15*e, z+scale*1.001, w)], c);
+    lines([p4(x+0.05*e, y-0.15*e, z+scale*1.001, w), p4(x-0.2*e, y+0.15*e, z+scale*1.001, w)], c);
+    // "2"
+    lineStrip([p4(x+0.1*e, y+0.15*e, z+scale*1.001, w), p4(x+0.3*e, y+0.15*e, z+scale*1.001, w),
+               p4(x+0.3*e, y, z+scale*1.001, w), p4(x+0.1*e, y, z+scale*1.001, w),
+               p4(x+0.1*e, y-0.15*e, z+scale*1.001, w), p4(x+0.3*e, y-0.15*e, z+scale*1.001, w)], c);
+    return;
+  }
   drawSpecialPic4D(pic, x, y, z, w, scale, base, value);
 }
 
@@ -3251,8 +3365,28 @@ function project4Dto3D(x4, y4, z4, w4) {
   return { x: 3 + dx2 + dw2 * 0.15, y: 3 + dy2 + dw2 * 0.15, z: z4 };
 }
 
+const _stealthColor4 = [0.08, 0.08, 0.1, 0.5];
+function drawBlockStealth4(gridX, gridY, gridZ, gridW, scale) {
+  const x = (gridX - 3) * 2 * scale;
+  const z = (gridY - 3) * 2 * scale;
+  const y = (gridZ - 4.5) * 2 * scale;
+  const w = (gridW - 3) * 2 * scale;
+  const s = scale;
+  renderer.lineWidth(0.7);
+  const v = [];
+  for (let i = 0; i < 16; i++) {
+    v[i] = p4(x + ((i & 8) ? s : -s), y + ((i & 4) ? s : -s), z + ((i & 2) ? s : -s), w + ((i & 1) ? s : -s));
+  }
+  const edge = (a, b) => { lines([v[a], v[b]], _stealthColor4); };
+  for (let i = 0; i < 16; i++) { if (!(i & 1)) edge(i, i | 1); }
+  for (let i = 0; i < 16; i++) { if (!(i & 2)) edge(i, i | 2); }
+  for (let i = 0; i < 16; i++) { if (!(i & 4)) edge(i, i | 4); }
+  for (let i = 0; i < 16; i++) { if (!(i & 8)) edge(i, i | 8); }
+  renderer.lineWidth(1.4);
+}
 function drawBoardAndBlocks() {
   const t2 = state.t2;
+  if (state.blindboard > now()) return;
 
   // captureMode: skip board outline, only draw blocks
   if (!state.captureMode) {
@@ -3358,11 +3492,26 @@ function drawBoardAndBlocks() {
         }
       }
     }
+  } else {
+    for (let x = 0; x < 7; x += 1) {
+      for (let y = 0; y < 7; y += 1) {
+        for (let z = 0; z < 7; z += 1) {
+          for (let w = 0; w < 7; w += 1) {
+          const value = state.nowblock[x][y][z][w];
+          if (!value) continue;
+          drawBlockStealth4(
+            x + state.blockpos[0], y + state.blockpos[1],
+            z + state.blockpos[2], w + state.blockpos[3], t2);
+          }
+        }
+      }
+    }
   }
   renderer.endBatch();
 
   // Pass 2: Draw all decorations (depth test off, batched)
   const gl2 = renderer.gl;
+  {
   gl2.disable(gl2.DEPTH_TEST);
   renderer.lineWidth(1.4);
   renderer.beginBatch();
@@ -3396,6 +3545,7 @@ function drawBoardAndBlocks() {
   renderer.endBatch();
   renderer.lineWidth(1.4);
   gl2.enable(gl2.DEPTH_TEST);
+  }
 }
 
 function getActiveItemCodes4d() {
