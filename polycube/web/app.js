@@ -151,7 +151,7 @@ const ITEM_DESC = _isKo ? {
   102:'상단삭제: 위의 블록 모두 제거', 104:'모노전용: 1칸 블록만', 105:'종렬삭제: 해당 열 삭제', 116:'-2줄: 바닥 2줄 제거', 117:'+2줄: 바닥에 2줄 추가',
   118:'범위삭제: 주변 열 전체삭제', 119:'전체삭제: 판 전체 클리어', 120:'시한폭탄: 3턴후 폭발', 121:'시한폭탄: 2턴후 폭발', 122:'시한폭탄: 1턴후 폭발',
   123:'시한폭탄: 폭발 임박', 124:'-3줄: 바닥 3줄 제거', 125:'+1줄: 바닥에 1줄 추가', 126:'횡렬삭제: 해당 행 삭제', 127:'폭탄변환: 30%확률 폭탄화',
-  157:'강화: 10줄간 아이템 효과 2배',
+  204:'강화: 10줄간 아이템 효과 2배',
 } : {
   1:'Self-Destruct: 3x3x3 boom', 2:'Conceal: Hide piece 10t', 200:'Mirror: Flip board', 19:'Zigzag: Shuffle each layer', 4:'Score Boost: x4 (stack x16)', 5:'Item Clear: Remove items',
   6:'No Preview: Hide next 10t', 8:'Speed Up: x2.5', 9:'Slow Down: x0.4', 10:'Hold Lock: 10 turns', 11:'Obstacle: 3 random',
@@ -160,7 +160,7 @@ const ITEM_DESC = _isKo ? {
   105:'Col Del: Delete column', 116:'-2 Lines: Remove 2', 117:'+2 Lines: Add 2 lines', 118:'Range Del: 3x3 columns', 119:'Full Clear: Wipe board',
   120:'Time Bomb: 3t to blow', 121:'Time Bomb: 2t to blow', 122:'Time Bomb: 1t to blow', 123:'Time Bomb: Imminent',
   124:'-3 Lines: Remove 3', 125:'+1 Line: Add 1 line', 126:'Row Del: Delete row', 127:'Bomb Convert: 30% bomb',
-  157:'Enforcement: x2 item effects 10 lines',
+  204:'Enforcement: x2 item effects 10 lines',
 };
 const ITEM_GOOD = new Set([1,4,9,20,21,30,31,102,104,105,116,117,118,119,124,125,126]);
 
@@ -532,7 +532,7 @@ function initBlockState() {
     else if (_mr < 60) _hv = 31;
     else {
       const _u = randInt(250000);
-      if(_u<100)_hv=116;else if(_u<400)_hv=117;else if(_u<700)_hv=118;else if(_u<720)_hv=119;else if(_u<1520)_hv=104;else if(_u<2020)_hv=120;else if(_u<3020)_hv=121;else if(_u<3720)_hv=122;else if(_u<4020)_hv=123;else if(_u<4070)_hv=124;else if(_u<4870)_hv=125;else if(_u<5120)_hv=91;else if(_u<5220)_hv=102;else if(_u<5420)_hv=126;else if(_u<5620)_hv=105;else if(_u<5920)_hv=127;else if(_u<6020)_hv=17;else if(_u<6220)_hv=20;else if(_u<7020)_hv=21;else if(_u<7820)_hv=22;else if(_u<8070)_hv=16;else if(_u<8270)_hv=11;else if(_u<8520)_hv=2;else if(_u<9520)_hv=8;else if(_u<10520)_hv=9;else if(_u<10770)_hv=10;else if(_u<11770)_hv=5;else if(_u<12020)_hv=6;else if(_u<12320)_hv=157;else if(_u<14570)_hv=120;else if(_u<24570)_hv=200;else if(_u<24870)_hv=19;else if(_u<25170)_hv=18;
+      if(_u<100)_hv=116;else if(_u<400)_hv=117;else if(_u<700)_hv=118;else if(_u<720)_hv=119;else if(_u<1520)_hv=104;else if(_u<2020)_hv=120;else if(_u<3020)_hv=121;else if(_u<3720)_hv=122;else if(_u<4020)_hv=123;else if(_u<4070)_hv=124;else if(_u<4870)_hv=125;else if(_u<5120)_hv=91;else if(_u<5220)_hv=102;else if(_u<5420)_hv=126;else if(_u<5620)_hv=105;else if(_u<5920)_hv=127;else if(_u<6020)_hv=17;else if(_u<6220)_hv=20;else if(_u<7020)_hv=21;else if(_u<7820)_hv=22;else if(_u<8070)_hv=16;else if(_u<8270)_hv=11;else if(_u<8520)_hv=2;else if(_u<9520)_hv=8;else if(_u<10520)_hv=9;else if(_u<10770)_hv=10;else if(_u<11770)_hv=5;else if(_u<12020)_hv=6;else if(_u<12320)_hv=204;else if(_u<14570)_hv=120;else if(_u<24570)_hv=200;else if(_u<24870)_hv=19;else if(_u<25170)_hv=18;
     }
     state.holdblock[3][3][3] = _hv;
   } else { state.holdblock[3][3][3] = 65; }
@@ -658,7 +658,7 @@ function assignCellFromProbability(baseIndex, x, y, z) {
   if (u < 13270) return 10;   // 홀드봉인: 0.025%
   if (u < 14270) return 5;    // 아이템제거: 0.1%
   if (u < 14520) return 6;    // 예측차단: 0.025%
-  if (u < 14820) return 157;  // 강화: 0.03%
+  if (u < 14820) return 204;  // 강화: 0.03%
   if (u < 24820) return 4;    // 득점강화: ~1%
   if (u < 25120) return 200;  // 거울상: 0.03%
   if (u < 25420) return 19;   // 지그재그: 0.03%
@@ -1183,7 +1183,7 @@ function processLine(cells, z, coords) {
         }
       }
       state.blk[x][y][z] = 256;
-    } else if (code === 157) {
+    } else if (code === 204) {
       state.reinforce = 10;
       state.blk[x][y][z] = 256;
     } else if (code === 4) { state.score2x += _enf ? 2 : 1; state.blk[x][y][z] = 256; }
@@ -2277,7 +2277,7 @@ function drawSpecialPic(pic, x, y, z, t, color, val) {
     specialColor = jitterColor(65536, 65536, 16384, color);
   } else if (pic === 53 || pic === 56 || pic === 57 || pic === 58 || pic === 59 || pic === 61 || pic === 63 || pic === 65 || pic === 66 || pic === 69 || pic === 75 || pic === 94 || pic === 96) {
     specialColor = jitterColor(16384, 65536, 65536, color);
-  } else if (pic === 72 || pic === 73 || pic === 74 || pic === 80 || pic === 81 || pic === 84 || pic === 85 || pic === 86 || (pic === 93 && (val & 255) > 127)) {
+  } else if (pic === 72 || pic === 73 || pic === 74 || pic === 80 || pic === 81 || pic === 84 || pic === 85 || pic === 86 || (pic === 12 && (val & 255) > 127)) {
     specialColor = jitterColor(16384, 32768, 65536, color);
   }
   const q = (verts, alpha = 1) => fillQuad(verts[0], verts[1], verts[2], verts[3], [specialColor[0], specialColor[1], specialColor[2], alpha]);
@@ -2680,17 +2680,17 @@ function drawSpecialPic(pic, x, y, z, t, color, val) {
     lineStrip([[-0.2*t+x, -0.8*t+y, -e+z], [-0.7*t+x, -0.3*t+y, -e+z], [-0.7*t+x, 0.3*t+y, -e+z], [-0.2*t+x, 0.8*t+y, -e+z]], specialColor);
     return true;
   }
-  if (pic === 93 && (val & 255) > 127) {
+  if (pic === 12 && (val & 255) > 127) {
     // Reinforce "x2" (only for code 157, not raw block 29)
     const ef = t * 0.85;
     const ec = [0.1, 0.1, 0.1, 0.7];
-    // "x" on front face (z+ face)
-    lines([[x-0.2*ef, y-0.15*ef, z+t*1.001], [x+0.05*ef, y+0.15*ef, z+t*1.001]], ec);
-    lines([[x+0.05*ef, y-0.15*ef, z+t*1.001], [x-0.2*ef, y+0.15*ef, z+t*1.001]], ec);
+    // "x" on front face (z+ face) — 2x size
+    lines([[x-0.4*ef, y-0.3*ef, z+t*1.001], [x+0.1*ef, y+0.3*ef, z+t*1.001]], ec);
+    lines([[x+0.1*ef, y-0.3*ef, z+t*1.001], [x-0.4*ef, y+0.3*ef, z+t*1.001]], ec);
     // "2" on front face
-    lineStrip([[x+0.1*ef, y+0.15*ef, z+t*1.001], [x+0.3*ef, y+0.15*ef, z+t*1.001],
-               [x+0.3*ef, y, z+t*1.001], [x+0.1*ef, y, z+t*1.001],
-               [x+0.1*ef, y-0.15*ef, z+t*1.001], [x+0.3*ef, y-0.15*ef, z+t*1.001]], ec);
+    lineStrip([[x+0.15*ef, y+0.3*ef, z+t*1.001], [x+0.55*ef, y+0.3*ef, z+t*1.001],
+               [x+0.55*ef, y, z+t*1.001], [x+0.15*ef, y, z+t*1.001],
+               [x+0.15*ef, y-0.3*ef, z+t*1.001], [x+0.55*ef, y-0.3*ef, z+t*1.001]], ec);
     return true;
   }
   return false;
