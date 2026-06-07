@@ -1220,26 +1220,27 @@ function processLine(row) {
       // Zigzag: shuffle blocks (reinforce: across all rows; normal: per-row)
       state.board[row][c] |= 256;
       if (_enf) {
-        // Collect all non-zero cell values and positions
-        const _allVals = [];
+        // Enforced: shuffle across all rows up to max occupied row
+        let _maxR = 0;
+        for (let r2 = 0; r2 < BOARD_H; r2++) for (let c2 = 0; c2 < BOARD_W; c2++) {
+          if ((state.board[r2][c2] & 255) !== 0 && r2 > _maxR) _maxR = r2;
+        }
+        const _vals = [];
+        const _occupied = [];
+        for (let r2 = 0; r2 <= _maxR; r2++) for (let c2 = 0; c2 < BOARD_W; c2++) {
+          const v = state.board[r2][c2] & 255;
+          if (v !== 0) { _vals.push(v); _occupied.push([r2, c2]); }
+        }
+        // All positions (0 to maxR) for redistribution
         const _allPos = [];
-        for (let r2 = 0; r2 < BOARD_H; r2++) {
-          for (let c2 = 0; c2 < BOARD_W; c2++) {
-            const v = state.board[r2][c2] & 255;
-            if (v !== 0) { _allVals.push(v); _allPos.push([r2, c2]); }
-          }
-        }
-        // Clear all
-        for (const [_r, _c] of _allPos) state.board[_r][_c] = state.board[_r][_c] & 256;
-        // Shuffle positions
-        for (let i = _allPos.length - 1; i > 0; i--) {
-          const j = randInt(i + 1);
-          [_allPos[i], _allPos[j]] = [_allPos[j], _allPos[i]];
-        }
-        // Place back
-        for (let i = 0; i < _allVals.length; i++) {
+        for (let r2 = 0; r2 <= _maxR; r2++) for (let c2 = 0; c2 < BOARD_W; c2++) _allPos.push([r2, c2]);
+        // Clear occupied cells
+        for (const [_r, _c] of _occupied) state.board[_r][_c] = state.board[_r][_c] & 256;
+        // Shuffle all positions, pick first vals.length
+        for (let i = _allPos.length - 1; i > 0; i--) { const j = randInt(i + 1); [_allPos[i], _allPos[j]] = [_allPos[j], _allPos[i]]; }
+        for (let i = 0; i < _vals.length; i++) {
           const [_r, _c] = _allPos[i];
-          state.board[_r][_c] = (state.board[_r][_c] & 256) + _allVals[i];
+          state.board[_r][_c] = (state.board[_r][_c] & 256) + _vals[i];
         }
       } else {
         for (let r2 = 0; r2 < BOARD_H; r2++) {

@@ -1261,27 +1261,30 @@ function processLine(cells, z, coords) {
       // Zigzag: shuffle blocks within each z-layer (or all z when enforced)
       state.blk[x][y][z] |= 256;
       if (_enf) {
-        // Enforced: shuffle across ALL z-levels
+        // Enforced: shuffle across all z-levels up to max occupied z
+        let _maxZ = 0;
+        for (let z2 = 0; z2 < 26; z2++) for (let x2 = 0; x2 < 7; x2++) for (let y2 = 0; y2 < 7; y2++) {
+          if ((state.blk[x2][y2][z2] & 255) !== 0 && z2 > _maxZ) _maxZ = z2;
+        }
         const vals = [];
         const positions = [];
-        for (let z2 = 0; z2 < 26; z2 += 1) {
-          for (let x2 = 0; x2 < 7; x2 += 1) {
-            for (let y2 = 0; y2 < 7; y2 += 1) {
+        for (let z2 = 0; z2 <= _maxZ; z2++) {
+          for (let x2 = 0; x2 < 7; x2++) {
+            for (let y2 = 0; y2 < 7; y2++) {
               const v = state.blk[x2][y2][z2] & 255;
-              if (v !== 0) vals.push(v);
-              positions.push([x2, y2, z2]);
+              if (v !== 0) { vals.push(v); positions.push([x2, y2, z2]); }
             }
           }
         }
-        for (const [px, py, pz] of positions) {
-          state.blk[px][py][pz] = state.blk[px][py][pz] & 256;
-        }
-        for (let i = positions.length - 1; i > 0; i--) {
-          const j = randInt(i + 1);
-          [positions[i], positions[j]] = [positions[j], positions[i]];
-        }
+        // Collect ALL positions (0 to maxZ) for redistribution
+        const allPos = [];
+        for (let z2 = 0; z2 <= _maxZ; z2++) for (let x2 = 0; x2 < 7; x2++) for (let y2 = 0; y2 < 7; y2++) allPos.push([x2, y2, z2]);
+        // Clear occupied cells
+        for (const [px, py, pz] of positions) state.blk[px][py][pz] = state.blk[px][py][pz] & 256;
+        // Shuffle all positions, pick first vals.length for placement
+        for (let i = allPos.length - 1; i > 0; i--) { const j = randInt(i + 1); [allPos[i], allPos[j]] = [allPos[j], allPos[i]]; }
         for (let i = 0; i < vals.length; i++) {
-          const [px, py, pz] = positions[i];
+          const [px, py, pz] = allPos[i];
           state.blk[px][py][pz] = (state.blk[px][py][pz] & 256) + vals[i];
         }
       } else {

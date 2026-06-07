@@ -1396,34 +1396,27 @@ function processLine(cells, z, coords4d) {
       // Zigzag: shuffle blocks within each z-layer (enforced: across ALL z-levels)
       state.blk[x][y][z][w] |= 256;
       if (state.reinforce > 0) {
-        // Find max occupied z
-        let maxZ = 0;
-        for (let x2 = 0; x2 < 7; x2++) for (let y2 = 0; y2 < 7; y2++) for (let z2 = 0; z2 < 26; z2++) for (let w2 = 0; w2 < 7; w2++) {
-          if ((state.blk[x2][y2][z2][w2] & 255) !== 0 && z2 > maxZ) maxZ = z2;
+        // Enforced: shuffle across all z-levels up to max occupied z
+        let _maxZ = 0;
+        for (let x2=0;x2<7;x2++) for (let y2=0;y2<7;y2++) for (let z2=0;z2<26;z2++) for (let w2=0;w2<7;w2++) {
+          if ((state.blk[x2][y2][z2][w2] & 255) !== 0 && z2 > _maxZ) _maxZ = z2;
         }
-        const allVals = [];
+        const vals = [];
+        const occupied = [];
+        for (let z2=0;z2<=_maxZ;z2++) for (let x2=0;x2<7;x2++) for (let y2=0;y2<7;y2++) for (let w2=0;w2<7;w2++) {
+          const v = state.blk[x2][y2][z2][w2] & 255;
+          if (v !== 0) { vals.push(v); occupied.push([x2,y2,z2,w2]); }
+        }
+        // Collect ALL positions (0 to maxZ) for redistribution
         const allPos = [];
-        for (let z2 = 0; z2 <= maxZ; z2++) {
-          for (let x2 = 0; x2 < 7; x2++) {
-            for (let y2 = 0; y2 < 7; y2++) {
-              for (let w2 = 0; w2 < 7; w2++) {
-                const v = state.blk[x2][y2][z2][w2] & 255;
-                if (v !== 0) allVals.push(v);
-                allPos.push([x2, y2, z2, w2]);
-              }
-            }
-          }
-        }
-        for (const [px, py, pz, pw] of allPos) {
-          state.blk[px][py][pz][pw] = state.blk[px][py][pz][pw] & 256;
-        }
-        for (let i = allPos.length - 1; i > 0; i--) {
-          const j = randInt(i + 1);
-          [allPos[i], allPos[j]] = [allPos[j], allPos[i]];
-        }
-        for (let i = 0; i < allVals.length; i++) {
-          const [px, py, pz, pw] = allPos[i];
-          state.blk[px][py][pz][pw] = (state.blk[px][py][pz][pw] & 256) + allVals[i];
+        for (let z2=0;z2<=_maxZ;z2++) for (let x2=0;x2<7;x2++) for (let y2=0;y2<7;y2++) for (let w2=0;w2<7;w2++) allPos.push([x2,y2,z2,w2]);
+        // Clear occupied cells
+        for (const [px,py,pz,pw] of occupied) state.blk[px][py][pz][pw] = state.blk[px][py][pz][pw] & 256;
+        // Shuffle all positions, pick first vals.length for placement
+        for (let i = allPos.length - 1; i > 0; i--) { const j = randInt(i + 1); [allPos[i], allPos[j]] = [allPos[j], allPos[i]]; }
+        for (let i = 0; i < vals.length; i++) {
+          const [px,py,pz,pw] = allPos[i];
+          state.blk[px][py][pz][pw] = (state.blk[px][py][pz][pw] & 256) + vals[i];
         }
       } else {
         for (let z2 = 0; z2 < 26; z2 += 1) {
