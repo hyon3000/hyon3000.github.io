@@ -3236,8 +3236,9 @@ function drawBlockDecor(gridX, gridY, gridZ, gridW, value, scale) {
   const base = state.depthColor ? depthColorFromW(gridW) : color;
   if (pic === 12 && (value & 255) > 127) {
     const e = scale * 0.85;
-    const c = [0.1, 0.1, 0.1, 0.7];
-    // 5-pointed star on z+ face
+    const _jc = jitterColor(16384, 32768, 65536, color);
+    const c = [_jc[0] * 0.4 + 0.5, _jc[1] * 0.2, _jc[2] * 0.2, 0.85];
+    // 5-pointed star (red-tinted, jittered) on z+ face
     const _sr4 = e * 0.55, _si4 = e * 0.22, _zf4 = z + scale * 1.001;
     const _pts4 = [];
     for (let i = 0; i < 5; i++) {

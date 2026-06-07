@@ -2684,8 +2684,8 @@ function drawSpecialPic(pic, x, y, z, t, color, val) {
   if (pic === 12 && (val & 255) > 127) {
     // Reinforce star (only for code 204, not raw block 76)
     const ef = t * 0.85;
-    const ec = [0.1, 0.1, 0.1, 0.7];
-    // 5-pointed star on z+ face
+    const ec = [specialColor[0] * 0.4 + 0.5, specialColor[1] * 0.2, specialColor[2] * 0.2, 0.85];
+    // 5-pointed star (red-tinted, jittered) on z+ face
     const _sr = ef * 0.55, _si = ef * 0.22, _zf = z + t * 1.001;
     const _pts = [];
     for (let i = 0; i < 5; i++) {

@@ -2262,9 +2262,9 @@ function drawCellDecoration(x, y, w, h, val) {
   }
   // pic 93 (reinforce): "x2" text
   if (code === 204) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.strokeStyle = 'rgba(180,30,30,0.8)';
     ctx.lineWidth = Math.max(1, w * 0.06);
-    // 5-pointed star
+    // 5-pointed star (red)
     ctx.beginPath();
     const sr = s * 0.55, si = s * 0.22;
     for (let i = 0; i < 5; i++) {
