@@ -93,7 +93,12 @@ function createProgram(gl, vsSource, fsSource) {
 class FixedPipelineGLImpl {
   constructor(canvas) {
     const _glOpts = { antialias: true, alpha: false, depth: true, preserveDrawingBuffer: false };
-    const gl = canvas.getContext("webgl", _glOpts) || canvas.getContext("webgl2", _glOpts) || canvas.getContext("experimental-webgl", _glOpts);
+    let gl = canvas.getContext("webgl", _glOpts);
+    if (!gl) gl = canvas.getContext("experimental-webgl", _glOpts);
+    if (!gl) {
+      // Try without antialias (mobile Firefox may reject antialiased contexts)
+      gl = canvas.getContext("webgl", { antialias: false, alpha: false, depth: true, preserveDrawingBuffer: false });
+    }
     if (!gl) {
       throw new Error("WebGL is unavailable");
     }
