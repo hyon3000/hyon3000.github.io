@@ -116,14 +116,20 @@ function createProgram(gl, vsSource, fsSource) {
 
 class FixedPipelineGLImpl {
   constructor(canvas) {
-    const _glOpts = { antialias: true, alpha: false, depth: true, preserveDrawingBuffer: false };
-    let gl = canvas.getContext("webgl", _glOpts);
-    if (!gl) gl = canvas.getContext("experimental-webgl", _glOpts);
-    if (!gl) {
-      gl = canvas.getContext("webgl", { antialias: false, alpha: false, depth: true, preserveDrawingBuffer: false });
+    let gl = null;
+    const _tried = [];
+    for (const _ct of ["webgl", "experimental-webgl"]) {
+      for (const _aa of [true, false]) {
+        if (gl) break;
+        try {
+          gl = canvas.getContext(_ct, { antialias: _aa, alpha: false, depth: true, preserveDrawingBuffer: false });
+          if (gl) _tried.push(_ct + (_aa ? '+aa' : '') + ':OK');
+          else _tried.push(_ct + (_aa ? '+aa' : '') + ':null');
+        } catch (e) { _tried.push(_ct + (_aa ? '+aa' : '') + ':' + e.message); }
+      }
     }
     if (!gl) {
-      throw new Error("WebGL is unavailable");
+      throw new Error("WebGL unavailable (" + _tried.join(', ') + ") canvas:" + canvas.width + "x" + canvas.height);
     }
 
     this.canvas = canvas;
