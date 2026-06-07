@@ -116,12 +116,8 @@ function createProgram(gl, vsSource, fsSource) {
 
 class FixedPipelineGLImpl {
   constructor(canvas) {
-    const gl = canvas.getContext("webgl", {
-      antialias: true,
-      alpha: false,
-      depth: true,
-      preserveDrawingBuffer: false,
-    });
+    const _glOpts = { antialias: true, alpha: false, depth: true, preserveDrawingBuffer: false };
+    const gl = canvas.getContext("webgl", _glOpts) || canvas.getContext("webgl2", _glOpts) || canvas.getContext("experimental-webgl", _glOpts);
     if (!gl) {
       throw new Error("WebGL is unavailable");
     }
