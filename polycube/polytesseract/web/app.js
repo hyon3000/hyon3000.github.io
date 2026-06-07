@@ -318,9 +318,9 @@ const _KEY_ARR = 50;
 const _rotTicket = {};  // true = can rotate (ticket available)
 
 function _execKey(code) {
+  if (state.goverflg || state.startscreen || state.pause) return;
   if (code === "Space") { state.vkspace2 = true; return; }
   if (code === "Enter") {
-    if (state.pause) return;
     const _hb = state.nowblock;
     while (!move(2, -1)) { if (state.nowblock !== _hb) break; }
     if (state.nowblock !== _hb) { state.timestamp = now(); return; }
@@ -1267,7 +1267,7 @@ function processLine(cells, z, coords4d) {
             for (let z2 = 0; z2 < 26; z2 += 1) {
               for (let w2 = 0; w2 < 7; w2 += 1) {
                 const v = state.blk[x2][y2][z2][w2] & 255;
-                if (v !== 0 && v < minVal) minVal = v;
+                if (v !== 0) { const _cv = 33 + (v % 31); if (_cv < minVal) minVal = _cv; }
               }
             }
           }
@@ -3237,13 +3237,17 @@ function drawBlockDecor(gridX, gridY, gridZ, gridW, value, scale) {
   if (pic === 12 && (value & 255) > 127) {
     const e = scale * 0.85;
     const c = [0.1, 0.1, 0.1, 0.7];
-    // "x" on z+ face — 2x size
-    lines([p4(x-0.4*e, y-0.3*e, z+scale*1.001, w), p4(x+0.1*e, y+0.3*e, z+scale*1.001, w)], c);
-    lines([p4(x+0.1*e, y-0.3*e, z+scale*1.001, w), p4(x-0.4*e, y+0.3*e, z+scale*1.001, w)], c);
-    // "2"
-    lineStrip([p4(x+0.15*e, y+0.3*e, z+scale*1.001, w), p4(x+0.55*e, y+0.3*e, z+scale*1.001, w),
-               p4(x+0.55*e, y, z+scale*1.001, w), p4(x+0.15*e, y, z+scale*1.001, w),
-               p4(x+0.15*e, y-0.3*e, z+scale*1.001, w), p4(x+0.55*e, y-0.3*e, z+scale*1.001, w)], c);
+    // 5-pointed star on z+ face
+    const _sr4 = e * 0.55, _si4 = e * 0.22, _zf4 = z + scale * 1.001;
+    const _pts4 = [];
+    for (let i = 0; i < 5; i++) {
+      const a1 = (i * 72 - 90) * Math.PI / 180;
+      const a2 = ((i * 72 + 36) - 90) * Math.PI / 180;
+      _pts4.push(p4(x + _sr4 * Math.cos(a1), y + _sr4 * Math.sin(a1), _zf4, w));
+      _pts4.push(p4(x + _si4 * Math.cos(a2), y + _si4 * Math.sin(a2), _zf4, w));
+    }
+    _pts4.push(_pts4[0]);
+    lineStrip(_pts4, c);
     return;
   }
   drawSpecialPic4D(pic, x, y, z, w, scale, base, value);

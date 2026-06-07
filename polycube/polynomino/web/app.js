@@ -264,6 +264,7 @@ const _KEY_ARR = 50;
 const _rotTicket = {};
 
 function _execKey(code) {
+  if (state.goverflg || state.startscreen || state.pause) return;
   if (code === "Enter") {
     // Hard drop: move down until stuck, then lock (continue through cancels)
     const _hb = state.nowblock;
@@ -1129,11 +1130,15 @@ function processLine(row) {
     else if (code === 5) {
       // Erase items (reinforce: unify all to min value)
       if (_enf) {
+        // Reinforce: convert all to normal, then unify to min converted color
         let _minV = 999;
         for (let r2 = 0; r2 < BOARD_H; r2++) {
           for (let c2 = 0; c2 < BOARD_W; c2++) {
             const _v = state.board[r2][c2];
-            if (_v !== 0 && _v < 256 && _v < _minV) _minV = _v;
+            if (_v !== 0 && _v < 256) {
+              const _cv = 33 + (_v % 31);
+              if (_cv < _minV) _minV = _cv;
+            }
           }
         }
         if (_minV < 999) {
@@ -2259,16 +2264,16 @@ function drawCellDecoration(x, y, w, h, val) {
   if (code === 204) {
     ctx.strokeStyle = 'rgba(0,0,0,0.6)';
     ctx.lineWidth = Math.max(1, w * 0.06);
-    // "x" as two crossing lines
+    // 5-pointed star
     ctx.beginPath();
-    ctx.moveTo(cx - 0.5*s, cy - 0.4*s); ctx.lineTo(cx + 0.1*s, cy + 0.4*s);
-    ctx.moveTo(cx + 0.1*s, cy - 0.4*s); ctx.lineTo(cx - 0.5*s, cy + 0.4*s);
-    ctx.stroke();
-    // "2" as lines
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.15*s, cy - 0.4*s); ctx.lineTo(cx + 0.55*s, cy - 0.4*s);
-    ctx.lineTo(cx + 0.55*s, cy); ctx.lineTo(cx + 0.15*s, cy);
-    ctx.lineTo(cx + 0.15*s, cy + 0.4*s); ctx.lineTo(cx + 0.55*s, cy + 0.4*s);
+    const sr = s * 0.55, si = s * 0.22;
+    for (let i = 0; i < 5; i++) {
+      const a1 = (i * 72 - 90) * Math.PI / 180;
+      const a2 = ((i * 72 + 36) - 90) * Math.PI / 180;
+      ctx.lineTo(cx + sr * Math.cos(a1), cy + sr * Math.sin(a1));
+      ctx.lineTo(cx + si * Math.cos(a2), cy + si * Math.sin(a2));
+    }
+    ctx.closePath();
     ctx.stroke();
   }
   // code 200: 거울상 (mirror) — trapezoid (|

@@ -288,6 +288,7 @@ const _KEY_ARR = 50;
 const _rotTicket = {};
 
 function _execKey(code) {
+  if (state.goverflg || state.startscreen || state.pause) return;
   if (code === "Space") { state.vkspace2 = true; return; }
   if (code === "Enter") {
     // Hard drop: move down until stuck, then place block
@@ -1156,7 +1157,7 @@ function processLine(cells, z, coords) {
           for (let y2 = 0; y2 < 7; y2 += 1) {
             for (let z2 = 0; z2 < 26; z2 += 1) {
               const _v = state.blk[x2][y2][z2];
-              if (_v !== 0 && _v !== 256) { if (_v < _minVal) _minVal = _v; }
+              if (_v !== 0 && _v !== 256) { const _cv = 33 + (_v % 31); if (_cv < _minVal) _minVal = _cv; }
             }
           }
         }
@@ -2681,16 +2682,20 @@ function drawSpecialPic(pic, x, y, z, t, color, val) {
     return true;
   }
   if (pic === 12 && (val & 255) > 127) {
-    // Reinforce "x2" (only for code 157, not raw block 29)
+    // Reinforce star (only for code 204, not raw block 76)
     const ef = t * 0.85;
     const ec = [0.1, 0.1, 0.1, 0.7];
-    // "x" on front face (z+ face) — 2x size
-    lines([[x-0.4*ef, y-0.3*ef, z+t*1.001], [x+0.1*ef, y+0.3*ef, z+t*1.001]], ec);
-    lines([[x+0.1*ef, y-0.3*ef, z+t*1.001], [x-0.4*ef, y+0.3*ef, z+t*1.001]], ec);
-    // "2" on front face
-    lineStrip([[x+0.15*ef, y+0.3*ef, z+t*1.001], [x+0.55*ef, y+0.3*ef, z+t*1.001],
-               [x+0.55*ef, y, z+t*1.001], [x+0.15*ef, y, z+t*1.001],
-               [x+0.15*ef, y-0.3*ef, z+t*1.001], [x+0.55*ef, y-0.3*ef, z+t*1.001]], ec);
+    // 5-pointed star on z+ face
+    const _sr = ef * 0.55, _si = ef * 0.22, _zf = z + t * 1.001;
+    const _pts = [];
+    for (let i = 0; i < 5; i++) {
+      const a1 = (i * 72 - 90) * Math.PI / 180;
+      const a2 = ((i * 72 + 36) - 90) * Math.PI / 180;
+      _pts.push([x + _sr * Math.cos(a1), y + _sr * Math.sin(a1), _zf]);
+      _pts.push([x + _si * Math.cos(a2), y + _si * Math.sin(a2), _zf]);
+    }
+    _pts.push(_pts[0]);
+    lineStrip(_pts, ec);
     return true;
   }
   return false;
