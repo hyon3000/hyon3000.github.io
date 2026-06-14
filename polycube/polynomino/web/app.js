@@ -578,6 +578,7 @@ function generateBlock() {
     const _sr = randInt(100);
     if (_sr < 40) {
       piece.vals = piece.vals.map(() => 31); // 40%: all cancel
+      state.nexthb = 0;
     } else if (_sr < 50) { // 10%: all pierce or selfdestruct
       const _sv = randInt(2) === 0 ? 30 : 1;
       if (_sv === 30) state.nexthb = 1;
@@ -594,6 +595,7 @@ function generateBlock() {
       piece.cells = src.cells.map(c => [...c]);
       piece.vals = piece.cells.map(() => _rfCode);
       if (_rfCode === 30) state.nexthb = 1;
+      else state.nexthb = 0;
       const rr = randInt(4);
       for (let i = 0; i < rr; i++) rotateCellsCW(piece);
     }

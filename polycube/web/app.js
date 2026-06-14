@@ -716,6 +716,7 @@ function setnextblock() {
     const _sr = randInt(100);
     if (_sr < 40) {
       for (let x = 0; x < 7; x++) for (let y = 0; y < 7; y++) for (let z = 0; z < 7; z++) if (state.nextblock[x][y][z] !== 0) state.nextblock[x][y][z] = 31;
+      state.nexthb = 0;
     } else if (_sr < 50) {
       const _sv = randInt(2) === 0 ? 30 : 1;
       if (_sv === 30) state.nexthb = 1;
@@ -734,6 +735,7 @@ function setnextblock() {
         if (state.rawblock[_rfIdx][x][y][z] !== 0) state.nextblock[x][y][z] = _rfCode;
       }
       if (_rfCode === 30) state.nexthb = 1;
+      else state.nexthb = 0;
     }
   }
 
