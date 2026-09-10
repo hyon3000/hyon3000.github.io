@@ -1504,12 +1504,24 @@ function getButtonLayout() {
 
 function hitTestButtons(px, py) {
   const buttons = getButtonLayout();
+  const candidates = [];
+
   for (const btn of buttons) {
-    if (px >= btn.x && px <= btn.x + btn.w && py >= btn.y && py <= btn.y + btn.h) {
-      return btn.action;
+    const expandX = btn.w * 0.5;
+    const expandY = btn.h * 0.5;
+    if (px >= btn.x - expandX && px <= btn.x + btn.w + expandX &&
+        py >= btn.y - expandY && py <= btn.y + btn.h + expandY) {
+      const cx = btn.x + btn.w / 2;
+      const cy = btn.y + btn.h / 2;
+      const dx = px - cx;
+      const dy = py - cy;
+      candidates.push({ btn, distanceSq: dx * dx + dy * dy });
     }
   }
-  return null;
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => a.distanceSq - b.distanceSq);
+  return candidates[0].btn.action;
 }
 
 function clickbutton(px, py) {
