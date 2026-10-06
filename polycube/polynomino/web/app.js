@@ -16,8 +16,12 @@ try {
   throw error;
 }
 
+// virtual clock: the AI evaluates plans in what-if time (see aiRunPlan); normally the real clock
+let _vnow = null;
+const BATTLE = !!window.__battle;   // battle mode (see ../battle.js)
+
 function now() {
-  return performance.now();
+  return _vnow !== null ? _vnow : performance.now();
 }
 
 function getDateP() {
@@ -99,6 +103,7 @@ const state = {
   simplify2: 0,
   pentaForce: 0,
   reinforce: 0,
+  _cTrig: {}, _cPlaced: {}, _cBoom: 0, _cGarb: 0, _cHold: 0,
   score: 0,
   lines: 0,
   level: 1,
@@ -276,7 +281,7 @@ function _execKey(code) {
       initBlockState();
       return;
     }
-    calculatescore(removeline());
+    calculatescore(removeline()); if (state._ovf) overflowDie();
     state.timestamp = now();
     return;
   }
@@ -498,7 +503,7 @@ function assignCellValue(baseVal) {
   if (u < 14270) return 5;    // 아이템제거: 0.1%
   if (u < 14520) return 6;    // 예측차단: 0.025%
   if (u < 14820) return 204;  // 강화: 0.03%
-  if (u < 24820) return 4;    // 득점강화: ~1%
+  if (u < 24820) return (BATTLE && randInt(16) !== 0) ? baseVal : 4;    // 득점강화: ~1% (battle mode: 1/16 of that; the block is a steal-items item there)
   if (u < 25120) return 200;  // 거울상: 0.03%
   if (u < 25420) return 19;   // 지그재그: 0.03%
   if (u < 25720) return 18;   // 구멍: 0.03%
@@ -648,6 +653,7 @@ function clonePiece(piece) {
   return {
     cells: piece.cells.map(c => [...c]),
     vals: [...piece.vals],
+    _mono: piece._mono || 0,
   };
 }
 
@@ -655,6 +661,7 @@ function clonePiece(piece) {
 
 function initBlockState() {
   loadHighScore();
+  if (BATTLE) { PolyBattle.clear(); _bq.length = 0; }
   state.nowhb = 0;
   state.nowib = 0;
   state.holdhb = 0;
@@ -686,6 +693,7 @@ function initBlockState() {
   state.simplify2 = 0;
   state.pentaForce = 0;
   state.reinforce = 0;
+  state._cTrig = {}; state._cPlaced = {}; state._cBoom = 0; state._cGarb = 0; state._cHold = 0;
   // Start with random special item in hold (monomino)
   let _hv = 4;
   if (itemsEnabled) {
@@ -698,6 +706,7 @@ function initBlockState() {
       if(_u<100)_hv=116;else if(_u<400)_hv=117;else if(_u<700)_hv=118;else if(_u<720)_hv=119;else if(_u<1520)_hv=104;else if(_u<2020)_hv=120;else if(_u<3020)_hv=121;else if(_u<3720)_hv=122;else if(_u<4020)_hv=123;else if(_u<4070)_hv=124;else if(_u<4870)_hv=125;else if(_u<5120)_hv=91;else if(_u<5220)_hv=102;else if(_u<5620)_hv=126;else if(_u<5920)_hv=127;else if(_u<6020)_hv=17;else if(_u<6220)_hv=20;else if(_u<7020)_hv=21;else if(_u<7820)_hv=22;else if(_u<8070)_hv=16;else if(_u<8270)_hv=11;else if(_u<8920)_hv=2;else if(_u<9920)_hv=8;else if(_u<10920)_hv=9;else if(_u<11170)_hv=10;else if(_u<12170)_hv=5;else if(_u<12420)_hv=6;else if(_u<12720)_hv=204;else if(_u<14970)_hv=120;else if(_u<24970)_hv=200;else if(_u<25270)_hv=19;else if(_u<25570)_hv=18;
     }
   } else { _hv = 65; }
+  if (BATTLE && _hv === 4 && randInt(16) !== 0) _hv = 65;   // battle mode: the score-boost block is 1/16 as common
   state.holdblock = { cells: [[0, 0]], vals: [_hv] };
   state.nextblock = generateBlock();
   setnextblock();
@@ -710,6 +719,7 @@ function setnextblock() {
   state.nexthb = 0;
   applySpecialAging();
   state.nextblock = generateBlock();
+  if (BATTLE && _bq.length) { state.nextblock = battleMonoPiece(); state.nextblock._mono = _bq.shift(); state.nexthb = 0; }   // battle mode: the block after a position item is a plain single cell of its own
 
   // Position block at top center
   // Find the bounding box of the block
@@ -982,6 +992,7 @@ function applySpecialAging() {
       if (120 <= value && value < 123) {
         state.board[r][c] += 1;
       } else if (value === 123) {
+        state._evBoom = (state._evBoom || 0) + 1; state._cBoom = (state._cBoom || 0) + 1;
         // Bomb explodes 3x3 (reinforce: 5x5)
         const _bRange = state.reinforce > 0 ? 2 : 1;
         for (let r2 = r - _bRange; r2 <= r + _bRange; r2++) {
@@ -1052,6 +1063,7 @@ function stickblock() {
     if (br >= BOARD_H) return 1; // game over if block is placed above the visible board
     if (br >= 0 && br < BOARD_H && bc >= 0 && bc < BOARD_W) {
       state.board[br][bc] = state.nowblock.vals[i];
+      const _pv = state.nowblock.vals[i] & 255; state._cPlaced[_pv] = (state._cPlaced[_pv] || 0) + 1;
     }
   }
   // 자폭: placed immediately triggers 3x3 destruction (reinforce: 5x5)
@@ -1078,30 +1090,14 @@ function stickblock() {
       for (let r = 0; r < BOARD_H; r++) { state.board[r][c] = r < resolved.length ? resolved[r] : 0; }
     }
   }
+  if (BATTLE) battleLocked();   // delayed battle-mode items that are centred on this block
   return setnextblock();
 }
 
-function processLine(row) {
-  let tline = 0;
-  let filled = 0;
-  let hasNonMarked = false;
-  for (let c = 0; c < BOARD_W; c++) {
-    if (state.board[row][c] === 0) return { filled: 0, tline: 0 };
-    if (state.board[row][c] < 256) hasNonMarked = true;
-  }
-  filled = hasNonMarked ? 1 : 0;
-
-  // Pre-scan for mirror before processing (early returns skip it)
-  let _mirrorFlag = false;
-  for (let c2 = 0; c2 < BOARD_W; c2++) {
-    if ((state.board[row][c2] & 255) === 200) { _mirrorFlag = true; state.board[row][c2] = (state.board[row][c2] & 256); }
-  }
-
-  const _enf = state.reinforce > 0;
-  for (let c = 0; c < BOARD_W; c++) {
-    const code = state.board[row][c] & 255;
-    if (code === 116) { tline -= (_enf ? 4 : 2); state.board[row][c] = 256; }
-    else if (code === 117) { tline += (_enf ? 4 : 2); state.board[row][c] = 256; }
+// effect of ONE item cell (code) located at (row, c); acc.tline collects the +/- line items. Shared by line clears and by battle-mode slots.
+function applyItemCell(code, row, c, acc, _enf) {
+    if (code === 116) { acc.tline -= (_enf ? 4 : 2); state.board[row][c] = 256; }
+    else if (code === 117) { acc.tline += (_enf ? 4 : 2); state.board[row][c] = 256; }
     else if (code === 118) {
       // 범위삭제: x좌표 +-1열 삭제 (reinforce: +-2)
       state.board[row][c] = 256;
@@ -1114,21 +1110,21 @@ function processLine(row) {
     } else if (code === 119) {
       // All clear
       state.board = create2d(BOARD_W, BOARD_H);
-      return { filled, tline: 0, hardReset: true };
+      return 'reset';
     } else if (code === 104) { state.simplify2 = 0; state.pentaForce = 0; state.monoonly += (_enf ? 22 : 11); state.board[row][c] = 256; }
-    else if (code === 124) { tline -= (_enf ? 6 : 3); state.board[row][c] = 256; }
-    else if (code === 125) { tline += (_enf ? 2 : 1); state.board[row][c] = 256; }
+    else if (code === 124) { acc.tline -= (_enf ? 6 : 3); state.board[row][c] = 256; }
+    else if (code === 125) { acc.tline += (_enf ? 2 : 1); state.board[row][c] = 256; }
     else if (code === 91) { state.spinlock += (_enf ? 20 : 10); state.board[row][c] = 256; }
     else if (code === 8) { state.speedup += (_enf ? 20 : 10); state.board[row][c] = 256; }
     else if (code === 9) { state.speeddown += (_enf ? 20 : 10); state.board[row][c] = 256; }
-    else if (code === 10) { state.holdlock += (_enf ? 20 : 10); state.board[row][c] = 256; }
+    else if (code === 10) { state.holdlock += (_enf ? 30 : 15); state.board[row][c] = 256; }
     else if (code === 16) { state.blindboard = now() + (_enf ? 20000 : 10000); state.board[row][c] = 256; }
     else if (code === 17) { state.bombnext += (_enf ? 12 : 6); state.board[row][c] = 256; }
     else if (code === 20) { state.compactPending = true; state.board[row][c] = 256; }
     else if (code === 21) { state.monoonly = 0; state.pentaForce = 0; state.simplify2 += (_enf ? 18 : 9); state.board[row][c] = 256; }
     else if (code === 22) { state.monoonly = 0; state.simplify2 = 0; state.pentaForce += (_enf ? 18 : 9); state.board[row][c] = 256; }
     else if (code === 2) { state.hideblock += (_enf ? 20 : 10); state.board[row][c] = 256; }
-    else if (code === 6) { state.hidenext += (_enf ? 20 : 10); state.board[row][c] = 256; }
+    else if (code === 6) { state.hidenext += (_enf ? 40 : 20); state.board[row][c] = 256; }
     else if (code === 5) {
       // Erase items (reinforce: unify all to min value)
       if (_enf) {
@@ -1163,10 +1159,10 @@ function processLine(row) {
       }
       state.board[row][c] = 256;
     } else if (code === 204) {
-      // Enforcement: enhance next 10 line clears
-      state.reinforce = 10;
+      // Enforcement: enhance next 20 line clears
+      state.reinforce = 20;
       state.board[row][c] = 256;
-    } else if (code === 4) { state.score2x += (_enf ? 2 : 1); state.board[row][c] = 256; }
+    } else if (code === 4) { if (!BATTLE) state.score2x += (_enf ? 2 : 1); state.board[row][c] = 256; }   // battle mode: no score effect (used on the opponent it steals the items in its slots)
     else if (code === 11) {
       // 장애물: 랜덤 위치 장애물
       state.board[row][c] = 256;
@@ -1271,6 +1267,34 @@ function processLine(row) {
     } else {
       state.board[row][c] |= 256;
     }
+  return '';
+}
+
+function processLine(row) {
+  let tline = 0;
+  let filled = 0;
+  let hasNonMarked = false;
+  for (let c = 0; c < BOARD_W; c++) {
+    if (state.board[row][c] === 0) return { filled: 0, tline: 0 };
+    if (state.board[row][c] < 256) hasNonMarked = true;
+  }
+  filled = hasNonMarked ? 1 : 0;
+
+  // Pre-scan for mirror before processing (early returns skip it)
+  let _mirrorFlag = false;
+  for (let c2 = 0; c2 < BOARD_W; c2++) {
+    if ((state.board[row][c2] & 255) === 200 && BATTLE && PolyBattle.store(200)) { state.board[row][c2] = 256; }
+    else if ((state.board[row][c2] & 255) === 200) { _mirrorFlag = true; state.board[row][c2] = (state.board[row][c2] & 256); state._cTrig[200] = (state._cTrig[200] || 0) + 1; }
+  }
+
+  const _enf = state.reinforce > 0;
+  const _acc = { tline: 0 };
+  for (let c = 0; c < BOARD_W; c++) {
+    const code = state.board[row][c] & 255;
+    if (code !== 0) state._cTrig[code] = (state._cTrig[code] || 0) + 1;
+    if (BATTLE && PolyBattle.store(code)) { state.board[row][c] = 256; continue; }   // battle mode: the item goes into a slot instead
+    const _ar = applyItemCell(code, row, c, _acc, _enf);
+    if (_ar === 'reset') return { filled, tline: 0, hardReset: true };
   }
   if (_mirrorFlag) {
     for (let r2 = 0; r2 < BOARD_H; r2++) {
@@ -1281,27 +1305,13 @@ function processLine(row) {
       }
     }
   }
+  tline = _acc.tline;
   return { filled, tline };
 }
 
-function removeline() {
-  if (state.spinlock > 0) state.spinlock -= 1;
-  if (state.hideblock > 0) state.hideblock -= 1;
-  if (state.hidenext > 0) state.hidenext -= 1;
-  if (state.speedup > 0) state.speedup -= 1;
-  if (state.speeddown > 0) state.speeddown -= 1;
-  if (state.holdlock > 0) state.holdlock -= 1;
-
-  let filledline = 0;
-  let totalTline = 0;
-
-  for (let r = 0; r < BOARD_H; r++) {
-    const result = processLine(r);
-    if (result.hardReset) return 0;
-    filledline += result.filled || 0;
-    totalTline += result.tline || 0;
-  }
-
+// board clean-up after item effects: remove marked cells, +/- lines (totalTline), gap clear. Returns the extra lines made by the gap clear.
+function settleBoard(totalTline) {
+  var compactLines = 0;
   if (totalTline < 0) {
     // Remove bottom rows
     for (let r = 0; r < -totalTline && r < BOARD_H; r++) {
@@ -1325,7 +1335,9 @@ function removeline() {
   }
 
   if (totalTline > 0) {
+    state._evGarb = (state._evGarb || 0) + totalTline; state._cGarb = (state._cGarb || 0) + totalTline;
     // Add garbage lines at bottom
+    for (let r = BOARD_H - totalTline; r < BOARD_H; r++) for (let c = 0; c < BOARD_W; c++) if (state.board[r][c] !== 0) state._ovf = true;   // pushed out of the board: dead
     for (let r = BOARD_H - 1; r >= totalTline; r--) {
       for (let c = 0; c < BOARD_W; c++) state.board[r][c] = state.board[r - totalTline][c];
     }
@@ -1351,7 +1363,6 @@ function removeline() {
       }
     }
     // Count and remove filled lines (no score multiplier, just base 20 per line)
-    let compactLines = 0;
     for (let r = 0; r < BOARD_H; r++) {
       let full = true;
       for (let c = 0; c < BOARD_W; c++) {
@@ -1375,9 +1386,31 @@ function removeline() {
       state.score += 20 * compactLines;
       state.level = Math.floor((state.score + 600) / 800) + 1;
       if (state.level > 16) state.level = 16;
-      filledline += compactLines;
     }
   }
+
+  return compactLines;
+}
+
+function removeline() {
+  if (state.spinlock > 0) state.spinlock -= 1;
+  if (state.hideblock > 0) state.hideblock -= 1;
+  if (state.hidenext > 0) state.hidenext -= 1;
+  if (state.speedup > 0) state.speedup -= 1;
+  if (state.speeddown > 0) state.speeddown -= 1;
+  if (state.holdlock > 0) state.holdlock -= 1;
+
+  let filledline = 0;
+  let totalTline = 0;
+
+  for (let r = 0; r < BOARD_H; r++) {
+    const result = processLine(r);
+    if (result.hardReset) return 0;
+    filledline += result.filled || 0;
+    totalTline += result.tline || 0;
+  }
+
+  filledline += settleBoard(totalTline);
 
   if (filledline !== 0) filledline += removeline();
   return filledline;
@@ -1394,9 +1427,14 @@ function calculatescore(line) {
   if (state.reinforce > 0 && line > 0) state.reinforce = Math.max(0, state.reinforce - line);
 }
 
+function overflowDie() {          // lines were added to a stack that has no room for them: game over
+  state._ovf = false;
+  if (state.goverflg || state.startscreen) return false;
+  gover(); initBlockState(); return true;
+}
 function gover() {
   state.oscore = state.score;
-  try {
+  if (!window.__btOpp) try {   // (the battle-mode opponent instance must not touch the player's high score)
     const raw = localStorage.getItem('polynomino_highscore');
     if (raw) {
       const data = JSON.parse(raw);
@@ -1457,6 +1495,7 @@ function tryHoldSwap() {
   const tmphb = state.nowhb;
   state.nowhb = state.holdhb;
   state.holdhb = tmphb;
+  state._cHold = (state._cHold || 0) + 1;
   // Pierce: immediately destroy overlapping board cells
   if (state.nowhb === 1) {
     for (let i = 0; i < state.nowblock.cells.length; i++) {
@@ -1499,17 +1538,30 @@ function getButtonLayout() {
   const pauseSize = btnSize * 0.9;
   const pauseBtn = { x: cw - pauseSize - 4 - pauseSize / 4, y: 4 + pauseSize / 4, w: pauseSize, h: pauseSize, action: 'pause', label: '||' };
 
-  return [rotCWBtn, rotCCWBtn, moveLeftBtn, moveRightBtn, hardDropBtn, dropBtn, holdBtn, pauseBtn];
+  return BATTLE ? [rotCWBtn, rotCCWBtn, moveLeftBtn, moveRightBtn, hardDropBtn, dropBtn, holdBtn]   // no pause in battle mode
+                : [rotCWBtn, rotCCWBtn, moveLeftBtn, moveRightBtn, hardDropBtn, dropBtn, holdBtn, pauseBtn];
 }
 
 function hitTestButtons(px, py) {
   const buttons = getButtonLayout();
+  const candidates = [];
+
   for (const btn of buttons) {
-    if (px >= btn.x && px <= btn.x + btn.w && py >= btn.y && py <= btn.y + btn.h) {
-      return btn.action;
+    const expandX = btn.w * 0.5;
+    const expandY = btn.h * 0.5;
+    if (px >= btn.x - expandX && px <= btn.x + btn.w + expandX &&
+        py >= btn.y - expandY && py <= btn.y + btn.h + expandY) {
+      const cx = btn.x + btn.w / 2;
+      const cy = btn.y + btn.h / 2;
+      const dx = px - cx;
+      const dy = py - cy;
+      candidates.push({ btn, distanceSq: dx * dx + dy * dy });
     }
   }
-  return null;
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => a.distanceSq - b.distanceSq);
+  return candidates[0].btn.action;
 }
 
 function clickbutton(px, py) {
@@ -1530,11 +1582,13 @@ function clickbutton(px, py) {
   if (state.goverflg === 1) {
     // Retry button
     if (py > ch * 0.62 && py < ch * 0.68 && px > cw * 0.3 && px < cw * 0.7) {
+      if (BATTLE) { PolyBattle.replay(() => { state.goverflg = 0; }); return 0; }   // waits until the opponent has restarted too
       state.goverflg = 0;
       return 0;
     }
     // Main button
     if (py > ch * 0.72 && py < ch * 0.78 && px > cw * 0.3 && px < cw * 0.7) {
+      if (BATTLE && !PolyBattle.canLeave()) return 0;                                  // not while the opponent is still playing
       state.goverflg = 0;
       state.startscreen = 1;
       state.about = 0;
@@ -1550,7 +1604,8 @@ function clickbutton(px, py) {
     }
     // Start button
     if (py > ch * 0.52 && py < ch * 0.60 && px > cw * 0.3 && px < cw * 0.7) {
-      state.startscreen = 0;
+      if (BATTLE) PolyBattle.begin(() => { state.startscreen = 0; });   // the pairing window comes first
+      else state.startscreen = 0;
       return 0;
     }
     // About button
@@ -1573,13 +1628,13 @@ function clickbutton(px, py) {
     while ((mr = moveDown()) !== 1) { if (state.nowblock !== _hb) break; }
     if (state.nowblock !== _hb) { state.timestamp = now(); return 0; }
     if (stickblock()) { gover(); initBlockState(); return 0; }
-    calculatescore(removeline());
+    calculatescore(removeline()); if (state._ovf) overflowDie();
     state.timestamp = now();
     return 0;
   }
   if (action === 'drop') { state.vkspace2 = true; return 0; }
   if (action === 'hold') { tryHoldSwap(); return 0; }
-  if (action === 'pause') {
+  if (action === 'pause' && !BATTLE) {
     state.pause = !state.pause;
     if (state.pause) state._pauseStart = now();
     else if (state._pauseStart && state.blindboard > 0) {
@@ -1633,6 +1688,7 @@ function updateFallingLogic() {
   if (state.speeddown > 0 && speedMult === 1) speedMult = state.reinforce > 0 ? 5.0 : 2.5;
   const doFall = state.timestamp + fallSpeed * speedMult < now();
   if (doFall) {
+    if (window.__fallLog) { const w = (window.__pid = window.__pid || new WeakMap()); if (!w.has(state.nowblock)) w.set(state.nowblock, (window.__pidN = (window.__pidN || 0) + 1)); window.__fallLog.push([now(), state.level, fallSpeed * speedMult, w.get(state.nowblock)]); }   // measurement hook
     const mr = moveDown();
     if (mr === 2) {
       // Block was destroyed (상쇄 interaction) — next block already spawned
@@ -1645,7 +1701,7 @@ function updateFallingLogic() {
         initBlockState();
         return;
       }
-      calculatescore(removeline());
+      calculatescore(removeline()); if (state._ovf) overflowDie();
       state.timestamp = now();
     } else {
       state.timestamp = now();
@@ -1733,6 +1789,8 @@ function drawLineString(ctx, x, y, scale, str, color) {
   }
 }
 
+// drawing target of the block / item cell drawing: the main canvas, except for the battle-mode opponent window and item sprites
+let _dc = ctx;
 function valToColor(val) {
   let pic = val & 127;
   if ((val & 255) !== 0) pic ^= 64;
@@ -1765,17 +1823,17 @@ function drawCell(x, y, w, h, val) {
   const code = val & 255;
   // val 31 (상쇄): wireframe only, white lines
   if (code === 31) {
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = Math.max(1, w * 0.08);
-    ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    _dc.strokeStyle = '#ffffff';
+    _dc.lineWidth = Math.max(1, w * 0.08);
+    _dc.strokeRect(x + 1, y + 1, w - 2, h - 2);
     return;
   }
   const border = Math.max(1, w * 0.08);
-  ctx.fillStyle = valToColor(val);
-  ctx.fillRect(x, y, w, h);
+  _dc.fillStyle = valToColor(val);
+  _dc.fillRect(x, y, w, h);
   // Inner brighter face
-  ctx.fillStyle = valToColorBright(val);
-  ctx.fillRect(x + border, y + border, w - border * 2, h - border * 2);
+  _dc.fillStyle = valToColorBright(val);
+  _dc.fillRect(x + border, y + border, w - border * 2, h - border * 2);
   // Special item decorations
   drawCellDecoration(x, y, w, h, val);
 }
@@ -1786,544 +1844,544 @@ function drawCellDecoration(x, y, w, h, val) {
   if (code === 0) return;
   const cx = x + w / 2, cy = y + h / 2;
   const s = w * 0.45;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, w, h);
-  ctx.clip();
-  ctx.lineWidth = Math.max(1, w * 0.06);
-  ctx.lineCap = 'round';
+  _dc.save();
+  _dc.beginPath();
+  _dc.rect(x, y, w, h);
+  _dc.clip();
+  _dc.lineWidth = Math.max(1, w * 0.06);
+  _dc.lineCap = 'round';
 
   // pic 65 (self-destruct): 3 perpendicular squares/cross (same as bombs)
   if (code === 1) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-    ctx.beginPath();
-    ctx.moveTo(cx + s, cy - s);
-    ctx.lineTo(cx - s, cy - s);
-    ctx.lineTo(cx - s, cy + s);
-    ctx.lineTo(cx + s, cy + s);
-    ctx.closePath();
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - s); ctx.lineTo(cx, cy + s);
-    ctx.moveTo(cx + s, cy); ctx.lineTo(cx - s, cy);
-    ctx.stroke();
+    _dc.strokeStyle = 'rgba(0,0,0,0.5)';
+    _dc.beginPath();
+    _dc.moveTo(cx + s, cy - s);
+    _dc.lineTo(cx - s, cy - s);
+    _dc.lineTo(cx - s, cy + s);
+    _dc.lineTo(cx + s, cy + s);
+    _dc.closePath();
+    _dc.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx, cy - s); _dc.lineTo(cx, cy + s);
+    _dc.moveTo(cx + s, cy); _dc.lineTo(cx - s, cy);
+    _dc.stroke();
   }
   // pic 75 (obstacle): filled cross (+ shape)
   if (code === 11) {
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.3*s, cy - 0.1*s);
-    ctx.lineTo(cx - 0.3*s, cy - 0.1*s);
-    ctx.lineTo(cx - 0.3*s, cy + 0.1*s);
-    ctx.lineTo(cx + 0.3*s, cy + 0.1*s);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.1*s, cy - 0.3*s);
-    ctx.lineTo(cx - 0.1*s, cy - 0.3*s);
-    ctx.lineTo(cx - 0.1*s, cy + 0.3*s);
-    ctx.lineTo(cx + 0.1*s, cy + 0.3*s);
-    ctx.fill();
+    _dc.fillStyle = 'rgba(0,0,0,0.4)';
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.3*s, cy - 0.1*s);
+    _dc.lineTo(cx - 0.3*s, cy - 0.1*s);
+    _dc.lineTo(cx - 0.3*s, cy + 0.1*s);
+    _dc.lineTo(cx + 0.3*s, cy + 0.1*s);
+    _dc.fill();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.1*s, cy - 0.3*s);
+    _dc.lineTo(cx - 0.1*s, cy - 0.3*s);
+    _dc.lineTo(cx - 0.1*s, cy + 0.3*s);
+    _dc.lineTo(cx + 0.1*s, cy + 0.3*s);
+    _dc.fill();
   }
   // pic 66 (hide): pentagon house + window marks — XZ-face lineStrip+lines
   if (code === 2) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    _dc.strokeStyle = 'rgba(0,0,0,0.5)';
     // house outline: [0.3,-0.4]->[0.3,0.2]->[0,0.4]->[-0.3,0.2]->[-0.3,-0.4]
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.3*s, cy + 0.4*s);
-    ctx.lineTo(cx + 0.3*s, cy - 0.2*s);
-    ctx.lineTo(cx,          cy - 0.4*s);
-    ctx.lineTo(cx - 0.3*s, cy - 0.2*s);
-    ctx.lineTo(cx - 0.3*s, cy + 0.4*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.3*s, cy + 0.4*s);
+    _dc.lineTo(cx + 0.3*s, cy - 0.2*s);
+    _dc.lineTo(cx,          cy - 0.4*s);
+    _dc.lineTo(cx - 0.3*s, cy - 0.2*s);
+    _dc.lineTo(cx - 0.3*s, cy + 0.4*s);
+    _dc.stroke();
     // window mark: lineStrip [-0.15,0.1]->[-0.05,0.1]->[-0.05,-0.1]
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.15*s, cy - 0.1*s);
-    ctx.lineTo(cx - 0.05*s, cy - 0.1*s);
-    ctx.lineTo(cx - 0.05*s, cy + 0.1*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.15*s, cy - 0.1*s);
+    _dc.lineTo(cx - 0.05*s, cy - 0.1*s);
+    _dc.lineTo(cx - 0.05*s, cy + 0.1*s);
+    _dc.stroke();
     // window mark: lines [0.05,0.1]->[0.15,0.1]
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.05*s, cy - 0.1*s);
-    ctx.lineTo(cx + 0.15*s, cy - 0.1*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.05*s, cy - 0.1*s);
+    _dc.lineTo(cx + 0.15*s, cy - 0.1*s);
+    _dc.stroke();
   }
   // pic 68 (x2): 3-sided square + vertical line — XZ-face lineStrip+lines
   if (code === 4) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    _dc.strokeStyle = 'rgba(0,0,0,0.5)';
     // 3-sided square: [0.4,0.4]->[-0.4,0.4]->[-0.4,-0.4]->[0.4,-0.4]
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.4*s, cy - 0.4*s);
-    ctx.lineTo(cx - 0.4*s, cy - 0.4*s);
-    ctx.lineTo(cx - 0.4*s, cy + 0.4*s);
-    ctx.lineTo(cx + 0.4*s, cy + 0.4*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.4*s, cy - 0.4*s);
+    _dc.lineTo(cx - 0.4*s, cy - 0.4*s);
+    _dc.lineTo(cx - 0.4*s, cy + 0.4*s);
+    _dc.lineTo(cx + 0.4*s, cy + 0.4*s);
+    _dc.stroke();
     // vertical line: [0,0.5]->[0,-0.5]
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - 0.5*s);
-    ctx.lineTo(cx, cy + 0.5*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx, cy - 0.5*s);
+    _dc.lineTo(cx, cy + 0.5*s);
+    _dc.stroke();
   }
   // pic 69 (erase): 4 short diagonal lines from corners — XZ-face lines
   if (code === 5) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.4*s, cy - 0.4*s); ctx.lineTo(cx + 0.2*s, cy - 0.2*s);
-    ctx.moveTo(cx + 0.4*s, cy + 0.4*s); ctx.lineTo(cx + 0.2*s, cy + 0.2*s);
-    ctx.moveTo(cx - 0.4*s, cy - 0.4*s); ctx.lineTo(cx - 0.2*s, cy - 0.2*s);
-    ctx.moveTo(cx - 0.4*s, cy + 0.4*s); ctx.lineTo(cx - 0.2*s, cy + 0.2*s);
-    ctx.stroke();
+    _dc.strokeStyle = 'rgba(0,0,0,0.5)';
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.4*s, cy - 0.4*s); _dc.lineTo(cx + 0.2*s, cy - 0.2*s);
+    _dc.moveTo(cx + 0.4*s, cy + 0.4*s); _dc.lineTo(cx + 0.2*s, cy + 0.2*s);
+    _dc.moveTo(cx - 0.4*s, cy - 0.4*s); _dc.lineTo(cx - 0.2*s, cy - 0.2*s);
+    _dc.moveTo(cx - 0.4*s, cy + 0.4*s); _dc.lineTo(cx - 0.2*s, cy + 0.2*s);
+    _dc.stroke();
   }
   // pic 70 (hidenext): N/zigzag + X cross — XZ-face lineStrip+lines
   if (code === 6) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    _dc.strokeStyle = 'rgba(0,0,0,0.5)';
     // zigzag: [-0.2,-0.4]->[-0.2,0.4]->[0.2,-0.4]->[0.2,0.4]
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.2*s, cy + 0.4*s);
-    ctx.lineTo(cx - 0.2*s, cy - 0.4*s);
-    ctx.lineTo(cx + 0.2*s, cy + 0.4*s);
-    ctx.lineTo(cx + 0.2*s, cy - 0.4*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.2*s, cy + 0.4*s);
+    _dc.lineTo(cx - 0.2*s, cy - 0.4*s);
+    _dc.lineTo(cx + 0.2*s, cy + 0.4*s);
+    _dc.lineTo(cx + 0.2*s, cy - 0.4*s);
+    _dc.stroke();
     // X cross: [0.5,0.5]->[-0.5,-0.5], [-0.5,0.5]->[0.5,-0.5]
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.5*s, cy - 0.5*s); ctx.lineTo(cx - 0.5*s, cy + 0.5*s);
-    ctx.moveTo(cx - 0.5*s, cy - 0.5*s); ctx.lineTo(cx + 0.5*s, cy + 0.5*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.5*s, cy - 0.5*s); _dc.lineTo(cx - 0.5*s, cy + 0.5*s);
+    _dc.moveTo(cx - 0.5*s, cy - 0.5*s); _dc.lineTo(cx + 0.5*s, cy + 0.5*s);
+    _dc.stroke();
   }
   // pic for spin lock (code 91)
   if (code === 91) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    _dc.strokeStyle = 'rgba(0,0,0,0.5)';
     // square with arrow: [0.6,-0.6]->[0.6,0.6]->[-0.6,0.6]->[-0.6,-0.6]->[0.2,-0.6]->[-0.1,-0.4],[0.2,-0.6]->[-0.1,-0.8]
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.6*s, cy + 0.6*s);
-    ctx.lineTo(cx + 0.6*s, cy - 0.6*s);
-    ctx.lineTo(cx - 0.6*s, cy - 0.6*s);
-    ctx.lineTo(cx - 0.6*s, cy + 0.6*s);
-    ctx.lineTo(cx + 0.2*s, cy + 0.6*s);
-    ctx.lineTo(cx - 0.1*s, cy + 0.4*s);
-    ctx.moveTo(cx + 0.2*s, cy + 0.6*s);
-    ctx.lineTo(cx - 0.1*s, cy + 0.8*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.6*s, cy + 0.6*s);
+    _dc.lineTo(cx + 0.6*s, cy - 0.6*s);
+    _dc.lineTo(cx - 0.6*s, cy - 0.6*s);
+    _dc.lineTo(cx - 0.6*s, cy + 0.6*s);
+    _dc.lineTo(cx + 0.2*s, cy + 0.6*s);
+    _dc.lineTo(cx - 0.1*s, cy + 0.4*s);
+    _dc.moveTo(cx + 0.2*s, cy + 0.6*s);
+    _dc.lineTo(cx - 0.1*s, cy + 0.8*s);
+    _dc.stroke();
     // diagonal X: [0.8,0.8]->[-0.8,-0.8], [-0.8,0.8]->[0.8,-0.8]
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.8*s, cy - 0.8*s); ctx.lineTo(cx - 0.8*s, cy + 0.8*s);
-    ctx.moveTo(cx - 0.8*s, cy - 0.8*s); ctx.lineTo(cx + 0.8*s, cy + 0.8*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.8*s, cy - 0.8*s); _dc.lineTo(cx - 0.8*s, cy + 0.8*s);
+    _dc.moveTo(cx - 0.8*s, cy - 0.8*s); _dc.lineTo(cx + 0.8*s, cy + 0.8*s);
+    _dc.stroke();
   }
   // code 8 (speedup >>): double right arrows
   if (code === 8) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.5*s, cy - 0.5*s); ctx.lineTo(cx, cy); ctx.lineTo(cx - 0.5*s, cy + 0.5*s);
-    ctx.moveTo(cx, cy - 0.5*s); ctx.lineTo(cx + 0.5*s, cy); ctx.lineTo(cx, cy + 0.5*s);
-    ctx.stroke();
-    ctx.lineWidth = 1;
+    _dc.strokeStyle = 'rgba(0,0,0,0.6)';
+    _dc.lineWidth = 1.5;
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.5*s, cy - 0.5*s); _dc.lineTo(cx, cy); _dc.lineTo(cx - 0.5*s, cy + 0.5*s);
+    _dc.moveTo(cx, cy - 0.5*s); _dc.lineTo(cx + 0.5*s, cy); _dc.lineTo(cx, cy + 0.5*s);
+    _dc.stroke();
+    _dc.lineWidth = 1;
   }
   // code 9 (speeddown <<): double left arrows
   if (code === 9) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.5*s, cy - 0.5*s); ctx.lineTo(cx, cy); ctx.lineTo(cx + 0.5*s, cy + 0.5*s);
-    ctx.moveTo(cx, cy - 0.5*s); ctx.lineTo(cx - 0.5*s, cy); ctx.lineTo(cx, cy + 0.5*s);
-    ctx.stroke();
-    ctx.lineWidth = 1;
+    _dc.strokeStyle = 'rgba(0,0,0,0.6)';
+    _dc.lineWidth = 1.5;
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.5*s, cy - 0.5*s); _dc.lineTo(cx, cy); _dc.lineTo(cx + 0.5*s, cy + 0.5*s);
+    _dc.moveTo(cx, cy - 0.5*s); _dc.lineTo(cx - 0.5*s, cy); _dc.lineTo(cx, cy + 0.5*s);
+    _dc.stroke();
+    _dc.lineWidth = 1;
   }
   // code 10 (holdlock HX): H shape with X overlay
   if (code === 10) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth = 1.5;
+    _dc.strokeStyle = 'rgba(0,0,0,0.6)';
+    _dc.lineWidth = 1.5;
     // H shape
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.5*s, cy - 0.5*s); ctx.lineTo(cx - 0.5*s, cy + 0.5*s);
-    ctx.moveTo(cx - 0.5*s, cy); ctx.lineTo(cx + 0.5*s, cy);
-    ctx.moveTo(cx + 0.5*s, cy - 0.5*s); ctx.lineTo(cx + 0.5*s, cy + 0.5*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.5*s, cy - 0.5*s); _dc.lineTo(cx - 0.5*s, cy + 0.5*s);
+    _dc.moveTo(cx - 0.5*s, cy); _dc.lineTo(cx + 0.5*s, cy);
+    _dc.moveTo(cx + 0.5*s, cy - 0.5*s); _dc.lineTo(cx + 0.5*s, cy + 0.5*s);
+    _dc.stroke();
     // X cross
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.3*s, cy - 0.3*s); ctx.lineTo(cx + 0.3*s, cy + 0.3*s);
-    ctx.moveTo(cx + 0.3*s, cy - 0.3*s); ctx.lineTo(cx - 0.3*s, cy + 0.3*s);
-    ctx.stroke();
-    ctx.lineWidth = 1;
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.3*s, cy - 0.3*s); _dc.lineTo(cx + 0.3*s, cy + 0.3*s);
+    _dc.moveTo(cx + 0.3*s, cy - 0.3*s); _dc.lineTo(cx - 0.3*s, cy + 0.3*s);
+    _dc.stroke();
+    _dc.lineWidth = 1;
   }
   // code 16 (blindboard): horizontal eye shape with X
   if (code === 16) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth = 1.5;
+    _dc.strokeStyle = 'rgba(0,0,0,0.6)';
+    _dc.lineWidth = 1.5;
     // Horizontal eye: two arcs (top and bottom)
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.7*s, cy);
-    ctx.quadraticCurveTo(cx, cy - 0.5*s, cx + 0.7*s, cy);
-    ctx.quadraticCurveTo(cx, cy + 0.5*s, cx - 0.7*s, cy);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.7*s, cy);
+    _dc.quadraticCurveTo(cx, cy - 0.5*s, cx + 0.7*s, cy);
+    _dc.quadraticCurveTo(cx, cy + 0.5*s, cx - 0.7*s, cy);
+    _dc.stroke();
     // Pupil
-    ctx.beginPath();
-    ctx.arc(cx, cy, 0.15*s, 0, Math.PI*2);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.arc(cx, cy, 0.15*s, 0, Math.PI*2);
+    _dc.stroke();
     // X cross over eye
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.4*s, cy - 0.4*s); ctx.lineTo(cx + 0.4*s, cy + 0.4*s);
-    ctx.moveTo(cx + 0.4*s, cy - 0.4*s); ctx.lineTo(cx - 0.4*s, cy + 0.4*s);
-    ctx.stroke();
-    ctx.lineWidth = 1;
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.4*s, cy - 0.4*s); _dc.lineTo(cx + 0.4*s, cy + 0.4*s);
+    _dc.moveTo(cx + 0.4*s, cy - 0.4*s); _dc.lineTo(cx - 0.4*s, cy + 0.4*s);
+    _dc.stroke();
+    _dc.lineWidth = 1;
   }
   // code 17 (bombnext): 品 shape (1 box on top, 2 boxes on bottom)
   if (code === 17) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth = 1.5;
+    _dc.strokeStyle = 'rgba(0,0,0,0.6)';
+    _dc.lineWidth = 1.5;
     // Top 밭 (box + cross)
-    ctx.strokeRect(cx - 0.2*s, cy - 0.6*s, 0.4*s, 0.4*s);
-    ctx.beginPath(); ctx.moveTo(cx, cy - 0.6*s); ctx.lineTo(cx, cy - 0.2*s); ctx.moveTo(cx - 0.2*s, cy - 0.4*s); ctx.lineTo(cx + 0.2*s, cy - 0.4*s); ctx.stroke();
+    _dc.strokeRect(cx - 0.2*s, cy - 0.6*s, 0.4*s, 0.4*s);
+    _dc.beginPath(); _dc.moveTo(cx, cy - 0.6*s); _dc.lineTo(cx, cy - 0.2*s); _dc.moveTo(cx - 0.2*s, cy - 0.4*s); _dc.lineTo(cx + 0.2*s, cy - 0.4*s); _dc.stroke();
     // Bottom-left 밭
-    ctx.strokeRect(cx - 0.5*s, cy + 0.0*s, 0.4*s, 0.4*s);
-    ctx.beginPath(); ctx.moveTo(cx - 0.3*s, cy); ctx.lineTo(cx - 0.3*s, cy + 0.4*s); ctx.moveTo(cx - 0.5*s, cy + 0.2*s); ctx.lineTo(cx - 0.1*s, cy + 0.2*s); ctx.stroke();
+    _dc.strokeRect(cx - 0.5*s, cy + 0.0*s, 0.4*s, 0.4*s);
+    _dc.beginPath(); _dc.moveTo(cx - 0.3*s, cy); _dc.lineTo(cx - 0.3*s, cy + 0.4*s); _dc.moveTo(cx - 0.5*s, cy + 0.2*s); _dc.lineTo(cx - 0.1*s, cy + 0.2*s); _dc.stroke();
     // Bottom-right 밭
-    ctx.strokeRect(cx + 0.1*s, cy + 0.0*s, 0.4*s, 0.4*s);
-    ctx.beginPath(); ctx.moveTo(cx + 0.3*s, cy); ctx.lineTo(cx + 0.3*s, cy + 0.4*s); ctx.moveTo(cx + 0.1*s, cy + 0.2*s); ctx.lineTo(cx + 0.5*s, cy + 0.2*s); ctx.stroke();
-    ctx.lineWidth = 1;
+    _dc.strokeRect(cx + 0.1*s, cy + 0.0*s, 0.4*s, 0.4*s);
+    _dc.beginPath(); _dc.moveTo(cx + 0.3*s, cy); _dc.lineTo(cx + 0.3*s, cy + 0.4*s); _dc.moveTo(cx + 0.1*s, cy + 0.2*s); _dc.lineTo(cx + 0.5*s, cy + 0.2*s); _dc.stroke();
+    _dc.lineWidth = 1;
   }
   // code 21 (Simplify2): two boxes side by side
   if (code === 21) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(cx - 0.5*s, cy - 0.3*s, 0.45*s, 0.6*s);
-    ctx.strokeRect(cx + 0.05*s, cy - 0.3*s, 0.45*s, 0.6*s);
-    ctx.lineWidth = 1;
+    _dc.strokeStyle = 'rgba(0,0,0,0.6)';
+    _dc.lineWidth = 1.5;
+    _dc.strokeRect(cx - 0.5*s, cy - 0.3*s, 0.45*s, 0.6*s);
+    _dc.strokeRect(cx + 0.05*s, cy - 0.3*s, 0.45*s, 0.6*s);
+    _dc.lineWidth = 1;
   }
   // code 22 (PentaForce): 3 boxes on top, 2 on bottom
   if (code === 22) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth = 1.5;
+    _dc.strokeStyle = 'rgba(0,0,0,0.6)';
+    _dc.lineWidth = 1.5;
     // Top row: 3 boxes
-    ctx.strokeRect(cx - 0.55*s, cy - 0.55*s, 0.33*s, 0.45*s);
-    ctx.strokeRect(cx - 0.165*s, cy - 0.55*s, 0.33*s, 0.45*s);
-    ctx.strokeRect(cx + 0.22*s, cy - 0.55*s, 0.33*s, 0.45*s);
+    _dc.strokeRect(cx - 0.55*s, cy - 0.55*s, 0.33*s, 0.45*s);
+    _dc.strokeRect(cx - 0.165*s, cy - 0.55*s, 0.33*s, 0.45*s);
+    _dc.strokeRect(cx + 0.22*s, cy - 0.55*s, 0.33*s, 0.45*s);
     // Bottom row: 2 boxes
-    ctx.strokeRect(cx - 0.4*s, cy + 0.05*s, 0.37*s, 0.45*s);
-    ctx.strokeRect(cx + 0.03*s, cy + 0.05*s, 0.37*s, 0.45*s);
-    ctx.lineWidth = 1;
+    _dc.strokeRect(cx - 0.4*s, cy + 0.05*s, 0.37*s, 0.45*s);
+    _dc.strokeRect(cx + 0.03*s, cy + 0.05*s, 0.37*s, 0.45*s);
+    _dc.lineWidth = 1;
   }
   // code 20 (빈공간삭제): thick down arrow (two vertical lines + V)
   if (code === 20) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth = 2;
+    _dc.strokeStyle = 'rgba(0,0,0,0.6)';
+    _dc.lineWidth = 2;
     // Two vertical lines
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.25*s, cy - 0.6*s); ctx.lineTo(cx - 0.25*s, cy + 0.1*s);
-    ctx.moveTo(cx + 0.25*s, cy - 0.6*s); ctx.lineTo(cx + 0.25*s, cy + 0.1*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.25*s, cy - 0.6*s); _dc.lineTo(cx - 0.25*s, cy + 0.1*s);
+    _dc.moveTo(cx + 0.25*s, cy - 0.6*s); _dc.lineTo(cx + 0.25*s, cy + 0.1*s);
+    _dc.stroke();
     // V shape (arrowhead)
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.5*s, cy + 0.1*s); ctx.lineTo(cx, cy + 0.6*s); ctx.lineTo(cx + 0.5*s, cy + 0.1*s);
-    ctx.stroke();
-    ctx.lineWidth = 1;
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.5*s, cy + 0.1*s); _dc.lineTo(cx, cy + 0.6*s); _dc.lineTo(cx + 0.5*s, cy + 0.1*s);
+    _dc.stroke();
+    _dc.lineWidth = 1;
   }
   // pic 38 (updel): top half filled — XZ-face quad
   if (code === 102) {
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    _dc.fillStyle = 'rgba(0,0,0,0.4)';
     // quad: [-0.7,0]->[0.7,0]->[0.7,0.7]->[-0.7,0.7] (y flipped: top half)
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.7*s, cy);
-    ctx.lineTo(cx + 0.7*s, cy);
-    ctx.lineTo(cx + 0.7*s, cy - 0.7*s);
-    ctx.lineTo(cx - 0.7*s, cy - 0.7*s);
-    ctx.fill();
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.7*s, cy);
+    _dc.lineTo(cx + 0.7*s, cy);
+    _dc.lineTo(cx + 0.7*s, cy - 0.7*s);
+    _dc.lineTo(cx - 0.7*s, cy - 0.7*s);
+    _dc.fill();
   }
   // pic 40 (mono): rectangle outline (0.6 size) — XZ-face lineStrip
   if (code === 104) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    _dc.strokeStyle = 'rgba(0,0,0,0.5)';
     // closed rect: [-0.6,-0.6]->[0.6,-0.6]->[0.6,0.6]->[-0.6,0.6]->[-0.6,-0.6]
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.6*s, cy + 0.6*s);
-    ctx.lineTo(cx + 0.6*s, cy + 0.6*s);
-    ctx.lineTo(cx + 0.6*s, cy - 0.6*s);
-    ctx.lineTo(cx - 0.6*s, cy - 0.6*s);
-    ctx.closePath();
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.6*s, cy + 0.6*s);
+    _dc.lineTo(cx + 0.6*s, cy + 0.6*s);
+    _dc.lineTo(cx + 0.6*s, cy - 0.6*s);
+    _dc.lineTo(cx - 0.6*s, cy - 0.6*s);
+    _dc.closePath();
+    _dc.stroke();
   }
   // pic 52 (2-): two separated horizontal bars — XZ-face quads
   if (code === 116) {
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    _dc.fillStyle = 'rgba(0,0,0,0.4)';
     // left bar: x in [-0.8, -0.2], y in [-0.1, 0.1]
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.8*s, cy - 0.1*s);
-    ctx.lineTo(cx - 0.2*s, cy - 0.1*s);
-    ctx.lineTo(cx - 0.2*s, cy + 0.1*s);
-    ctx.lineTo(cx - 0.8*s, cy + 0.1*s);
-    ctx.fill();
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.8*s, cy - 0.1*s);
+    _dc.lineTo(cx - 0.2*s, cy - 0.1*s);
+    _dc.lineTo(cx - 0.2*s, cy + 0.1*s);
+    _dc.lineTo(cx - 0.8*s, cy + 0.1*s);
+    _dc.fill();
     // right bar: x in [0.2, 0.8], y in [-0.1, 0.1]
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.8*s, cy - 0.1*s);
-    ctx.lineTo(cx + 0.2*s, cy - 0.1*s);
-    ctx.lineTo(cx + 0.2*s, cy + 0.1*s);
-    ctx.lineTo(cx + 0.8*s, cy + 0.1*s);
-    ctx.fill();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.8*s, cy - 0.1*s);
+    _dc.lineTo(cx + 0.2*s, cy - 0.1*s);
+    _dc.lineTo(cx + 0.2*s, cy + 0.1*s);
+    _dc.lineTo(cx + 0.8*s, cy + 0.1*s);
+    _dc.fill();
   }
   // pic 53 (2+): two bars + two cross bars — XZ-face quads
   if (code === 117) {
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    _dc.fillStyle = 'rgba(0,0,0,0.4)';
     // left horizontal bar: x in [-0.8, -0.2], y in [-0.1, 0.1]
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.8*s, cy - 0.1*s);
-    ctx.lineTo(cx - 0.2*s, cy - 0.1*s);
-    ctx.lineTo(cx - 0.2*s, cy + 0.1*s);
-    ctx.lineTo(cx - 0.8*s, cy + 0.1*s);
-    ctx.fill();
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.8*s, cy - 0.1*s);
+    _dc.lineTo(cx - 0.2*s, cy - 0.1*s);
+    _dc.lineTo(cx - 0.2*s, cy + 0.1*s);
+    _dc.lineTo(cx - 0.8*s, cy + 0.1*s);
+    _dc.fill();
     // right horizontal bar: x in [0.2, 0.8], y in [-0.1, 0.1]
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.8*s, cy - 0.1*s);
-    ctx.lineTo(cx + 0.2*s, cy - 0.1*s);
-    ctx.lineTo(cx + 0.2*s, cy + 0.1*s);
-    ctx.lineTo(cx + 0.8*s, cy + 0.1*s);
-    ctx.fill();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.8*s, cy - 0.1*s);
+    _dc.lineTo(cx + 0.2*s, cy - 0.1*s);
+    _dc.lineTo(cx + 0.2*s, cy + 0.1*s);
+    _dc.lineTo(cx + 0.8*s, cy + 0.1*s);
+    _dc.fill();
     // left vertical cross: x in [-0.6, -0.4], y in [-0.3, 0.3]
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.6*s, cy - 0.3*s);
-    ctx.lineTo(cx - 0.4*s, cy - 0.3*s);
-    ctx.lineTo(cx - 0.4*s, cy + 0.3*s);
-    ctx.lineTo(cx - 0.6*s, cy + 0.3*s);
-    ctx.fill();
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.6*s, cy - 0.3*s);
+    _dc.lineTo(cx - 0.4*s, cy - 0.3*s);
+    _dc.lineTo(cx - 0.4*s, cy + 0.3*s);
+    _dc.lineTo(cx - 0.6*s, cy + 0.3*s);
+    _dc.fill();
     // right vertical cross: x in [0.4, 0.6], y in [-0.3, 0.3]
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.6*s, cy - 0.3*s);
-    ctx.lineTo(cx + 0.4*s, cy - 0.3*s);
-    ctx.lineTo(cx + 0.4*s, cy + 0.3*s);
-    ctx.lineTo(cx + 0.6*s, cy + 0.3*s);
-    ctx.fill();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.6*s, cy - 0.3*s);
+    _dc.lineTo(cx + 0.4*s, cy - 0.3*s);
+    _dc.lineTo(cx + 0.4*s, cy + 0.3*s);
+    _dc.lineTo(cx + 0.6*s, cy + 0.3*s);
+    _dc.fill();
   }
   // pic 54 (VC): bowtie/hourglass lines — XZ-face lineStrips
   if (code === 118) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    _dc.strokeStyle = 'rgba(0,0,0,0.5)';
     // first bowtie line: [-0.3,0.5]->[0,0.7]->[0,-0.7]->[0.3,-0.5]
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.3*s, cy - 0.5*s);
-    ctx.lineTo(cx,          cy - 0.7*s);
-    ctx.lineTo(cx,          cy + 0.7*s);
-    ctx.lineTo(cx + 0.3*s, cy + 0.5*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.3*s, cy - 0.5*s);
+    _dc.lineTo(cx,          cy - 0.7*s);
+    _dc.lineTo(cx,          cy + 0.7*s);
+    _dc.lineTo(cx + 0.3*s, cy + 0.5*s);
+    _dc.stroke();
     // second bowtie line: [0.3,0.5]->[0,0.7]->[0,-0.7]->[-0.3,-0.5]
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.3*s, cy - 0.5*s);
-    ctx.lineTo(cx,          cy - 0.7*s);
-    ctx.lineTo(cx,          cy + 0.7*s);
-    ctx.lineTo(cx - 0.3*s, cy + 0.5*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.3*s, cy - 0.5*s);
+    _dc.lineTo(cx,          cy - 0.7*s);
+    _dc.lineTo(cx,          cy + 0.7*s);
+    _dc.lineTo(cx - 0.3*s, cy + 0.5*s);
+    _dc.stroke();
   }
   // pic 55 (AC): C-shape frame (3 bars forming C) — XZ-face quads
   if (code === 119) {
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    _dc.fillStyle = 'rgba(0,0,0,0.4)';
     // top bar: x in [-0.5, 0.5], y in [0.3, 0.5]
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.5*s, cy - 0.5*s);
-    ctx.lineTo(cx - 0.5*s, cy - 0.5*s);
-    ctx.lineTo(cx - 0.5*s, cy - 0.3*s);
-    ctx.lineTo(cx + 0.5*s, cy - 0.3*s);
-    ctx.fill();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.5*s, cy - 0.5*s);
+    _dc.lineTo(cx - 0.5*s, cy - 0.5*s);
+    _dc.lineTo(cx - 0.5*s, cy - 0.3*s);
+    _dc.lineTo(cx + 0.5*s, cy - 0.3*s);
+    _dc.fill();
     // bottom bar: x in [-0.5, 0.5], y in [-0.5, -0.3]
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.5*s, cy + 0.5*s);
-    ctx.lineTo(cx - 0.5*s, cy + 0.5*s);
-    ctx.lineTo(cx - 0.5*s, cy + 0.3*s);
-    ctx.lineTo(cx + 0.5*s, cy + 0.3*s);
-    ctx.fill();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.5*s, cy + 0.5*s);
+    _dc.lineTo(cx - 0.5*s, cy + 0.5*s);
+    _dc.lineTo(cx - 0.5*s, cy + 0.3*s);
+    _dc.lineTo(cx + 0.5*s, cy + 0.3*s);
+    _dc.fill();
     // left vertical bar: x in [-0.5, -0.3], y in [-0.5, 0.5]
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.5*s, cy - 0.5*s);
-    ctx.lineTo(cx - 0.3*s, cy - 0.5*s);
-    ctx.lineTo(cx - 0.3*s, cy + 0.5*s);
-    ctx.lineTo(cx - 0.5*s, cy + 0.5*s);
-    ctx.fill();
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.5*s, cy - 0.5*s);
+    _dc.lineTo(cx - 0.3*s, cy - 0.5*s);
+    _dc.lineTo(cx - 0.3*s, cy + 0.5*s);
+    _dc.lineTo(cx - 0.5*s, cy + 0.5*s);
+    _dc.fill();
   }
   // pic 56-59,63,96 (bombs): 3 perpendicular squares/cross — center-plane lineStrips
   if (code >= 120 && code <= 123) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    _dc.strokeStyle = 'rgba(0,0,0,0.5)';
     // XY-plane square: [1,1]->[-1,1]->[-1,-1]->[1,-1]->[1,1]
-    ctx.beginPath();
-    ctx.moveTo(cx + s, cy - s);
-    ctx.lineTo(cx - s, cy - s);
-    ctx.lineTo(cx - s, cy + s);
-    ctx.lineTo(cx + s, cy + s);
-    ctx.closePath();
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx + s, cy - s);
+    _dc.lineTo(cx - s, cy - s);
+    _dc.lineTo(cx - s, cy + s);
+    _dc.lineTo(cx + s, cy + s);
+    _dc.closePath();
+    _dc.stroke();
     // cross from YZ and XZ plane squares projected
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - s); ctx.lineTo(cx, cy + s);
-    ctx.moveTo(cx + s, cy); ctx.lineTo(cx - s, cy);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx, cy - s); _dc.lineTo(cx, cy + s);
+    _dc.moveTo(cx + s, cy); _dc.lineTo(cx - s, cy);
+    _dc.stroke();
   }
   // pic 60 (3-): three separated bars — XZ-face quads
   if (code === 124) {
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    _dc.fillStyle = 'rgba(0,0,0,0.4)';
     // left bar: x in [-0.8, -0.4], y in [-0.1, 0.1]
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.8*s, cy - 0.1*s);
-    ctx.lineTo(cx - 0.4*s, cy - 0.1*s);
-    ctx.lineTo(cx - 0.4*s, cy + 0.1*s);
-    ctx.lineTo(cx - 0.8*s, cy + 0.1*s);
-    ctx.fill();
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.8*s, cy - 0.1*s);
+    _dc.lineTo(cx - 0.4*s, cy - 0.1*s);
+    _dc.lineTo(cx - 0.4*s, cy + 0.1*s);
+    _dc.lineTo(cx - 0.8*s, cy + 0.1*s);
+    _dc.fill();
     // right bar: x in [0.4, 0.8], y in [-0.1, 0.1]
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.8*s, cy - 0.1*s);
-    ctx.lineTo(cx + 0.4*s, cy - 0.1*s);
-    ctx.lineTo(cx + 0.4*s, cy + 0.1*s);
-    ctx.lineTo(cx + 0.8*s, cy + 0.1*s);
-    ctx.fill();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.8*s, cy - 0.1*s);
+    _dc.lineTo(cx + 0.4*s, cy - 0.1*s);
+    _dc.lineTo(cx + 0.4*s, cy + 0.1*s);
+    _dc.lineTo(cx + 0.8*s, cy + 0.1*s);
+    _dc.fill();
     // center bar: x in [-0.2, 0.2], y in [-0.1, 0.1]
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.2*s, cy - 0.1*s);
-    ctx.lineTo(cx + 0.2*s, cy - 0.1*s);
-    ctx.lineTo(cx + 0.2*s, cy + 0.1*s);
-    ctx.lineTo(cx - 0.2*s, cy + 0.1*s);
-    ctx.fill();
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.2*s, cy - 0.1*s);
+    _dc.lineTo(cx + 0.2*s, cy - 0.1*s);
+    _dc.lineTo(cx + 0.2*s, cy + 0.1*s);
+    _dc.lineTo(cx - 0.2*s, cy + 0.1*s);
+    _dc.fill();
   }
   // pic 61 (+1): cross shape (same as 65 on all faces) — XZ-face quads
   if (code === 125) {
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    _dc.fillStyle = 'rgba(0,0,0,0.4)';
     // horizontal bar: x in [-0.3, 0.3], y in [-0.1, 0.1]
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.3*s, cy - 0.1*s);
-    ctx.lineTo(cx - 0.3*s, cy - 0.1*s);
-    ctx.lineTo(cx - 0.3*s, cy + 0.1*s);
-    ctx.lineTo(cx + 0.3*s, cy + 0.1*s);
-    ctx.fill();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.3*s, cy - 0.1*s);
+    _dc.lineTo(cx - 0.3*s, cy - 0.1*s);
+    _dc.lineTo(cx - 0.3*s, cy + 0.1*s);
+    _dc.lineTo(cx + 0.3*s, cy + 0.1*s);
+    _dc.fill();
     // vertical bar: x in [-0.1, 0.1], y in [-0.3, 0.3]
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.1*s, cy - 0.3*s);
-    ctx.lineTo(cx - 0.1*s, cy - 0.3*s);
-    ctx.lineTo(cx - 0.1*s, cy + 0.3*s);
-    ctx.lineTo(cx + 0.1*s, cy + 0.3*s);
-    ctx.fill();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.1*s, cy - 0.3*s);
+    _dc.lineTo(cx - 0.1*s, cy - 0.3*s);
+    _dc.lineTo(cx - 0.1*s, cy + 0.3*s);
+    _dc.lineTo(cx + 0.1*s, cy + 0.3*s);
+    _dc.fill();
   }
   // pic 62 (xzdel): bowtie shape — XZ-face lineStrips
   if (code === 126) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    _dc.strokeStyle = 'rgba(0,0,0,0.5)';
     // line 1: [-0.3,0.5]->[0,0.7]->[0,-0.7]->[0.3,-0.5]
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.3*s, cy - 0.5*s);
-    ctx.lineTo(cx,          cy - 0.7*s);
-    ctx.lineTo(cx,          cy + 0.7*s);
-    ctx.lineTo(cx + 0.3*s, cy + 0.5*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.3*s, cy - 0.5*s);
+    _dc.lineTo(cx,          cy - 0.7*s);
+    _dc.lineTo(cx,          cy + 0.7*s);
+    _dc.lineTo(cx + 0.3*s, cy + 0.5*s);
+    _dc.stroke();
     // line 2: [0.3,0.5]->[0,0.7]->[0,-0.7]->[-0.3,-0.5]
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.3*s, cy - 0.5*s);
-    ctx.lineTo(cx,          cy - 0.7*s);
-    ctx.lineTo(cx,          cy + 0.7*s);
-    ctx.lineTo(cx - 0.3*s, cy + 0.5*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.3*s, cy - 0.5*s);
+    _dc.lineTo(cx,          cy - 0.7*s);
+    _dc.lineTo(cx,          cy + 0.7*s);
+    _dc.lineTo(cx - 0.3*s, cy + 0.5*s);
+    _dc.stroke();
     // line 3: [0.5,-0.3]->[0.7,0]->[-0.7,0]->[-0.5,0.3]
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.5*s, cy + 0.3*s);
-    ctx.lineTo(cx + 0.7*s, cy);
-    ctx.lineTo(cx - 0.7*s, cy);
-    ctx.lineTo(cx - 0.5*s, cy - 0.3*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.5*s, cy + 0.3*s);
+    _dc.lineTo(cx + 0.7*s, cy);
+    _dc.lineTo(cx - 0.7*s, cy);
+    _dc.lineTo(cx - 0.5*s, cy - 0.3*s);
+    _dc.stroke();
     // line 4: [0.5,0.3]->[0.7,0]->[-0.7,0]->[-0.5,-0.3]
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.5*s, cy - 0.3*s);
-    ctx.lineTo(cx + 0.7*s, cy);
-    ctx.lineTo(cx - 0.7*s, cy);
-    ctx.lineTo(cx - 0.5*s, cy + 0.3*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.5*s, cy - 0.3*s);
+    _dc.lineTo(cx + 0.7*s, cy);
+    _dc.lineTo(cx - 0.7*s, cy);
+    _dc.lineTo(cx - 0.5*s, cy + 0.3*s);
+    _dc.stroke();
   }
   // val 30 (관통): T-shape + box decoration (古 shape, matching polycube pic 94)
   if (code === 30) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    _dc.strokeStyle = 'rgba(0,0,0,0.5)';
     // horizontal line at top
-    ctx.beginPath();
-    ctx.moveTo(cx + 0.3*s, cy - 0.4*s);
-    ctx.lineTo(cx - 0.3*s, cy - 0.4*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx + 0.3*s, cy - 0.4*s);
+    _dc.lineTo(cx - 0.3*s, cy - 0.4*s);
+    _dc.stroke();
     // vertical stem from center down
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - 0.4*s);
-    ctx.lineTo(cx, cy - 0.1*s);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx, cy - 0.4*s);
+    _dc.lineTo(cx, cy - 0.1*s);
+    _dc.stroke();
     // box below (closed rectangle)
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.3*s, cy - 0.1*s);
-    ctx.lineTo(cx - 0.3*s, cy + 0.4*s);
-    ctx.lineTo(cx + 0.3*s, cy + 0.4*s);
-    ctx.lineTo(cx + 0.3*s, cy - 0.1*s);
-    ctx.closePath();
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.3*s, cy - 0.1*s);
+    _dc.lineTo(cx - 0.3*s, cy + 0.4*s);
+    _dc.lineTo(cx + 0.3*s, cy + 0.4*s);
+    _dc.lineTo(cx + 0.3*s, cy - 0.1*s);
+    _dc.closePath();
+    _dc.stroke();
   }
   // pic 63/96 (bombcr/explode): 3 perpendicular squares/cross
   if (code === 127) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-    ctx.beginPath();
-    ctx.moveTo(cx + s, cy - s);
-    ctx.lineTo(cx - s, cy - s);
-    ctx.lineTo(cx - s, cy + s);
-    ctx.lineTo(cx + s, cy + s);
-    ctx.closePath();
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - s); ctx.lineTo(cx, cy + s);
-    ctx.moveTo(cx + s, cy); ctx.lineTo(cx - s, cy);
-    ctx.stroke();
+    _dc.strokeStyle = 'rgba(0,0,0,0.5)';
+    _dc.beginPath();
+    _dc.moveTo(cx + s, cy - s);
+    _dc.lineTo(cx - s, cy - s);
+    _dc.lineTo(cx - s, cy + s);
+    _dc.lineTo(cx + s, cy + s);
+    _dc.closePath();
+    _dc.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx, cy - s); _dc.lineTo(cx, cy + s);
+    _dc.moveTo(cx + s, cy); _dc.lineTo(cx - s, cy);
+    _dc.stroke();
   }
   // pic 93 (reinforce): "x2" text
   if (code === 204) {
-    ctx.strokeStyle = 'rgba(180,30,30,0.8)';
-    ctx.lineWidth = Math.max(1, w * 0.06);
+    _dc.strokeStyle = 'rgba(180,30,30,0.8)';
+    _dc.lineWidth = Math.max(1, w * 0.06);
     // 5-pointed star (red)
-    ctx.beginPath();
+    _dc.beginPath();
     const sr = s * 0.55, si = s * 0.22;
     for (let i = 0; i < 5; i++) {
       const a1 = (i * 72 - 90) * Math.PI / 180;
       const a2 = ((i * 72 + 36) - 90) * Math.PI / 180;
-      ctx.lineTo(cx + sr * Math.cos(a1), cy + sr * Math.sin(a1));
-      ctx.lineTo(cx + si * Math.cos(a2), cy + si * Math.sin(a2));
+      _dc.lineTo(cx + sr * Math.cos(a1), cy + sr * Math.sin(a1));
+      _dc.lineTo(cx + si * Math.cos(a2), cy + si * Math.sin(a2));
     }
-    ctx.closePath();
-    ctx.stroke();
+    _dc.closePath();
+    _dc.stroke();
   }
   // code 200: 거울상 (mirror) — trapezoid (|
   if (code === 200) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-    ctx.lineWidth = Math.max(1, w * 0.07);
+    _dc.strokeStyle = 'rgba(255,255,255,0.7)';
+    _dc.lineWidth = Math.max(1, w * 0.07);
     // Right vertical bar |
-    ctx.beginPath();
-    ctx.moveTo(cx + s * 0.4, cy - s * 0.8);
-    ctx.lineTo(cx + s * 0.4, cy + s * 0.8);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx + s * 0.4, cy - s * 0.8);
+    _dc.lineTo(cx + s * 0.4, cy + s * 0.8);
+    _dc.stroke();
     // Left angled line ( — trapezoid shape
-    ctx.beginPath();
-    ctx.moveTo(cx - s * 0.2, cy - s * 0.8);
-    ctx.lineTo(cx - s * 0.7, cy - s * 0.3);
-    ctx.lineTo(cx - s * 0.7, cy + s * 0.3);
-    ctx.lineTo(cx - s * 0.2, cy + s * 0.8);
-    ctx.stroke();
+    _dc.beginPath();
+    _dc.moveTo(cx - s * 0.2, cy - s * 0.8);
+    _dc.lineTo(cx - s * 0.7, cy - s * 0.3);
+    _dc.lineTo(cx - s * 0.7, cy + s * 0.3);
+    _dc.lineTo(cx - s * 0.2, cy + s * 0.8);
+    _dc.stroke();
   }
   // Hole: three dashes at 12, 4, 8 o'clock
   if (code === 18) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
+    _dc.strokeStyle = 'rgba(0,0,0,0.6)';
+    _dc.lineWidth = 2;
+    _dc.beginPath();
     // 12 o'clock
-    ctx.moveTo(cx - 0.15*s, cy - 0.55*s);
-    ctx.lineTo(cx + 0.15*s, cy - 0.55*s);
+    _dc.moveTo(cx - 0.15*s, cy - 0.55*s);
+    _dc.lineTo(cx + 0.15*s, cy - 0.55*s);
     // 4 o'clock (lower-right)
-    ctx.moveTo(cx + 0.33*s, cy + 0.17*s);
-    ctx.lineTo(cx + 0.48*s, cy + 0.43*s);
+    _dc.moveTo(cx + 0.33*s, cy + 0.17*s);
+    _dc.lineTo(cx + 0.48*s, cy + 0.43*s);
     // 8 o'clock (lower-left)
-    ctx.moveTo(cx - 0.48*s, cy + 0.43*s);
-    ctx.lineTo(cx - 0.33*s, cy + 0.17*s);
-    ctx.stroke();
+    _dc.moveTo(cx - 0.48*s, cy + 0.43*s);
+    _dc.lineTo(cx - 0.33*s, cy + 0.17*s);
+    _dc.stroke();
   }
   // Zigzag: Z letter
   if (code === 19) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.5*s, cy - 0.5*s);
-    ctx.lineTo(cx + 0.5*s, cy - 0.5*s);
-    ctx.lineTo(cx - 0.5*s, cy + 0.5*s);
-    ctx.lineTo(cx + 0.5*s, cy + 0.5*s);
-    ctx.stroke();
+    _dc.strokeStyle = 'rgba(0,0,0,0.6)';
+    _dc.lineWidth = 2;
+    _dc.beginPath();
+    _dc.moveTo(cx - 0.5*s, cy - 0.5*s);
+    _dc.lineTo(cx + 0.5*s, cy - 0.5*s);
+    _dc.lineTo(cx - 0.5*s, cy + 0.5*s);
+    _dc.lineTo(cx + 0.5*s, cy + 0.5*s);
+    _dc.stroke();
   }
-  ctx.restore();
+  _dc.restore();
 }
 
 function drawBoard() {
@@ -2687,6 +2745,7 @@ function drawStartScreen() {
   const titleScale = Math.max(20, cw * 0.065);
   ctx.lineWidth = 1.5;
   drawLineStringCentered(ctx, cw / 2, ch * 0.18, titleScale, 'POLYNOMINO', '#fff');
+  if (BATTLE) drawLineStringCentered(ctx, cw / 2, ch * 0.18 + titleScale * 1.5, Math.max(8, titleScale * 0.34), 'BATTLE MODE', '#8cf');
 
   if (state.about === 0) {
     // Start button box
@@ -2736,7 +2795,10 @@ function drawGameOverScreen() {
   // Title using line-drawn letters
   const titleScale = Math.max(18, cw * 0.06);
   ctx.lineWidth = 1.5;
-  drawLineStringCentered(ctx, cw / 2, ch * 0.15, titleScale, 'GAME OVER', '#fff');
+  if (BATTLE) {            // battle mode: WIN / LOSE / DRAW instead of GAME OVER (same line font, same place)
+    const w = window.PolyBattle && PolyBattle.result && PolyBattle.result();
+    if (w) drawLineStringCentered(ctx, cw / 2, ch * 0.15, titleScale, w.toUpperCase(), w === 'win' ? '#5f5' : (w === 'lose' ? '#f66' : '#ccc'));
+  } else drawLineStringCentered(ctx, cw / 2, ch * 0.15, titleScale, 'GAME OVER', '#fff');
 
   // Score label and digits (large, 2x)
   const labelScale = Math.max(14, cw * 0.055);
@@ -2811,23 +2873,25 @@ const _isKo = /^ko/i.test(navigator.language || '');
 const ITEM_DESC = _isKo ? {
   1:'자폭: 착지 즉시 주변 파괴', 2:'은폐: 현재 블록 숨김', 200:'거울상: 보드 좌우반전', 19:'지그재그: 각 행 블록 재배치', 4:'득점강화: 점수 4배 (중첩 16배)',
   5:'아이템제거: 판 위 아이템 제거', 6:'예측차단: 다음 블록 숨김', 8:'속도증가: x2.5', 9:'속도감소: x0.4',
-  10:'홀드봉인: 10턴간 홀드 불가', 11:'장애물: 랜덤 위치 장애물 3개', 16:'시야봉인: 보드 숨김', 17:'폭탄블록5개: 5블록에 폭탄', 18:'구멍: 블록 30% 제거',
+  10:'홀드봉인: 15턴간 홀드 불가', 11:'장애물: 랜덤 위치 장애물 3개', 16:'시야봉인: 보드 숨김', 17:'폭탄블록5개: 5블록에 폭탄', 18:'구멍: 블록 30% 제거',
   91:'회전봉인: 10턴간 회전 불가', 20:'빈공간삭제: 모든 빈공간 정리', 21:'소형화: 8턴간 3칸 이하', 22:'대형화: 8턴간 5칸 이상', 30:'관통: 낙하경로 블록파괴', 31:'상쇄: 블록과 닿으면 상호삭제',
   102:'상단삭제: 위의 블록 모두 제거', 104:'모노전용: 1칸 블록만', 116:'-2줄: 바닥 2줄 제거', 117:'+2줄: 바닥에 2줄 추가',
   118:'범위삭제: 주변 열 전체삭제', 119:'전체삭제: 판 전체 클리어', 120:'시한폭탄: 3턴후 폭발', 121:'시한폭탄: 2턴후 폭발', 122:'시한폭탄: 1턴후 폭발',
   123:'시한폭탄: 폭발 임박', 124:'-3줄: 바닥 3줄 제거', 125:'+1줄: 바닥에 1줄 추가', 126:'횡렬삭제: 해당 행 삭제', 127:'폭탄변환: 30%확률 폭탄화',
-  204:'강화: 10턴간 효과 2배',
+  204:'강화: 20턴간 효과 2배',
 } : {
   1:'Self-Destruct: 3x3 boom', 2:'Conceal: Hide piece 10t', 200:'Mirror: Flip board', 19:'Zigzag: Shuffle each row', 4:'Score Boost: x4 (stack x16)', 5:'Item Clear: Remove items',
-  6:'No Preview: Hide next 10t', 8:'Speed Up: x2.5', 9:'Slow Down: x0.4', 10:'Hold Lock: 10 turns', 11:'Obstacle: 3 random',
+  6:'No Preview: Hide next 20t', 8:'Speed Up: x2.5', 9:'Slow Down: x0.4', 10:'Hold Lock: 15 turns', 11:'Obstacle: 3 random',
   16:'Blind: Hide board 10sec', 17:'Bomb x5: Next 5 have bombs', 18:'Hole: Remove 30% blocks', 91:'Rot Lock: 10 turns', 20:'Gap Clear: Remove gaps', 21:'Simplify: ≤3 cells 8 turns',
   22:'PentaForce: ≥5 cells 8 turns', 30:'Pierce: Destroy in path', 31:'Cancel: Mutual delete', 102:'Top Clear: All above', 104:'Mono Only: 1-cell 10 turns',
   116:'-2 Lines: Remove 2', 117:'+2 Lines: Add 2 lines', 118:'Range Del: ±1 columns', 119:'Full Clear: Wipe board',
   120:'Time Bomb: 3t to blow', 121:'Time Bomb: 2t to blow', 122:'Time Bomb: 1t to blow', 123:'Time Bomb: Imminent',
   124:'-3 Lines: Remove 3', 125:'+1 Line: Add 1 line', 126:'Row Del: Delete row', 127:'Bomb Convert: 30% bomb',
-  204:'Enforce: x2 effects 10 turns',
+  204:'Enforce: x2 effects 20 turns',
 };
 // 유리=beneficial(cyan), 불리=harmful(orange) — matches about section
+// battle mode: the score-boost block steals the items from the opponent's slots (see ../battle.js)
+if (BATTLE) ITEM_DESC[4] = _isKo ? '강탈: 상대에게 쓰면 상대 슬롯 아이템을 전부 뺏음' : 'Steal: on the opponent = take all its slot items';
 const ITEM_GOOD = new Set([1,4,9,20,21,30,31,102,104,116,117,118,119,124,125,126,204]);
 
 function getActiveItemCodes() {
@@ -2903,13 +2967,634 @@ function drawScene() {
   drawSidePanel();
   drawItemInfo();
   drawTouchButtons();
+  if (BATTLE) battleDrawSlots();
 }
 
-function drawFrame() {
+// ====== AI PLAYER ======
+// A trained afterstate-value network (web/ai.js + web/ai-model.js) plays with the same inputs a human has,
+// but at most ONE input (hold / rotate / move / hard drop) every 200 ms while gravity keeps running.
+// To evaluate a plan we really execute its inputs on a saved copy of the game with a virtual clock
+// (real rotate()/move()/stickblock()/removeline(), gravity between inputs), so item effects, cancel/pierce,
+// bombs, garbage lines, speed up/down... are all reflected; the state is then restored.
+// While the board is hidden (blind item) the AI does not see it: it plans on the board it remembers plus
+// its own predictions. While NEXT is hidden (hide-next item) it does not see the next/held piece either.
+const AI_GAP = 200;
+const AI_GRAVITY = [800, 717, 633, 550, 467, 383, 300, 217];
+const AI_MAXC = 128;
+const AI_TRIAL_MASK = 0x9E3779B9;
+const ai = { on: false, plan: null, piece: null, lastAct: 0, overAt: 0, pieces: 0, belief: null, beliefValid: false, h: null, snap: null, lastSumAct: null, thinkEst: 0, gen: null, sliceEnd: 0, planFor: null, planT0: 0 };
+
+function hardDrop() {
+  const _hb = state.nowblock;
+  let mr;
+  while ((mr = moveDown()) !== 1) { if (state.nowblock !== _hb) break; }
+  if (state.nowblock !== _hb) { state.timestamp = now(); return; }
+  if (stickblock()) { gover(); initBlockState(); return; }
+  calculatescore(removeline()); if (state._ovf) overflowDie();
+  state.timestamp = now();
+}
+
+// hard drop for what-if evaluation: same as hardDrop() but never ends/resets the game
+function aiTrialDrop() {
+  const _hb = state.nowblock;
+  let mr;
+  while ((mr = moveDown()) !== 1) { if (state.nowblock !== _hb) break; }
+  if (state.nowblock !== _hb) return { dead: false, lines: 0 };
+  if (stickblock()) return { dead: true, lines: 0 };
+  const l = removeline();
+  calculatescore(l);
+  if (state._ovf) { state._ovf = false; return { dead: true, lines: l }; }
+  return { dead: false, lines: l };
+}
+
+const AI_FIELDS = ['nowhb', 'nexthb', 'holdhb', 'score', 'lines', 'level', 'asc', 'gt', 'ht', 'monoonly', 'spinlock',
+  'hideblock', 'hidenext', 'score2x', 'speedup', 'speeddown', 'holdlock', 'blindboard', 'bombnext', 'compactPending',
+  'simplify2', 'pentaForce', 'reinforce', '_assignIsMonoBlock', '_rfUpgrade', 'timestamp', 'vkspace2', '_cBoom', '_cGarb', '_cHold'];
+
+function aiSave() {
+  const s = {};
+  for (const k of AI_FIELDS) s[k] = state[k];
+  s.board = clone2d(state.board);
+  s.now = clonePiece(state.nowblock);
+  s.next = clonePiece(state.nextblock);
+  s.hold = state.holdblock ? clonePiece(state.holdblock) : null;
+  s.pos = [state.blockpos[0], state.blockpos[1]];
+  s.cTrig = Object.assign({}, state._cTrig); s.cPlaced = Object.assign({}, state._cPlaced);
+  if (BATTLE) { s.bSlots = PolyBattle.slots.slice(); s.bq = _bq.slice(); }   // battle mode: the item queue / the position items waiting for a single cell are part of what a what-if run changes (the ties live on the cloned pieces)
+  return s;
+}
+function aiLoad(s) {
+  state._ovf = false;
+  for (const k of AI_FIELDS) state[k] = s[k];
+  state.board = clone2d(s.board);
+  state.nowblock = clonePiece(s.now);
+  state.nextblock = clonePiece(s.next);
+  state.holdblock = s.hold ? clonePiece(s.hold) : null;
+  state.blockpos = [s.pos[0], s.pos[1]];
+  state._cTrig = Object.assign({}, s.cTrig); state._cPlaced = Object.assign({}, s.cPlaced);
+  if (BATTLE && s.bSlots) { PolyBattle.slots = s.bSlots.slice(); _bq.length = 0; for (const c of s.bq) _bq.push(c); }
+}
+
+// what the value network sees after a plan (obs = what the AI could observe at decision time)
+function aiPost(lines, placedN, obs) {
+  const st = state;
+  return {
+    board: st.board, now: st.nowblock, nowhb: st.nowhb, hold: st.holdblock, holdhb: st.holdhb,
+    spinlock: st.spinlock, hidenext: st.hidenext, holdlock: st.holdlock, score2x: st.score2x, monoonly: st.monoonly,
+    simplify2: st.simplify2, pentaForce: st.pentaForce, bombnext: st.bombnext, reinforce: st.reinforce,
+    compactPending: st.compactPending, level: st.level, speedup: st.speedup, speeddown: st.speeddown,
+    lines: lines, placedN: placedN, blind: obs.blind, blindRemain: obs.blindRemain, hideNext: obs.hideNext,
+    boom: st._evBoom || 0, garb: st._evGarb || 0,
+  };
+}
+
+// cumulative event counters + board shape: the raw material of the agent's event memory (see PolyAI.summarize)
+function aiCounters(board) {
+  let holes = 0, maxh = 0;
+  for (let c = 0; c < BOARD_W; c++) {
+    let h = 0;
+    for (let r = BOARD_H - 1; r >= 0; r--) if (board[r][c] !== 0) { h = r + 1; break; }
+    maxh = Math.max(maxh, h);
+    for (let r = 0; r < h; r++) if (board[r][c] === 0) holes++;
+  }
+  return { trig: Object.assign({}, state._cTrig), placed: Object.assign({}, state._cPlaced), boom: state._cBoom, garb: state._cGarb,
+    hold: state._cHold, lines: state.lines, holes: holes, maxh: maxh };
+}
+
+function aiKey(dead, c) {
+  const st = state;
+  return dead + '|' + st.board.map(r => r.join(',')).join(';') + '|' + st.holdblock.cells.join(';') + st.holdblock.vals.join(',') +
+    '|' + st.nowblock.cells.join(';') + st.nowblock.vals.join(',') + '|' + st.score + '|' + st.holdhb + '|' + st.nowhb +
+    '|' + c.lastAct + '|' + st.timestamp + '|' + st.blockpos[0] + ',' + st.blockpos[1];
+}
+
+// ---- what-if gravity (updateFallingLogic on the virtual clock) ----
+function aiNextFall(f) {
+  const interval = AI_GRAVITY[Math.min(state.level - 1, 7)];
+  let mult = 1;
+  if (state.speedup > 0 && mult === 1) mult = state.reinforce > 0 ? 0.2 : 0.4;
+  if (state.speeddown > 0 && mult === 1) mult = state.reinforce > 0 ? 5.0 : 2.5;
+  return Math.max(Math.floor(state.timestamp + interval * mult) + 1, f);
+}
+// process gravity for frames [c.f, to). 0 = ok, 1 = current piece replaced (stop), 2 = game over
+function aiAdvance(c, to) {
+  while (true) {
+    const tf = aiNextFall(c.f);
+    if (tf >= to) { if (to > c.f) c.f = to; return 0; }
+    _vnow = tf; c.f = tf + 1;
+    const s0 = state.nowblock, base = AI_GRAVITY[Math.min(state.level - 1, 7)];
+    const mr = moveDown();
+    if (mr === 2) state.timestamp = tf + base;
+    else if (mr === 1) {
+      if (stickblock()) return 2;
+      const l = removeline(); calculatescore(l); c.lines += l; state.timestamp = tf;
+      if (state._ovf) { state._ovf = false; return 2; }
+    } else state.timestamp = tf;
+    if (state.nowblock !== s0) return 1;
+  }
+}
+
+const P_DONE = 0, P_INVALID = 1, P_INTERRUPTED = 2, P_DEAD = 3;
+// Execute [hold] + k*rotate + |dcol|*move + hard drop, one input per AI_GAP with gravity in between.
+function aiRunPlan(c, hd, k, dcol) {
+  c.lines = 0; state._evBoom = 0; state._evGarb = 0;
+  let ref = state.nowblock;
+  const total = (hd ? 1 : 0) + k + Math.abs(dcol) + 1;
+  for (let j = 0; j < total; j++) {
+    const a = (hd && j === 0) ? 'H' : (j < (hd ? 1 : 0) + k ? 'R' : (j < total - 1 ? (dcol < 0 ? 'L' : 'X') : 'D'));
+    const T = c.lastAct + AI_GAP;
+    if (aiAdvance(c, T) === 2) return P_DEAD;
+    if (state.nowblock !== ref) return P_INTERRUPTED;
+    _vnow = T; c.lastAct = T; c.f = T;
+    let ok = true, dead = false;
+    switch (a) {
+      case 'H': tryHoldSwap(); if (state.nowblock === ref) ok = false; else ref = state.nowblock; break;
+      case 'R': ok = state.spinlock === 0 && rotate(1) === 0; break;
+      case 'L': ok = move(-1) !== 1; break;
+      case 'X': ok = move(1) !== 1; break;
+      case 'D': { const r = aiTrialDrop(); dead = r.dead; c.lines += r.lines; state.timestamp = T; break; }
+    }
+    if (dead) return P_DEAD;
+    if (aiAdvance(c, T + 1) === 2) return P_DEAD;
+    if (!ok) return P_INVALID;
+    if (a === 'D') return P_DONE;
+    if (state.nowblock !== ref) return P_INTERRUPTED;
+  }
+  return P_DONE;
+}
+
+// Enumerate every plan the AI could carry out from the current state, evaluated with what-if execution.
+// Returns candidates [{hold, rot, dcol, status, dead, lines, boom, garb, feat, postBoard}] in a fixed order.
+// ---- planning is written as generators so that the search can be time-sliced between game frames ----
+// While the AI thinks the game must run exactly as for a human player (gravity included), so it never blocks the game loop for long:
+// aiRunSlice() runs a few ms of search per frame; every slice saves the real game state first and puts it back afterwards, so the
+// what-if trials (virtual clock, copies of the state) can never leak into the real game.
+function aiSliceExpired() { if (window.__aiSliceHook) return window.__aiSliceHook(); return performance.now() > ai.sliceEnd; }
+
+// Enumerate every plan from a saved decision state `root` (state at decision time tNow). Used at the real decision and,
+// for the 2-ply search, at the child decision after a candidate plan has been played on.
+function* aiEnumerateCoreG(root, tNow, rootC, obs, blind, withFeatures, seed) {
+  const hook = window.__rngHook;
+  const placedN = root.now.cells.length;
+  const cands = [], seen = new Set();
+  const tryPlan = (hd, k, dc) => {
+    aiLoad(root);
+    if (hook) hook.set(seed);
+    const c = { f: tNow, lastAct: tNow - AI_GAP, lines: 0 };
+    const st = aiRunPlan(c, hd, k, dc);
+    if (st === P_INVALID) return st;
+    if (cands.length >= AI_MAXC) return st;
+    const dead = st === P_DEAD;
+    const key = aiKey(dead ? 1 : 0, c);
+    if (!seen.has(key)) {
+      seen.add(key);
+      const cd = { hold: hd, rot: k, dcol: dc, status: st, dead: dead, lines: c.lines, gain: state.score - root.score, boom: state._evBoom || 0, garb: state._evGarb || 0, feat: null, postBoard: clone2d(state.board) };
+      if (withFeatures && !dead) { cd.feat = PolyAI.features(aiPost(c.lines, placedN, obs)); cd.sum = PolyAI.summarize(rootC, aiCounters(state.board), blind); }
+      cands.push(cd);
+    }
+    return st;
+  };
+  for (let hd = 0; hd < 2; hd++) {
+    for (let k = 0; k < 4; k++) {
+      if (tryPlan(hd, k, 0) === P_INVALID) break;
+      for (let dir = -1; dir <= 1; dir += 2) {
+        for (let dc = 1; dc < 30; dc++) {
+          const r = tryPlan(hd, k, dc * dir);
+          if (r === P_INVALID || r === P_INTERRUPTED) break;
+          if (aiSliceExpired()) yield;
+        }
+      }
+      if (aiSliceExpired()) yield;
+    }
+  }
+  _vnow = null;
+  return cands;   // (the callers put the real random stream back)
+}
+
+// bookkeeping at a decision root, on the REAL game state (not inside a time slice): event memory + the test hook
+function aiBeginDecision() {
+  // event memory: fold what happened since the previous decision into the traces (before anything else happens at this root)
+  const cnt0 = aiCounters(state.board);
+  // (the memory is a recurrent net: its state absorbs the events of the decision just finished; a game start feeds zeros)
+  ai.lastSumAct = ai.snap ? PolyAI.summarize(ai.snap, cnt0, state.blindboard > now()) : new Float32Array(PolyAI.SD);
+  ai.h = PolyAI.hiddenStep(ai.snap ? ai.h : null, ai.lastSumAct);
+  ai.snap = cnt0;
+  if (BATTLE) { aiBattleUse(); aiBattleCtx(); }               // battle mode: which stored item to use / throw now? then the plans (after the memory update: as in training)
+  if (window.__aiPreEnum) window.__aiPreEnum(); // test hook
+}
+
+// ---- battle mode: the item-use decision (state must equal vec_bstate in sim.cpp) ----
+// [own board features][what I see of the opponent window][what I see of my own window][own item queue]
+function battleClassSnapshot(board) {            // cell classes 0 empty / 1 normal / 2 special, row-major with row 0 = bottom
+  const b = new Uint8Array(BOARD_H * BOARD_W);
+  for (let r = 0; r < BOARD_H; r++) for (let c = 0; c < BOARD_W; c++) { const v = board[r][c]; b[r * BOARD_W + c] = v === 0 || v >= 256 ? 0 : (ITEM_DESC[v & 255] ? 2 : 1); }
+  return b;
+}
+function battleViewFeat(board, piece, qn) {      // board: Uint8Array classes; piece: [[row, col, class], ...]
+  const out = new Float32Array(32), hgt = new Array(BOARD_W).fill(0), layer = new Array(10).fill(0);
+  let maxh = 0, holes = 0, nn = 0, ns = 0;
+  for (let c = 0; c < BOARD_W; c++) {
+    let top = -1, occ = 0;
+    for (let r = 0; r < BOARD_H; r++) { const v = board[r * BOARD_W + c]; if (v) { top = r; occ++; if (v === 2) ns++; else nn++; if (r < 10) layer[r]++; } }
+    hgt[c] = top + 1; if (top + 1 > maxh) maxh = top + 1; holes += top + 1 - occ;
+  }
+  let sh = 0; for (let c = 0; c < BOARD_W; c++) sh += hgt[c];
+  out[0] = maxh / 20; out[1] = sh / BOARD_W / 20; out[2] = holes / 20; out[3] = nn / 100; out[4] = ns / 20; out[5] = qn / 10;
+  for (let c = 0; c < BOARD_W; c++) out[6 + Math.min(Math.floor(hgt[c] / 2), 9)] += 1 / BOARD_W;
+  let sr = 0, sc = 0; const np = piece.length;
+  for (const [r, c] of piece) { sr += r; sc += c; }
+  if (np) { out[17] = sc / np / (BOARD_W - 1); out[18] = sr / np / (BOARD_H - 1); out[21] = np / 20; }
+  for (let z = 0; z < 10; z++) out[22 + z] = layer[z] / BOARD_W;
+  return out;
+}
+function battleQFeat(slots) {
+  const NT = PolyAI.NT, QPOS = 4, out = new Float32Array(1 + (QPOS + 1) * NT); out[0] = slots.length / 10;
+  for (let k = 0; k < slots.length && k < QPOS; k++) { const t = PolyAI.typeIndex(slots[k]); if (t !== undefined) out[1 + k * NT + t] = 1; }
+  for (const code of slots) { const t = PolyAI.typeIndex(code); if (t !== undefined) out[1 + QPOS * NT + t] += 0.5; }
+  return out;
+}
+function battleBState(oppSnap, oppQn) {
+  const blind = state.blindboard > now(), board = (blind && ai.belief) ? ai.belief : state.board;
+  const obs = { blind: blind ? 1 : 0, blindRemain: 0, hideNext: state.hidenext > 0 ? 1 : 0 };
+  const P = aiPost(0, state.nowblock.cells.length, obs); P.board = board; P.boom = 0; P.garb = 0;
+  const f = PolyAI.features(P).f;
+  const mine = battleClassSnapshot(board), piece = state.nowblock.cells.map((cl) => [state.blockpos[0] + cl[0], state.blockpos[1] + cl[1]]);
+  const oppPiece = oppSnap.piece.map((p) => [p[0], p[1]]);
+  const x = new Float32Array(f.length + 64 + 1 + 5 * PolyAI.NT);
+  x.set(f, 0); x.set(battleViewFeat(oppSnap.board, oppPiece, oppQn), f.length); x.set(battleViewFeat(mine, piece, PolyBattle.slots.length), f.length + 32); x.set(battleQFeat(PolyBattle.slots), f.length + 64);
+  return x;
+}
+let _nSeen = 0, _newT = 0;
+// actions: 0 wait; 2k+1 / 2k+2 = take item k of the first 4 (touch the slots k times, then use the front item) and use it on me / throw it at the opponent
+function aiBattleUse() {
+  const os = PolyBattle.oppState && PolyBattle.oppState();
+  const tn = performance.now();               // like a person, it lets a new item sit in its slot for a moment before using anything
+  if (PolyBattle.slots.length > _nSeen) _newT = tn;
+  _nSeen = PolyBattle.slots.length;
+  if (!PolyBattle.slots.length) return;
+  if (tn - _newT < 1500) return;
+  if (!PolyAI.hasBattle() || !os) { PolyBattle.aiUseSlots(); _nSeen = PolyBattle.slots.length; return; }       // no battle network: the solo one + the old rule
+  const x = battleBState(os.snap, os.qn), slots = PolyBattle.slots, NFf = x.length - 64 - (1 + 5 * PolyAI.NT);
+  const ctx = new Float32Array(32 + 1 + 5 * PolyAI.NT); ctx.set(x.subarray(NFf, NFf + 32), 0); ctx.set(x.subarray(NFf + 64), 32);
+  const q = PolyAI.itemAdv(x.subarray(0, NFf), ai.h, ctx);
+  let best = 0;
+  for (let a2 = 1; a2 < q.length; a2++) {
+    const k = (a2 - 1) >> 1, tg = 1 + ((a2 - 1) & 1);
+    if (k >= slots.length || k >= 4) continue;
+    if (PolyBattle.forbidden && PolyBattle.forbidden(slots[k]) === tg) continue;     // clearly helpful items are never given away, clearly harmful ones never used on myself
+    if (q[a2] > q[best]) best = a2;
+  }
+  if (best > 0) { PolyBattle.useAt((best - 1) >> 1, ((best - 1) & 1) ? 'opponent' : 'self'); _nSeen = PolyBattle.slots.length; }
+}
+// the plans are valued knowing what the opponent window shows and which items I hold (after the item decision)
+function aiBattleCtx() {
+  const os = PolyBattle.oppState && PolyBattle.oppState();
+  if (!PolyAI.hasBattle() || !os) { PolyAI.setCtx(null); return; }
+  const ctx = new Float32Array(32 + 1 + 5 * PolyAI.NT);
+  ctx.set(battleViewFeat(os.snap.board, os.snap.piece.map((p) => [p[0], p[1]]), os.qn), 0); ctx.set(battleQFeat(PolyBattle.slots), 32);
+  PolyAI.setCtx(ctx);
+}
+
+function* aiEnumerateG(withFeatures) {
+  const hook = window.__rngHook, rng0 = hook ? hook.get() : null;
+  const tNow = now();
+  const blind = state.blindboard > tNow;
+  const obs = { blind: blind ? 1 : 0, blindRemain: blind ? Math.min(1, (state.blindboard - tNow) / 20000) : 0, hideNext: state.hidenext > 0 ? 1 : 0 };
+  if (!blind) ai.beliefValid = false;
+  else if (!ai.beliefValid) { ai.belief = clone2d(state.board); ai.beliefValid = true; }
+  let root = aiSave();
+  if (blind) root.board = clone2d(ai.belief); // the remembered board, not the true one
+  // the game keeps running while the AI thinks: plan for the state about `shift` ms from now (0 in the test harness)
+  let tPlan = tNow;
+  const shift = (_vnow === null && !window.__rngHook) ? Math.round(ai.thinkEst || 0) : 0;
+  if (shift > 0) {
+    aiLoad(root);
+    const c = { f: tNow, lastAct: tNow - AI_GAP, lines: 0 };
+    let over = false;
+    for (;;) { const r = aiAdvance(c, tNow + shift); if (r === 2) { over = true; break; } if (r === 0) break; }
+    if (!over) { root = aiSave(); tPlan = tNow + shift; }
+    _vnow = null;
+  }
+  const rootC = aiCounters(root.board);
+  let seed = hook ? ((rng0 ^ AI_TRIAL_MASK) >>> 0) : 0;
+  // NEXT is hidden (human view): the simulation must not use the real next piece, plan against a random piece of the game's distribution
+  if (obs.hideNext) { aiLoad(root); if (hook) hook.set(seed); root.next = clonePiece(generateBlock()); if (hook) seed = hook.get(); }
+  const cands = yield* aiEnumerateCoreG(root, tPlan, rootC, obs, blind, withFeatures, seed);
+  if (hook) hook.set(rng0);
+  ai.ctx = { root: root, tNow: tPlan };
+  return cands;
+}
+
+// 2-ply search helper: play candidate `p` on to the next decision with the exact rules and enumerate the follow-up plans there.
+// Returns the child candidates (with features), or [] when the game is already over.
+function* aiChildrenG(p) {
+  const ctx = ai.ctx, hook = window.__rngHook, rng0 = hook ? hook.get() : null;
+  aiLoad(ctx.root);
+  if (hook) hook.set((rng0 ^ AI_TRIAL_MASK) >>> 0);
+  const c = { f: ctx.tNow, lastAct: ctx.tNow - AI_GAP, lines: 0 };
+  const st = aiRunPlan(c, p.hold, p.rot, p.dcol);
+  let out = [], over = st === P_DEAD;
+  if (!over) {
+    const td = c.lastAct + AI_GAP;        // the next moment the AI may act (passive gravity locks may happen before)
+    for (;;) { const r = aiAdvance(c, td); if (r === 2) { over = true; break; } if (r === 0) break; }
+    if (!over) {
+      const tc = td, croot = aiSave();
+      const blind = state.blindboard > tc;
+      const obs = { blind: blind ? 1 : 0, blindRemain: blind ? Math.min(1, (state.blindboard - tc) / 20000) : 0, hideNext: state.hidenext > 0 ? 1 : 0 };
+      let seed = hook ? ((hook.get() ^ AI_TRIAL_MASK) >>> 0) : 0;
+      if (obs.hideNext) { if (hook) hook.set(seed); croot.next = clonePiece(generateBlock()); if (hook) seed = hook.get(); }   // NEXT hidden here too
+      out = yield* aiEnumerateCoreG(croot, tc, aiCounters(croot.board), obs, blind, true, seed);
+    }
+  }
+  _vnow = null;
+  if (hook) hook.set(rng0);
+  return over ? [] : out;
+}
+
+const AI_SEARCH_K = 5;   // 2-ply search over the K best candidates (0 = greedy); lowered automatically when thinking gets slow
+function aiSearchK() { const e = ai.thinkEst || 0; return e > 300 ? 0 : (e > 160 ? 3 : AI_SEARCH_K); }
+function* aiChooseG(cands) {
+  if (window.__aiForcePick) { aiLoad(ai.realCur); _vnow = null; return PolyAI.pick(cands, ai.h); }   // (identity restored by the slice driver afterwards)   // test hook: the harness chooses the candidate (and reads the real state)
+  const q1 = PolyAI.qValues(cands, ai.h);
+  const order = [];
+  for (let i = 0; i < cands.length; i++) if (q1[i] > -1e8 && !cands[i].dead) order.push(i);
+  order.sort((x, y) => q1[y] - q1[x]);
+  const K = aiSearchK();
+  if (K <= 0 || order.length < 2) return PolyAI.pick(cands, ai.h);
+  // Q2(parent) = r(parent) + gamma * max over follow-ups [ r + gamma * V ], follow-ups enumerated with the exact game rules
+  let best = null, bestQ = -Infinity;
+  for (const i of order.slice(0, K)) {
+    const p = cands[i];
+    const hp = PolyAI.hiddenStep(ai.h, p.sum);            // memory after the parent's own events
+    const ch = yield* aiChildrenG(p);
+    let bestChild = PolyAI.DEATH_R;
+    if (ch.length) { const qc = PolyAI.qValues(ch, hp); for (const q of qc) if (q > bestChild) bestChild = q; }
+    const q2 = PolyAI.rewardOf(p) + PolyAI.GAMMA * bestChild;
+    if (q2 > bestQ) { bestQ = q2; best = p; }
+    if (aiSliceExpired()) yield;
+  }
+  return best || PolyAI.pick(cands, ai.h);
+}
+
+function* aiPlanG() {
+  const plan = [];
+  if (!window.PolyAI || !PolyAI.isLoaded()) { plan.push('D'); return plan; }
+  const cands = yield* aiEnumerateG(true);
+  const best = yield* aiChooseG(cands);
+  if (!best) { plan.push('D'); return plan; }
+  ai.belief = clone2d(best.postBoard); ai.beliefValid = true; // what the AI expects the board to look like afterwards
+  if (best.hold) plan.push('H');
+  for (let i = 0; i < best.rot; i++) plan.push('R');
+  for (let i = 0; i < Math.abs(best.dcol); i++) plan.push(best.dcol < 0 ? 'L' : 'X');
+  plan.push('D');
+  return plan;
+}
+
+// run a few ms of a planning generator; the real game state is saved before and restored after (the what-if trials use copies)
+function aiRunSlice(gen, budgetMs) {
+  const cur = aiSave();
+  const keep = { now: state.nowblock, next: state.nextblock, hold: state.holdblock };   // the game and the AI compare piece objects (identity)
+  ai.realCur = cur;
+  ai.sliceEnd = performance.now() + budgetMs;
+  if (window.__aiSliceReset) window.__aiSliceReset();   // test hook
+  let r;
+  try { do { r = gen.next(); } while (!r.done && !aiSliceExpired()); }
+  finally {
+    _vnow = null; aiLoad(cur);
+    // put the original piece objects back (same content), so "was the piece replaced?" keeps meaning what it means in the game
+    for (const [name, obj] of [['nowblock', keep.now], ['nextblock', keep.next], ['holdblock', keep.hold]]) {
+      if (obj && state[name]) { obj.cells = state[name].cells; obj.vals = state[name].vals; state[name] = obj; }
+    }
+  }
+  return r;
+}
+// synchronous planning (tests, tools): no slicing
+function aiMakePlan() {
+  aiBeginDecision();
+  const r = aiRunSlice(aiPlanG(), Infinity);
+  return r.value;
+}
+
+// The AI presses the same keys a player does (through the keyboard handler), then checks whether it had an effect.
+const AI_KEYS = { H: 'ShiftLeft', R: 'KeyZ', L: 'ArrowLeft', X: 'ArrowRight', D: 'Enter' };
+function aiPressKey(act) {
+  const piece = state.nowblock, c0 = state.blockpos[1], cell0 = piece.cells[0];
+  _execKey(AI_KEYS[act]);
+  if (act === 'D') return true;
+  if (state.nowblock !== piece) return act !== 'R';       // hold swapped / piece replaced
+  // a successful rotation rebuilds the cell arrays (even when the shape looks identical, e.g. the square)
+  if (act === 'R') return piece.cells[0] !== cell0;
+  return state.blockpos[1] !== c0;                         // L / X: moved sideways?
+}
+// returns true when the action succeeded
+function aiExec(act) { return aiPressKey(act); }
+
+function aiTick() {
+  if (!ai.on || !state.ready) return;
+  if (state.startscreen || state.goverflg) {
+    if (!ai.autoRestart) { aiStop(); return; }          // auto-solve ends with the game
+    if (state.startscreen) { state.startscreen = 0; return; }
+    const t0 = now();
+    if (!ai.overAt) ai.overAt = t0;
+    if (t0 - ai.overAt > 1200) { state.goverflg = 0; ai.overAt = 0; ai.plan = null; ai.beliefValid = false; ai.h = null; ai.snap = null; ai.gen = null; }
+    return;
+  }
+  if (state.pause) return;
+  const t = now();
+  ai.overAt = 0;
+  if (t - ai.lastAct < AI_GAP) return; // one input per 200 ms
+  if (ai.gen || ai.piece !== state.nowblock || !ai.plan) {
+    // (re)plan; the work is spread over several frames, the game keeps running (and the piece keeps falling) in the meantime
+    if (!ai.gen) { aiBeginDecision(); ai.gen = aiPlanG(); ai.planFor = state.nowblock; ai.planT0 = performance.now(); }
+    const r = aiRunSlice(ai.gen, 6);
+    if (!r.done) return;
+    ai.gen = null;
+    const dt = performance.now() - ai.planT0;
+    ai.thinkEst = Math.min(400, 0.6 * (ai.thinkEst || 0) + 0.4 * dt);
+    if (state.nowblock !== ai.planFor || state.startscreen || state.goverflg) { ai.plan = null; return; }   // the piece was replaced meanwhile
+    ai.plan = r.value; ai.piece = state.nowblock;
+  }
+  const act = ai.plan.shift();
+  const ok = aiExec(act);
+  ai.lastAct = now();   // the next input comes 200 ms after this one
+  if (act === 'D') { ai.plan = null; ai.pieces++; }
+  else if (!ok && (act === 'H' || !(state.blindboard > now()))) ai.plan = null; // deviated (blocked move, replaced piece...): replan at the next input slot;
+  // while the board is hidden a blocked rotation/move is invisible to a human, so it is not noticed either (the hold slot stays visible)
+  else if (act === 'H') ai.piece = state.nowblock;
+  else if (!ai.plan.length) ai.plan = null;
+}
+
+function aiIsRunning() { return !!state.ready && !state.startscreen && !state.goverflg; }
+
+function aiUpdateHud() {
+  if (hud) hud.textContent = ai.on ? 'AI  (1 input / 0.2s)  [A / F3] off' : (ai.loading ? 'AI model loading...' : '');
+  const b = document.getElementById('aibtn');
+  if (b) { b.classList.toggle('on', ai.on); b.textContent = ai.on ? 'AI ON' : 'AI'; }
+  if (window.PolyAutoSolve) window.PolyAutoSolve.notify();
+}
+
+function aiStop() {
+  ai.on = false; ai.plan = null; ai.piece = null; ai.overAt = 0; ai.beliefValid = false; ai.loading = false; ai.h = null; ai.snap = null; ai.gen = null;
+  aiUpdateHud();
+}
+
+// the model file is large: fetch it the first time auto-solve is used
+function aiEnsureModel(cb) {
+  if (window.PolyAI && PolyAI.isLoaded()) { cb(true); return; }
+  // battle mode: the battle network (placement + items in one); normal mode (or no battle file): the solo network
+  let url = BATTLE ? './web/ai-battle.js' : './web/ai-model.js', vr = BATTLE ? 'POLY_AI_BATTLE_2D' : 'POLY_AI_MODEL';
+  const done = () => {
+    try { PolyAI.load(window[vr]); } catch (e) { if (hud) hud.textContent = 'AI model load failed: ' + e.message; cb(false); return; }
+    cb(true);
+  };
+  const fetchScript = (u, ok, err) => { const sc = document.createElement('script'); sc.src = u; sc.onload = ok; sc.onerror = err; document.head.appendChild(sc); };
+  if (window[vr]) { done(); return; }
+  fetchScript(url, done, () => {
+    if (BATTLE) { url = './web/ai-model.js'; vr = 'POLY_AI_MODEL'; if (window[vr]) { done(); return; } fetchScript(url, done, () => { if (hud) hud.textContent = 'AI model missing (web/ai-model.js)'; cb(false); }); return; }   // (no battle network file: the solo one + the old item rule)
+    if (hud) hud.textContent = 'AI model missing (web/ai-model.js)'; cb(false);
+  });
+}
+
+function aiStart() {
+  if (ai.on || ai.loading || !aiIsRunning() || !window.PolyAI) return;
+  ai.loading = true; aiUpdateHud();
+  aiEnsureModel((ok) => {
+    ai.loading = false;
+    if (!ok || !aiIsRunning()) { aiUpdateHud(); return; }   // no model, or the game ended while loading
+    ai.on = true; ai.plan = null; ai.piece = null; ai.overAt = 0; ai.beliefValid = false; ai.lastAct = now(); ai.h = null; ai.snap = null; ai.gen = null;
+    state.vkspace2 = false;
+    aiUpdateHud();
+  });
+}
+function aiToggle() { if (ai.on) aiStop(); else aiStart(); }
+
+window.PolyAIControl = { toggle: aiToggle, start: aiStart, stop: aiStop, isOn: () => ai.on };
+// shell integration (Cheat > Solve Automatically): see ../autosolve-bridge.js
+if (window.PolyAutoSolve) {
+  window.PolyAutoSolve.register({ dim: 2, isRunning: aiIsRunning, isSolving: () => ai.on || ai.loading, start: aiStart, stop: aiStop });
+}
+window.addEventListener('keydown', (e) => {
+  if ((e.code === 'KeyA' && !e.repeat) || (e.code === 'F3' && !e.repeat)) { if (e.code === 'F3') e.preventDefault(); aiToggle(); }
+});
+// test/debug hook (not used by the game itself)
+
+// ---- battle mode: use a stored item on the own board ----
+// Location-dependent items need a cell: the tallest column / the top row of the stack are used (the item was not picked up at a spot).
+// Items whose effect depends on a centre (range / row / top delete) cannot use the spot where they were eaten, because battle-mode items are used later.
+// Their centre is the centre of a block: the block that is falling when the item is used (or, if none is falling, the next one), rounded to
+// whole cells and kept on the board. The effect happens when that block has locked.
+const BATTLE_POS = { 118: 1, 126: 1, 102: 1 };
+const _bq = [];      // codes of position items (row / column / top delete) that wait for a single cell of their own
+function battleMonoPiece() { return { cells: [[0, 0]], vals: [12], _mono: 0 }; }       // the yellow single cell of the mono-only item (a plain block: never special)
+function battleApplyStored(code) {
+  if (state.goverflg || state.startscreen) return;
+  if (BATTLE_POS[code]) {              // the NEXT block to fall is a single cell (shown in the preview); the item acts at its centre when it has locked
+    if (!state.nextblock._mono) { state.nextblock = battleMonoPiece(); state.nextblock._mono = code; state.nexthb = 0; } else _bq.push(code);
+    return;
+  }
+  const acc = { tline: 0 }, keep = state.board[0][0];
+  const res = applyItemCell(code, 0, 0, acc, state.reinforce > 0);
+  if (res !== 'reset' && state.board[0][0] === 256 && keep < 256 && ![5, 18, 19, 119, 200].includes(code)) state.board[0][0] = keep;   // the used item is not a cell of the board
+  settleBoard(res === 'reset' ? 0 : acc.tline);
+  if (state._ovf) overflowDie();
+}
+function battleLocked() {                       // called when a block has just been put on the board
+  const code = state.nowblock._mono || 0;
+  if (!code) return;
+  state.nowblock._mono = 0;
+  let sr = 0, sc = 0, n = state.nowblock.cells.length;
+  for (const [r, c] of state.nowblock.cells) { sr += state.blockpos[0] + r; sc += state.blockpos[1] + c; }
+  const row = Math.min(BOARD_H - 1, Math.max(0, Math.round(sr / n))), col = Math.min(BOARD_W - 1, Math.max(0, Math.round(sc / n)));   // the centre, rounded, kept on the board
+  window.__btCenter = [row, col];   // (for tests)
+  const acc = { tline: 0 };
+  const res = applyItemCell(code, row, col, acc, state.reinforce > 0);
+  settleBoard(res === 'reset' ? 0 : acc.tline);
+}
+// a small row of slots right above the special-block description line (see drawItemInfo)
+function battleSlotRect() {
+  const boardBottom = state.boardY + state.cellSize * BOARD_H;
+  const btnSize = Math.min(state.canvasW * 0.13, state.canvasH * 0.08);
+  const gapH = state.canvasH * 0.82 - btnSize - btnSize * 0.1 - boardBottom;
+  const textY = boardBottom + gapH * 0.5, blockSize = Math.min(gapH * 0.65, state.cellSize * 0.9), s = state.cellSize;
+  const left = state.canvasW * 0.18 - btnSize / 2;                                  // the left end of the box = the left line of the rotation buttons (see getButtonLayout)
+  const W = 2 * (state.boardX + state.cellSize * BOARD_W / 2 - left), H = (W - 3) / 10 + 3;     // the centre of the box = the centre of the board; exactly 10 square cells fit inside
+  return [left, textY - blockSize / 2 - H - 3, W, H];
+}
+// the item block images of the stored items (no border, no slot boxes: packed from the left)
+function battleDrawSlots() {
+  const B = window.PolyBattle; if (!B || !B.slots) return;
+  const r = battleSlotRect(), sz = (r[2] - 3) / B.SLOTS;
+  ctx.save(); ctx.strokeStyle = '#9ab'; ctx.lineWidth = 1.5; ctx.strokeRect(r[0] + 0.75, r[1] + 0.75, r[2] - 1.5, r[3] - 1.5); ctx.restore();   // the box around the 1x10 area (edge only)
+  for (let i = 0; i < B.slots.length; i++) drawCell(r[0] + 1.5 + i * sz + sz * 0.08, r[1] + 1.5 + sz * 0.08, sz * 0.84, sz * 0.84, B.slots[i]);   // packed from the left
+}
+// ---- battle mode: the opponent is rendered HERE from a sanitised state (nothing is copied from the other page) ----
+// every cell is only empty (0) / normal block (1) / special block (2): the type of a special block cannot be told
+function battleSnapshot() {
+  const cls = (v) => (v === 0 || v >= 256) ? 0 : (ITEM_DESC[v & 255] ? 2 : 1);
+  const board = new Uint8Array(BOARD_H * BOARD_W);
+  for (let r = 0; r < BOARD_H; r++) for (let c = 0; c < BOARD_W; c++) board[r * BOARD_W + c] = cls(state.board[r][c]);
+  const piece = [];
+  if (state.nowblock && state.nowblock.cells) for (let i = 0; i < state.nowblock.cells.length; i++) {
+    const [r, c] = state.nowblock.cells[i]; piece.push([state.blockpos[0] + r, state.blockpos[1] + c, cls(state.nowblock.vals[i])]);
+  }
+  return { board, piece, blind: state.blindboard > now() };       // (blind: the board is hidden from this player: its window is hidden for the opponent too)
+}
+function battleMakeOpp(areaEl, slotEl) {
+  const cv = document.createElement('canvas'), sc = document.createElement('canvas');
+  areaEl.appendChild(cv); slotEl.appendChild(sc);
+  const c1 = cv.getContext('2d'), c2 = sc.getContext('2d');
+  const FILL = ['', '#6e6e6e', '#a4a4a4'], EDGE = ['', '#555555', '#7e7e7e'];      // all normal blocks one grey, special blocks a slightly lighter grey
+  const fit = (c) => { const w = Math.max(1, c.clientWidth), h = Math.max(1, c.clientHeight); if (c.width !== w || c.height !== h) { c.width = w; c.height = h; } };
+  const cell = (g, x, y, s, k) => { const b = Math.max(1, s * 0.08); g.fillStyle = EDGE[k]; g.fillRect(x, y, s, s); g.fillStyle = FILL[k]; g.fillRect(x + b, y + b, s - 2 * b, s - 2 * b); };
+  return {
+    draw(snap, codes) {
+      fit(cv); fit(sc);
+      const cw = cv.width, cs = cw / BOARD_W, oy = cv.height - cs * BOARD_H;
+      c1.fillStyle = '#0a0a12'; c1.fillRect(0, 0, cw, cv.height);
+      c1.strokeStyle = '#1a1a2a'; c1.lineWidth = 1; c1.beginPath();
+      for (let r = 0; r <= BOARD_H; r++) { const y = oy + r * cs; c1.moveTo(0, y); c1.lineTo(cw, y); }
+      for (let c = 0; c <= BOARD_W; c++) { c1.moveTo(c * cs, oy); c1.lineTo(c * cs, cv.height); }
+      c1.stroke();
+      if (!snap.blind) for (let r = 0; r < BOARD_H; r++) for (let c = 0; c < BOARD_W; c++) { const k = snap.board[r * BOARD_W + c]; if (k) cell(c1, c * cs, oy + (BOARD_H - 1 - r) * cs, cs, k); }
+      if (!snap.blind) for (const [r, c, k] of snap.piece) if (r >= 0 && r < BOARD_H && c >= 0 && c < BOARD_W && k) cell(c1, c * cs, oy + (BOARD_H - 1 - r) * cs, cs, k);
+      c1.strokeStyle = '#445'; c1.strokeRect(0.5, oy + 0.5, cw - 1, cs * BOARD_H - 1);
+      // the opponent's stored items: real colours, packed from the left, 1 x 10 square cells
+      c2.fillStyle = '#05050e'; c2.fillRect(0, 0, sc.width, sc.height);
+      const sz = sc.width / 10;
+      _dc = c2;
+      for (let i = 0; i < codes.length && i < 10; i++) drawCell(i * sz + sz * 0.08, sz * 0.08, sz * 0.84, sz * 0.84, codes[i]);
+      _dc = ctx;
+    },
+    icon(code, sprite) {
+      const g = sprite.getContext('2d'); g.clearRect(0, 0, sprite.width, sprite.height);
+      _dc = g; drawCell(4, 4, sprite.width - 8, sprite.height - 8, code); _dc = ctx;
+    }
+  };
+}
+function battleBoardRect() { return [state.boardX, state.boardY, state.cellSize * BOARD_W, state.cellSize * BOARD_H]; }
+if (BATTLE) PolyBattle.attach({ itemDesc: (c) => ITEM_DESC[c], applyStored: battleApplyStored,
+  isReady: () => !!state.ready, autostart: () => { state.startscreen = 0; },
+  isPlaying: () => !!state.ready && !state.startscreen && !state.goverflg,
+  stats: () => ({ score: state.goverflg ? state.oscore : state.score, lines: state.lines, level: state.level, over: state.goverflg }),
+  pieceInfo: () => ({ pos: state.blockpos.slice(), cells: state.nowblock ? state.nowblock.cells.map((c) => [c[0], c[1]]) : [] }),
+  boardRect: battleBoardRect, snapshot: battleSnapshot, makeOppRenderer: battleMakeOpp,
+  background: () => ({ url: EMBEDDED_TEXTURES[1] || './assets/texture1.bmp', dim: '5,5,16,0.7' }), slotRect: battleSlotRect, restart: () => { state.goverflg = 0; },
+  forceOver: () => { if (state.ready && !state.startscreen && !state.goverflg) { gover(); initBlockState(); } },   // the other side died: this game ends too
+  overLayout: () => ({ resY: 0.085, msgY: 0.66, mask: [0.612, 0.788] }) });
+window.__poly = { battleBState: (typeof battleBState === 'function' ? battleBState : null), gover: () => gover(), state, ai, logicFrame: () => logicFrame(), init: () => initBlockState(), aiEnumerate: (f) => { aiBeginDecision(); return aiRunSlice(aiEnumerateG(f), Infinity).value; }, aiChildren: (p) => aiRunSlice(aiChildrenG(p), Infinity).value, aiExec, aiMakePlan, aiToggle, aiPressKey,
+  setItems: (v) => { itemsEnabled = v; } };
+
+function logicFrame() {
   handleTouches();
+  aiTick();
   if (state.ready && !state.startscreen && !state.pause && !state.goverflg) {
     updateFallingLogic();
   }
+}
+
+function drawFrame() {
+  if (window.__frameLog) { const t = performance.now(); if (window.__lastFrameT) window.__frameLog.push(t - window.__lastFrameT); window.__lastFrameT = t; }
+  logicFrame();
 
   if (state.startscreen === 1) drawStartScreen();
   else if (state.goverflg === 1) drawGameOverScreen();

@@ -1,0 +1,2 @@
+milestones (games reaching N lines before dying or the cap): {100: '100%', 500: '98%', 1000: '94%', 2000: '83%'} lines per piece 0.587
+DIM 3 ITEMS runs/y3/fin.pt: episodes 48 mean pieces 5313 median 6000 cap(6000) 81% mean lines 3119 mean score 232932

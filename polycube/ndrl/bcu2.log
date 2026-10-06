@@ -1,0 +1,8 @@
+collected 6195 states in 163 s; label shares [0.0, 0.469, 0.531, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+epoch 5 val accuracy 1.000
+epoch 10 val accuracy 1.000
+epoch 15 val accuracy 1.000
+epoch 20 val accuracy 1.000
+epoch 25 val accuracy 1.000
+epoch 30 val accuracy 1.000
+saved runs/use2/bc.pt

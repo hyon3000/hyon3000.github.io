@@ -20,7 +20,7 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 .windows { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
 .polycube-window { position: relative; display: flex; flex-direction: column; }
 .polycube-window .title-bar .title-icon {
-  background-image: url(polycube_icon.png);
+  background-image: url(polynomino/polynomino_icon.png);
   background-size: 16px 16px;
   image-rendering: pixelated !important;
 }
@@ -31,9 +31,11 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
   background: #000;
 }
 .polycube-window .window-content iframe { width: 100%; height: 100%; border: none; display: block; }
-li.menu_polytheme > ul.menu, li.menu_polyothergames > ul.menu {
+li.menu_polytheme > ul.menu, li.menu_polyothergames > ul.menu, li.menu_cheat > ul.menu {
   width: max-content !important; min-width: 150px !important;
 }
+li.menu_cheat > ul.menu .ui-menu-item-wrapper, li.menu_cheat > ul.menu .mi-label, li.menu_cheat > ul.menu .mi-key { white-space: nowrap !important; }
+li.menu_cheat > ul.menu .mi-key { float: right; margin-left: 24px; }
 </style>
 </head>
 <body>
@@ -41,7 +43,7 @@ li.menu_polytheme > ul.menu, li.menu_polyothergames > ul.menu {
   <div class="window has-menu polycube-window">
     <div class="title-bar">
       <div class="title-icon"></div>
-      <div class="title">Polycube</div>
+      <div class="title">Polynomino</div>
       <div class="title-button-group">
         <div class="title-button minimize"></div>
         <div class="title-button maximize disabled" onclick="event.preventDefault();event.stopPropagation();return false;"></div>
@@ -55,14 +57,15 @@ li.menu_polytheme > ul.menu, li.menu_polyothergames > ul.menu {
           <li class="menu_polytheme" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
             <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">　테마...</a>
             <ul class="menu">
-              <li class="poly-theme-polycube" onclick="return runMenu(function(){ switchToPolycube(); });"><a href="#">✓ 폴리큐브 (3D)</a></li>
-              <li class="poly-theme-polynomino" onclick="return runMenu(function(){ switchToPolynomino(); });"><a href="#">　폴리노미노 (2D)</a></li>
+              <li class="poly-theme-polycube" onclick="return runMenu(function(){ switchToPolycube(); });"><a href="#">　폴리큐브 (3D)</a></li>
+              <li class="poly-theme-polynomino" onclick="return runMenu(function(){ switchToPolynomino(); });"><a href="#">✓ 폴리노미노 (2D)</a></li>
               <li class="poly-theme-polytesseract" onclick="return runMenu(function(){ switchToPolytesseract(); });"><a href="#">　폴리테서렉트 (4D)</a></li>
             </ul>
           </li>
           <li class="poly-fullscreen" onclick="return runMenu(function(){ goFullscreen(); });"><a href="#">　전체화면</a></li>
           <li class="separator"></li>
           <li class="poly-item-toggle" onclick="return runMenu(function(){ toggleItems(); });"><a href="#">✓ 아이템 사용</a></li>
+          <li class="poly-battle-toggle" onclick="return runMenu(function(){ toggleBattle(); });"><a href="#">　대전 모드</a></li>
           <li class="separator"></li>
           <li class="poly-menuclose" onclick="return runMenu(function(){ $('.has-menu.polycube-window').css('visibility','hidden'); });">
             <a href="#">　끝내기(X)</a>
@@ -72,6 +75,15 @@ li.menu_polytheme > ul.menu, li.menu_polyothergames > ul.menu {
       <li>
         <a href="#" data-access-key="h" class="menu-help-top">도움말</a>
         <ul class="menu">
+          <li class="menu_cheat" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">　치트...</a>
+            <ul class="menu">
+              <li class="menu-autosolve" onclick="return runMenu(function(){ toggleAutoSolve(); });">
+                <a href="#"><span class="mi-label">　자동으로 풀기</span><span class="mi-key">F3</span></a>
+              </li>
+            </ul>
+          </li>
+          <li class="separator"></li>
           <li class="menu_polyothergames" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
             <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">　다른 게임</a>
             <ul class="menu">
@@ -85,7 +97,7 @@ li.menu_polytheme > ul.menu, li.menu_polyothergames > ul.menu {
       </li>
     </ul>
     <div class="window-content">
-      <iframe id="game" src="game.html"></iframe>
+      <iframe id="game" src="polynomino/game.html"></iframe>
     </div>
   </div>
 </div>
@@ -104,7 +116,7 @@ $(function() {
 function resize() {
   var vw = window.innerWidth, vh = window.innerHeight;
   var win = document.querySelector('.polycube-window');
-  var chrome = 46, ratio = 1/2, gw, gh;
+  var chrome = 46, ratio = battleMode ? 3/4 : 1/2, gw, gh;   // battle mode: 1.5x as wide
   if (vw / (vh - chrome) < ratio) { gw = vw - 8; gh = gw / ratio; }
   else { gh = vh - chrome - 8; gw = gh * ratio; }
   win.style.width = Math.floor(gw + 8) + 'px';
@@ -138,25 +150,61 @@ window.addEventListener('blur', closeAllMenus);
     if (ht) ht.textContent = 'Help';
     function st(sel, txt) { var el = document.querySelector(sel); if (el) { var a = el.querySelector('a'); if (a) a.textContent = txt; } }
     st('li.menu_polytheme', '\u3000Theme...');
-    st('li.poly-theme-polycube', '\u2713 Polycube (3D)');
-    st('li.poly-theme-polynomino', '\u3000Polynomino (2D)');
+    st('li.poly-theme-polycube', '\u3000Polycube (3D)');
+    st('li.poly-theme-polynomino', '\u2713 Polynomino (2D)');
     st('li.poly-theme-polytesseract', '\u3000Polytesseract (4D)');
     st('li.poly-theme-modern', '\u3000Modern');
     st('li.poly-theme-classic', '\u3000Classic');
     st('li.poly-fullscreen', '\u3000Fullscreen');
     st('li.poly-item-toggle', '\u2713 Items');
+    st('li.poly-battle-toggle', '\u3000Battle Mode');
     st('li.poly-menuclose', '\u3000Exit');
     st('li.menu_polyothergames', '\u3000Other Games');
+    st('li.menu_cheat', '\u3000Cheat...');
     st('li.poly-minesweeper', '\u3000Minesweeper');
   }
 })();
+
+// ---- Cheat > Solve Automatically (talks to the game iframe through autosolve-bridge.js) ----
+// The entry is never greyed out. The game decides: it only starts while a game is running, and a game that has no
+// auto-solve yet (3D / 4D for now) simply does not answer, so clicking does nothing.
+var autoSolveState = { solving: false };
+function autoSolveLabel() {
+  var ko = (navigator.language || '').toLowerCase().indexOf('ko') === 0;
+  if (autoSolveState.solving) return ko ? '　자동 풀기 중지' : '　Stop Auto-solve';
+  return ko ? '　자동으로 풀기' : '　Solve Automatically';
+}
+function refreshAutoSolveMenu() {
+  var el = document.querySelector('li.menu-autosolve .mi-label');
+  if (el) el.textContent = autoSolveLabel();
+}
+function postToGame(cmd) {
+  var f = document.getElementById('game');
+  try { if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'polycube-autosolve', cmd: cmd }, '*'); } catch (e) {}
+}
+function toggleAutoSolve() { postToGame('toggle'); }
+window.addEventListener('message', function (ev) {
+  var d = ev.data, f = document.getElementById('game');
+  if (!d || d.type !== 'polycube-autosolve-status' || !f || ev.source !== f.contentWindow) return;
+  autoSolveState.solving = !!(d.supported && d.solving);
+  refreshAutoSolveMenu();
+});
+document.getElementById('game').addEventListener('load', function () {
+  autoSolveState.solving = false; refreshAutoSolveMenu();
+  postToGame('status');
+});
+window.addEventListener('keydown', function (e) {
+  if (e.key === 'F3' && !e.repeat) { e.preventDefault(); toggleAutoSolve(); }
+});
+refreshAutoSolveMenu();
 var itemsEnabled = true;
+var battleMode = false;
 function syncItemsToGame() {
   // Reload the iframe with/without ?items=0 parameter
   var iframe = document.getElementById('game');
   if (!iframe) return;
   var src = iframe.src.split('?')[0];
-  iframe.src = src + (itemsEnabled ? '' : '?items=0');
+  iframe.src = src + gameParams();
 }
 function toggleItems() {
   itemsEnabled = !itemsEnabled;
@@ -176,7 +224,23 @@ function updateThemeChecks(active) {
     el.textContent = (items[i] === active ? '✓ ' : '\u3000') + name;
   }
 }
-function itemsParam() { return itemsEnabled ? '' : '?items=0'; }
+function gameParams() {
+  var p = [];
+  if (!itemsEnabled) p.push('items=0');
+  if (battleMode) p.push('battle=1');
+  return p.length ? '?' + p.join('&') : '';
+}
+function itemsParam() { return gameParams(); }
+function toggleBattle() {
+  battleMode = !battleMode;
+  var el = document.querySelector('.poly-battle-toggle a');
+  if (el) {
+    var name = el.textContent.trim().replace(/^[✓\u2713]\s*/, '').replace(/^\u3000/, '');
+    el.textContent = (battleMode ? '✓ ' : '\u3000') + name;
+  }
+  resize();
+  syncItemsToGame();
+}
 function switchToPolynomino() {
   document.getElementById('game').src = 'polynomino/game.html' + itemsParam();
   document.querySelector('.polycube-window .title').textContent = 'Polynomino';

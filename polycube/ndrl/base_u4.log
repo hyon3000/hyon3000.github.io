@@ -1,0 +1,4 @@
+DIM 4 ITEMS runs/y4/fin.pt: 61184 blocks played in 15.0 min, 1 deaths
+SCORE per block 34.20  (score per 1000 blocks 34196), lines per block 0.472
+death rate 1.63e-05 per block -> expected survival 61184 blocks  (95% interval 10981 .. 2416639)
+finished games: mean 760 blocks, median 760, longest 760; mean lines 427, mean score 132494

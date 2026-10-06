@@ -1,0 +1,1476 @@
+// Polynomino simulator — a line-by-line port of the game rules in web/app.js INCLUDING items:
+// piece generation, per-cell item assignment, move/moveDown with cancel(31)/pierce(30), rotation with
+// wall kicks + rotation lock, hold (+hold lock), self-destruct, time bombs, all line-clear item effects,
+// garbage lines, reinforce, scoring and the level curve.
+//
+// The RNG is mulberry32 and randInt(m)=floor(rand*m) so a JS harness that swaps Math.random for the same
+// generator reproduces games bit-for-bit (see test_lockstep.py). The order of RNG calls mirrors app.js.
+//
+// Real-time model: the AI may give ONE input every 200 ms (hold / rotate / move / hard drop); between inputs
+// the game's gravity runs on its real clock (level speed, speed-up/-down items). A decision is a whole plan
+// (optional hold, k rotations, horizontal moves, hard drop) that is enumerated by *executing* it, action by
+// action, on a copy of the game. While the board is hidden (blind item) or NEXT is hidden (hide-next item) the
+// agent only sees what a player would: a remembered/predicted board, no next/hold. Candidate evaluation uses an
+// independent RNG stream (no foresight of random effects); the chosen plan is then executed on the true game.
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <vector>
+
+static int CRISIS_HOLD_VAL = 30;   // which special mono piece waits in the hold of a bad-board start: 30 pierce, 31 cancel, 1 self-destruct
+static int CRISIS_BASE = 9, CRISIS_SPAN = 5;   // bad-board starts: 9..13 rows by default
+static long long INPUT_GAP = 200;   // ms between two AI inputs (200 = the rule of the web AI; changed only for diagnostics)
+#define W 10
+#define H 20
+#define MAXP 16
+#define MAXC 128
+#define SD 80       // per-decision event summary size
+#define MEMK 3      // memory time constants
+#define NF 371      // dense features (event memory is a recurrent net on the Python side; the sim only supplies event summaries)
+#define KIDS 64    // sparse item ids per candidate (board item cells + upcoming/held piece item cells)
+#define NT 37      // item types
+#define NIDS (NT * 200 + 2 * NT)
+
+struct Rng {
+  uint32_t a;
+  double next() {
+    a += 0x6D2B79F5u;
+    uint32_t t = a;
+    t = (t ^ (t >> 15)) * (t | 1u);
+    t ^= t + (t ^ (t >> 7)) * (t | 61u);
+    return (double)(t ^ (t >> 14)) / 4294967296.0;
+  }
+};
+
+struct Piece { int n; int r[MAXP], c[MAXP], v[MAXP]; };
+struct Raw { int n; int r[MAXP], c[MAXP]; int val; };
+static std::vector<Raw> RAW;
+
+static inline int fdiv(int a, int b) { int q = a / b; if ((a % b != 0) && ((a < 0) != (b < 0))) q--; return q; }
+static inline int jsround(double x) { return (int)std::floor(x + 0.5); }
+
+static void center(const Piece& p, int& cr, int& cc) {
+  int sr = 0, sc = 0;
+  for (int i = 0; i < p.n; i++) { sr += p.r[i]; sc += p.c[i]; }
+  cr = jsround((double)sr / p.n); cc = jsround((double)sc / p.n);
+}
+static void rotCW(Piece& p) {
+  int cr, cc; center(p, cr, cc);
+  for (int i = 0; i < p.n; i++) {
+    int r = p.r[i], c = p.c[i];
+    p.r[i] = -(c - cc) + cr; p.c[i] = (r - cr) + cc;
+  }
+  int nr, nc; center(p, nr, nc);
+  if (nr != cr || nc != cc) {
+    int dr = cr - nr, dc = cc - nc;
+    for (int i = 0; i < p.n; i++) { p.r[i] += dr; p.c[i] += dc; }
+  }
+}
+static void erasePiece(Piece& p, int i) {
+  for (int k = i; k + 1 < p.n; k++) { p.r[k] = p.r[k + 1]; p.c[k] = p.c[k + 1]; p.v[k] = p.v[k + 1]; }
+  p.n--;
+}
+
+static bool isItemVal(int v) {
+  switch (v) {
+    case 1: case 2: case 4: case 5: case 6: case 8: case 9: case 10: case 11: case 16: case 17: case 18: case 19:
+    case 20: case 21: case 22: case 30: case 31: case 91: case 102: case 104: case 116: case 117: case 118: case 119:
+    case 120: case 121: case 122: case 123: case 124: case 125: case 126: case 127: case 200: case 204: return true;
+  }
+  return false;
+}
+static bool isGoodVal(int v) {  // ITEM_GOOD in app.js
+  switch (v) {
+    case 1: case 4: case 9: case 20: case 21: case 30: case 31: case 102: case 104: case 116: case 117: case 118:
+    case 119: case 124: case 125: case 126: case 204: return true;
+  }
+  return false;
+}
+
+static int typeIndex(int vv);
+struct PL { int filled, tline; bool hard; };
+
+struct Env {
+  bool items, ovf = false;      // ovf: lines were added and pushed blocks out of the board = game over
+
+  uint16_t board[H][W];
+  Piece now, next, hold;
+  int nowhb, nexthb, holdhb;
+  int row, col;
+  int monoonly, spinlock, hideblock, hidenext, score2x, speedup, speeddown, holdlock, bombnext, simplify2, pentaForce, reinforce;
+  bool compactPending;
+  int asc, lines, level, pieces, assignMono, rfUpgrade;
+  long long score, serial;
+  long long f, ts, lastAct, nowT, blindUntil;  // frame clock (ms): frames < f are processed; ts = state.timestamp
+  int passiveLines, evBoom, evGarb;
+  short cTrig[NT], cPlaced[NT];  // cumulative: item types triggered by line clears / item cells locked on the board
+  int cBoom, cGarb, cHold;
+  double itemScale;
+  double crisisProb, crisisHold, pierceBoost;  // training curriculum: games that start on a bad board / more pierce pieces
+  double boostP; int nBoost; double boostCum[40]; int boostCode[40];  // curriculum: extra item probability per group
+  int itemMask;  // bit per item group that is allowed to appear (diagnostics); all groups by default
+  int* stats;  // optional event counters (only set on the real game, null on what-if copies)
+  // battle mode: eaten items go into a queue and are used on demand
+  bool battle; int16_t q[10]; int qn; int bq[16], nbq, tieNow, tieNext, tieHold;      // position items wait for a single cell of their own: tie* = the item of that block
+  Rng rng;
+
+  int randInt(int m) { return (int)(rng.next() * m); }
+
+  bool coll(const Piece& p, int row_, int col_) const {
+    for (int i = 0; i < p.n; i++) {
+      int br = row_ + p.r[i], bc = col_ + p.c[i];
+      if (bc < 0 || bc >= W || br < 0) return true;
+      if (br >= H) continue;
+      if (board[br][bc] != 0) return true;
+    }
+    return false;
+  }
+
+  // ---------- piece generation ----------
+  void createNewBlock(Piece& out, int& val) {
+    int bc_ = randInt(32768), blockcnt;
+    if (bc_ > 8192) blockcnt = 6; else if (bc_ > 2048) blockcnt = 7; else if (bc_ > 512) blockcnt = 8;
+    else if (bc_ > 128) blockcnt = 9; else if (bc_ > 32) blockcnt = 10; else if (bc_ > 8) blockcnt = 11;
+    else if (bc_ > 4) blockcnt = 12; else if (bc_ > 2) blockcnt = 13; else blockcnt = 14;
+    const int S = 7;
+    int grid[S][S]; memset(grid, 0, sizeof grid);
+    int r = 3, c = 3, cnt = 0, stuck = 0;
+    switch (blockcnt) { case 6: val = 207; break; case 7: val = 206; break; case 8: val = 205; break; case 9: val = 203; break;
+      case 10: val = 202; break; case 11: val = 201; break; case 12: val = 199; break; case 13: val = 198; break; default: val = 197; }
+    while (cnt < blockcnt) {
+      if (grid[r][c] == 0) { grid[r][c] = 1; cnt++; stuck = 0; }
+      else {
+        stuck++;
+        if (stuck > 20) {
+          int ar[S * S * 4], ac[S * S * 4], na = 0;
+          for (int rr = 0; rr < S; rr++) for (int cc = 0; cc < S; cc++) if (grid[rr][cc]) {
+            if (rr > 0 && !grid[rr - 1][cc]) { ar[na] = rr - 1; ac[na++] = cc; }
+            if (rr < S - 1 && !grid[rr + 1][cc]) { ar[na] = rr + 1; ac[na++] = cc; }
+            if (cc > 0 && !grid[rr][cc - 1]) { ar[na] = rr; ac[na++] = cc - 1; }
+            if (cc < S - 1 && !grid[rr][cc + 1]) { ar[na] = rr; ac[na++] = cc + 1; }
+          }
+          if (na > 0) { int k = randInt(na); r = ar[k]; c = ac[k]; stuck = 0; continue; }
+        }
+      }
+      switch (randInt(4)) {
+        case 0: r = std::min(S - 1, r + 1); break;
+        case 1: r = std::max(0, r - 1); break;
+        case 2: c = std::min(S - 1, c + 1); break;
+        default: c = std::max(0, c - 1); break;
+      }
+    }
+    out.n = 0;
+    int rMin = S, rMax = 0, cMin = S, cMax = 0;
+    for (int rr = 0; rr < S; rr++) for (int cc = 0; cc < S; cc++) if (grid[rr][cc]) {
+      out.r[out.n] = rr; out.c[out.n] = cc; out.n++;
+      rMin = std::min(rMin, rr); rMax = std::max(rMax, rr); cMin = std::min(cMin, cc); cMax = std::max(cMax, cc);
+    }
+    int cr = (rMin + rMax) / 2, cc2 = (cMin + cMax) / 2;
+    for (int i = 0; i < out.n; i++) { out.r[i] -= cr; out.c[i] -= cc2; }
+  }
+
+  int chooseBaseBlockIndex() {
+    int b1, b2, b3, b4, b5, L = level;
+    if (L == 1) { b1 = 5; b2 = 15; b3 = 30; b4 = 100; b5 = 100; }
+    else if (L == 2) { b1 = 3; b2 = 10; b3 = 20; b4 = 98; b5 = 100; }
+    else if (L == 3) { b1 = 2; b2 = 5; b3 = 15; b4 = 95; b5 = 100; }
+    else if (L == 4) { b1 = 2; b2 = 4; b3 = 17; b4 = 93; b5 = 99; }
+    else if (L <= 6) { b1 = 2; b2 = 4; b3 = 16; b4 = 90; b5 = 99; }
+    else if (L <= 8) { b1 = 1; b2 = 3; b3 = 16; b4 = 88; b5 = 99; }
+    else if (L <= 11) { b1 = 1; b2 = 3; b3 = 15; b4 = 86; b5 = 98; }
+    else if (L <= 15) { b1 = 1; b2 = 3; b3 = 15; b4 = 84; b5 = 98; }
+    else { b1 = 1; b2 = 3; b3 = 15; b4 = 82; b5 = 98; }
+    if (monoonly) { b1 = 100; b2 = 100; b3 = 100; b4 = 100; monoonly -= 1; }
+    if (simplify2 > 0) { simplify2 -= 1; return randInt(4); }
+    if (pentaForce > 0) { pentaForce -= 1; return 11 + randInt(18); }
+    int t = randInt(100);
+    int nraw = (int)RAW.size();
+    if (t < b1) t = 0;
+    else if (t < b2) t = 1;
+    else if (t < b3) t = 2 + randInt(2);
+    else if (t < b4) t = 4 + randInt(7);
+    else if (t < b5) t = 11 + randInt(18);
+    else {
+      if (randInt(3) == 0) return -1;
+      t = 29 + randInt(std::max(1, nraw - 29));
+      if (t >= nraw) return -1;
+    }
+    return t;
+  }
+
+  // item groups (bit index): 0 bombs, 1 +lines (117,125), 2 obstacles (11), 3 shuffles (hole,zigzag,mirror,item-clear),
+  // 4 timing/visibility, 5 piece-size, 6 -lines (116,124), 7 range delete (118), 8 top clear/row del/full clear (102,126,119),
+  // 9 gap clear (20), 10 score x4 / reinforce (4,204), 11 special mono pieces (cancel/pierce/self-destruct)
+  static int itemGroup(int code) {
+    switch (code) {
+      case 120: case 121: case 122: case 123: case 127: case 17: return 0;
+      case 117: case 125: return 1;
+      case 11: return 2;
+      case 18: case 19: case 200: case 5: return 3;
+      case 8: case 9: case 10: case 91: case 2: case 6: case 16: return 4;
+      case 21: case 22: case 104: return 5;
+      case 116: case 124: return 6;
+      case 118: return 7;
+      case 102: case 126: case 119: return 8;
+      case 20: return 9;
+      default: return 10;   // 4, 204
+    }
+  }
+  // item base probabilities (per 1e6 cells) copied from the thresholds below; used to boost chosen groups
+  void setGroupScale(const double* sc) {
+    static const int code[32] = {116,117,118,119,104,120,121,122,123,124,125,91,102,126,127,17,20,21,22,16,11,2,8,9,10,5,6,204,4,200,19,18};
+    static const int w[32]    = {100,300,300,20,800,2500,1250,850,400,50,800,250,100,400,300,100,200,800,800,250,200,250,1000,1000,250,1000,250,300,10000,300,300,300};
+    nBoost = 0; boostP = 0;
+    double cum = 0;
+    for (int i = 0; i < 32; i++) {
+      double extra = (sc[itemGroup(code[i])] - 1.0) * w[i] / 1e6;
+      if (extra <= 0) continue;
+      cum += extra; boostCum[nBoost] = cum; boostCode[nBoost] = code[i]; nBoost++;
+    }
+    boostP = cum;
+  }
+  int assignCellValue0(int baseVal) {
+    if (baseVal == 0) return 0;
+    if (!items) return baseVal;
+    if (boostP > 0) {  // extra chance of an item from the boosted groups (only drawn while a curriculum is active)
+      double r2 = rng.next();
+      if (r2 < boostP) { for (int i = 0; i < nBoost; i++) if (r2 < boostCum[i]) return boostCode[i]; }
+    }
+    int a = randInt(16384); int b = randInt(16384);
+    long long u = ((long long)a + (long long)b * 16384) % 1000000;
+    if (itemScale != 1.0) u = (long long)((double)u / itemScale);  // curriculum: more items
+    if (u < 100) return 116;
+    if (u < 400) return 117;
+    if (u < 700) return 118;
+    if (u < 720) return 119;
+    if (u < 1520) return 104;
+    if (u < 4020) return 120;
+    if (u < 5270) return 121;
+    if (u < 6120) return 122;
+    if (u < 6520) return 123;
+    if (u < 6570) return 124;
+    if (u < 7370) return 125;
+    if (u < 7620) return 91;
+    if (u < 7720) return 102;
+    if (u < 8120) return 126;
+    if (u < 8420) return 127;
+    if (u < 8520) return 17;
+    if (u < 8720) return 20;
+    if (u < 9520) return 21;
+    if (u < 10320) return 22;
+    if (u < 10570) return 16;
+    if (u < 10770) return 11;
+    if (u < 11020) return 2;
+    if (u < 12020) return 8;
+    if (u < 13020) return 9;
+    if (u < 13270) return 10;
+    if (u < 14270) return 5;
+    if (u < 14520) return 6;
+    if (u < 14820) return 204;
+    if (u < 24820) return (battle && randInt(16) != 0) ? baseVal : 4;      // battle mode: the score-boost ('steal') block is 1/16 as common
+    if (u < 25120) return 200;
+    if (u < 25420) return 19;
+    if (u < 25720) return 18;
+    if (assignMono) {
+      int mr = randInt(100);
+      if (mr < 10) return 1;
+      if (mr < 20) {
+        if (reinforce > 0) { rfUpgrade = 30; return baseVal; }
+        nexthb = 1; return 30;
+      }
+      if (mr < 60) {
+        if (reinforce > 0) { rfUpgrade = 31; return baseVal; }
+        return 31;
+      }
+    }
+    if (monoonly || (simplify2 > 0 && assignMono)) return 12 + randInt(4);
+    return baseVal;
+  }
+
+  int assignCellValue(int baseVal) {
+    int v = assignCellValue0(baseVal);
+    if (itemMask == 0xfff || !items) return v;
+    if (v == baseVal) return v;
+    int g = (v == 1 || v == 30 || v == 31) ? 11 : itemGroup(v);
+    if (v >= 12 && v <= 15) return v;      // mono-only colours are not items
+    if (!(itemMask >> g & 1)) { if (g == 11) nexthb = 0; return baseVal; }
+    return v;
+  }
+
+  Piece generateBlock() {
+    int idx = chooseBaseBlockIndex();
+    Piece p; int baseVal;
+    if (idx == -1 || idx >= (int)RAW.size()) { createNewBlock(p, baseVal); }
+    else { const Raw& s = RAW[idx]; p.n = s.n; for (int i = 0; i < s.n; i++) { p.r[i] = s.r[i]; p.c[i] = s.c[i]; } baseVal = s.val; }
+    bool isMono = (idx == 0) || (p.n == 1);
+    assignMono = isMono;
+    for (int i = 0; i < p.n; i++) p.v[i] = assignCellValue(baseVal);
+    assignMono = 0;
+    int rots = randInt(4);
+    for (int i = 0; i < rots; i++) rotCW(p);
+    if (bombnext > 0) {
+      static const int bombTypes[5] = {120, 121, 122, 123, 127};
+      int bombCount = p.n >= 5 ? 2 : 1;
+      bool used[MAXP] = {false};
+      for (int b = 0; b < bombCount && b < p.n; b++) {
+        int bi;
+        do { bi = randInt(p.n); } while (used[bi]);
+        used[bi] = true;
+        p.v[bi] = bombTypes[randInt(5)];
+      }
+      bombnext -= 1;
+    }
+    if (simplify2 > 0) {
+      int sr = randInt(100);
+      if (sr < 40) { for (int i = 0; i < p.n; i++) p.v[i] = 31; nexthb = 0; }
+      else if (sr < 50) {
+        int sv = randInt(2) == 0 ? 30 : 1;
+        if (sv == 30) nexthb = 1;
+        for (int i = 0; i < p.n; i++) p.v[i] = sv;
+      }
+    }
+    if (rfUpgrade) {
+      int code = rfUpgrade; rfUpgrade = 0;
+      int ridx = 2 + randInt(2);
+      if (ridx < (int)RAW.size()) {
+        const Raw& s = RAW[ridx];
+        p.n = s.n; for (int i = 0; i < s.n; i++) { p.r[i] = s.r[i]; p.c[i] = s.c[i]; p.v[i] = code; }
+        if (code == 30) nexthb = 1; else nexthb = 0;
+        int rr = randInt(4);
+        for (int i = 0; i < rr; i++) rotCW(p);
+      }
+    }
+    if (pierceBoost > 0 && items && rng.next() < pierceBoost) { p.n = 1; p.r[0] = 0; p.c[0] = 0; p.v[0] = 30; nexthb = 1; }   // curriculum
+    return p;
+  }
+
+  // ---------- turn flow ----------
+  void applySpecialAging() {
+    for (int r = 0; r < H; r++) for (int c = 0; c < W; c++) {
+      int value = board[r][c];
+      if (120 <= value && value < 123) board[r][c] += 1;
+      else if (value == 123) {
+        evBoom++; cBoom++;
+        if (stats) stats[256]++;
+        int rg = reinforce > 0 ? 2 : 1;
+        for (int r2 = r - rg; r2 <= r + rg; r2++) for (int c2 = c - rg; c2 <= c + rg; c2++)
+          if (r2 >= 0 && r2 < H && c2 >= 0 && c2 < W) board[r2][c2] = randInt(4) != 0 ? 98 : 0;
+      } else if (value == 32) {
+        for (int r2 = r - 1; r2 <= r + 1; r2++) for (int c2 = c - 1; c2 <= c + 1; c2++)
+          if (r2 >= 0 && r2 < H && c2 >= 0 && c2 < W) board[r2][c2] = 0;
+      }
+    }
+  }
+
+  bool setnext() {  // returns true on spawn collision
+    asc = 0;
+    now = next; nowhb = nexthb; nexthb = 0; serial++; pieces++; tieNow = tieNext;
+    applySpecialAging();
+    next = generateBlock(); tieNext = 0;
+    if (battle && nbq > 0) { makeMono(next); tieNext = bq[0]; for (int k = 1; k < nbq; k++) bq[k - 1] = bq[k]; nbq--; }   // battle mode: the block after a position item is a plain single cell of its own
+    int minR = 1 << 30, maxR = -(1 << 30), minC = 1 << 30, maxC = -(1 << 30);
+    for (int i = 0; i < now.n; i++) {
+      minR = std::min(minR, now.r[i]); maxR = std::max(maxR, now.r[i]);
+      minC = std::min(minC, now.c[i]); maxC = std::max(maxC, now.c[i]);
+    }
+    int startRow = H - 1 - maxR;
+    int adj = W / 2 - fdiv(minC + maxC, 2);
+    int left = adj + minC, right = adj + maxC;
+    if (left < 0) adj -= left;
+    if (right >= W) adj -= (right - W + 1);
+    row = startRow; col = adj;
+    return coll(now, row, col);
+  }
+
+  // tDeath < 0: fresh start. Otherwise mirrors the game-over screen (1.2 s wait) of the AI loop in app.js.
+  void reset(long long tDeath = -1) {
+    ovf = false;
+    memset(board, 0, sizeof board); qn = 0; nbq = 0; tieNow = tieNext = tieHold = 0;
+    if (tDeath < 0) { f = 100000; lastAct = f - INPUT_GAP; } else { f = tDeath + 1202; lastAct = tDeath + 1203 - INPUT_GAP; }
+    nowT = f; ts = 0; blindUntil = 0; passiveLines = 0;
+    nowhb = nexthb = holdhb = 0;
+    level = 1; lines = 0; pieces = 0; score = 0; asc = 0; serial = 0;
+    monoonly = spinlock = hideblock = hidenext = score2x = speedup = speeddown = holdlock = bombnext = simplify2 = pentaForce = reinforce = 0;
+    compactPending = false; assignMono = 0; rfUpgrade = 0;
+    memset(cTrig, 0, sizeof cTrig); memset(cPlaced, 0, sizeof cPlaced); cBoom = cGarb = cHold = 0;
+    int hv = 4;
+    if (items) {
+      int mr = randInt(100);
+      if (mr < 10) hv = 1;
+      else if (mr < 20) { hv = 30; holdhb = 1; }
+      else if (mr < 60) hv = 31;
+      else {
+        int u = randInt(250000);
+        if (u < 100) hv = 116; else if (u < 400) hv = 117; else if (u < 700) hv = 118; else if (u < 720) hv = 119;
+        else if (u < 1520) hv = 104; else if (u < 2020) hv = 120; else if (u < 3020) hv = 121; else if (u < 3720) hv = 122;
+        else if (u < 4020) hv = 123; else if (u < 4070) hv = 124; else if (u < 4870) hv = 125; else if (u < 5120) hv = 91;
+        else if (u < 5220) hv = 102; else if (u < 5620) hv = 126; else if (u < 5920) hv = 127; else if (u < 6020) hv = 17;
+        else if (u < 6220) hv = 20; else if (u < 7020) hv = 21; else if (u < 7820) hv = 22; else if (u < 8070) hv = 16;
+        else if (u < 8270) hv = 11; else if (u < 8920) hv = 2; else if (u < 9920) hv = 8; else if (u < 10920) hv = 9;
+        else if (u < 11170) hv = 10; else if (u < 12170) hv = 5; else if (u < 12420) hv = 6; else if (u < 12720) hv = 204;
+        else if (u < 14970) hv = 120; else if (u < 24970) hv = 200; else if (u < 25270) hv = 19; else if (u < 25570) hv = 18;
+      }
+    } else hv = 65;
+    if (battle && hv == 4 && randInt(16) != 0) hv = 65;                      // battle mode: the score-boost block is 1/16 as common
+    hold.n = 1; hold.r[0] = 0; hold.c[0] = 0; hold.v[0] = hv;
+    if (crisisProb > 0 && rng.next() < crisisProb) {   // curriculum: start on a bad board (9-13 rows of holey junk, no full rows)
+      int hgt = CRISIS_BASE + randInt(CRISIS_SPAN);
+      for (int r = 0; r < hgt; r++) { int hole = randInt(W); for (int c = 0; c < W; c++) board[r][c] = (c != hole && rng.next() < 0.8) ? 66 : 0; }
+      if (items && crisisHold > 0 && rng.next() < crisisHold) { hold.v[0] = CRISIS_HOLD_VAL; holdhb = CRISIS_HOLD_VAL == 30 ? 1 : 0; }   // ... often with a special piece in the hold
+    }
+    next = generateBlock();
+    setnext();
+  }
+
+  // ---------- movement ----------
+  int move(int dcol) {
+    int newCol = col + dcol;
+    if (nowhb == 0) {
+      bool hasHard = false, hasSoft = false;
+      for (int i = 0; i < now.n; i++) {
+        int br = row + now.r[i], bc = newCol + now.c[i];
+        if (bc < 0 || bc >= W || br < 0) { hasHard = true; break; }
+        if (br >= H) continue;
+        int cell = board[br][bc];
+        if (cell == 0) continue;
+        int myVal = now.v[i];
+        if ((cell == 31 && myVal != 31) || (myVal == 31 && cell != 0 && cell != 31)) { hasSoft = true; continue; }
+        hasHard = true; break;
+      }
+      if (hasHard) return 1;
+      if (hasSoft) {
+        for (int i = now.n - 1; i >= 0; i--) {
+          int br = row + now.r[i], bc = newCol + now.c[i];
+          if (br < 0 || br >= H) continue;
+          int cell = board[br][bc], myVal = now.v[i];
+          if ((cell == 31 && myVal != 31) || (myVal == 31 && cell != 0 && cell != 31)) {
+            board[br][bc] = 0; erasePiece(now, i); score += 40;
+          }
+        }
+        if (now.n == 0) { setnext(); return 2; }
+      }
+      col = newCol;
+      return 0;
+    }
+    if (nowhb == 1) {
+      for (int i = 0; i < now.n; i++) {
+        if (newCol + now.c[i] < 0 || newCol + now.c[i] >= W || row + now.r[i] < 0) return 1;
+      }
+      for (int i = now.n - 1; i >= 0; i--) {
+        int br = row + now.r[i], bc = newCol + now.c[i];
+        if (br >= H || br < 0) continue;
+        int cell = board[br][bc];
+        if (cell == 31 || cell == 30) { board[br][bc] = 0; erasePiece(now, i); score += 40; }
+        else if (cell != 0) board[br][bc] = 0;
+      }
+      if (now.n == 0) { setnext(); return 2; }
+      col = newCol;
+      return 0;
+    }
+    if (!coll(now, row, newCol)) { col = newCol; return 0; }
+    return 1;
+  }
+
+  int moveDown() {
+    int newRow = row - 1;
+    if (nowhb == 0) {
+      for (int i = 0; i < now.n; i++) {
+        int br = newRow + now.r[i], bc = col + now.c[i];
+        if (bc < 0 || bc >= W || br < 0) return 1;
+        if (br >= H) continue;
+        int cell = board[br][bc], myVal = now.v[i];
+        if ((cell == 31 && myVal != 31) || (myVal == 31 && cell != 0 && cell != 31)) continue;
+        if (cell != 0) return 1;
+      }
+    } else if (nowhb == 1) {
+      for (int i = 0; i < now.n; i++) {
+        int br = newRow + now.r[i], bc = col + now.c[i];
+        if (bc < 0 || bc >= W || br < 0) return 1;
+      }
+    }
+    while (true) {
+      bool restart = false;
+      for (int i = 0; i < now.n; i++) {
+        int br = newRow + now.r[i], bc = col + now.c[i];
+        if (bc < 0 || bc >= W) return 1;
+        if (br < 0) return 1;
+        if (br >= H) continue;
+        int cell = board[br][bc];
+        if (nowhb == 0) {
+          if (cell == 31 && now.v[i] != 31) {
+            board[br][bc] = 0; erasePiece(now, i); score += 40;
+            if (now.n == 0) { setnext(); return 2; }
+            restart = true; break;
+          }
+          if (now.v[i] == 31 && cell != 0 && cell != 31) {
+            board[br][bc] = 0; erasePiece(now, i); score += 40;
+            if (now.n == 0) { setnext(); return 2; }
+            restart = true; break;
+          }
+          if (cell != 0) return 1;
+        } else if (nowhb == 1) {
+          if (cell == 31 || cell == 30) {
+            board[br][bc] = 0; erasePiece(now, i); score += 40;
+            if (now.n == 0) { setnext(); return 2; }
+            restart = true; break;
+          }
+          if (cell != 0) board[br][bc] = 0;
+        }
+      }
+      if (restart) continue;
+      row = newRow;
+      return 0;
+    }
+  }
+
+  bool rotate() {  // true if the piece actually rotated
+    if (spinlock != 0) return false;
+    Piece t = now; rotCW(t);
+    if (!coll(t, row, col)) { now = t; return true; }
+    static const int K[8][2] = {{0, 1}, {0, -1}, {0, 2}, {0, -2}, {1, 0}, {-1, 0}, {1, 1}, {1, -1}};
+    for (auto& k : K) if (!coll(t, row + k[0], col + k[1])) { now = t; row += k[0]; col += k[1]; return true; }
+    return false;
+  }
+
+  void tryHold() {
+    if (hidenext != 0) return;
+    if (holdlock != 0) return;
+    if (holdhb == 1) {
+      for (int i = 0; i < hold.n; i++) {
+        int br = row + hold.r[i], bc = col + hold.c[i];
+        if (bc < 0 || bc >= W || br < 0) return;
+        if (br >= H) continue;
+        if (board[br][bc] == 31 || board[br][bc] == 30) return;
+      }
+    } else if (coll(hold, row, col)) return;
+    std::swap(now, hold); std::swap(nowhb, holdhb); std::swap(tieNow, tieHold); serial++; cHold++;
+    if (nowhb == 1) {
+      for (int i = 0; i < now.n; i++) {
+        int br = row + now.r[i], bc = col + now.c[i];
+        if (br >= 0 && br < H && bc >= 0 && bc < W && board[br][bc] != 0) board[br][bc] = 0;
+      }
+    }
+  }
+
+  // ---------- lock / line clear ----------
+  static int resolveColumn(const int* col_, int n, int* res) {
+    int m = 0;
+    for (int k = 0; k < n; k++) {
+      res[m++] = col_[k];
+      bool changed = true;
+      while (changed && m >= 2) {
+        changed = false;
+        int top = res[m - 1], below = res[m - 2];
+        bool t30 = (top & 255) == 30, t31 = (top & 255) == 31, b30 = (below & 255) == 30, b31 = (below & 255) == 31;
+        bool tS = t30 || t31, bS = b30 || b31;
+        if (t30 && !bS) { res[m - 2] = res[m - 1]; m--; changed = true; }
+        else if (t30 && b30) { m -= 2; changed = true; }
+        else if ((t30 && b31) || (t31 && b30)) { m -= 2; changed = true; }
+        else if ((t31 && !bS) || (!tS && b31)) { m -= 2; changed = true; }
+      }
+    }
+    return m;
+  }
+
+  bool stickblock() {
+    asc = 0;
+    for (int i = 0; i < now.n; i++) {
+      int br = row + now.r[i], bc = col + now.c[i];
+      if (br < 0 || br >= H || bc < 0 || bc >= W) continue;
+      int it = 0, jt = 0;
+      if (br == 0 || (br > 0 && board[br - 1][bc] != 0)) it++;
+      if (br == H - 1 || (br < H - 1 && board[br + 1][bc] != 0)) it++;
+      if (bc == 0 || (bc > 0 && board[br][bc - 1] != 0)) it++;
+      if (bc == W - 1 || (bc < W - 1 && board[br][bc + 1] != 0)) it++;
+      for (int j = 0; j < now.n; j++) {
+        if (j == i) continue;
+        int dr = (row + now.r[j]) - br, dc = (col + now.c[j]) - bc;
+        if (std::abs(dr) + std::abs(dc) == 1) jt++;
+      }
+      if (jt < 2 && it + jt > 2) asc++;
+    }
+    if (asc != 0) asc--;
+    if (asc != 0) score += 50LL * (1LL << (2 * asc));
+    for (int i = 0; i < now.n; i++) {
+      int br = row + now.r[i], bc = col + now.c[i];
+      if (br >= H) return true;
+      if (br >= 0 && br < H && bc >= 0 && bc < W) { board[br][bc] = now.v[i]; int ti = typeIndex(now.v[i] & 255); if (ti >= 0) cPlaced[ti]++; }
+      if (stats && isItemVal(now.v[i] & 255)) stats[300 + (now.v[i] & 255)]++;
+    }
+    int sd = reinforce > 0 ? 2 : 1;
+    for (int i = 0; i < now.n; i++) {
+      if ((now.v[i] & 255) == 1) {
+        int br = row + now.r[i], bc = col + now.c[i];
+        for (int r2 = br - sd; r2 <= br + sd; r2++) for (int c2 = bc - sd; c2 <= bc + sd; c2++)
+          if (r2 >= 0 && r2 < H && c2 >= 0 && c2 < W) board[r2][c2] = 0;
+      }
+    }
+    if (nowhb == 1) {
+      for (int c = 0; c < W; c++) {
+        int colv[H], res[H + 2], n = 0;
+        for (int r = 0; r < H; r++) if (board[r][c] != 0) colv[n++] = board[r][c];
+        int m = resolveColumn(colv, n, res);
+        for (int r = 0; r < H; r++) board[r][c] = r < m ? res[r] : 0;
+      }
+    }
+    if (battle) battleLocked();
+    return setnext();
+  }
+
+  // ---------- battle mode ----------
+  static bool storable(int code) { return isItemVal(code) && !(code == 1 || code == 30 || code == 31 || code == 98 || code == 103 || (code >= 120 && code <= 123)); }
+  static bool positionalItem(int code) { return code == 118 || code == 126 || code == 102; }
+  // effect of ONE item cell (code) at (r, c); tline collects the +/- line items. Returns -1 when the board was wiped (full clear).
+  int applyCell(int code, int r, int c, int& tline) {
+    bool enf = reinforce > 0;
+    if (code == 116) { tline -= (enf ? 4 : 2); board[r][c] = 256; }
+    else if (code == 117) { tline += (enf ? 4 : 2); board[r][c] = 256; }
+    else if (code == 118) {
+      board[r][c] = 256;
+      int rg = enf ? 2 : 1;
+      for (int c2 = c - rg; c2 <= c + rg; c2++) if (c2 >= 0 && c2 < W) for (int r2 = 0; r2 < H; r2++) board[r2][c2] |= 256;
+    } else if (code == 119) {
+      memset(board, 0, sizeof board);
+      return -1;
+    } else if (code == 104) { simplify2 = 0; pentaForce = 0; monoonly += (enf ? 22 : 11); board[r][c] = 256; }
+    else if (code == 124) { tline -= (enf ? 6 : 3); board[r][c] = 256; }
+    else if (code == 125) { tline += (enf ? 2 : 1); board[r][c] = 256; }
+    else if (code == 91) { spinlock += (enf ? 20 : 10); board[r][c] = 256; }
+    else if (code == 8) { speedup += (enf ? 20 : 10); board[r][c] = 256; }
+    else if (code == 9) { speeddown += (enf ? 20 : 10); board[r][c] = 256; }
+    else if (code == 10) { holdlock += (enf ? 30 : 15); board[r][c] = 256; }
+    else if (code == 16) { blindUntil = nowT + (enf ? 20000 : 10000); board[r][c] = 256; }
+    else if (code == 17) { bombnext += (enf ? 12 : 6); board[r][c] = 256; }
+    else if (code == 20) { compactPending = true; board[r][c] = 256; }
+    else if (code == 21) { monoonly = 0; pentaForce = 0; simplify2 += (enf ? 18 : 9); board[r][c] = 256; }
+    else if (code == 22) { monoonly = 0; simplify2 = 0; pentaForce += (enf ? 18 : 9); board[r][c] = 256; }
+    else if (code == 2) { hideblock += (enf ? 20 : 10); board[r][c] = 256; }
+    else if (code == 6) { hidenext += (enf ? 40 : 20); board[r][c] = 256; }
+    else if (code == 5) {
+      if (enf) {
+        int minV = 999;
+        for (int r2 = 0; r2 < H; r2++) for (int c2 = 0; c2 < W; c2++) {
+          int v = board[r2][c2];
+          if (v != 0 && v < 256) { int cv = 33 + (v % 31); if (cv < minV) minV = cv; }
+        }
+        if (minV < 999)
+          for (int r2 = 0; r2 < H; r2++) for (int c2 = 0; c2 < W; c2++)
+            if (board[r2][c2] != 0 && board[r2][c2] < 256) board[r2][c2] = minV;
+      } else {
+        for (int r2 = 0; r2 < H; r2++) for (int c2 = 0; c2 < W; c2++)
+          if (board[r2][c2] != 0 && board[r2][c2] != 256) board[r2][c2] = 33 + (board[r2][c2] % 31);
+      }
+      board[r][c] = 256;
+    } else if (code == 204) { reinforce = 20; board[r][c] = 256; }
+    else if (code == 4) { if (!battle) score2x += (enf ? 2 : 1); board[r][c] = 256; }
+    else if (code == 11) {
+      board[r][c] = 256;
+      int obsMax = enf ? 5 : 3, count = 0;
+      for (int i = 0; i < 50; i++) {
+        int rr = randInt(H - 1), cc = randInt(W - 1);
+        if (board[rr][cc] == 0 && board[rr][cc + 1] == 0 && (rr + 1 >= H || board[rr + 1][cc] == 0)) {
+          count += 1; board[rr][cc] = 103;
+        }
+        if (count == obsMax) break;
+      }
+    } else if (code == 102) {
+      for (int r2 = r; r2 < H; r2++) for (int c2 = 0; c2 < W; c2++) board[r2][c2] = 256;
+    } else if (code == 126) {
+      board[r][c] = 256;
+      int rg = enf ? 2 : 1;
+      for (int r2 = r - rg; r2 <= r + rg; r2++) if (r2 >= 0 && r2 < H) for (int c2 = 0; c2 < W; c2++) board[r2][c2] |= 256;
+    } else if (code == 127) {
+      int rate = reinforce > 0 ? 50 : 20;
+      board[r][c] |= 256;
+      for (int r2 = 0; r2 < H; r2++) for (int c2 = 0; c2 < W; c2++)
+        if ((board[r2][c2] & 255) != 0 && randInt(100) < rate) board[r2][c2] = (board[r2][c2] & 256) + 120 + randInt(4);
+    } else if (code == 18) {
+      board[r][c] |= 256;
+      for (int r2 = 0; r2 < H; r2++) for (int c2 = 0; c2 < W; c2++)
+        if ((board[r2][c2] & 255) != 0 && randInt(100) < (enf ? 60 : 30)) board[r2][c2] = board[r2][c2] & 256;
+    } else if (code == 19) {
+      board[r][c] |= 256;
+      if (enf) {
+        int maxR = 0;
+        for (int r2 = 0; r2 < H; r2++) for (int c2 = 0; c2 < W; c2++) if ((board[r2][c2] & 255) != 0 && r2 > maxR) maxR = r2;
+        int vals[H * W], nv = 0, occR[H * W], occC[H * W];
+        for (int r2 = 0; r2 <= maxR; r2++) for (int c2 = 0; c2 < W; c2++) {
+          int v = board[r2][c2] & 255;
+          if (v != 0) { vals[nv] = v; occR[nv] = r2; occC[nv] = c2; nv++; }
+        }
+        int pr[H * W], pc[H * W], np = 0;
+        for (int r2 = 0; r2 <= maxR; r2++) for (int c2 = 0; c2 < W; c2++) { pr[np] = r2; pc[np] = c2; np++; }
+        for (int i = 0; i < nv; i++) board[occR[i]][occC[i]] = board[occR[i]][occC[i]] & 256;
+        for (int i = np - 1; i > 0; i--) { int j = randInt(i + 1); std::swap(pr[i], pr[j]); std::swap(pc[i], pc[j]); }
+        for (int i = 0; i < nv; i++) board[pr[i]][pc[i]] = (board[pr[i]][pc[i]] & 256) + vals[i];
+      } else {
+        for (int r2 = 0; r2 < H; r2++) {
+          int vals[W], nv = 0, cols[W];
+          for (int c2 = 0; c2 < W; c2++) { int v = board[r2][c2] & 255; if (v != 0) vals[nv++] = v; cols[c2] = c2; }
+          for (int c2 = 0; c2 < W; c2++) board[r2][c2] = board[r2][c2] & 256;
+          for (int i = W - 1; i > 0; i--) { int j = randInt(i + 1); std::swap(cols[i], cols[j]); }
+          for (int i = 0; i < nv; i++) board[r2][cols[i]] = (board[r2][cols[i]] & 256) + vals[i];
+        }
+      }
+    } else board[r][c] |= 256;
+    return 0;
+  }
+
+  PL processLine(int r) {
+    int tline = 0, filled = 0; bool hasNonMarked = false;
+    for (int c = 0; c < W; c++) {
+      if (board[r][c] == 0) return {0, 0, false};
+      if (board[r][c] < 256) hasNonMarked = true;
+    }
+    filled = hasNonMarked ? 1 : 0;
+    bool mirror = false;
+    for (int c2 = 0; c2 < W; c2++) if ((board[r][c2] & 255) == 200) {
+      if (battle) { if (qn < 10) q[qn++] = 200; board[r][c2] = 256; int ti = typeIndex(200); if (ti >= 0) cTrig[ti]++; }          // battle mode: stored
+      else { mirror = true; board[r][c2] = board[r][c2] & 256; int ti = typeIndex(200); if (ti >= 0) cTrig[ti]++; }
+    }
+    bool enf = reinforce > 0;
+    for (int c = 0; c < W; c++) {
+      int code = board[r][c] & 255;
+      if (code != 0) { int ti = typeIndex(code); if (ti >= 0) cTrig[ti]++; }
+      if (stats && code != 0) stats[code]++;
+      if (battle && storable(code)) { if (qn < 10) q[qn++] = (int16_t)code; board[r][c] = 256; continue; }   // battle mode: stored instead of used (beyond 10 the new item is thrown away)
+      if (applyCell(code, r, c, tline) < 0) return {filled, 0, true};
+    }
+    if (mirror) {
+      for (int r2 = 0; r2 < H; r2++) for (int i = 0; i < W / 2; i++) std::swap(board[r2][i], board[r2][W - 1 - i]);
+    }
+    return {filled, tline, false};
+  }
+
+  // board clean-up after item effects: remove marked cells, +/- lines (totalTline), gap clear. Returns the extra lines made by the gap clear.
+  int settle(int totalTline) {
+    int compactLines = 0;
+    if (totalTline < 0) {
+      for (int r = 0; r < -totalTline && r < H; r++) for (int c = 0; c < W; c++) board[r][c] = 256;
+      totalTline = 0;
+    }
+    for (int c = 0; c < W; c++) {
+      int t = 0;
+      for (int r = 0; r < H; r++) if (board[r][c] < 256) { board[t][c] = board[r][c]; t++; }
+      for (; t < H; t++) board[t][c] = 0;
+    }
+    if (totalTline > 0) {
+      evGarb += totalTline; cGarb += totalTline;
+      for (int r = H - totalTline; r < H; r++) for (int c = 0; c < W; c++) if (board[r][c] != 0) ovf = true;
+      for (int r = H - 1; r >= totalTline; r--) for (int c = 0; c < W; c++) board[r][c] = board[r - totalTline][c];
+      for (int r = 0; r < totalTline; r++) for (int c = 0; c < W; c++) {
+        board[r][c] = randInt(2) != 0 ? 103 : 0;
+        if (c % W == r % W) board[r][c] = 0;
+      }
+    }
+    if (compactPending) {
+      compactPending = false;
+      for (int c = 0; c < W; c++) {
+        int colv[H], res[H + 2], n = 0;
+        for (int r = 0; r < H; r++) if (board[r][c] != 0) colv[n++] = board[r][c];
+        int m = resolveColumn(colv, n, res);
+        for (int r = 0; r < H; r++) board[r][c] = r < m ? res[r] : 0;
+      }
+      for (int r = 0; r < H; r++) {
+        bool full = true;
+        for (int c = 0; c < W; c++) if (board[r][c] == 0) { full = false; break; }
+        if (full) { for (int c = 0; c < W; c++) board[r][c] = 0; compactLines++; }
+      }
+      if (compactLines > 0) {
+        for (int c = 0; c < W; c++) {
+          int t = 0;
+          for (int r = 0; r < H; r++) if (board[r][c] != 0) { board[t][c] = board[r][c]; t++; }
+          for (; t < H; t++) board[t][c] = 0;
+        }
+        lines += compactLines; score += 20LL * compactLines;
+        level = (int)((score + 600) / 800) + 1; if (level > 16) level = 16;
+      }
+    }
+    return compactLines;
+  }
+
+  void makeMono(Piece& p) { p.n = 1; p.r[0] = 0; p.c[0] = 0; p.v[0] = 12; if (&p == &next) nexthb = 0; }      // the yellow single cell of the mono-only item (a plain block: never special)
+  // use an item on this board (an own item or one sent by the opponent). Position items act at the centre of the NEXT block to fall, which is made a single cell.
+  void useItem(int code) {
+    if (positionalItem(code)) { if (!tieNext) { makeMono(next); tieNext = code; } else if (nbq < 16) bq[nbq++] = code; return; }
+    int tl = 0; int keep = board[0][0];
+    int r = applyCell(code, 0, 0, tl);
+    if (r >= 0 && board[0][0] == 256 && keep < 256 && code != 5 && code != 18 && code != 19 && code != 119 && code != 200) board[0][0] = keep;   // the used item is not a cell of the board
+    settle(r < 0 ? 0 : tl);
+  }
+  void battleLocked() {            // a block has just been put on the board
+    int code = tieNow;
+    if (!code) return;
+    tieNow = 0;
+    if (now.n == 0) return;
+    double sr = 0, sc = 0;
+    for (int i = 0; i < now.n; i++) { sr += row + now.r[i]; sc += col + now.c[i]; }
+    int cr = std::min(H - 1, std::max(0, (int)std::floor(sr / now.n + 0.5))), cc = std::min(W - 1, std::max(0, (int)std::floor(sc / now.n + 0.5)));
+    int tl = 0; int r = applyCell(code, cr, cc, tl); settle(r < 0 ? 0 : tl);
+  }
+
+  int removeline() {
+    if (spinlock > 0) spinlock -= 1;
+    if (hideblock > 0) hideblock -= 1;
+    if (hidenext > 0) hidenext -= 1;
+    if (speedup > 0) speedup -= 1;
+    if (speeddown > 0) speeddown -= 1;
+    if (holdlock > 0) holdlock -= 1;
+    int filledline = 0, totalTline = 0;
+    for (int r = 0; r < H; r++) {
+      PL res = processLine(r);
+      if (res.hard) return 0;
+      filledline += res.filled; totalTline += res.tline;
+    }
+    if (stats) { stats[257] += totalTline > 0 ? totalTline : 0; stats[258] += totalTline < 0 ? -totalTline : 0; stats[259] += filledline; }
+    filledline += settle(totalTline);
+    if (filledline != 0) filledline += removeline();
+    return filledline;
+  }
+
+  void calculatescore(int line) {
+    lines += line;
+    if (score2x > 3) score2x = 3;
+    score += (long long)std::floor(20.0 * line * std::sqrt((double)line) * std::pow(4.0, score2x)) * (long long)std::pow(4.0, asc);
+    if (score > 999999999) score = 999999999;
+    score2x = 0;
+    level = (int)((score + 600) / 800) + 1; if (level > 16) level = 16;
+    if (reinforce > 0 && line > 0) reinforce = std::max(0, reinforce - line);
+  }
+
+  // Enter key: returns true if the game is over. `cleared` = value passed to calculatescore.
+  bool hardDrop(int& cleared) {
+    long long s0 = serial; int mr;
+    cleared = 0;
+    while ((mr = moveDown()) != 1) { if (serial != s0) break; }
+    if (serial != s0) { ts = nowT; return false; }
+    if (stickblock()) return true;
+    cleared = removeline();
+    calculatescore(cleared);
+    ts = nowT;
+    if (ovf) { ovf = false; return true; }
+    return false;
+  }
+
+  // ---------- real-time gravity (updateFallingLogic) ----------
+  static int gravityBase(int level) { static const int g[8] = {800, 717, 633, 550, 467, 383, 300, 217}; return g[std::min(level - 1, 7)]; }
+  long long nextFall() const {
+    double interval = gravityBase(level), mult = 1;
+    if (speedup > 0 && mult == 1) mult = reinforce > 0 ? 0.2 : 0.4;
+    if (speeddown > 0 && mult == 1) mult = reinforce > 0 ? 5.0 : 2.5;
+    long long tf = (long long)std::floor((double)ts + interval * mult) + 1;
+    return std::max(tf, f);
+  }
+  // process gravity for frames [f, to). 0 = ok, 1 = current piece was replaced (stop), 2 = game over
+  int advance(long long to) {
+    while (true) {
+      long long tf = nextFall();
+      if (tf >= to) { if (to > f) f = to; return 0; }
+      nowT = tf; f = tf + 1;
+      long long s0 = serial;
+      long long base = gravityBase(level);
+      int mr = moveDown();
+      if (mr == 2) ts = tf + base;
+      else if (mr == 1) {
+        if (stickblock()) return 2;
+        int c = removeline(); calculatescore(c); passiveLines += c; ts = tf;
+        if (ovf) { ovf = false; return 2; }
+      } else ts = tf;
+      if (serial != s0) return 1;
+    }
+  }
+  // advance to the next moment the AI may act (200 ms after its last input); 2 = game over
+  int toDecision() {
+    long long td = lastAct + INPUT_GAP;
+    while (true) {
+      int r = advance(td);
+      if (r == 2) return 2;
+      if (r == 0) return 0;
+    }
+  }
+};
+
+enum { P_DONE = 0, P_INVALID = 1, P_INTERRUPTED = 2, P_DEAD = 3 };
+
+// Execute a plan [hold] + k*rotate + |dcol|*move + hard drop, one input per 200 ms with gravity in between.
+// `lines` = lines cleared by any lock during the plan.
+static int runPlan(Env& e, int hd, int k, int dcol, int& lines, bool trueRun = false) {
+  if (e.ovf) { e.ovf = false; lines = 0; return P_DEAD; }   // an item added lines to a stack without room: dead before the next plan
+  e.passiveLines = 0; e.evBoom = 0; e.evGarb = 0; lines = 0;
+  long long serial0 = e.serial;
+  int total = (hd ? 1 : 0) + k + std::abs(dcol) + 1;
+  for (int j = 0; j < total; j++) {
+    char a = (hd && j == 0) ? 'H' : (j < (hd ? 1 : 0) + k ? 'R' : (j < total - 1 ? (dcol < 0 ? 'L' : 'X') : 'D'));
+    long long T = e.lastAct + INPUT_GAP;
+    int r = e.advance(T);
+    if (r == 2) { lines = e.passiveLines; return P_DEAD; }
+    if (e.serial != serial0) { lines = e.passiveLines; return P_INTERRUPTED; }
+    e.nowT = T; e.lastAct = T; e.f = T;
+    bool ok = true, dead = false; int cl = 0;
+    switch (a) {
+      case 'H': e.tryHold(); if (e.serial == serial0) ok = false; else serial0 = e.serial; break;
+      case 'R': ok = e.rotate(); break;
+      case 'L': case 'X': { int m = e.move(a == 'L' ? -1 : 1); if (m == 1) ok = false; break; }
+      case 'D': dead = e.hardDrop(cl); e.ts = T; break;
+    }
+    if (dead) { lines = e.passiveLines + cl; return P_DEAD; }
+    lines = e.passiveLines + cl;
+    r = e.advance(T + 1);  // gravity check of the same frame
+    if (r == 2) { lines = e.passiveLines + cl; return P_DEAD; }
+    // human view: while the board is hidden a blocked rotation/move cannot be noticed, so the real execution just carries on
+    if (!ok && trueRun && a != 'H' && e.blindUntil > T) ok = true;
+    if (!ok) { lines = e.passiveLines; return P_INVALID; }
+    if (a == 'D') return P_DONE;
+    if (e.serial != serial0) { lines = e.passiveLines; return P_INTERRUPTED; }
+  }
+  return P_DONE;
+}
+
+// ---------- candidates ----------
+static const uint32_t TRIAL_MASK = 0x9E3779B9u;  // candidate trials use an independent RNG stream
+
+struct Cand {
+  int hold, rot, dcol, status;
+  bool dead; int lines, placedN, boom, garb;
+  float gain;        // game score gained by this plan (lines, tight-fit bonus, ...)
+  bool usesPierce;   // the piece this plan places is a pierce piece
+  uint64_t key;
+  Env post;
+};
+
+struct Counters { short trig[NT], placed[NT]; int boom, garb, hold, lines, holes, maxh; };
+
+static void boardStats(const uint16_t (*board)[W], int& holes, int& maxh) {
+  holes = 0; maxh = 0;
+  for (int c = 0; c < W; c++) {
+    int h = 0;
+    for (int r = H - 1; r >= 0; r--) if (board[r][c]) { h = r + 1; break; }
+    maxh = std::max(maxh, h);
+    for (int r = 0; r < h; r++) if (!board[r][c]) holes++;
+  }
+}
+static Counters makeCounters(const Env& e, const uint16_t (*boardForStats)[W]) {
+  Counters k;
+  memcpy(k.trig, e.cTrig, sizeof k.trig); memcpy(k.placed, e.cPlaced, sizeof k.placed);
+  k.boom = e.cBoom; k.garb = e.cGarb; k.hold = e.cHold; k.lines = e.lines;
+  boardStats(boardForStats, k.holes, k.maxh);
+  return k;
+}
+static const float MEM_LAMBDA[MEMK] = {0.8f, 0.95f, 0.99f};
+// what happened between two decision roots; board deltas are zeroed while the board is hidden (the agent cannot see them)
+static void summarize(const Counters& before, const Env& after, bool hideBoard, float* out) {
+  for (int t = 0; t < NT; t++) { out[t] = (float)(after.cTrig[t] - before.trig[t]); out[NT + t] = (float)(after.cPlaced[t] - before.placed[t]); }
+  out[74] = (after.lines - before.lines) / 4.f; out[75] = (after.cBoom - before.boom) / 2.f; out[76] = (after.cGarb - before.garb) / 4.f;
+  out[77] = (float)(after.cHold - before.hold);
+  int holes, maxh; boardStats(after.board, holes, maxh);
+  out[78] = hideBoard ? 0.f : (holes - before.holes) / 10.f; out[79] = hideBoard ? 0.f : (maxh - before.maxh) / 10.f;
+}
+
+#define RING 12
+#define BANKCAP 6000
+struct Slot {
+  Env ring[RING]; long ringDec[RING]; int ringN, ringHead; bool fromBank; uint64_t sr;   // snapshots of this game every 10 decisions
+  Counters snap; float sumAct[SD]; bool first; Counters rootC; bool hideRoot;  // what happened since the previous decision
+  int stats[800];
+  short hMh[64], hHoles[64];   // stack height / holes after each of the last 64 decisions (death anatomy)
+  int dec, lastBoom, lastGarb;  // decision counter, last decision with a bomb explosion / garbage rows (diagnostics)
+  Env e;
+  std::vector<Cand> cands;
+  uint16_t belief[H][W]; bool beliefValid;
+  // observation flags of the current decision
+  bool blindObs, hideNextObs; float blindRemain;
+};
+
+static uint64_t hashEnv(const Env& e, bool dead) {
+  uint64_t h = 1469598103934665603ULL;
+  auto mix = [&](uint64_t x) { h ^= x; h *= 1099511628211ULL; };
+  for (int r = 0; r < H; r++) for (int c = 0; c < W; c++) mix(e.board[r][c]);
+  for (int i = 0; i < e.hold.n; i++) { mix(e.hold.r[i] + 100); mix(e.hold.c[i] + 100); mix(e.hold.v[i]); }
+  for (int i = 0; i < e.now.n; i++) { mix(e.now.r[i] + 100); mix(e.now.c[i] + 100); mix(e.now.v[i]); }
+  mix(dead); mix(e.score); mix(e.holdhb); mix(e.nowhb); mix(e.lastAct); mix(e.ts); mix(e.row + 100); mix(e.col + 100);
+  return h;
+}
+
+// returns false when the plan is invalid (stop expanding); appends a candidate otherwise
+static int tryPlan(Slot& s, const Env& root, int hd, int k, int dc) {
+  Env e = root; int lines;
+  int st = runPlan(e, hd, k, dc, lines);
+  if (st == P_INVALID) return st;
+  if ((int)s.cands.size() >= MAXC) return st;
+  Cand cd; cd.hold = hd; cd.rot = k; cd.dcol = dc; cd.status = st; cd.dead = (st == P_DEAD); cd.lines = lines;
+  cd.placedN = root.now.n; cd.post = e; cd.boom = e.evBoom; cd.garb = e.evGarb; cd.gain = (float)(e.score - root.score);
+  {
+    const Piece& pc = hd ? root.hold : root.now; int hb = hd ? root.holdhb : root.nowhb;
+    bool isP = hb == 1; for (int i = 0; i < pc.n; i++) if ((pc.v[i] & 255) == 30) isP = true;
+    cd.usesPierce = isP;
+  }
+  cd.key = hashEnv(e, cd.dead);
+  for (auto& x : s.cands) if (x.key == cd.key) return st;
+  s.cands.push_back(cd);
+  return st;
+}
+
+static void genCands(Slot& s, const Env& root) {
+  s.cands.clear();
+  for (int hd = 0; hd < 2; hd++) {
+    for (int k = 0; k < 4; k++) {
+      int st = tryPlan(s, root, hd, k, 0);
+      if (st == P_INVALID) break;
+      for (int dir = -1; dir <= 1; dir += 2) {
+        for (int dc = 1; dc < 30; dc++) {
+          int r = tryPlan(s, root, hd, k, dir * dc);
+          if (r == P_INVALID || r == P_INTERRUPTED) break;
+        }
+      }
+    }
+  }
+}
+
+// ---------- features ----------
+static uint64_t canonMask(const Piece& p) {
+  int r[MAXP], c[MAXP]; uint64_t best = ~0ULL;
+  for (int i = 0; i < p.n; i++) { r[i] = p.r[i]; c[i] = p.c[i]; }
+  for (int rot = 0; rot < 4; rot++) {
+    int mr = 1 << 30, mc = 1 << 30;
+    for (int i = 0; i < p.n; i++) { mr = std::min(mr, r[i]); mc = std::min(mc, c[i]); }
+    uint64_t m = 0;
+    for (int i = 0; i < p.n; i++) { int a = r[i] - mr, b = c[i] - mc; if (a < 7 && b < 7) m |= 1ULL << (a * 7 + b); }
+    best = std::min(best, m);
+    for (int i = 0; i < p.n; i++) { int a = r[i], b = c[i]; r[i] = b; c[i] = -a; }
+  }
+  return best;
+}
+
+static int typeIndex(int vv) {
+  static const int T[NT] = {1, 2, 4, 5, 6, 8, 9, 10, 11, 16, 17, 18, 19, 20, 21, 22, 30, 31, 91, 102, 104, 116, 117, 118, 119,
+                            120, 121, 122, 123, 124, 125, 126, 127, 200, 204, 98, 103};
+  for (int i = 0; i < NT; i++) if (T[i] == vv) return i;
+  return -1;
+}
+
+static inline float clampf(int x, int m) { return (float)std::min(x, m) / (float)m; }
+
+// dense layout: 0-199 occupied | 200-248 upcoming piece mask | 249-297 held piece mask | 298-317 row deficit |
+// 318-337 row bomb urgency | 338-347 heights | 348 holes 349 bump 350 maxh 351 level 352 lines 353 placedN |
+// 354 blind 355 blindRemain 356 speedup 357 speeddown 358 hideNextObs | 359-368 counters | 369 boom 370 garbage
+// ids: board item cells (type*200+cell, row-major, max 40), then upcoming / held piece item cells (7400 + which*NT + type)
+static void fillFeatures(float* f, int16_t* ids, const Cand& cd, const Slot& s) {
+  const Env& e = cd.post;
+  memset(f, 0, sizeof(float) * NF);
+  for (int k = 0; k < KIDS; k++) ids[k] = -1;
+  int nid = 0;
+  uint16_t occ[H];
+  for (int r = 0; r < H; r++) {
+    occ[r] = 0; float urg = 0.f; int cnt = 0;
+    for (int c = 0; c < W; c++) {
+      int v = e.board[r][c], vv = v & 255;
+      if (v == 0) continue;
+      occ[r] |= 1 << c; cnt++;
+      f[r * W + c] = 1.f;
+      if (vv >= 120 && vv <= 123) urg = std::max(urg, (vv - 119) / 4.f);
+      int t = typeIndex(vv);
+      if (t >= 0 && nid < 40) ids[nid++] = (int16_t)(t * 200 + r * W + c);
+    }
+    f[298 + r] = (W - cnt) / (float)W;
+    f[318 + r] = urg;
+  }
+  if (!s.hideNextObs) {  // hide-next item: upcoming piece and hold are not visible
+    uint64_t mn = canonMask(e.now), mh = canonMask(e.hold);
+    for (int i = 0; i < 49; i++) { f[200 + i] = (mn >> i & 1) ? 1.f : 0.f; f[249 + i] = (mh >> i & 1) ? 1.f : 0.f; }
+    for (int w = 0; w < 2; w++) {
+      const Piece& p = w == 0 ? e.now : e.hold;
+      int hb = w == 0 ? e.nowhb : e.holdhb;
+      for (int i = 0; i < p.n && nid < KIDS; i++) { int t = typeIndex(p.v[i] & 255); if (t >= 0) ids[nid++] = (int16_t)(NT * 200 + w * NT + t); }
+      (void)hb;
+    }
+  }
+  int hts[W], holes = 0, maxh = 0, bump = 0;
+  for (int c = 0; c < W; c++) {
+    int h = 0;
+    for (int r = H - 1; r >= 0; r--) if (occ[r] >> c & 1) { h = r + 1; break; }
+    hts[c] = h; maxh = std::max(maxh, h);
+    for (int r = 0; r < h; r++) if (!(occ[r] >> c & 1)) holes++;
+  }
+  for (int c = 0; c + 1 < W; c++) bump += std::abs(hts[c] - hts[c + 1]);
+  for (int c = 0; c < W; c++) f[338 + c] = hts[c] / 20.f;
+  f[348] = holes / 20.f; f[349] = bump / 40.f; f[350] = maxh / 20.f; f[351] = e.level / 16.f;
+  f[352] = cd.lines / 4.f; f[353] = cd.placedN / 8.f;
+  // Human-visible observations only: the board is hidden (blind) / NEXT is hidden are visible; remaining effect counters, pending
+  // gap-clear, remaining blind time and speed counters are NOT shown by the game, so they are not inputs (f[355..357], f[359..368] stay 0).
+  f[354] = s.blindObs ? 1.f : 0.f;
+  f[358] = s.hideNextObs ? 1.f : 0.f;
+  f[369] = std::min(cd.boom, 2) / 2.f; f[370] = std::min(cd.garb, 4) / 4.f;
+}
+
+
+struct Vec { std::vector<Slot> slots; std::vector<Env> bank; double restartProb = 0; };
+static inline uint64_t nextr(uint64_t& x) { x += 0x9E3779B97F4A7C15ULL; uint64_t z = x; z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL; z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL; return z ^ (z >> 31); }
+
+static void prepareDecision(Slot& s) {
+  const Env& e = s.e;
+  s.blindObs = e.blindUntil > e.f;
+  s.blindRemain = s.blindObs ? std::min(1.0f, (float)(e.blindUntil - e.f) / 20000.f) : 0.f;
+  s.hideNextObs = e.hidenext > 0;
+}
+// at every decision root: the events since the previous root (input of the recurrent memory); zeros at the first decision
+static void updateMemory(Slot& s) {
+  summarize(s.snap, s.e, s.blindObs, s.sumAct);
+  s.snap = makeCounters(s.e, s.e.board); s.first = false;
+}
+// at enumeration time (mirrors aiEnumerate): a visible board discards the memory; a hidden one uses the last prediction
+static void updateBelief(Slot& s) {
+  if (!s.blindObs) s.beliefValid = false;
+  else if (!s.beliefValid) { memcpy(s.belief, s.e.board, sizeof s.belief); s.beliefValid = true; }
+}
+
+extern "C" {
+void set_blocks(int n, const int* counts, const int* vals, const int* flat) {
+  RAW.clear(); int o = 0;
+  for (int b = 0; b < n; b++) {
+    Raw p; p.n = counts[b]; p.val = vals[b];
+    for (int i = 0; i < p.n; i++) { p.r[i] = flat[o++]; p.c[i] = flat[o++]; }
+    RAW.push_back(p);
+  }
+}
+int num_features() { return NF; }
+int max_cands() { return MAXC; }
+int num_ids() { return KIDS; }
+int num_id_slots() { return NIDS; }
+int num_types() { return NT; }
+
+static void toFirstDecision(Slot& s) {
+  int r = s.e.toDecision();
+  while (r == 2) { s.e.reset(s.e.nowT); r = s.e.toDecision(); }
+  s.beliefValid = false;
+  prepareDecision(s);
+  memset(s.sumAct, 0, sizeof s.sumAct); s.snap = makeCounters(s.e, s.e.board); s.first = true; s.ringN = s.ringHead = 0;   // new game: the agent's memory starts empty
+}
+
+void set_input_gap(int ms) { INPUT_GAP = ms; }
+void set_crisis_hold_type(int v) { CRISIS_HOLD_VAL = v; }
+void set_crisis_height(int base, int span) { CRISIS_BASE = base; CRISIS_SPAN = span; }
+void vec_reset_all(void* h) { for (auto& s : ((Vec*)h)->slots) { s.e.reset(-1); s.fromBank = false; toFirstDecision(s); } }   // start every game afresh (after the curriculum was changed)
+void vec_set_restart(void* h, double prob) { ((Vec*)h)->restartProb = prob; }
+void vec_set_curriculum(void* h, double crisis, double crisisHold, double pierce) { for (auto& s : ((Vec*)h)->slots) { s.e.crisisProb = crisis; s.e.crisisHold = crisisHold; s.e.pierceBoost = pierce; } }
+void vec_set_group_scale(void* h, const double* sc) { for (auto& s : ((Vec*)h)->slots) s.e.setGroupScale(sc); }
+void vec_set_item_mask(void* h, int m) { for (auto& s : ((Vec*)h)->slots) s.e.itemMask = m; }
+void vec_set_item_scale(void* h, double sc) { for (auto& s : ((Vec*)h)->slots) s.e.itemScale = sc; }
+
+void* vec_new(int n, const uint32_t* seeds, int items) {
+  Vec* v = new Vec(); v->slots.resize(n);
+  for (int i = 0; i < n; i++) {
+    Slot& s = v->slots[i];
+    memset(s.stats, 0, sizeof s.stats); s.e.stats = s.stats; s.sr = 0x1234567ULL * (i + 1) + seeds[i]; s.fromBank = false; s.ringN = s.ringHead = 0; s.dec = 0; s.lastBoom = s.lastGarb = -1000;
+    s.e.items = items != 0; s.e.crisisProb = s.e.crisisHold = s.e.pierceBoost = 0; s.e.itemScale = 1.0; s.e.boostP = 0; s.e.nBoost = 0; s.e.itemMask = 0xfff; s.e.rng.a = seeds[i]; s.e.reset();
+    toFirstDecision(s);
+  }
+  return v;
+}
+void vec_free(void* h) { delete (Vec*)h; }
+
+// feats [n,MAXC,NF]; ids [n,MAXC,KIDS] int16; counts [n]; lines [n,MAXC]; ev [n,MAXC,2] = (bomb explosions, garbage rows);
+// done [n,MAXC]; info [n,MAXC,4] = (hold, rot, dcol, status)
+void vec_gen(void* h, float* feats, int16_t* ids, int* counts, float* lines_out, int* ev, uint8_t* done, int* info, float* sumc, float* sumact, int* first, uint8_t* pierce, int* rootmaxh, int* restarted, float* gain_out) {
+  Vec* v = (Vec*)h; int n = (int)v->slots.size();
+#pragma omp parallel for schedule(dynamic, 4)
+  for (int i = 0; i < n; i++) {
+    Slot& s = v->slots[i];
+    prepareDecision(s);   // (battle mode: an item used at the decision root can change what is visible)
+    updateBelief(s);
+    Env eb = s.e;  // what the agent believes: true game, but with the remembered board while blind
+    eb.stats = nullptr;
+    s.rootC = makeCounters(eb, eb.board); s.hideRoot = s.blindObs;
+    if (s.blindObs) memcpy(eb.board, s.belief, sizeof eb.board);
+    eb.rng.a ^= TRIAL_MASK;
+    if (s.hideNextObs) { Env tmp = eb; eb.next = tmp.generateBlock(); eb.rng = tmp.rng; }   // NEXT is hidden: plan against a random piece, not the real one
+    genCands(s, eb);
+    counts[i] = (int)s.cands.size();
+    memcpy(sumact + (long)i * SD, s.sumAct, sizeof s.sumAct); first[i] = s.first ? 1 : 0;
+    { int hh, mh; boardStats(s.e.board, hh, mh); rootmaxh[i] = mh; }
+    restarted[i] = s.fromBank ? 1 : 0;
+    for (int k = 0; k < (int)s.cands.size(); k++) {
+      const Cand& cd = s.cands[k];
+      long idx = (long)i * MAXC + k;
+      pierce[idx] = cd.usesPierce ? 1 : 0; gain_out[idx] = cd.gain;
+      lines_out[idx] = (float)cd.lines; done[idx] = cd.dead ? 1 : 0; ev[idx * 2] = cd.boom; ev[idx * 2 + 1] = cd.garb;
+      info[idx * 4] = cd.hold; info[idx * 4 + 1] = cd.rot; info[idx * 4 + 2] = cd.dcol; info[idx * 4 + 3] = cd.status;
+      if (!cd.dead) { fillFeatures(feats + idx * NF, ids + idx * KIDS, cd, s); summarize(s.rootC, cd.post, s.hideRoot, sumc + idx * SD); }
+    }
+  }
+}
+
+// ep: [n,4] = (status 0 running / 1 dead / 2 truncated, score, lines, pieces)
+void vec_step(void* h, const int* act, int maxpieces, float* ep) {
+  Vec* v = (Vec*)h; int n = (int)v->slots.size();
+#pragma omp parallel for schedule(dynamic, 4)
+  for (int i = 0; i < n; i++) {
+    Slot& s = v->slots[i];
+    const Cand& cd = s.cands[act[i]];
+    ep[i * 4] = 0;
+    memcpy(s.belief, cd.post.board, sizeof s.belief); s.beliefValid = true;  // the agent's prediction of the outcome
+    // ---- diagnostics: how the agent handles pierce pieces (hold them, use them when the board is bad?) ----
+    {
+      const Env& e0 = s.e;
+      auto isP = [](const Piece& pc, int hb) { if (hb == 1) return true; for (int i = 0; i < pc.n; i++) if ((pc.v[i] & 255) == 30) return true; return false; };
+      bool curP = isP(e0.now, e0.nowhb), holdP = isP(e0.hold, e0.holdhb);
+      int hh, mh; boardStats(e0.board, hh, mh);
+      s.stats[736] += mh; s.stats[737]++;                          // board height at every decision (baseline)
+      if (curP) { s.stats[730]++; if (cd.hold) s.stats[731]++; }   // pierce is the falling piece / agent swaps it into the hold
+      if (holdP) s.stats[732]++;                                   // a pierce piece is waiting in the hold
+      if ((curP && !cd.hold) || (holdP && cd.hold)) {              // a pierce piece is being used (placed) now
+        s.stats[734] += mh; s.stats[735]++; if (mh >= 14) s.stats[738]++; if (holdP && cd.hold) s.stats[733]++;
+      }
+    }
+    int lines;
+    bool spd0 = s.e.speedup > 0 || s.e.speeddown > 0;
+    int st = runPlan(s.e, cd.hold, cd.rot, cd.dcol, lines, true);  // executed on the TRUE game with the true RNG
+    bool dead = st == P_DEAD;
+    if (!dead && s.e.toDecision() == 2) dead = true;
+    // ---- diagnostics: how plans end, and which item states are active at death vs. at any time ----
+    s.dec++;
+    { int hh, mh; boardStats(s.e.board, hh, mh); s.hMh[s.dec & 63] = (short)mh; s.hHoles[s.dec & 63] = (short)hh; }
+    if (dead && s.dec >= 45) {   // how did this game end: slow build-up or a sudden shock?
+      int jump = 0;
+      for (int k = 1; k <= 20; k++) jump = std::max(jump, (int)s.hMh[(s.dec - k + 1) & 63] - (int)s.hMh[(s.dec - k) & 63]);
+      int mh0 = s.hMh[(s.dec - 1) & 63], mh40 = s.hMh[(s.dec - 41) & 63], ho0 = s.hHoles[(s.dec - 1) & 63], ho40 = s.hHoles[(s.dec - 41) & 63];
+      s.stats[741]++; if (jump >= 4) s.stats[740]++; s.stats[742] += mh40; s.stats[743] += mh0; s.stats[744] += ho0; s.stats[745] += ho40;
+      s.stats[746] += jump; if (mh40 <= 10) s.stats[747]++; if (ho0 - ho40 >= 8) s.stats[748]++;
+    }
+    s.stats[700 + st]++;                       // chosen plan outcome (0 done, 1 invalid, 2 interrupted by gravity, 3 dead)
+    if (s.e.speedup > 0) s.stats[710 + st]++;  // ... while speed-up is active
+    if (s.e.speeddown > 0) s.stats[715 + st]++;
+    if (s.e.evBoom > 0) s.lastBoom = s.dec;
+    if (s.e.evGarb > 0) s.lastGarb = s.dec;
+    {
+      const Env& e = s.e;
+      int fl[14] = {e.speedup > 0, e.speeddown > 0, e.blindUntil > e.nowT, e.hidenext > 0, e.spinlock > 0, e.holdlock > 0,
+                    e.monoonly > 0, e.simplify2 > 0, e.pentaForce > 0, e.reinforce > 0, e.bombnext > 0,
+                    s.dec - s.lastBoom <= 10, s.dec - s.lastGarb <= 10, e.level >= 16};
+      s.stats[619]++;                                   // decisions observed
+      for (int k = 0; k < 14; k++) { if (fl[k]) s.stats[620 + k]++; if (dead && fl[k]) s.stats[601 + k]++; }
+      if (dead) s.stats[600]++;
+    }
+    if (dead) {
+      s.stats[560 + std::min(16, s.e.level)]++;
+      ep[i * 4] = 1; ep[i * 4 + 1] = (float)s.e.score; ep[i * 4 + 2] = (float)s.e.lines; ep[i * 4 + 3] = (float)s.e.pieces;
+      {  // general curriculum: remember a state from 10-100 decisions before this failure, and start some new games from such states
+        int idx[RING], nn = 0;
+        for (int k = 0; k < s.ringN; k++) { long age_ = s.dec - s.ringDec[k]; if (age_ >= 10 && age_ <= 100) idx[nn++] = k; }
+        if (nn) {
+          int k = idx[nextr(s.sr) % nn];
+#pragma omp critical(bank)
+          { if ((int)v->bank.size() < BANKCAP) v->bank.push_back(s.ring[k]); else v->bank[nextr(s.sr) % BANKCAP] = s.ring[k]; }
+        }
+      }
+      s.e.reset(s.e.nowT);
+      s.fromBank = false;
+      if (v->restartProb > 0 && (double)(nextr(s.sr) % 1000000) / 1e6 < v->restartProb) {
+        bool ok = false; Env e;
+#pragma omp critical(bank)
+        { if (v->bank.size() >= 200) { e = v->bank[nextr(s.sr) % v->bank.size()]; ok = true; } }
+        if (ok) { e.stats = s.stats; e.rng.a = (uint32_t)nextr(s.sr); e.pieces = 0; s.e = e; s.fromBank = true; }
+      }
+      toFirstDecision(s);
+      continue;
+    }
+    prepareDecision(s);
+    updateMemory(s);
+    if (s.dec % 10 == 0) { int k = s.ringHead; s.ring[k] = s.e; s.ringDec[k] = s.dec; s.ringHead = (k + 1) % RING; if (s.ringN < RING) s.ringN++; }
+    if (s.e.pieces >= maxpieces) {
+      ep[i * 4] = 2; ep[i * 4 + 1] = (float)s.e.score; ep[i * 4 + 2] = (float)s.e.lines; ep[i * 4 + 3] = (float)s.e.pieces;
+      s.e.reset(-1);
+      s.fromBank = false;
+      toFirstDecision(s);
+    }
+  }
+}
+
+// the decision state that follows a candidate: its game advanced to the next decision, candidates enumerated (exact rules)
+static bool buildChild(const Env& post, Slot* c) {
+  c->e = post; c->e.stats = nullptr;
+  if (c->e.toDecision() == 2) return false;
+  c->beliefValid = false; prepareDecision(*c);
+  Env eb = c->e; eb.rng.a ^= TRIAL_MASK;
+  if (c->hideNextObs) { Env tmp = eb; eb.next = tmp.generateBlock(); eb.rng = tmp.rng; }
+  c->rootC = makeCounters(eb, eb.board); c->hideRoot = c->blindObs;
+  genCands(*c, eb);
+  return true;
+}
+static void writeCands(const Slot& c, long t, float* feats, int16_t* ids, int* counts, uint8_t* done, float* lines_out, float* sumc, float* gain_out) {
+  int m = (int)c.cands.size(); counts[t] = m;
+  for (int k = 0; k < m; k++) {
+    const Cand& cd = c.cands[k]; long idx = t * MAXC + k;
+    lines_out[idx] = (float)cd.lines; done[idx] = cd.dead ? 1 : 0; gain_out[idx] = cd.gain;
+    if (!cd.dead) { fillFeatures(feats + idx * NF, ids + idx * KIDS, cd, c); summarize(c.rootC, cd.post, c.hideRoot, sumc + idx * SD); }
+  }
+}
+// 3-ply: for (env, parent p, child j) take the child candidate `ck[t]` of p's follow-up decision and enumerate ITS follow-ups
+void vec_expand2(void* h, const int* parents, int K1, const int* ck, int K2, float* feats, int16_t* ids, int* counts, uint8_t* done, float* lines_out, float* sumc, float* gain_out) {
+  Vec* v = (Vec*)h; int n = (int)v->slots.size();
+#pragma omp parallel for schedule(dynamic, 2)
+  for (int t = 0; t < n * K1 * K2; t++) {
+    int i = t / (K1 * K2), pj = t / K2, pk = parents[pj], cj = ck[t];
+    counts[t] = 0;
+    if (pk < 0 || cj < 0) continue;
+    Slot& s = v->slots[i];
+    if (pk >= (int)s.cands.size() || s.cands[pk].dead) continue;
+    Slot* c = new Slot();
+    if (!buildChild(s.cands[pk].post, c)) { counts[t] = -1; delete c; continue; }
+    if (cj >= (int)c->cands.size() || c->cands[cj].dead) { delete c; continue; }
+    Slot* g = new Slot();
+    if (!buildChild(c->cands[cj].post, g)) { counts[t] = -1; delete g; delete c; continue; }
+    writeCands(*g, t, feats, ids, counts, done, lines_out, sumc, gain_out);
+    delete g; delete c;
+  }
+}
+
+// 2-ply search support: for every (env, parent candidate) advance the parent's resulting game to its next decision and enumerate
+// the child candidates there (exact rules; the upcoming piece is known, anything random is sampled).
+// counts[t] = number of child candidates, -1 = the game is already over at the child decision, 0 = no parent given.
+void vec_expand(void* h, const int* parents, int K, float* feats, int16_t* ids, int* counts, uint8_t* done, float* lines_out, float* sumc, float* gain_out) {
+  Vec* v = (Vec*)h; int n = (int)v->slots.size();
+#pragma omp parallel for schedule(dynamic, 2)
+  for (int t = 0; t < n * K; t++) {
+    int i = t / K, pk = parents[t];
+    counts[t] = 0;
+    if (pk < 0) continue;
+    Slot& s = v->slots[i];
+    if (pk >= (int)s.cands.size() || s.cands[pk].dead) continue;
+    Slot* c = new Slot();
+    c->e = s.cands[pk].post; c->e.stats = nullptr;
+    if (c->e.toDecision() == 2) { counts[t] = -1; delete c; continue; }
+    c->beliefValid = false; prepareDecision(*c);
+    Env eb = c->e; eb.rng.a ^= TRIAL_MASK;
+    if (c->hideNextObs) { Env tmp = eb; eb.next = tmp.generateBlock(); eb.rng = tmp.rng; }   // NEXT hidden at the child decision too
+    c->rootC = makeCounters(eb, eb.board); c->hideRoot = c->blindObs;
+    genCands(*c, eb);
+    int m = (int)c->cands.size(); counts[t] = m;
+    for (int k = 0; k < m; k++) {
+      const Cand& cd = c->cands[k]; long idx = (long)t * MAXC + k;
+      lines_out[idx] = (float)cd.lines; done[idx] = cd.dead ? 1 : 0; gain_out[idx] = cd.gain;
+      if (!cd.dead) { fillFeatures(feats + idx * NF, ids + idx * KIDS, cd, *c); summarize(c->rootC, cd.post, c->hideRoot, sumc + idx * SD); }
+    }
+    delete c;
+  }
+}
+
+// test hook: which 0 blindUntil(abs ms) 1 speedup 2 speeddown 3 hidenext 4 spinlock 5 holdlock
+void env_inject(void* h, int i, int which, long long value) {
+  Slot& s = ((Vec*)h)->slots[i];
+  switch (which) {
+    case 0: s.e.blindUntil = value; break; case 1: s.e.speedup = (int)value; break; case 2: s.e.speeddown = (int)value; break;
+    case 3: s.e.hidenext = (int)value; break; case 4: s.e.spinlock = (int)value; break; case 5: s.e.holdlock = (int)value; break;
+  }
+  prepareDecision(s);
+}
+
+// sum of the event counters of all envs into out[600]; + death info: stats[500..] = level histogram at death
+void vec_stats(void* h, long long* out) {
+  Vec* v = (Vec*)h; memset(out, 0, sizeof(long long) * 800);
+  for (auto& s : v->slots) for (int k = 0; k < 800; k++) out[k] += s.stats[k];
+}
+
+// summary of an env for lockstep tests
+void env_summary(void* h, int i, long long* out) {
+  Env& e = ((Vec*)h)->slots[i].e;
+  long long cs = 0;
+  for (int r = 0; r < H; r++) for (int c = 0; c < W; c++) cs = (cs * 131 + e.board[r][c] + 7) % 1000000007LL;
+  out[0] = e.score; out[1] = e.lines; out[2] = e.level; out[3] = e.rng.a; out[4] = cs; out[5] = e.now.n; out[6] = e.hold.n; out[7] = e.next.n;
+  out[8] = e.f; out[9] = e.lastAct; out[10] = e.ts; out[11] = e.blindUntil; out[12] = e.row; out[13] = e.col;
+}
+}
+
+// ====================================================================== battle mode API (2D)
+#define VIEWD 32
+#define QPOS 4                       // the first QPOS items of the queue are told apart (one-hot each); the model may take any of them
+#define QD (1 + QPOS * NT + NT)
+static bool visSpecial(int code) { return isItemVal(code); }       // what the opponent window shows as a special block (98 / 103 look like normal blocks)
+extern "C" {
+void vec_set_battle(void* h, int on, int itemScale, const uint32_t* seeds) {      // seeds (optional): restart every game from its seed, as a fresh VecEnv would
+  int i = 0;
+  for (auto& s : ((Vec*)h)->slots) { s.e.battle = on != 0; s.e.itemScale = itemScale < 1 ? 1.0 : (double)itemScale; if (seeds) s.e.rng.a = seeds[i]; i++; s.e.reset(); s.fromBank = false; toFirstDecision(s); }
+}
+void vec_reset_one(void* h, int i) { Slot& s = ((Vec*)h)->slots[i]; s.e.reset(-1); s.fromBank = false; toFirstDecision(s); }
+void env_queue(void* h, int i, int* out) { Env& e = ((Vec*)h)->slots[i].e; out[0] = e.qn; for (int k = 0; k < 10; k++) out[1 + k] = k < e.qn ? e.q[k] : 0; }
+void env_push(void* h, int i, int code) { Env& e = ((Vec*)h)->slots[i].e; if (e.qn < 10) e.q[e.qn++] = (int16_t)code; }
+int env_use(void* h, int i, int mode) {
+  Env& e = ((Vec*)h)->slots[i].e;
+  if (e.qn <= 0) return 0;
+  // mode: 1 / 2 = the front item on me / taken for the opponent; 2k+1 / 2k+2 = the same after the player has touched the slots k times (each touch sends the front item to the back)
+  int rk = (mode - 1) >> 1; mode = 1 + ((mode - 1) & 1);
+  if (rk >= e.qn) return 0;
+  for (int r = 0; r < rk; r++) { int c0 = e.q[0]; for (int k = 1; k < e.qn; k++) e.q[k - 1] = e.q[k]; e.q[e.qn - 1] = (int16_t)c0; }
+  int code = e.q[0]; for (int k = 1; k < e.qn; k++) e.q[k - 1] = e.q[k]; e.qn--;
+  if (mode == 1 && code != 4) e.useItem(code);                     // the score-boost block ('steal') does nothing on yourself
+  return code;
+}
+void env_receive(void* h, int i, int code) { Env& e = ((Vec*)h)->slots[i].e; if (code != 4) e.useItem(code); }
+void env_steal(void* hf, int i, void* ht, int j) {
+  Env& a = ((Vec*)hf)->slots[i].e; Env& b = ((Vec*)ht)->slots[j].e;
+  for (int k = 0; k < a.qn; k++) if (b.qn < 10) b.q[b.qn++] = a.q[k];
+  a.qn = 0;
+}
+// sanitised copy as sent to the opponent: cell classes 0 / 1 normal / 2 special (row-major, row 0 = bottom), the falling piece as (row, col, class) triples
+void env_snapshot(void* h, int i, uint8_t* board, int* piece, int* npiece, int* qn) {
+  const Env& e = ((Vec*)h)->slots[i].e;
+  for (int r = 0; r < H; r++) for (int c = 0; c < W; c++) { int v = e.board[r][c]; board[r * W + c] = v == 0 ? 0 : (visSpecial(v & 255) ? 2 : 1); }
+  *npiece = e.now.n;
+  for (int k = 0; k < e.now.n; k++) { piece[3 * k] = e.row + e.now.r[k]; piece[3 * k + 1] = e.col + e.now.c[k]; int v = e.now.v[k]; piece[3 * k + 2] = v == 0 ? 0 : (visSpecial(v & 255) ? 2 : 1); }
+  *qn = e.qn;
+}
+static void viewOf(const uint16_t (*board)[W], const Env& e, float* out) {
+  memset(out, 0, sizeof(float) * VIEWD);
+  int hgt[W], maxh = 0, holes = 0, nn = 0, ns = 0, layer[10] = {0};
+  for (int c = 0; c < W; c++) {
+    int top = -1, occ = 0;
+    for (int r = 0; r < H; r++) { int v = board[r][c]; if (v) { top = r; occ++; if (visSpecial(v & 255)) ns++; else nn++; if (r < 10) layer[r]++; } }
+    hgt[c] = top + 1; maxh = std::max(maxh, top + 1); holes += top + 1 - occ;
+  }
+  double sh = 0; for (int c = 0; c < W; c++) sh += hgt[c];
+  out[0] = maxh / 20.0f; out[1] = (float)(sh / W / 20.0); out[2] = holes / 20.0f; out[3] = nn / 100.0f; out[4] = ns / 20.0f; out[5] = e.qn / 10.0f;
+  for (int c = 0; c < W; c++) out[6 + std::min(hgt[c] / 2, 9)] += 1.0f / W;
+  double sr = 0, sc = 0; int np = e.now.n;
+  for (int k = 0; k < np; k++) { sr += e.row + e.now.r[k]; sc += e.col + e.now.c[k]; }
+  if (np) { out[17] = (float)(sc / np / (W - 1)); out[18] = (float)(sr / np / (H - 1)); out[21] = np / 20.0f; }
+  for (int z = 0; z < 10; z++) out[22 + z] = layer[z] / (float)W;
+}
+void env_view(void* h, int i, float* out) { const Env& e = ((Vec*)h)->slots[i].e; viewOf(e.board, e, out); }
+void env_qfeat(void* h, int i, float* out) {
+  const Env& e = ((Vec*)h)->slots[i].e; memset(out, 0, sizeof(float) * QD);
+  out[0] = e.qn / 10.0f;
+  for (int k = 0; k < e.qn && k < QPOS; k++) { int t = typeIndex(e.q[k]); if (t >= 0) out[1 + k * NT + t] = 1; }
+  for (int k = 0; k < e.qn; k++) { int t = typeIndex(e.q[k]); if (t >= 0) out[1 + QPOS * NT + t] += 0.5f; }
+}
+// dense features of the current state (as if the pieces were already placed), from what the player knows: the remembered board while blind
+void env_rootfeat(void* h, int i, float* out) {
+  Slot& s = ((Vec*)h)->slots[i]; int16_t ids[KIDS];
+  prepareDecision(s); updateBelief(s);
+  Cand cd; cd.post = s.e; cd.lines = 0; cd.placedN = s.e.now.n; cd.boom = 0; cd.garb = 0;
+  if (s.blindObs) memcpy(cd.post.board, s.belief, sizeof cd.post.board);
+  fillFeatures(out, ids, cd, s);
+}
+int battle_view_dim() { return VIEWD; }
+int battle_q_dim() { return QD; }
+int battle_state_dim() { return NF + 2 * VIEWD + QD; }
+void vec_times(void* h, double* out) { Vec* v = (Vec*)h; for (size_t i = 0; i < v->slots.size(); i++) out[i] = (double)v->slots[i].e.nowT; }
+void vec_bstate(void* hs, void* ho, float* out, int* qn) {
+  Vec* a = (Vec*)hs; int D = NF + 2 * VIEWD + QD;
+  for (size_t i = 0; i < a->slots.size(); i++) {
+    float* o = out + (size_t)i * D; Slot& s = a->slots[i];
+    env_rootfeat(hs, (int)i, o); env_view(ho, (int)i, o + NF);
+    { if (s.blindObs && s.beliefValid) { Env tmp = s.e; viewOf(s.belief, tmp, o + NF + VIEWD); } else viewOf(s.e.board, s.e, o + NF + VIEWD); }
+    env_qfeat(hs, (int)i, o + NF + 2 * VIEWD);
+    qn[i] = s.e.qn;
+  }
+}
+void vec_qpos(void* hs, int* out) { Vec* a = (Vec*)hs; for (size_t i = 0; i < a->slots.size(); i++) { Env& e = a->slots[i].e; for (int k = 0; k < QPOS; k++) out[i * QPOS + k] = k < e.qn ? e.q[k] : 0; } }
+void vec_buse(void* hs, void* ho, const int* mode, int* used) {
+  Vec* a = (Vec*)hs;
+  for (size_t i = 0; i < a->slots.size(); i++) {
+    used[i] = 0; if (mode[i] == 0) continue;
+    int code = env_use(hs, (int)i, mode[i]); used[i] = code;
+    if (((mode[i] - 1) & 1) && code) { if (code == 4) env_steal(ho, (int)i, hs, (int)i); else env_receive(ho, (int)i, code); }
+  }
+}
+}  // extern C

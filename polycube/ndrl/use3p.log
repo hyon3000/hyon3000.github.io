@@ -1,0 +1,105 @@
+init from runs/use3/bc.pt (logits softened by 0.15 )
+EVAL learned(A) vs rule(B): {'win': 0.12307692307692308, 'lose': 0.12307692307692308, 'draw': 0.7538461538461538, 'games': 65, 'mean_len': 352.0153846153846}
+iter 5 t 4.7m policy -0.0485 value 0.0082 entropy 0.981 decisions 706
+iter 10 t 6.4m policy 0.0568 value 0.0044 entropy 0.861 decisions 1276
+iter 15 t 8.2m policy 0.0271 value 0.0055 entropy 0.886 decisions 1495
+iter 20 t 10.0m policy 0.0090 value 0.0097 entropy 0.858 decisions 1037
+iter 25 t 11.9m policy -0.0543 value 0.0048 entropy 0.940 decisions 687
+EVAL learned(A) vs rule(B): {'win': 0.06060606060606061, 'lose': 0.18181818181818182, 'draw': 0.7575757575757576, 'games': 66, 'mean_len': 352.57575757575756}
+iter 30 t 16.5m policy -0.0470 value 0.0066 entropy 0.798 decisions 1112
+iter 35 t 18.2m policy 0.0541 value 0.0028 entropy 0.885 decisions 1216
+iter 40 t 19.9m policy -0.0680 value 0.0037 entropy 0.870 decisions 1180
+iter 45 t 21.5m policy -0.0427 value 0.0088 entropy 0.897 decisions 934
+iter 50 t 23.2m policy 0.0539 value 0.0073 entropy 0.912 decisions 848
+iter 55 t 24.9m policy 0.0565 value 0.0031 entropy 0.934 decisions 944
+EVAL learned(A) vs rule(B): {'win': 0.18181818181818182, 'lose': 0.12121212121212122, 'draw': 0.696969696969697, 'games': 66, 'mean_len': 345.57575757575756}
+iter 60 t 29.2m policy -0.0453 value 0.0048 entropy 0.956 decisions 947
+iter 65 t 30.8m policy -0.0369 value 0.0092 entropy 0.970 decisions 879
+iter 70 t 32.5m policy -0.0068 value 0.0042 entropy 0.976 decisions 869
+iter 75 t 34.3m policy -0.0444 value 0.0045 entropy 0.957 decisions 973
+iter 80 t 36.0m policy 0.0623 value 0.0044 entropy 0.889 decisions 892
+iter 85 t 37.7m policy -0.0695 value 0.0034 entropy 0.842 decisions 1086
+EVAL learned(A) vs rule(B): {'win': 0.03076923076923077, 'lose': 0.2153846153846154, 'draw': 0.7538461538461538, 'games': 65, 'mean_len': 354.61538461538464}
+iter 90 t 42.3m policy 0.0050 value 0.0126 entropy 0.989 decisions 859
+iter 95 t 44.0m policy -0.0750 value 0.0065 entropy 0.941 decisions 728
+iter 100 t 45.8m policy 0.0049 value 0.0007 entropy 0.980 decisions 777
+iter 105 t 47.6m policy 0.0384 value 0.0028 entropy 0.916 decisions 822
+iter 110 t 49.3m policy 0.0030 value 0.0038 entropy 0.969 decisions 818
+EVAL learned(A) vs rule(B): {'win': 0.078125, 'lose': 0.046875, 'draw': 0.875, 'games': 64, 'mean_len': 377.265625}
+iter 115 t 53.9m policy -0.0408 value 0.0067 entropy 0.988 decisions 896
+iter 120 t 55.6m policy 0.0651 value 0.0043 entropy 0.970 decisions 783
+iter 125 t 57.4m policy -0.0282 value 0.0042 entropy 1.031 decisions 810
+iter 130 t 59.1m policy -0.0123 value 0.0013 entropy 0.953 decisions 745
+iter 135 t 60.9m policy -0.1151 value 0.0032 entropy 0.934 decisions 858
+EVAL learned(A) vs rule(B): {'win': 0.078125, 'lose': 0.125, 'draw': 0.796875, 'games': 64, 'mean_len': 369.0625}
+iter 140 t 65.5m policy -0.0697 value 0.0050 entropy 0.938 decisions 784
+iter 145 t 67.2m policy -0.0524 value 0.0087 entropy 0.968 decisions 857
+iter 150 t 69.0m policy -0.0041 value 0.0028 entropy 0.972 decisions 797
+iter 155 t 70.8m policy 0.0169 value 0.0040 entropy 0.902 decisions 675
+iter 160 t 72.6m policy -0.0027 value 0.0003 entropy 0.869 decisions 723
+iter 165 t 74.4m policy -0.0088 value 0.0023 entropy 0.933 decisions 689
+EVAL learned(A) vs rule(B): {'win': 0.06153846153846154, 'lose': 0.07692307692307693, 'draw': 0.8615384615384616, 'games': 65, 'mean_len': 376.9384615384615}
+iter 170 t 79.0m policy 0.0251 value 0.0031 entropy 0.856 decisions 622
+iter 175 t 80.7m policy 0.0091 value 0.0042 entropy 0.804 decisions 641
+iter 180 t 81.9m policy -0.0318 value 0.0024 entropy 0.805 decisions 731
+iter 185 t 83.0m policy 0.0202 value 0.0061 entropy 0.855 decisions 653
+iter 190 t 84.0m policy -0.0207 value 0.0048 entropy 0.866 decisions 661
+iter 195 t 85.0m policy 0.0266 value 0.0038 entropy 0.863 decisions 789
+iter 200 t 86.1m policy 0.0220 value 0.0022 entropy 0.871 decisions 594
+EVAL learned(A) vs rule(B): {'win': 0.13636363636363635, 'lose': 0.09090909090909091, 'draw': 0.7727272727272727, 'games': 66, 'mean_len': 358.0151515151515}
+iter 205 t 88.8m policy -0.1396 value 0.0051 entropy 0.861 decisions 687
+iter 210 t 89.9m policy 0.0238 value 0.0006 entropy 0.956 decisions 771
+iter 215 t 90.9m policy -0.0345 value 0.0071 entropy 0.978 decisions 753
+iter 220 t 92.0m policy -0.0770 value 0.0046 entropy 1.041 decisions 745
+iter 225 t 93.0m policy -0.0473 value 0.0034 entropy 0.942 decisions 798
+iter 230 t 94.1m policy 0.0127 value 0.0065 entropy 0.956 decisions 869
+iter 235 t 95.1m policy 0.0437 value 0.0005 entropy 0.935 decisions 1183
+iter 240 t 96.2m policy -0.0368 value 0.0027 entropy 0.800 decisions 1179
+iter 245 t 97.2m policy -0.0570 value 0.0018 entropy 0.945 decisions 1067
+iter 250 t 98.3m policy 0.0940 value 0.0005 entropy 0.819 decisions 662
+EVAL learned(A) vs rule(B): {'win': 0.12307692307692308, 'lose': 0.12307692307692308, 'draw': 0.7538461538461538, 'games': 65, 'mean_len': 358.89230769230767}
+iter 255 t 101.1m policy -0.0482 value 0.0073 entropy 0.926 decisions 729
+iter 260 t 102.1m policy 0.0457 value 0.0030 entropy 0.866 decisions 736
+iter 265 t 103.2m policy -0.0832 value 0.0007 entropy 0.737 decisions 658
+iter 270 t 104.3m policy 0.0640 value 0.0058 entropy 0.771 decisions 683
+iter 275 t 105.3m policy -0.0713 value 0.0036 entropy 0.818 decisions 618
+iter 280 t 106.4m policy -0.0571 value 0.0006 entropy 0.864 decisions 611
+iter 285 t 107.4m policy 0.0505 value 0.0055 entropy 0.922 decisions 825
+iter 290 t 108.4m policy -0.0382 value 0.0053 entropy 0.874 decisions 727
+iter 295 t 109.5m policy 0.0445 value 0.0059 entropy 0.947 decisions 714
+iter 300 t 110.5m policy 0.0644 value 0.0047 entropy 0.900 decisions 670
+EVAL learned(A) vs rule(B): {'win': 0.045454545454545456, 'lose': 0.13636363636363635, 'draw': 0.8181818181818182, 'games': 66, 'mean_len': 368.469696969697}
+iter 305 t 113.2m policy -0.0079 value 0.0066 entropy 0.801 decisions 691
+iter 310 t 114.3m policy -0.0329 value 0.0041 entropy 0.909 decisions 710
+iter 315 t 115.3m policy -0.0529 value 0.0034 entropy 0.717 decisions 623
+iter 320 t 116.3m policy -0.0782 value 0.0045 entropy 0.794 decisions 626
+iter 325 t 117.4m policy -0.0026 value 0.0004 entropy 0.905 decisions 670
+iter 330 t 118.4m policy 0.0275 value 0.0025 entropy 0.815 decisions 674
+iter 335 t 119.5m policy 0.0472 value 0.0044 entropy 0.910 decisions 721
+iter 340 t 120.5m policy 0.1568 value 0.0038 entropy 0.842 decisions 623
+iter 345 t 121.5m policy -0.0722 value 0.0026 entropy 0.770 decisions 637
+iter 350 t 122.6m policy 0.1101 value 0.0007 entropy 0.764 decisions 666
+EVAL learned(A) vs rule(B): {'win': 0.13846153846153847, 'lose': 0.15384615384615385, 'draw': 0.7076923076923077, 'games': 65, 'mean_len': 344.2}
+iter 355 t 125.3m policy -0.0175 value 0.0006 entropy 0.817 decisions 659
+iter 360 t 126.3m policy 0.0374 value 0.0041 entropy 0.757 decisions 557
+iter 365 t 127.4m policy -0.0592 value 0.0019 entropy 0.770 decisions 679
+iter 370 t 128.4m policy 0.1025 value 0.0009 entropy 0.802 decisions 647
+iter 375 t 129.5m policy 0.1030 value 0.0003 entropy 0.855 decisions 630
+iter 380 t 130.5m policy -0.0031 value 0.0004 entropy 0.857 decisions 748
+iter 385 t 131.6m policy -0.0437 value 0.0017 entropy 0.878 decisions 822
+iter 390 t 132.6m policy -0.0188 value 0.0028 entropy 0.904 decisions 710
+iter 395 t 133.6m policy 0.0176 value 0.0020 entropy 0.938 decisions 658
+iter 400 t 134.7m policy -0.0052 value 0.0043 entropy 0.937 decisions 731
+EVAL learned(A) vs rule(B): {'win': 0.09230769230769231, 'lose': 0.09230769230769231, 'draw': 0.8153846153846154, 'games': 65, 'mean_len': 362.89230769230767}
+iter 405 t 137.4m policy -0.0639 value 0.0027 entropy 0.904 decisions 912
+iter 410 t 138.5m policy 0.0291 value 0.0009 entropy 0.914 decisions 900
+iter 415 t 139.5m policy 0.0114 value 0.0003 entropy 0.878 decisions 831
+iter 420 t 140.6m policy 0.0136 value 0.0006 entropy 0.939 decisions 894
+iter 425 t 141.7m policy -0.0646 value 0.0002 entropy 0.932 decisions 877
+iter 430 t 142.7m policy -0.0645 value 0.0002 entropy 0.948 decisions 811
+iter 435 t 143.8m policy -0.0886 value 0.0032 entropy 0.911 decisions 962
+iter 440 t 144.9m policy -0.0341 value 0.0006 entropy 0.886 decisions 854
+iter 445 t 145.9m policy 0.0002 value 0.0026 entropy 0.920 decisions 818
+iter 450 t 147.0m policy -0.0286 value 0.0021 entropy 0.937 decisions 810
+EVAL learned(A) vs rule(B): {'win': 0.1076923076923077, 'lose': 0.1076923076923077, 'draw': 0.7846153846153846, 'games': 65, 'mean_len': 357.4153846153846}
+iter 455 t 149.8m policy -0.0680 value 0.0021 entropy 0.954 decisions 800

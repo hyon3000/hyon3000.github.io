@@ -1,0 +1,4 @@
+DIM 3 ITEMS runs/s3u/last.pt: 246656 blocks played in 20.0 min, 7 deaths
+SCORE per block 42.08  (score per 1000 blocks 42082), lines per block 0.545
+death rate 2.84e-05 per block -> expected survival 35237 blocks  (95% interval 17102 .. 87642)
+finished games: mean 2206 blocks, median 1906, longest 3563; mean lines 1173, mean score 95195

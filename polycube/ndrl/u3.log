@@ -1,0 +1,2 @@
+resume: runs/w3/fin.pt | new (randomly/zero initialised) tensors: []
+rnd 500 steps 0.13M windows 2605 eps 0.049 boost 0.98 t 3.4m fresh 349 all 349 lines 122 score 14378 trunc 0.00 loss 0.0004 qmax 309 base 0.000 hole 0.000 lpp 0.351

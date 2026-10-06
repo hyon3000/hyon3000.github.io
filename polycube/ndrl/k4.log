@@ -1,0 +1,76 @@
+init: runs/bat4/best.pt | new tensors: []
+EVAL battle-net(A) vs solo-net + old rule(B): {'win': 0.5833333333333334, 'lose': 0.19791666666666666, 'draw': 0.21875, 'games': 96, 'mean_len': 334.0104166666667}
+rnd 100 steps 0.01M t 27.0m eps 0.080 pairs_len 0 wins A/B/draw 0/0/0 loss 0.0000 item_loss 0.00000 items: used 0.66 of rows-with-items, k>0 45, thrown 315/433
+rnd 200 steps 0.01M t 30.0m eps 0.080 pairs_len 183 wins A/B/draw 4/4/0 loss 0.0000 item_loss 0.00000 items: used 0.51 of rows-with-items, k>0 84, thrown 459/662
+EVAL battle-net(A) vs solo-net + old rule(B): {'win': 0.5833333333333334, 'lose': 0.19791666666666666, 'draw': 0.21875, 'games': 96, 'mean_len': 334.0104166666667}
+rnd 300 steps 0.02M t 56.1m eps 0.079 pairs_len 221 wins A/B/draw 8/14/0 loss 0.0000 item_loss 0.00000 items: used 0.61 of rows-with-items, k>0 89, thrown 457/641
+rnd 400 steps 0.03M t 59.0m eps 0.079 pairs_len 221 wins A/B/draw 16/17/0 loss 0.0000 item_loss 0.00000 items: used 0.57 of rows-with-items, k>0 64, thrown 397/562
+/home/a/Desktop/stuff/polycube/ndrl/train_battle.py:254: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:836.)
+  if rnd % 10 == 0: loss_ema = 0.99 * loss_ema + 0.01 * loss.item(); iloss_ema = 0.99 * iloss_ema + 0.01 * float(il)
+EVAL battle-net(A) vs solo-net + old rule(B): {'win': 0.6458333333333334, 'lose': 0.14583333333333334, 'draw': 0.20833333333333334, 'games': 96, 'mean_len': 334.0416666666667}
+rnd 500 steps 0.03M t 86.3m eps 0.079 pairs_len 233 wins A/B/draw 25/20/0 loss 0.0007 item_loss 0.00039 items: used 0.60 of rows-with-items, k>0 96, thrown 494/684
+rnd 600 steps 0.04M t 89.2m eps 0.079 pairs_len 243 wins A/B/draw 31/30/0 loss 0.0013 item_loss 0.00079 items: used 0.54 of rows-with-items, k>0 70, thrown 450/626
+EVAL battle-net(A) vs solo-net + old rule(B): {'win': 0.5729166666666666, 'lose': 0.16666666666666666, 'draw': 0.2604166666666667, 'games': 96, 'mean_len': 345.0833333333333}
+rnd 700 steps 0.04M t 116.2m eps 0.078 pairs_len 242 wins A/B/draw 40/34/0 loss 0.0018 item_loss 0.00113 items: used 0.50 of rows-with-items, k>0 87, thrown 482/651
+rnd 800 steps 0.05M t 117.6m eps 0.078 pairs_len 244 wins A/B/draw 44/41/0 loss 0.0022 item_loss 0.00147 items: used 0.51 of rows-with-items, k>0 69, thrown 488/658
+rnd 900 steps 0.06M t 119.0m eps 0.078 pairs_len 247 wins A/B/draw 50/46/0 loss 0.0025 item_loss 0.00178 items: used 0.48 of rows-with-items, k>0 98, thrown 496/693
+rnd 1000 steps 0.06M t 120.4m eps 0.078 pairs_len 250 wins A/B/draw 56/49/0 loss 0.0027 item_loss 0.00202 items: used 0.51 of rows-with-items, k>0 80, thrown 485/685
+EVAL battle-net(A) vs solo-net + old rule(B): {'win': 0.6041666666666666, 'lose': 0.08333333333333333, 'draw': 0.3125, 'games': 96, 'mean_len': 365.7916666666667}
+rnd 1100 steps 0.07M t 133.9m eps 0.078 pairs_len 252 wins A/B/draw 62/57/0 loss 0.0029 item_loss 0.00239 items: used 0.54 of rows-with-items, k>0 88, thrown 494/667
+rnd 1200 steps 0.08M t 135.2m eps 0.077 pairs_len 253 wins A/B/draw 64/66/0 loss 0.0031 item_loss 0.00246 items: used 0.49 of rows-with-items, k>0 91, thrown 470/658
+rnd 1300 steps 0.08M t 136.5m eps 0.077 pairs_len 255 wins A/B/draw 69/72/0 loss 0.0032 item_loss 0.00289 items: used 0.53 of rows-with-items, k>0 76, thrown 454/648
+rnd 1400 steps 0.09M t 137.8m eps 0.077 pairs_len 259 wins A/B/draw 77/75/0 loss 0.0034 item_loss 0.00321 items: used 0.53 of rows-with-items, k>0 91, thrown 477/672
+rnd 1500 steps 0.10M t 139.1m eps 0.077 pairs_len 260 wins A/B/draw 88/79/0 loss 0.0035 item_loss 0.00342 items: used 0.52 of rows-with-items, k>0 86, thrown 513/672
+rnd 1600 steps 0.10M t 140.4m eps 0.076 pairs_len 256 wins A/B/draw 94/88/0 loss 0.0036 item_loss 0.00379 items: used 0.58 of rows-with-items, k>0 86, thrown 472/627
+rnd 1700 steps 0.11M t 141.7m eps 0.076 pairs_len 254 wins A/B/draw 103/91/0 loss 0.0037 item_loss 0.00399 items: used 0.53 of rows-with-items, k>0 82, thrown 502/673
+rnd 1800 steps 0.12M t 143.1m eps 0.076 pairs_len 257 wins A/B/draw 106/98/0 loss 0.0038 item_loss 0.00423 items: used 0.57 of rows-with-items, k>0 57, thrown 452/656
+rnd 1900 steps 0.12M t 144.4m eps 0.076 pairs_len 258 wins A/B/draw 110/106/0 loss 0.0039 item_loss 0.00448 items: used 0.55 of rows-with-items, k>0 64, thrown 437/599
+rnd 2000 steps 0.13M t 145.8m eps 0.076 pairs_len 259 wins A/B/draw 115/114/0 loss 0.0040 item_loss 0.00454 items: used 0.57 of rows-with-items, k>0 63, thrown 478/659
+rnd 2100 steps 0.13M t 147.2m eps 0.075 pairs_len 259 wins A/B/draw 119/118/0 loss 0.0040 item_loss 0.00469 items: used 0.56 of rows-with-items, k>0 93, thrown 519/742
+rnd 2200 steps 0.14M t 148.5m eps 0.075 pairs_len 259 wins A/B/draw 126/125/0 loss 0.0040 item_loss 0.00512 items: used 0.52 of rows-with-items, k>0 69, thrown 458/626
+rnd 2300 steps 0.15M t 149.9m eps 0.075 pairs_len 262 wins A/B/draw 132/127/0 loss 0.0042 item_loss 0.00563 items: used 0.53 of rows-with-items, k>0 89, thrown 495/677
+rnd 2400 steps 0.15M t 151.3m eps 0.075 pairs_len 260 wins A/B/draw 140/133/0 loss 0.0041 item_loss 0.00578 items: used 0.59 of rows-with-items, k>0 71, thrown 441/622
+EVAL battle-net(A) vs solo-net + old rule(B): {'win': 0.6770833333333334, 'lose': 0.0625, 'draw': 0.2604166666666667, 'games': 96, 'mean_len': 334.3958333333333}
+rnd 2500 steps 0.16M t 163.6m eps 0.074 pairs_len 261 wins A/B/draw 146/137/0 loss 0.0042 item_loss 0.00587 items: used 0.54 of rows-with-items, k>0 72, thrown 457/639
+rnd 2600 steps 0.17M t 164.9m eps 0.074 pairs_len 262 wins A/B/draw 149/141/0 loss 0.0042 item_loss 0.00594 items: used 0.53 of rows-with-items, k>0 64, thrown 442/637
+rnd 2700 steps 0.17M t 166.3m eps 0.074 pairs_len 261 wins A/B/draw 156/143/0 loss 0.0042 item_loss 0.00614 items: used 0.56 of rows-with-items, k>0 105, thrown 506/700
+rnd 2800 steps 0.18M t 167.6m eps 0.074 pairs_len 269 wins A/B/draw 157/143/0 loss 0.0044 item_loss 0.00623 items: used 0.57 of rows-with-items, k>0 68, thrown 441/605
+rnd 2900 steps 0.19M t 169.0m eps 0.074 pairs_len 272 wins A/B/draw 160/140/0 loss 0.0044 item_loss 0.00637 items: used 0.55 of rows-with-items, k>0 74, thrown 435/614
+rnd 3000 steps 0.19M t 170.4m eps 0.073 pairs_len 273 wins A/B/draw 160/140/0 loss 0.0046 item_loss 0.00640 items: used 0.58 of rows-with-items, k>0 60, thrown 433/595
+rnd 3100 steps 0.20M t 171.7m eps 0.073 pairs_len 272 wins A/B/draw 159/141/0 loss 0.0047 item_loss 0.00648 items: used 0.58 of rows-with-items, k>0 62, thrown 428/589
+rnd 3200 steps 0.20M t 173.1m eps 0.073 pairs_len 271 wins A/B/draw 158/142/0 loss 0.0047 item_loss 0.00633 items: used 0.50 of rows-with-items, k>0 56, thrown 462/614
+rnd 3300 steps 0.21M t 174.5m eps 0.073 pairs_len 272 wins A/B/draw 155/145/0 loss 0.0048 item_loss 0.00660 items: used 0.53 of rows-with-items, k>0 63, thrown 489/652
+rnd 3400 steps 0.22M t 175.8m eps 0.072 pairs_len 272 wins A/B/draw 153/147/0 loss 0.0049 item_loss 0.00666 items: used 0.58 of rows-with-items, k>0 77, thrown 467/629
+rnd 3500 steps 0.22M t 177.2m eps 0.072 pairs_len 271 wins A/B/draw 152/148/0 loss 0.0049 item_loss 0.00707 items: used 0.51 of rows-with-items, k>0 46, thrown 432/584
+rnd 3600 steps 0.23M t 178.6m eps 0.072 pairs_len 271 wins A/B/draw 156/144/0 loss 0.0050 item_loss 0.00739 items: used 0.55 of rows-with-items, k>0 69, thrown 482/619
+rnd 3700 steps 0.24M t 180.0m eps 0.072 pairs_len 272 wins A/B/draw 158/142/0 loss 0.0051 item_loss 0.00739 items: used 0.59 of rows-with-items, k>0 62, thrown 436/586
+rnd 3800 steps 0.24M t 181.4m eps 0.071 pairs_len 271 wins A/B/draw 158/142/0 loss 0.0053 item_loss 0.00744 items: used 0.48 of rows-with-items, k>0 98, thrown 464/618
+EVAL battle-net(A) vs solo-net + old rule(B): {'win': 0.59375, 'lose': 0.07291666666666667, 'draw': 0.3333333333333333, 'games': 96, 'mean_len': 355.6875}
+rnd 3900 steps 0.25M t 194.6m eps 0.071 pairs_len 270 wins A/B/draw 155/145/0 loss 0.0054 item_loss 0.00762 items: used 0.51 of rows-with-items, k>0 78, thrown 403/525
+rnd 4000 steps 0.26M t 196.0m eps 0.071 pairs_len 269 wins A/B/draw 153/147/0 loss 0.0056 item_loss 0.00742 items: used 0.54 of rows-with-items, k>0 65, thrown 435/580
+rnd 4100 steps 0.26M t 197.4m eps 0.071 pairs_len 270 wins A/B/draw 154/146/0 loss 0.0058 item_loss 0.00758 items: used 0.53 of rows-with-items, k>0 71, thrown 413/573
+rnd 4200 steps 0.27M t 198.8m eps 0.071 pairs_len 272 wins A/B/draw 157/143/0 loss 0.0058 item_loss 0.00752 items: used 0.52 of rows-with-items, k>0 78, thrown 473/631
+rnd 4300 steps 0.28M t 200.1m eps 0.070 pairs_len 273 wins A/B/draw 154/146/0 loss 0.0058 item_loss 0.00795 items: used 0.53 of rows-with-items, k>0 81, thrown 412/554
+rnd 4400 steps 0.28M t 201.5m eps 0.070 pairs_len 276 wins A/B/draw 155/145/0 loss 0.0059 item_loss 0.00793 items: used 0.52 of rows-with-items, k>0 81, thrown 451/618
+rnd 4500 steps 0.29M t 202.9m eps 0.070 pairs_len 274 wins A/B/draw 159/141/0 loss 0.0059 item_loss 0.00794 items: used 0.48 of rows-with-items, k>0 52, thrown 385/526
+rnd 4600 steps 0.29M t 204.3m eps 0.070 pairs_len 276 wins A/B/draw 162/138/0 loss 0.0060 item_loss 0.00794 items: used 0.47 of rows-with-items, k>0 91, thrown 436/585
+rnd 4700 steps 0.30M t 205.6m eps 0.069 pairs_len 274 wins A/B/draw 162/138/0 loss 0.0060 item_loss 0.00837 items: used 0.46 of rows-with-items, k>0 70, thrown 398/558
+rnd 4800 steps 0.31M t 207.0m eps 0.069 pairs_len 273 wins A/B/draw 162/138/0 loss 0.0062 item_loss 0.00842 items: used 0.44 of rows-with-items, k>0 72, thrown 398/521
+rnd 4900 steps 0.31M t 208.4m eps 0.069 pairs_len 274 wins A/B/draw 163/137/0 loss 0.0062 item_loss 0.00883 items: used 0.50 of rows-with-items, k>0 71, thrown 422/557
+rnd 5000 steps 0.32M t 209.8m eps 0.069 pairs_len 273 wins A/B/draw 162/138/0 loss 0.0063 item_loss 0.00899 items: used 0.49 of rows-with-items, k>0 84, thrown 455/619
+rnd 5100 steps 0.33M t 211.2m eps 0.069 pairs_len 271 wins A/B/draw 162/138/0 loss 0.0064 item_loss 0.00923 items: used 0.50 of rows-with-items, k>0 95, thrown 441/613
+EVAL battle-net(A) vs solo-net + old rule(B): {'win': 0.6770833333333334, 'lose': 0.07291666666666667, 'draw': 0.25, 'games': 96, 'mean_len': 331.9583333333333}
+rnd 5200 steps 0.33M t 223.1m eps 0.068 pairs_len 270 wins A/B/draw 160/140/0 loss 0.0066 item_loss 0.00929 items: used 0.46 of rows-with-items, k>0 111, thrown 455/595
+rnd 5300 steps 0.34M t 224.5m eps 0.068 pairs_len 263 wins A/B/draw 161/139/0 loss 0.0066 item_loss 0.00947 items: used 0.50 of rows-with-items, k>0 68, thrown 381/539
+rnd 5400 steps 0.35M t 225.9m eps 0.068 pairs_len 262 wins A/B/draw 162/138/0 loss 0.0067 item_loss 0.00928 items: used 0.52 of rows-with-items, k>0 55, thrown 425/560
+rnd 5500 steps 0.35M t 227.3m eps 0.068 pairs_len 264 wins A/B/draw 158/142/0 loss 0.0068 item_loss 0.00916 items: used 0.52 of rows-with-items, k>0 56, thrown 441/601
+rnd 5600 steps 0.36M t 228.6m eps 0.067 pairs_len 267 wins A/B/draw 157/143/0 loss 0.0068 item_loss 0.00911 items: used 0.55 of rows-with-items, k>0 77, thrown 444/597
+rnd 5700 steps 0.36M t 230.0m eps 0.067 pairs_len 268 wins A/B/draw 160/140/0 loss 0.0070 item_loss 0.00920 items: used 0.46 of rows-with-items, k>0 70, thrown 425/599
+rnd 5800 steps 0.37M t 231.4m eps 0.067 pairs_len 270 wins A/B/draw 163/137/0 loss 0.0070 item_loss 0.00956 items: used 0.50 of rows-with-items, k>0 69, thrown 468/627
+rnd 5900 steps 0.38M t 232.8m eps 0.067 pairs_len 269 wins A/B/draw 163/137/0 loss 0.0071 item_loss 0.00960 items: used 0.48 of rows-with-items, k>0 70, thrown 413/563
+rnd 6000 steps 0.38M t 234.2m eps 0.067 pairs_len 265 wins A/B/draw 165/135/0 loss 0.0070 item_loss 0.00969 items: used 0.47 of rows-with-items, k>0 65, thrown 424/556
+rnd 6100 steps 0.39M t 235.5m eps 0.066 pairs_len 264 wins A/B/draw 161/139/0 loss 0.0072 item_loss 0.00973 items: used 0.45 of rows-with-items, k>0 95, thrown 401/548
+rnd 6200 steps 0.40M t 236.9m eps 0.066 pairs_len 263 wins A/B/draw 161/139/0 loss 0.0073 item_loss 0.01036 items: used 0.49 of rows-with-items, k>0 75, thrown 391/538
+rnd 6300 steps 0.40M t 238.3m eps 0.066 pairs_len 259 wins A/B/draw 164/136/0 loss 0.0073 item_loss 0.01014 items: used 0.49 of rows-with-items, k>0 78, thrown 473/599
+rnd 6400 steps 0.41M t 239.7m eps 0.066 pairs_len 260 wins A/B/draw 163/137/0 loss 0.0075 item_loss 0.01002 items: used 0.49 of rows-with-items, k>0 82, thrown 418/578

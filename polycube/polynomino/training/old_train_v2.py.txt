@@ -1,0 +1,149 @@
+"""Afterstate Double-DQN for Polynomino.
+
+Q(c) = r(c) + gamma * V(afterstate_c); V is a small MLP over the afterstate features.
+Targets are computed on the fly with a Polyak-averaged target network (double-DQN action selection).
+"""
+import argparse, collections, pathlib, time
+import numpy as np
+import torch, torch.nn as nn, torch.nn.functional as Fn
+from simlib import VecEnv, NF, MAXC
+
+HERE = pathlib.Path(__file__).parent
+VSCALE = 10.0
+GAMMA = 0.99
+DEATH = -10.0
+
+
+def make_net(hidden=(256, 256, 128)):
+    layers, d = [], NF
+    for h in hidden:
+        layers += [nn.Linear(d, h), nn.ReLU()]
+        d = h
+    layers += [nn.Linear(d, 1)]
+    return nn.Sequential(*layers)
+
+
+def reward_of(lines, done):
+    r = 1.0 + 2.0 * lines * lines
+    return np.where(done > 0, DEATH, r)
+
+
+@torch.no_grad()
+def q_values(net, x, rew, valid):
+    v = net(x).squeeze(-1) * VSCALE
+    q = rew + GAMMA * v
+    return q.masked_fill(~valid, -1e9)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--envs", type=int, default=512)
+    ap.add_argument("--minutes", type=float, default=30)
+    ap.add_argument("--maxpieces", type=int, default=3000)
+    ap.add_argument("--batch", type=int, default=1024)
+    ap.add_argument("--updates", type=int, default=4)
+    ap.add_argument("--lr", type=float, default=3e-4)
+    ap.add_argument("--tau", type=float, default=0.01)
+    ap.add_argument("--eps0", type=float, default=0.25)
+    ap.add_argument("--eps1", type=float, default=0.01)
+    ap.add_argument("--eps_steps", type=float, default=2e6)
+    ap.add_argument("--buffer", type=int, default=400_000)
+    ap.add_argument("--out", default="runs/main")
+    ap.add_argument("--resume", default="")
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--noitems", action="store_true")
+    a = ap.parse_args()
+
+    out = HERE / a.out; out.mkdir(parents=True, exist_ok=True)
+    dev = torch.device("cuda")
+    torch.manual_seed(a.seed); rng = np.random.default_rng(a.seed)
+    net = make_net().to(dev); tgt = make_net().to(dev)
+    if a.resume:
+        sd = torch.load(a.resume)
+        w = sd["0.weight"]
+        if w.shape[1] < NF:  # warm start from a model with fewer inputs: new inputs start at zero weight
+            sd["0.weight"] = torch.cat([w, torch.zeros(w.shape[0], NF - w.shape[1], device=w.device)], 1)
+        net.load_state_dict(sd)
+    tgt.load_state_dict(net.state_dict())
+    opt = torch.optim.Adam(net.parameters(), lr=a.lr)
+
+    env = VecEnv(a.envs, a.seed + 1, items=not a.noitems)
+    N = a.envs
+    bx = torch.zeros(a.buffer, NF, device=dev); by = torch.zeros(a.buffer, device=dev)
+    bn, bp = 0, 0
+    pend_x = None; pend_valid = np.zeros(N, bool); pend_dead = np.zeros(N, bool)
+    ep_pieces = collections.deque(maxlen=300); ep_lines = collections.deque(maxlen=300); ep_score = collections.deque(maxlen=300)
+    ep_trunc = collections.deque(maxlen=300)
+    steps = 0; rnd = 0; t0 = time.time(); best = -1; loss_ema = 0
+    while time.time() - t0 < a.minutes * 60:
+        env.gen()
+        cmax = int(env.counts.max())
+        x = torch.from_numpy(env.feats[:, :cmax]).to(dev)
+        rew = torch.from_numpy(reward_of(env.lines[:, :cmax], env.done[:, :cmax]).astype(np.float32)).to(dev)
+        idx = torch.arange(cmax, device=dev)[None]
+        inrange = idx < torch.from_numpy(env.counts).to(dev)[:, None]
+        dn = torch.from_numpy(env.done[:, :cmax]).to(dev) > 0
+        alive = inrange & ~dn
+        valid = torch.where(alive.any(1, keepdim=True), alive, inrange)  # forced death: any candidate
+
+        qo = q_values(net, x, rew, valid)
+        qt = q_values(tgt, x, rew, valid)
+        best_a = qo.argmax(1)
+        ystar = qt.gather(1, best_a[:, None]).squeeze(1)
+
+        # targets for the previous afterstates
+        if pend_x is not None:
+            m = torch.from_numpy(pend_valid | pend_dead).to(dev)
+            k = int(m.sum())
+            if k:
+                xs = pend_x[m]
+                ytar = torch.where(torch.from_numpy(pend_dead).to(dev), torch.full_like(ystar, DEATH), ystar)
+                ys = ytar[m] / VSCALE  # store in net-output scale
+                pos = (torch.arange(k, device=dev) + bp) % a.buffer
+                bx[pos] = xs; by[pos] = ys
+                bp = (bp + k) % a.buffer; bn = min(bn + k, a.buffer)
+
+        # action selection (epsilon-greedy over valid candidates)
+        eps = max(a.eps1, a.eps0 + (a.eps1 - a.eps0) * steps / a.eps_steps)
+        rand_pick = torch.multinomial(valid.float(), 1).squeeze(1)
+        explore = torch.rand(N, device=dev) < eps
+        act = torch.where(explore, rand_pick, best_a)
+        pend_x = x[torch.arange(N, device=dev), act]
+        act_np = act.cpu().numpy()
+        chosen_done = env.done[np.arange(N), act_np] > 0
+
+        ep = env.step(act_np, a.maxpieces)
+        steps += N; rnd += 1
+        pend_valid = (ep[:, 0] == 0)  # non-terminal, non-truncated: bootstrap from the next decision
+        # predicted alive but the real game ended (gravity lock, blind misjudgement...): learn that this afterstate is deadly
+        pend_dead = (ep[:, 0] == 1) & ~chosen_done
+        for i in np.nonzero(ep[:, 0] > 0)[0]:
+            ep_pieces.append(ep[i, 3]); ep_lines.append(ep[i, 2]); ep_score.append(ep[i, 1]); ep_trunc.append(ep[i, 0] == 2)
+
+        # learning
+        if bn >= 20000:
+            for _ in range(a.updates):
+                ii = torch.randint(0, bn, (a.batch,), device=dev)
+                pred = net(bx[ii]).squeeze(-1)
+                loss = Fn.smooth_l1_loss(pred, by[ii])
+                opt.zero_grad(set_to_none=True); loss.backward()
+                nn.utils.clip_grad_norm_(net.parameters(), 5.0)
+                opt.step()
+                loss_ema = 0.99 * loss_ema + 0.01 * loss.item() if rnd % 10 == 0 else loss_ema
+            with torch.no_grad():
+                for pt, pn in zip(tgt.parameters(), net.parameters()):
+                    pt.lerp_(pn, a.tau)
+
+        if rnd % 100 == 0 and ep_pieces:
+            mp = float(np.mean(ep_pieces))
+            print(f"rnd {rnd} steps {steps/1e6:.2f}M eps {eps:.3f} t {(time.time()-t0)/60:.1f}m "
+                  f"pieces {mp:.0f} lines {np.mean(ep_lines):.0f} score {np.mean(ep_score):.0f} "
+                  f"trunc {np.mean(ep_trunc):.2f} loss {loss_ema:.4f}", flush=True)
+            torch.save(net.state_dict(), out / "last.pt")
+            if mp > best and steps > 1e6:
+                best = mp; torch.save(net.state_dict(), out / "best.pt")
+    torch.save(net.state_dict(), out / "last.pt")
+
+
+if __name__ == "__main__":
+    main()

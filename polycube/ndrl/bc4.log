@@ -1,0 +1,8 @@
+collected 3448 states in 290 s; label shares [0.0, 0.395, 0.605]
+epoch 5 val accuracy 0.872
+epoch 10 val accuracy 0.991
+epoch 15 val accuracy 0.997
+epoch 20 val accuracy 0.997
+epoch 25 val accuracy 0.997
+epoch 30 val accuracy 0.997
+saved runs/duel4/bc1.pt

@@ -1,0 +1,6 @@
+resume: runs/s3/last.pt | new (randomly/zero initialised) tensors: []
+rnd 800 steps 0.20M windows 4353 eps 0.091 boost 0.98 t 4.9m fresh 531 all 531 lines 246 score 12720 trunc 0.00 loss 0.0002 qmax 220
+rnd 900 steps 0.23M windows 4875 eps 0.090 boost 0.97 t 5.5m fresh 568 all 568 lines 266 score 13602 trunc 0.00 loss 0.0002 qmax 221
+rnd 1000 steps 0.26M windows 5400 eps 0.088 boost 0.97 t 6.2m fresh 604 all 604 lines 286 score 15139 trunc 0.00 loss 0.0003 qmax 221
+rnd 1100 steps 0.28M windows 5929 eps 0.087 boost 0.96 t 6.8m fresh 657 all 657 lines 315 score 16552 trunc 0.00 loss 0.0003 qmax 221
+rnd 1200 steps 0.31M windows 6457 eps 0.086 boost 0.96 t 7.4m fresh 701 all 701 lines 339 score 18060 trunc 0.00 loss 0.0003 qmax 222

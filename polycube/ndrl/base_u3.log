@@ -1,0 +1,4 @@
+DIM 3 ITEMS runs/w3/fin.pt: 145472 blocks played in 15.0 min, 13 deaths
+SCORE per block 41.48  (score per 1000 blocks 41478), lines per block 0.535
+death rate 8.94e-05 per block -> expected survival 11190 blocks  (95% interval 6544 .. 21016)
+finished games: mean 954 blocks, median 761, longest 2263; mean lines 501, mean score 39753

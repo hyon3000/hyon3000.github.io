@@ -1,4 +1,7 @@
 (() => {
+const BATTLE = !!window.__battle;   // battle mode (see ../battle.js)
+// A canvas wider than the normal 1:2 window (battle mode main screen) keeps the vertical extent of the scene and gains room on both sides.
+function viewK(w, h) { return Math.max(1, (w / h) / 0.5); }
 const PI = 3.1415926535898;
 const TR = 57.295779513082320876798154814105;
 
@@ -36,7 +39,7 @@ function getMinute() {
 }
 
 function randInt(max) {
-  return Math.floor(Math.random() * max);
+  return Math.floor((window.__rng ? window.__rng() : Math.random()) * max);
 }
 
 function create3d(x, y, z, value = 0) {
@@ -146,22 +149,24 @@ const _isKo = /^ko/i.test(navigator.language || '');
 const ITEM_DESC = _isKo ? {
   1:'자폭: 착지 즉시 주변 파괴', 2:'은폐: 현재 블록 숨김', 200:'거울상: 보드 좌우반전', 19:'지그재그: 각 층 블록 재배치', 4:'득점강화: 점수 4배 (중첩 16배)',
   5:'아이템제거: 판 위 아이템 제거', 6:'예측차단: 다음 블록 숨김', 8:'속도증가: x2.5', 9:'속도감소: x0.4',
-  10:'홀드봉인: 10턴간 홀드 불가', 11:'장애물: 랜덤 위치 장애물 3개', 16:'시야봉인: 보드 숨김', 17:'폭탄블록5개: 5블록에 폭탄', 18:'구멍: 블록 30% 제거',
+  10:'홀드봉인: 15턴간 홀드 불가', 11:'장애물: 랜덤 위치 장애물 3개', 16:'시야봉인: 보드 숨김', 17:'폭탄블록5개: 5블록에 폭탄', 18:'구멍: 블록 30% 제거',
   91:'회전봉인: 10턴간 회전 불가', 20:'빈공간삭제: 모든 빈공간 정리', 21:'소형화: 8턴간 3칸 이하', 22:'대형화: 8턴간 5칸 이상', 30:'관통: 낙하경로 블록파괴', 31:'상쇄: 블록과 닿으면 상호삭제',
   102:'상단삭제: 위의 블록 모두 제거', 104:'모노전용: 1칸 블록만', 105:'종렬삭제: 해당 열 삭제', 116:'-2줄: 바닥 2줄 제거', 117:'+2줄: 바닥에 2줄 추가',
   118:'범위삭제: 주변 열 전체삭제', 119:'전체삭제: 판 전체 클리어', 120:'시한폭탄: 3턴후 폭발', 121:'시한폭탄: 2턴후 폭발', 122:'시한폭탄: 1턴후 폭발',
   123:'시한폭탄: 폭발 임박', 124:'-3줄: 바닥 3줄 제거', 125:'+1줄: 바닥에 1줄 추가', 126:'횡렬삭제: 해당 행 삭제', 127:'폭탄변환: 30%확률 폭탄화',
-  204:'강화: 10줄간 아이템 효과 2배',
+  204:'강화: 20줄간 아이템 효과 2배',
 } : {
   1:'Self-Destruct: 3x3x3 boom', 2:'Conceal: Hide piece 10t', 200:'Mirror: Flip board', 19:'Zigzag: Shuffle each layer', 4:'Score Boost: x4 (stack x16)', 5:'Item Clear: Remove items',
-  6:'No Preview: Hide next 10t', 8:'Speed Up: x2.5', 9:'Slow Down: x0.4', 10:'Hold Lock: 10 turns', 11:'Obstacle: 3 random',
+  6:'No Preview: Hide next 20t', 8:'Speed Up: x2.5', 9:'Slow Down: x0.4', 10:'Hold Lock: 15 turns', 11:'Obstacle: 3 random',
   16:'Blind: Hide board 10sec', 17:'Bomb x5: Next 5 have bombs', 18:'Hole: Remove 30% blocks', 91:'Rot Lock: 10 turns', 20:'Gap Clear: Remove gaps', 21:'Simplify: ≤3 cells 8 turns',
   22:'PentaForce: ≥5 cells 8 turns', 30:'Pierce: Destroy in path', 31:'Cancel: Mutual delete', 102:'Top Clear: All above', 104:'Mono Only: 1-cell 10 turns',
   105:'Col Del: Delete column', 116:'-2 Lines: Remove 2', 117:'+2 Lines: Add 2 lines', 118:'Range Del: 3x3 columns', 119:'Full Clear: Wipe board',
   120:'Time Bomb: 3t to blow', 121:'Time Bomb: 2t to blow', 122:'Time Bomb: 1t to blow', 123:'Time Bomb: Imminent',
   124:'-3 Lines: Remove 3', 125:'+1 Line: Add 1 line', 126:'Row Del: Delete row', 127:'Bomb Convert: 30% bomb',
-  204:'Enforcement: x2 item effects 10 lines',
+  204:'Enforcement: x2 item effects 20 lines',
 };
+// battle mode: the score-boost block steals the items from the opponent's slots (see ../battle.js)
+if (BATTLE) ITEM_DESC[4] = _isKo ? '강탈: 상대에게 쓰면 상대 슬롯 아이템을 전부 뺏음' : 'Steal: on the opponent = take all its slot items';
 const ITEM_GOOD = new Set([1,4,9,20,21,30,31,102,104,105,116,117,118,119,124,125,126]);
 
 const texcoords = [
@@ -178,8 +183,8 @@ function normalizeTouch(clientX, clientY) {
   const activitysizex = rect.width || 1;
   const activitysizey = rect.height || 1;
   return {
-    x: ((px / activitysizex) * 3 - 1.5) / 2.095,
-    y: -((((py + activitysizey / 40) / activitysizey) * 3 - 1.5) * activitysizey / activitysizex / 2.095),
+    x: ((px / activitysizex) * 3 - 1.5) * viewK(activitysizex, activitysizey) / 2.095,
+    y: -((((py + activitysizey / 40) / activitysizey) * 3 - 1.5) * activitysizey / activitysizex * viewK(activitysizex, activitysizey) / 2.095),
   };
 }
 
@@ -296,7 +301,7 @@ function _execKey(code) {
     while (!move(2, -1)) { if (state.nowblock !== _hb) break; }
     if (state.nowblock !== _hb) { state.timestamp = now(); return; }
     if (stickblock()) { gover(); initBlockState(); return; }
-    calculatescore(removeline());
+    calculatescore(removeline()); if (state._ovf) overflowDie();
     state.timestamp = now();
     return;
   }
@@ -395,7 +400,8 @@ function resize() {
   overlayCanvas.width = canvas.width;
   overlayCanvas.height = canvas.height;
   renderer.matrixMode("PROJECTION");
-  renderer.orthof(-1.5, 1.5, (-1.5 * canvas.height) / canvas.width, (1.5 * canvas.height) / canvas.width, 0.96, 20);
+  const _k = viewK(canvas.width, canvas.height);
+  renderer.orthof(-1.5 * _k, 1.5 * _k, (-1.5 * _k * canvas.height) / canvas.width, (1.5 * _k * canvas.height) / canvas.width, 0.96, 20);
 }
 
 function clear3d(arr, value = 0) {
@@ -490,6 +496,7 @@ function createNewBlock() {
 
 function initBlockState() {
   loadHighScore();
+  if (BATTLE) { PolyBattle.clear(); _bq.length = 0; for (const b of state.b) if (b) b._mono = 0; }
   state.floorz = 0;
   state.nowhb = 0;
   state.nowib = 0;
@@ -535,6 +542,7 @@ function initBlockState() {
       const _u = randInt(250000);
       if(_u<100)_hv=116;else if(_u<400)_hv=117;else if(_u<700)_hv=118;else if(_u<720)_hv=119;else if(_u<1520)_hv=104;else if(_u<2020)_hv=120;else if(_u<3020)_hv=121;else if(_u<3720)_hv=122;else if(_u<4020)_hv=123;else if(_u<4070)_hv=124;else if(_u<4870)_hv=125;else if(_u<5120)_hv=91;else if(_u<5220)_hv=102;else if(_u<5420)_hv=126;else if(_u<5620)_hv=105;else if(_u<5920)_hv=127;else if(_u<6020)_hv=17;else if(_u<6220)_hv=20;else if(_u<7020)_hv=21;else if(_u<7820)_hv=22;else if(_u<8070)_hv=16;else if(_u<8270)_hv=11;else if(_u<8520)_hv=2;else if(_u<9520)_hv=8;else if(_u<10520)_hv=9;else if(_u<10770)_hv=10;else if(_u<11770)_hv=5;else if(_u<12020)_hv=6;else if(_u<12320)_hv=204;else if(_u<14570)_hv=120;else if(_u<24570)_hv=200;else if(_u<24870)_hv=19;else if(_u<25170)_hv=18;
     }
+    if (BATTLE && _hv === 4 && randInt(16) !== 0) _hv = 65;   // battle mode: the score-boost block is 1/16 as common
     state.holdblock[3][3][3] = _hv;
   } else { state.holdblock[3][3][3] = 65; }
   setnextblock();
@@ -598,6 +606,7 @@ function applySpecialAging() {
         if (120 <= value && value < 123) {
           state.blk[x][y][z] += 1;
         } else if (value === 123) {
+          if (window.__ev) window.__ev.boom++;
           const _tbR = state.reinforce > 0 ? 2 : 1;
           for (let x2 = x - _tbR; x2 <= x + _tbR; x2 += 1) {
             for (let y2 = y - _tbR; y2 <= y + _tbR; y2 += 1) {
@@ -660,7 +669,7 @@ function assignCellFromProbability(baseIndex, x, y, z) {
   if (u < 14270) return 5;    // 아이템제거: 0.1%
   if (u < 14520) return 6;    // 예측차단: 0.025%
   if (u < 14820) return 204;  // 강화: 0.03%
-  if (u < 24820) return 4;    // 득점강화: ~1%
+  if (u < 24820) return (BATTLE && randInt(16) !== 0) ? raw : 4;    // 득점강화: ~1% (battle mode: 1/16 of that; the block is a steal-items item there)
   if (u < 25120) return 200;  // 거울상: 0.03%
   if (u < 25420) return 19;   // 지그재그: 0.03%
   if (u < 25720) return 18;   // 구멍: 0.03%
@@ -694,6 +703,7 @@ function assignCellFromProbability(baseIndex, x, y, z) {
 }
 
 function setnextblock() {
+  window.__pieceSeq = (window.__pieceSeq || 0) + 1;
   state.asc = 0;
   [state.nextblock, state.nowblock] = [state.nowblock, state.nextblock];
   [state.nexthb, state.nowhb] = [state.nowhb, state.nexthb];
@@ -760,6 +770,9 @@ function setnextblock() {
       state.bombnext -= 1;
     }
   }
+
+  state.nextblock._mono = 0;
+  if (BATTLE && _bq.length) { battleMakeMono(state.nextblock); state.nextblock._mono = _bq.shift(); }   // battle mode: the block after a position item is a plain single cube of its own
 
   state.blockpos[0] = 0;
   state.blockpos[1] = 0;
@@ -1108,21 +1121,9 @@ function move(pos, deg) {
   }
 }
 
-function processLine(cells, z, coords) {
-  let tline2 = 0;
-  for (const [x, y] of coords) {
-    if (state.blk[x][y][z] === 0) return 0;
-    if (state.blk[x][y][z] < 256) tline2 += 1;
-  }
-  let filled = tline2 ? 1 : 0;
-  // Pre-scan for mirror (code 200) before processing - early returns might skip it
-  let _mirrorFlag = false;
-  for (const [x2, y2] of coords) {
-    if ((state.blk[x2][y2][z] & 255) === 200) { _mirrorFlag = true; state.blk[x2][y2][z] = (state.blk[x2][y2][z] & 256); }
-  }
-  for (const [x, y] of coords) {
-    const code = state.blk[x][y][z] & 255;
-    const _enf = state.reinforce > 0;
+// effect of ONE item cell (code) at (x, y, z); cells.tline collects the +/- line items. Shared by line clears and by battle-mode slots.
+function applyItemCell(code, x, y, z, cells) {
+  const _enf = state.reinforce > 0;
     if (code === 116) { cells.tline -= _enf ? 4 : 2; state.blk[x][y][z] = 256; }
     else if (code === 117) { cells.tline += _enf ? 4 : 2; state.blk[x][y][z] = 256; }
     else if (code === 118) {
@@ -1137,21 +1138,21 @@ function processLine(cells, z, coords) {
       }
     } else if (code === 119) {
       clear3d(state.blk, 0);
-      return { hardReset: true, filled };
+      return 'reset';
     } else if (code === 104) { state.simplify2 = 0; state.pentaForce = 0; state.monoonly += _enf ? 22 : 11; state.blk[x][y][z] = 256; }
     else if (code === 124) { cells.tline -= _enf ? 6 : 3; state.blk[x][y][z] = 256; }
     else if (code === 125) { cells.tline += _enf ? 2 : 1; state.blk[x][y][z] = 256; }
     else if (code === 91) { state.spinlock += _enf ? 20 : 10; state.blk[x][y][z] = 256; }
     else if (code === 8) { state.speedup += _enf ? 20 : 10; state.blk[x][y][z] = 256; }
     else if (code === 9) { state.speeddown += _enf ? 20 : 10; state.blk[x][y][z] = 256; }
-    else if (code === 10) { state.holdlock += _enf ? 20 : 10; state.blk[x][y][z] = 256; }
+    else if (code === 10) { state.holdlock += _enf ? 30 : 15; state.blk[x][y][z] = 256; }
     else if (code === 16) { state.blindboard = now() + (_enf ? 20000 : 10000); state.blk[x][y][z] = 256; }
     else if (code === 17) { state.bombnext += _enf ? 12 : 6; state.blk[x][y][z] = 256; }
     else if (code === 20) { state.compactPending = true; state.blk[x][y][z] = 256; }
     else if (code === 21) { state.monoonly = 0; state.pentaForce = 0; state.simplify2 += _enf ? 18 : 9; state.blk[x][y][z] = 256; }
     else if (code === 22) { state.monoonly = 0; state.simplify2 = 0; state.pentaForce += _enf ? 18 : 9; state.blk[x][y][z] = 256; }
     else if (code === 2) { state.hideblock += _enf ? 20 : 10; state.blk[x][y][z] = 256; }
-    else if (code === 6) { state.hidenext += _enf ? 20 : 10; state.blk[x][y][z] = 256; }
+    else if (code === 6) { state.hidenext += _enf ? 40 : 20; state.blk[x][y][z] = 256; }
     else if (code === 5) {
       if (_enf) {
         let _minVal = Infinity;
@@ -1187,9 +1188,9 @@ function processLine(cells, z, coords) {
       }
       state.blk[x][y][z] = 256;
     } else if (code === 204) {
-      state.reinforce = 10;
+      state.reinforce = 20;
       state.blk[x][y][z] = 256;
-    } else if (code === 4) { state.score2x += _enf ? 2 : 1; state.blk[x][y][z] = 256; }
+    } else if (code === 4) { if (!BATTLE) state.score2x += _enf ? 2 : 1; state.blk[x][y][z] = 256; }   // battle mode: no score effect (used on the opponent it steals the items in its slots)
     // code 200 (mirror) handled by pre-scan above
     else if (code === 11) {
       state.blk[x][y][z] = 256;
@@ -1316,6 +1317,27 @@ function processLine(cells, z, coords) {
     } else {
       state.blk[x][y][z] |= 256;
     }
+  return '';
+}
+
+function processLine(cells, z, coords) {
+  let tline2 = 0;
+  for (const [x, y] of coords) {
+    if (state.blk[x][y][z] === 0) return 0;
+    if (state.blk[x][y][z] < 256) tline2 += 1;
+  }
+  let filled = tline2 ? 1 : 0;
+  // Pre-scan for mirror (code 200) before processing - early returns might skip it
+  let _mirrorFlag = false;
+  for (const [x2, y2] of coords) {
+    if ((state.blk[x2][y2][z] & 255) === 200 && BATTLE && PolyBattle.store(200)) { state.blk[x2][y2][z] = 256; }
+    else if ((state.blk[x2][y2][z] & 255) === 200) { _mirrorFlag = true; state.blk[x2][y2][z] = (state.blk[x2][y2][z] & 256); }
+  }
+  for (const [x, y] of coords) {
+    const code = state.blk[x][y][z] & 255;
+    if (window.__ev) window.__evTrig(code);
+    if (BATTLE && PolyBattle.store(code)) { state.blk[x][y][z] = 256; continue; }   // battle mode: the item goes into a slot instead
+    if (applyItemCell(code, x, y, z, cells) === 'reset') return { hardReset: true, filled };
   }
   if (_mirrorFlag) {
     for (let z2 = 0; z2 < 26; z2++) {
@@ -1329,6 +1351,94 @@ function processLine(cells, z, coords) {
     }
   }
   return { filled };
+}
+
+// board clean-up after item effects: remove marked cells, +/- lines (cells.tline), gap clear. Returns the extra lines made by the gap clear.
+function settleBoard(cells) {
+  var compactLines = 0;
+  if (cells.tline < 0) {
+    for (let z = 0; z < -cells.tline; z += 1) {
+      for (let x = 0; x < 7; x += 1) {
+        for (let y = 0; y < 7; y += 1) state.blk[x][y][z] = 256;
+      }
+    }
+    cells.tline = 0;
+  }
+
+  for (let x = 0; x < 7; x += 1) {
+    for (let y = 0; y < 7; y += 1) {
+      let t = 0;
+      for (let z = 0; z < 26; z += 1) {
+        if (state.blk[x][y][z] < 256) {
+          state.blk[x][y][t] = state.blk[x][y][z];
+          t += 1;
+        }
+      }
+      for (; t < 26; t += 1) state.blk[x][y][t] = 0;
+    }
+  }
+
+  if (cells.tline > 0) {
+    if (window.__ev) window.__ev.garb += cells.tline;
+    for (let x = 0; x < 7; x += 1) {
+      for (let y = 0; y < 7; y += 1) {
+        for (let z = 25 - cells.tline; z > -1; z -= 1) {
+          state.blk[x][y][z + cells.tline] = state.blk[x][y][z];
+        }
+        for (let t = 0; t < cells.tline; t += 1) {
+          state.blk[x][y][t] = randInt(2) !== 0 ? 103 : 0;
+          if (x % 7 === (y + t) % 7) state.blk[x][y][t] = 0;
+        }
+      }
+    }
+    for (let x = 0; x < 7; x += 1) for (let y = 0; y < 7; y += 1) for (let z = 9; z < 26; z += 1) if (state.blk[x][y][z] !== 0) state._ovf = true;   // the stack reaches above the ceiling: dead
+  }
+
+  // 빈공간삭제: compact all (x,y) columns along z, then count extra filled lines
+  if (state.compactPending) {
+    state.compactPending = false;
+    for (let x = 0; x < 7; x++) {
+      for (let y = 0; y < 7; y++) {
+        const col = [];
+        for (let z = 0; z < 26; z++) { if (state.blk[x][y][z] !== 0) col.push(state.blk[x][y][z]); }
+        const resolved = resolveColumn(col);
+        for (let z = 0; z < 26; z++) { state.blk[x][y][z] = z < resolved.length ? resolved[z] : 0; }
+      }
+    }
+    // Count and remove filled lines (x-rows and y-rows at each z)
+    compactLines = 0;
+    for (let z = 0; z < 26; z++) {
+      // Check x-rows
+      for (let x = 0; x < 7; x++) {
+        let full = true;
+        for (let y = 0; y < 7; y++) { if (state.blk[x][y][z] === 0) { full = false; break; } }
+        if (full) { for (let y = 0; y < 7; y++) state.blk[x][y][z] = 0; compactLines++; }
+      }
+      // Check y-rows
+      for (let y = 0; y < 7; y++) {
+        let full = true;
+        for (let x = 0; x < 7; x++) { if (state.blk[x][y][z] === 0) { full = false; break; } }
+        if (full) { for (let x = 0; x < 7; x++) state.blk[x][y][z] = 0; compactLines++; }
+      }
+    }
+    if (compactLines > 0) {
+      // Re-compact with resolve
+      for (let x = 0; x < 7; x++) {
+        for (let y = 0; y < 7; y++) {
+          const col = [];
+          for (let z = 0; z < 26; z++) { if (state.blk[x][y][z] !== 0) col.push(state.blk[x][y][z]); }
+          const resolved = resolveColumn(col);
+          for (let z = 0; z < 26; z++) { state.blk[x][y][z] = z < resolved.length ? resolved[z] : 0; }
+        }
+      }
+      state.lines += compactLines;
+      state.score += 20 * compactLines;
+      state.level = Math.floor((state.score + 600) / 800) + 1;
+      if (state.level > 16) state.level = 16;
+    }
+  }
+
+  return compactLines;
 }
 
 function removeline() {
@@ -1359,86 +1469,7 @@ function removeline() {
     }
   }
 
-  if (cells.tline < 0) {
-    for (let z = 0; z < -cells.tline; z += 1) {
-      for (let x = 0; x < 7; x += 1) {
-        for (let y = 0; y < 7; y += 1) state.blk[x][y][z] = 256;
-      }
-    }
-    cells.tline = 0;
-  }
-
-  for (let x = 0; x < 7; x += 1) {
-    for (let y = 0; y < 7; y += 1) {
-      let t = 0;
-      for (let z = 0; z < 26; z += 1) {
-        if (state.blk[x][y][z] < 256) {
-          state.blk[x][y][t] = state.blk[x][y][z];
-          t += 1;
-        }
-      }
-      for (; t < 26; t += 1) state.blk[x][y][t] = 0;
-    }
-  }
-
-  if (cells.tline > 0) {
-    for (let x = 0; x < 7; x += 1) {
-      for (let y = 0; y < 7; y += 1) {
-        for (let z = 25 - cells.tline; z > -1; z -= 1) {
-          state.blk[x][y][z + cells.tline] = state.blk[x][y][z];
-        }
-        for (let t = 0; t < cells.tline; t += 1) {
-          state.blk[x][y][t] = randInt(2) !== 0 ? 103 : 0;
-          if (x % 7 === (y + t) % 7) state.blk[x][y][t] = 0;
-        }
-      }
-    }
-  }
-
-  // 빈공간삭제: compact all (x,y) columns along z, then count extra filled lines
-  if (state.compactPending) {
-    state.compactPending = false;
-    for (let x = 0; x < 7; x++) {
-      for (let y = 0; y < 7; y++) {
-        const col = [];
-        for (let z = 0; z < 26; z++) { if (state.blk[x][y][z] !== 0) col.push(state.blk[x][y][z]); }
-        const resolved = resolveColumn(col);
-        for (let z = 0; z < 26; z++) { state.blk[x][y][z] = z < resolved.length ? resolved[z] : 0; }
-      }
-    }
-    // Count and remove filled lines (x-rows and y-rows at each z)
-    let compactLines = 0;
-    for (let z = 0; z < 26; z++) {
-      // Check x-rows
-      for (let x = 0; x < 7; x++) {
-        let full = true;
-        for (let y = 0; y < 7; y++) { if (state.blk[x][y][z] === 0) { full = false; break; } }
-        if (full) { for (let y = 0; y < 7; y++) state.blk[x][y][z] = 0; compactLines++; }
-      }
-      // Check y-rows
-      for (let y = 0; y < 7; y++) {
-        let full = true;
-        for (let x = 0; x < 7; x++) { if (state.blk[x][y][z] === 0) { full = false; break; } }
-        if (full) { for (let x = 0; x < 7; x++) state.blk[x][y][z] = 0; compactLines++; }
-      }
-    }
-    if (compactLines > 0) {
-      // Re-compact with resolve
-      for (let x = 0; x < 7; x++) {
-        for (let y = 0; y < 7; y++) {
-          const col = [];
-          for (let z = 0; z < 26; z++) { if (state.blk[x][y][z] !== 0) col.push(state.blk[x][y][z]); }
-          const resolved = resolveColumn(col);
-          for (let z = 0; z < 26; z++) { state.blk[x][y][z] = z < resolved.length ? resolved[z] : 0; }
-        }
-      }
-      state.lines += compactLines;
-      state.score += 20 * compactLines;
-      state.level = Math.floor((state.score + 600) / 800) + 1;
-      if (state.level > 16) state.level = 16;
-      filledline += compactLines;
-    }
-  }
+  filledline += settleBoard(cells);
 
   if (filledline !== 0) filledline += removeline();
   return filledline;
@@ -1482,6 +1513,7 @@ function stickblock() {
       }
     }
   }
+  if (window.__ev) window.__evPlaced(state.nowblock);
   // 자폭: placed immediately triggers 3x3x3 (or 5x5x5 if enforced) destruction
   const _sdR = state.reinforce > 0 ? 2 : 1;
   for (let x = 0; x < 7; x += 1) {
@@ -1515,10 +1547,12 @@ function stickblock() {
       }
     }
   }
+  if (BATTLE) battleLocked();   // delayed battle-mode items that are centred on this block
   return setnextblock();
 }
 
 function calculatescore(line) {
+  if (window.__ev) window.__ev.lines += line;
   if (state.reinforce > 0 && line > 0) state.reinforce = Math.max(0, state.reinforce - line);
   state.lines += line;
   if (state.score2x > 2) state.score2x = 2;
@@ -1529,9 +1563,14 @@ function calculatescore(line) {
   if (state.level > 16) state.level = 16;
 }
 
+function overflowDie() {          // lines were added to a stack that has no room for them: game over (the same ceiling as a block locked too high)
+  state._ovf = false;
+  if (state.goverflg || state.startscreen) return false;
+  gover(); initBlockState(); return true;
+}
 function gover() {
   state.oscore = state.score;
-  try {
+  if (!window.__btOpp) try {   // (the battle-mode opponent instance must not touch the player's high score)
     const raw = localStorage.getItem('polycube_highscore');
     if (raw) {
       const data = JSON.parse(raw);
@@ -1599,17 +1638,20 @@ function clickbutton(x, y) {
   x /= 0.96;
   y /= 0.96;
   if (state.goverflg === 1 && -0.25 < x && x < 0.25 && -0.31 > y && y > -0.46) {
+    if (BATTLE) { PolyBattle.replay(() => { state.goverflg = 0; }); return 0; }   // waits until the opponent has restarted too
     state.goverflg = 0;
     return 0;
   }
   if (state.goverflg === 1 && -0.25 < x && x < 0.25 && -0.51 > y && y > -0.66) {
+    if (BATTLE && !PolyBattle.canLeave()) return 0;                                  // not while the opponent is still playing
     state.goverflg = 0;
     state.startscreen = 1;
     state.about = 0;
     return 0;
   }
   if (state.startscreen === 1 && state.about === 0 && -0.25 < x && x < 0.25 && -0.31 > y && y > -0.46) {
-    state.startscreen = 0;
+    if (BATTLE) PolyBattle.begin(() => { state.startscreen = 0; });   // the pairing window comes first
+    else state.startscreen = 0;
     return 0;
   }
   if (state.startscreen === 1 && -0.25 < x && x < 0.25 && -0.51 > y && y > -0.66) {
@@ -1652,12 +1694,12 @@ function clickbutton(x, y) {
     while (!move(2, -1)) { if (state.nowblock !== _hb) break; }
     if (state.nowblock !== _hb) { state.timestamp = now(); return 0; }
     if (stickblock()) { gover(); initBlockState(); return 0; }
-    calculatescore(removeline());
+    calculatescore(removeline()); if (state._ovf) overflowDie();
     state.timestamp = now();
     return 0;
   }
   if (0.13 > x && x > -0.07 && -1.10 < y && y < -0.80) { tryHoldSwap(); return 0; }
-  if (0.6 > x && x > 0.3 && 1.35 > y && y > 1.05) {
+  if (!BATTLE && 0.6 > x && x > 0.3 && 1.35 > y && y > 1.05) {
     if (state.pause && state._pauseStart && state.blindboard > 0) {
       state.blindboard += now() - state._pauseStart; state._pauseStart = 0;
     }
@@ -1733,7 +1775,7 @@ function updateFallingLogic() {
         initBlockState();
         return;
       }
-      calculatescore(removeline());
+      calculatescore(removeline()); if (state._ovf) overflowDie();
     }
     state.timestamp = now();
   }
@@ -2056,8 +2098,9 @@ function drawGraphOverlay() {
 
 function drawGameOverScorePanel() {
   const c = [0, 1, 1, 1];
+  const str = String(state.oscore % 1000000000), W = 1.3 + 0.2 * (str.length - 1);     // "SCORE:" + the digits close behind it, the pair centred whatever the number of digits
   renderer.pushMatrix();
-  renderer.translatef(-3, 0.5, 0);
+  renderer.translatef(0.05 - W / 2 - 1.6, 0.5, 0);
   drawPolylines([
     [[17 * 0.1, -2 * 0.1, 0], [16 * 0.1, -2 * 0.1, 0], [16 * 0.1, -3 * 0.1, 0], [17 * 0.1, -3 * 0.1, 0], [17 * 0.1, -4 * 0.1, 0], [16 * 0.1, -4 * 0.1, 0]],
     [[19 * 0.1, -2 * 0.1, 0], [18 * 0.1, -2 * 0.1, 0], [18 * 0.1, -4 * 0.1, 0], [19 * 0.1, -4 * 0.1, 0]],
@@ -2066,7 +2109,7 @@ function drawGameOverScorePanel() {
     [[25 * 0.1, -2 * 0.1, 0], [24 * 0.1, -2 * 0.1, 0], [24 * 0.1, -3 * 0.1, 0], [25 * 0.1, -3 * 0.1, 0], [24 * 0.1, -3 * 0.1, 0], [24 * 0.1, -4 * 0.1, 0], [25 * 0.1, -4 * 0.1, 0]],
   ], c);
   pointsDraw([[26 * 0.1, -2.5 * 0.1, 0], [26 * 0.1, -3.5 * 0.1, 0]], c);
-  drawDigitString(1.5, -0.2, 0.1, String(state.oscore % 1000000000), 9, c);
+  for (let i = 0; i < str.length; i += 1) drawDigitAt(2.8 + 0.2 * i, -0.2, 0.1, str[i], c);
   renderer.popMatrix();
 }
 
@@ -2149,6 +2192,7 @@ function drawControlOverlay() {
     [[-0.01, -1.20, 1], [0.03, -1.24, 1], [0.07, -1.20, 1]],
   ], [1, 1, 1, 1]);
 
+  if (!BATTLE) {   // no pause button in battle mode
   renderer.pushMatrix();
   renderer.translatef(-0.015, -0.03, 0);
   renderer.scalef(1.2, 1.2, 1.2);
@@ -2158,6 +2202,7 @@ function drawControlOverlay() {
     [[0.3475, 1.16, 0], [0.4975, 1.16, 0], [0.4975, 1.31, 0], [0.3475, 1.31, 0], [0.3475, 1.16, 0]],
   ], [1, 1, 1, 1]);
   renderer.popMatrix();
+  }
 }
 
 function fillQuad(a, b, c, d, color = [1, 1, 1, 0.35]) {
@@ -2178,7 +2223,9 @@ function drawTexture(index, vertices, color = [1, 1, 1, 1]) {
   renderer.drawTexturedQuad(vertices, index === 1 ? texcoordsTiled : texcoords, color);
 }
 
+let _oppGray = false;   // battle mode: drawing the opponent (cells are only 1 = normal block, 2 = special block)
 function decodeBlockVisual(value) {
+  if (_oppGray) { const g = (value & 255) === 2 ? 0.64 : 0.42; return { pic: 1000, color: [g, g, g, 1] }; }
   let pic = value & 127;
   if ((value & 255) !== 0) pic ^= 64;
   const R = pic >> 4;
@@ -2911,14 +2958,14 @@ function getItemInfoCode() {
 function overlayToPixel(ox, oy) {
   const w = state.activitysizex, h = state.activitysizey;
   const eyeX = ox * 1.8, eyeY = oy * 1.8 - 0.2;
-  const ndcX = eyeX / 1.5, ndcY = eyeY / (1.5 * h / w);
+  const _k = viewK(w, h), ndcX = eyeX / (1.5 * _k), ndcY = eyeY / (1.5 * _k * h / w);
   const px = (ndcX + 1) / 2 * w;
   const py = h - ((ndcY + 1) / 2 * (h * 41 / 40) + h / 40);
   return [px, py];
 }
 
 // Shared overlay position for the block icon
-const ITEM_OX = -0.58, ITEM_OY = -0.735;
+const ITEM_OX = -0.58, ITEM_OY = BATTLE ? -0.79 : -0.735;   // battle mode: the description line sits a little lower, the item slots are right above it
 const ITEM_SCALE = 0.04;
 
 // Draw 3D block icon in WebGL (called within the overlay matrix context)
@@ -2936,6 +2983,7 @@ function drawItemInfoBlock(code) {
 // Draw text on 2D overlay (called after WebGL rendering)
 function drawItemInfo3d(code) {
   ctx2d.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+  if (BATTLE) { const _r = battleSlotRect(overlayCanvas.width, overlayCanvas.height), _B = window.PolyBattle; ctx2d.save(); ctx2d.strokeStyle = '#9ab'; ctx2d.lineWidth = 1.5; ctx2d.strokeRect(_r[0], _r[1], _r[2], _r[3]); ctx2d.restore(); }   // the box around the 1x10 slot area (edge only)
   if (code < 0) return;
   const desc = ITEM_DESC[code] || '';
   const cw = overlayCanvas.width, ch = overlayCanvas.height;
@@ -2974,6 +3022,7 @@ function drawScene3d() {
   drawControlOverlay();
   const _itemCode = getItemInfoCode();
   drawItemInfoBlock(_itemCode);
+  if (BATTLE) battleDrawSlots();
   // Background texture (C++ draw() lines 3200-3219: texture[1] at z=-9.9)
   renderer.viewport(0, 0, state.activitysizex, state.activitysizey);
   renderer.loadIdentity();
@@ -3138,12 +3187,35 @@ function drawStartMenuGlyphs() {
   }
 }
 
+// battle mode: WIN / LOSE / DRAW in the same hand-made line font as GAME OVER, in the place where GAME OVER was
+function drawBattleWord(word) {
+  const GL = {
+    W: [[[0, 0.1], [0.025, -0.1], [0.05, 0], [0.075, -0.1], [0.1, 0.1]]],
+    I: [[[0.02, 0.1], [0.08, 0.1]], [[0.05, 0.1], [0.05, -0.1]], [[0.02, -0.1], [0.08, -0.1]]],
+    N: [[[0, -0.1], [0, 0.1], [0.1, -0.1], [0.1, 0.1]]],
+    L: [[[0, 0.1], [0, -0.1], [0.1, -0.1]]],
+    O: [[[0.1, 0.1], [0, 0.1], [0, -0.1], [0.1, -0.1], [0.1, 0.1]]],
+    S: [[[0.1, 0.1], [0, 0.1], [0, 0], [0.1, 0], [0.1, -0.1], [0, -0.1]]],
+    E: [[[0.1, 0.1], [0, 0.1], [0, -0.1], [0.1, -0.1]], [[0, 0], [0.1, 0]]],
+    D: [[[0, 0.1], [0.07, 0.1], [0.1, 0.05], [0.1, -0.05], [0.07, -0.1], [0, -0.1], [0, 0.1]]],
+    R: [[[0, -0.1], [0, 0.1], [0.1, 0.1], [0.1, 0], [0, 0], [0.1, -0.1]]],
+    A: [[[0, -0.1], [0.05, 0.1], [0.1, -0.1]], [[0.025, 0], [0.075, 0]]],
+  };
+  const txt = word.toUpperCase(), col = word === 'win' ? [0.35, 1, 0.35, 1] : (word === 'lose' ? [1, 0.4, 0.4, 1] : [0.8, 0.8, 0.8, 1]);
+  const yt = 0.5, xs = 0.05 - ((txt.length - 1) * 0.2 + 0.1) / 2;
+  for (let i = 0; i < txt.length; i++) {
+    const xt = xs + i * 0.2;
+    for (const st of GL[txt[i]] || []) lineStrip(st.map((q) => [xt + q[0], yt + q[1], 0]), col);
+  }
+}
+
 function drawGameOverGlyphs() {
   drawMenuButtonBoxes();
   drawExactMenuWord("main");
   drawExactMenuWord("retry");
   renderer.lineWidth(2.8);
-  drawExactMenuWord("gameover");
+  if (BATTLE) { const _w = window.PolyBattle && PolyBattle.result && PolyBattle.result(); if (_w) drawBattleWord(_w); }     // battle mode: WIN / LOSE / DRAW instead of GAME OVER
+  else drawExactMenuWord("gameover");
   renderer.lineWidth(1.4);
   drawGameOverScorePanel();
 }
@@ -3187,6 +3259,7 @@ function drawStartScreen() {
     ctx2d.textAlign = 'center';
     ctx2d.fillText('Also: Polynomino (2D) · Polytesseract (4D)', _cw / 2, _ch * 0.78);
     ctx2d.fillText('Switch in Game > Theme', _cw / 2, _ch * 0.78 + _fs * 1.3);
+    if (BATTLE) { ctx2d.font = 'bold ' + Math.max(8, Math.floor(_cw * 0.032)) + 'px monospace'; ctx2d.fillStyle = '#8cf'; ctx2d.fillText('battle mode', _cw / 2, _ch * 0.215); }
   }
 }
 
@@ -3215,6 +3288,165 @@ function drawFrame() {
   window.__polycubeAbout = state.startscreen === 1 ? state.about : -1;
   requestAnimationFrame(drawFrame);
 }
+
+
+// ---- battle mode: use a stored item on the own board ----
+// Location-dependent items need a cell: the top of the tallest column is used (the item was not picked up at a spot).
+// Items whose effect depends on a centre (range / row / column / top delete) cannot use the spot where they were eaten, because battle-mode items are used
+// later. Their centre is the centre of a block: the block that is falling when the item is used (or, if none is falling, the next one), rounded to
+// whole cells and kept on the board. The effect happens when that block has locked.
+const BATTLE_POS = { 118: 1, 126: 1, 105: 1, 102: 1 };
+const _bq = [];      // codes of position items (row / column / range / top delete) that wait for a single cube of their own
+function battleMakeMono(blk) {         // the next block becomes a plain single cube: never a special block
+  clear3d(blk, 0);
+  const r = state.rawblock[0];
+  for (let x = 0; x < 7; x++) for (let y = 0; y < 7; y++) for (let z = 0; z < 7; z++) if (r[x][y][z] !== 0) blk[x][y][z] = 12;     // the yellow single cube of the mono-only item (a plain block: never special)
+  state.nexthb = 0;
+}
+function battleApplyStored(code) {
+  if (state.goverflg || state.startscreen) return;
+  if (BATTLE_POS[code]) {              // the NEXT block to fall is a single cube (shown in the preview); the item acts at its centre when it has locked
+    if (!state.nextblock._mono) { battleMakeMono(state.nextblock); state.nextblock._mono = code; } else _bq.push(code);
+    return;
+  }
+  const cells = { tline: 0 }, keep = state.blk[0][0][0];
+  const res = applyItemCell(code, 0, 0, 0, cells);
+  if (res !== 'reset' && state.blk[0][0][0] === 256 && keep < 256 && ![5, 18, 19, 119, 200].includes(code)) state.blk[0][0][0] = keep;   // the used item is not a cell of the board
+  if (res === 'reset') cells.tline = 0;
+  settleBoard(cells);
+  if (state._ovf) overflowDie();
+}
+function battleSnap() { return { bq: _bq.slice(), tn: state.nextblock._mono || 0, tw: state.nowblock._mono || 0, th: state.holdblock && state.holdblock._mono || 0 }; }       // for the AI's what-if runs
+function battleRestore(b) { _bq.length = 0; for (const c of b.bq) _bq.push(c); state.nextblock._mono = b.tn; state.nowblock._mono = b.tw; if (state.holdblock) state.holdblock._mono = b.th; }
+function battleLocked() {                       // called when a block has just been put on the board
+  const code = state.nowblock._mono || 0;
+  if (!code) return;
+  state.nowblock._mono = 0;
+  const sum = [0, 0, 0, 0]; let n = 0;
+  for (let x = 0; x < 7; x++) for (let y = 0; y < 7; y++) for (let z = 0; z < 7; z++)  {
+    if (!state.nowblock[x][y][z]) continue;
+    sum[0] += x + state.blockpos[0]; sum[1] += y + state.blockpos[1]; sum[2] += z + state.blockpos[2];  n++;
+  }
+  if (!n) return;
+  const cl = (v, hi) => Math.min(hi, Math.max(0, Math.round(v)));      // the centre, rounded, kept on the board
+  const cx = cl(sum[0] / n, 6), cy = cl(sum[1] / n, 6), cz = cl(sum[2] / n, 25);
+  window.__btCenter = [cx, cy, cz];   // (for tests)
+  const cells = { tline: 0 };
+  const res = applyItemCell(code, cx, cy, cz, cells);
+  if (res === 'reset') cells.tline = 0;
+  settleBoard(cells);
+}
+// a small row of slots right above the special-block description line (see drawItemInfo3d)
+function battleSlotRect(w, h) {
+  const [bx, by] = overlayToPixel(ITEM_OX, ITEM_OY), sq = w * 0.055;   // 1 x 10 square cells (narrow enough to stay clear of the minimap)
+  const left = overlayToPixel(-0.45 - 0.305, ITEM_OY)[0];       // the left end of the box = the leftmost line of the leftmost rotation button (the control overlay is drawn at x = -0.45, its left buttons start at -0.305)
+  const W = sq * 10, H = (W - 3) / 10 + 3;                      // exactly 10 square cells fit inside the box (1.5 px border all round)
+  return [left, by - H - h * 0.02, W, H];
+}
+// inverse of overlayToPixel: canvas pixel -> overlay-space position
+function pixelToOverlay(px, py) {
+  const w = state.activitysizex, h = state.activitysizey, k = viewK(w, h);
+  const ndcX = 2 * px / w - 1, ndcY = ((h - py - h / 40) / (h * 41 / 40)) * 2 - 1;
+  return [ndcX * 1.5 * k / 1.8, (ndcY * 1.5 * k * h / w + 0.2) / 1.8];
+}
+// the item block images of the stored items (no border, no slot boxes: packed from the left). Called inside drawScene3d with the overlay matrix set.
+function battleDrawSlots() {
+  const B = window.PolyBattle; if (!B || !B.slots) return;
+  const r = battleSlotRect(state.activitysizex, state.activitysizey), sz = (r[2] - 3) / B.SLOTS, step = sz;
+  for (let i = 0; i < B.slots.length; i++) {
+    const [ox, oy] = pixelToOverlay(r[0] + 1.5 + (i + 0.5) * step, r[1] + r[3] / 2);   // packed from the left
+    renderer.pushMatrix();
+    renderer.translatef(ox, oy, 0);
+    renderer.rotatef(state.wAngleX, 1, 0, 0);
+    renderer.rotatef(state.wAngleY, 0, 1, 0);
+    renderer.rotatef(state.wAngleZ, 0, 0, 1);
+    drawBlockVisual(3, 3, 4.5, B.slots[i], ITEM_SCALE * 1.0, false);
+    renderer.popMatrix();
+  }
+}
+// ---- battle mode: the opponent is rendered HERE from a sanitised state (nothing is copied from the other page) ----
+// every cell is only empty (0) / normal block (1) / special block (2): the type of a special block cannot be told
+function btBlind() { return state.blindboard > now(); }      // (battleSnapshot has a local called 'now')
+function battleSnapshot() {
+  const cls = (v) => (v === 0 ? 0 : ((window.PolyND ? window.PolyND._isSpecial(v & 255) : ITEM_DESC[v & 255]) ? 2 : 1));   // the same rule as the AI's view of the opponent
+  const blk = new Uint8Array(7 * 7 * 26), now = new Uint8Array(7 * 7 * 7); let i = 0, j = 0;
+  for (let x = 0; x < 7; x++) for (let y = 0; y < 7; y++) for (let z = 0; z < 26; z++) blk[i++] = cls(state.blk[x][y][z]);
+  for (let x = 0; x < 7; x++) for (let y = 0; y < 7; y++) for (let z = 0; z < 7; z++) now[j++] = cls(state.nowblock[x][y][z]);
+  return { blk, now, pos: state.blockpos.slice(), blind: btBlind() };       // (blind: the board is hidden from this player: its window is hidden for the opponent too)
+}
+function battleBoardRect(w, h) { return [w * 0.03, h * 0.07, w * 0.55, h * 0.55]; }   // the block area (well + falling piece) of the default view
+function battleMakeOpp(areaEl, slotEl) {
+  const cvB = document.createElement('canvas'), cvS = document.createElement('canvas'), cvI = document.createElement('canvas');
+  areaEl.appendChild(cvB); slotEl.appendChild(cvS); cvI.width = cvI.height = 64;
+  let rB, rS, rI;
+  try { rB = new window.FixedPipelineGL(cvB); rS = new window.FixedPipelineGL(cvS); rI = new window.FixedPipelineGL(cvI); } catch (e) { return null; }
+  const oppBlk = create3d(7, 7, 26), oppNow = create3d(7, 7, 7);
+  const fit = (c) => { const w = Math.max(1, c.clientWidth), h = Math.max(1, c.clientHeight); if (c.width !== w || c.height !== h) { c.width = w; c.height = h; } };
+  const HW = 0.1;                                    // item icons: a small orthographic view around one block
+  function iconView(r, w, h, x, y) {
+    r.matrixMode("PROJECTION"); r.orthof(-HW, HW, -HW, HW, 0.96, 20);
+    r.matrixMode("MODELVIEW"); r.loadIdentity(); r.viewport(x, y, w, h); r.translatef(0, 0, -4);
+  }
+  return {
+    draw(snap, codes) {
+      fit(cvB); fit(cvS);
+      const W = state.activitysizex, H = state.activitysizey, rc = battleBoardRect(W, H), s = cvB.width / rc[2], h = cvB.height;
+      let i = 0, j = 0;
+      for (let x = 0; x < 7; x++) for (let y = 0; y < 7; y++) for (let z = 0; z < 26; z++) oppBlk[x][y][z] = snap.blk[i++];
+      for (let x = 0; x < 7; x++) for (let y = 0; y < 7; y++) for (let z = 0; z < 7; z++) oppNow[x][y][z] = snap.now[j++];
+      const keep = { renderer, blk: state.blk, nowblock: state.nowblock, blockpos: state.blockpos, hideblock: state.hideblock, blindboard: state.blindboard, depthColor: state.depthColor };
+      renderer = rB; _oppGray = true;
+      state.blk = oppBlk; state.nowblock = oppNow; state.blockpos = snap.pos.slice(); state.hideblock = 0; state.blindboard = snap.blind ? 1e15 : 0; state.depthColor = false;
+      try {
+        rB.lineWidth(1.4);
+        rB.matrixMode("MODELVIEW"); rB.loadIdentity();
+        rB.clearColor(0, 0, 0, 1); rB.clear(rB.gl.COLOR_BUFFER_BIT | rB.gl.DEPTH_BUFFER_BIT);
+        rB.matrixMode("PROJECTION"); const k = viewK(W, H);
+        rB.orthof(-1.5 * k, 1.5 * k, (-1.5 * k * H) / W, (1.5 * k * H) / W, 0.96, 20);
+        rB.matrixMode("MODELVIEW"); rB.loadIdentity();
+        rB.viewport(-rc[0] * s, h + (H / 20 + rc[1]) * s - 41 * H * s / 40, W * s, 41 * H * s / 40);   // the block area of the design view fills this canvas
+        rB.translatef(state.centerx - 0.6, state.centery, -4);
+        rB.rotatef(state.wAngleX, 1, 0, 0); rB.rotatef(state.wAngleY, 0, 1, 0); rB.rotatef(state.wAngleZ, 0, 0, 1);
+        drawBoardAndBlocks();
+      } finally {
+        _oppGray = false; renderer = keep.renderer; state.blk = keep.blk; state.nowblock = keep.nowblock; state.blockpos = keep.blockpos;
+        state.hideblock = keep.hideblock; state.blindboard = keep.blindboard; state.depthColor = keep.depthColor;
+      }
+      // the opponent's stored items: real colours, packed from the left, 1 x 10 square cells
+      renderer = rS;
+      try {
+        rS.clearColor(0.02, 0.02, 0.05, 1); rS.clear(rS.gl.COLOR_BUFFER_BIT | rS.gl.DEPTH_BUFFER_BIT);
+        const sz = cvS.width / 10;
+        for (let n = 0; n < codes.length && n < 10; n++) {
+          iconView(rS, sz, sz, n * sz, cvS.height - sz);
+          rS.rotatef(state.wAngleX, 1, 0, 0); rS.rotatef(state.wAngleY, 0, 1, 0); rS.rotatef(state.wAngleZ, 0, 0, 1);
+          drawBlockVisual(3, 3, 4.5, codes[n], 0.055, false);
+        }
+      } finally { renderer = keep.renderer; }
+    },
+    icon(code, sprite) {
+      const keep = renderer; renderer = rI;
+      try {
+        rI.lineWidth(1.4); rI.clearColor(0.03, 0.03, 0.08, 1); rI.clear(rI.gl.COLOR_BUFFER_BIT | rI.gl.DEPTH_BUFFER_BIT);
+        iconView(rI, 64, 64, 0, 0);
+        rI.rotatef(state.wAngleX, 1, 0, 0); rI.rotatef(state.wAngleY, 0, 1, 0); rI.rotatef(state.wAngleZ, 0, 0, 1);
+        drawBlockVisual(3, 3, 4.5, code, 0.055, false);
+        const g = sprite.getContext('2d'); g.clearRect(0, 0, sprite.width, sprite.height); g.drawImage(cvI, 0, 0, sprite.width, sprite.height);   // our own rendering, read straight after drawing
+      } finally { renderer = keep; }
+    }
+  };
+}
+if (BATTLE) PolyBattle.attach({ itemDesc: (c) => ITEM_DESC[c], applyStored: battleApplyStored,
+  isReady: () => !!state.ready, autostart: () => { state.startscreen = 0; },
+  isPlaying: () => !!state.ready && !state.startscreen && !state.goverflg,
+  stats: () => ({ score: state.goverflg ? state.oscore : state.score, lines: state.lines, level: state.level, over: state.goverflg }),
+  pieceInfo: () => { const out = []; for (let x = 0; x < 7; x++) for (let y = 0; y < 7; y++) for (let z = 0; z < 7; z++)  if (state.nowblock[x][y][z]) out.push([x, y, z]); return { pos: state.blockpos.slice(), cells: out }; },
+  boardRect: battleBoardRect, snapshot: battleSnapshot, makeOppRenderer: battleMakeOpp, oppScale: 0.5,   // the opponent window is half the size of my block area
+  background: () => ({ url: EMBEDDED_TEXTURES[1] || './assets/texture1.bmp', dim: '0,0,0,0.6' }), slotRect: battleSlotRect, restart: () => { state.goverflg = 0; },
+  forceOver: () => { if (state.ready && !state.startscreen && !state.goverflg) { gover(); initBlockState(); } },   // the other side died: this game ends too
+  overLayout: () => ({ resY: 0.255, msgY: 0.62, mask: [0.565, 0.705] }) });
+if (window.PolyND) window.PolyND.attach({ battleSnap: () => (BATTLE ? battleSnap() : null), battleRestore, dim: 3, state, move, tryHoldSwap, stickblock, removeline, calculatescore, execKey: _execKey, now, modelUrl: './web/ai-model-3d.js', modelVar: 'POLY_AI_MODEL_3D', battleUrl: './web/ai-battle-3d.js', battleVar: 'POLY_AI_BATTLE_3D' });
+window.__poly = { gover: () => gover(), state, init: () => initBlockState(), execKey: (c) => _execKey(c), move: (a, d) => move(a, d), rotate: (a, d) => rotate(a, d), tryHoldSwap: () => tryHoldSwap(), now: () => now() };
 
 async function boot() {
   resize();

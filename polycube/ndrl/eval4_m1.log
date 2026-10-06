@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/home/a/Desktop/stuff/polycube/ndrl/eval_nd.py", line 9, in <module>
+    dev = torch.device("cuda"); net = RNet().to(dev); net.load_state_dict(torch.load(a.ckpt)); net.eval()
+                                                                          ^^^^^^^^^^^^^^^^^^
+  File "/home/a/.local/lib/python3.12/site-packages/torch/serialization.py", line 1484, in load
+    with _open_file_like(f, "rb") as opened_file:
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/a/.local/lib/python3.12/site-packages/torch/serialization.py", line 759, in _open_file_like
+    return _open_file(name_or_buffer, mode)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/a/.local/lib/python3.12/site-packages/torch/serialization.py", line 740, in __init__
+    super().__init__(open(name, mode))
+                     ^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'runs/y4/m1.pt'

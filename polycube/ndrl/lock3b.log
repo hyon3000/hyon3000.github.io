@@ -1,0 +1,4 @@
+  File "/home/a/Desktop/stuff/polycube/ndrl/lockstep_nd.py", line 48
+    if (hd) { var nb0 = S.nowblock; P.execKey('ShiftLeft'); if (S.nowblock === nb0) return; }
+              ^^^^^^^
+SyntaxError: invalid syntax. Perhaps you forgot a comma?
