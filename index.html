@@ -43,6 +43,7 @@
       overflow: visible;
       width: max-content;
       min-width: 100%;
+      min-height: 440px;      /* room for the drop-down menus / sub-menus below a small (beginner) board: the page body clips whatever sticks out of it */
     }
 
     .mine-window {
@@ -567,22 +568,22 @@ if (is3DTheme()){
 
       const extraHead = hasWhite ? 20 : 0; // 58-38
   // 창 크기 조절 (기존 16 고정은 오동작)
-  $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win")
+  $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win, #about-win")
     .css({ width: 22 + cellPx * 16, height: 104 + cellPx * 16 });
 
-  $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win")
+  $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win, #about-win")
     .find(".window-content .mine-head-area")
     .css({ width: 2 + cellPx * 16 });
 
       
-      $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win")
+      $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win, #about-win")
       .find(".window-content .mine-area")
       .css({ "width": cellPx * 16, "height": cellPx * 16 });
       $(".inner").css({ "width": cellPx * 16, "height": cellPx * 16 });
       
       
-        if (hasWhite) $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").find(".window-content .mine-head-area .mine-reset-button").css({ "left": -4 + 8 * cellPx });
-      else $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").find(".window-content .mine-head-area .mine-reset-button").css({ "left": -11 + 8 * cellPx });
+        if (hasWhite) $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win, #about-win").find(".window-content .mine-head-area .mine-reset-button").css({ "left": -4 + 8 * cellPx });
+      else $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win, #about-win").find(".window-content .mine-head-area .mine-reset-button").css({ "left": -11 + 8 * cellPx });
       
       
       $(".windows").css({ "height": (112 + extraHead) + cellPx * 16 });
@@ -626,14 +627,14 @@ __threeD.lastInit = {
 
       const extraHead = hasWhite ? 20 : 0; // 58-38
       // 메인 지뢰찾기 창만 크기 조정 (사용자지정 창, 최고기록 창, 이름입력 창 제외)
-      $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").css({ "width": 22 + i * 16, "height": (104 + extraHead) + j * 16 });
-      $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").find(".window-content .mine-head-area").css({ "width": 2 + i * 16 });
-      $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").find(".window-content .mine-area").css({ "width": i * 16, "height": j * 16 });
+      $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win, #about-win").css({ "width": 22 + i * 16, "height": (104 + extraHead) + j * 16 });
+      $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win, #about-win").find(".window-content .mine-head-area").css({ "width": 2 + i * 16 });
+      $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win, #about-win").find(".window-content .mine-area").css({ "width": i * 16, "height": j * 16 });
       $(".inner").css({ "width": i * 16, "height": j * 16 });
       
       
-        if (hasWhite) $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").find(".window-content .mine-head-area .mine-reset-button").css({ "left": -4 + 8 * i });
-      else $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win").find(".window-content .mine-head-area .mine-reset-button").css({ "left": -11 + 8 * i });
+        if (hasWhite) $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win, #about-win").find(".window-content .mine-head-area .mine-reset-button").css({ "left": -4 + 8 * i });
+      else $(".mine-window").not("#custom-win, #besttimes-win, #nameinput-win, #about-win").find(".window-content .mine-head-area .mine-reset-button").css({ "left": -11 + 8 * i });
       
       
       $(".windows").css({ "height": (112 + extraHead) + j * 16 });
@@ -824,11 +825,23 @@ __threeD.lastInit = {
                 <li class="menu-polycube" onclick="return runMenu(() => { window.location.href = 'polycube/index.html'; });">
                   <a href="#">　폴리큐브</a>
                 </li>
+                <li class="menu-2048" onclick="return runMenu(() => { window.location.href = '2048/index.html'; });">
+                  <a href="#">　2048</a>
+                </li>
+                <li class="menu-dino" onclick="return runMenu(() => { window.location.href = 'dino/index.html'; });">
+                  <a href="#">　T-Rex</a>
+                </li>
+                <li class="menu-sudoku" onclick="return runMenu(() => { window.location.href = 'sudoku/index.html'; });">
+                  <a href="#">　스도쿠</a>
+                </li>
+                <li class="menu-bo2d" onclick="return runMenu(() => { window.location.href = 'atari/index.html'; });">
+                  <a href="#">　아타리 브레이크아웃</a>
+                </li>
 
               </ul>
             </li>
             <li class="separator"></li>
-            <li class="menu101" onclick="return runMenu(() => alert(window.__APPNAME_SING || 'Minesweeper'));"><a href="#">　지뢰 찾기 정보(A)...</a>
+            <li class="menu101" onclick="return runMenu(() => openAboutWin());"><a href="#">　지뢰 찾기 정보(A)...</a>
             </li>
 
           </ul>
@@ -977,9 +990,66 @@ __threeD.lastInit = {
           style="width:30px; padding:0; font-size:7px; margin:0; border:1px outset #c0c0c0;">OK</button>
       </div>
     </div>
+
+    <!-- About / information window: the notes and the live log console (opened with Help > About) -->
+    <div id="about-win" class="window mine-window customdialog" style="display:none">
+      <div class="title-bar">
+        <div class="title-icon"></div>
+        <div class="title" id="abouttitle">지뢰 찾기 정보</div>
+        <div class="title-button-group">
+          <div class="title-button close" onclick="closeAboutWin()"></div>
+        </div>
+      </div>
+      <div class="window-content" style="padding:8px; box-sizing:border-box; width:auto; overflow:auto; max-height:80vh; background:silver;">
+  <div id="heavy-notice" class="notice">
+    <h3>안내 / 성능 주의</h3>
+    <ul>
+      <li><strong>3D지뢰찾기 출시:게임-테마에서 3D를 선택하세요</strong></li>
+      <li> 모바일에서 조작:짧게 눌러 좌클릭, 길게 눌러 우클릭, 열린칸을 더블터치해서 chording.</li>
+      <li>첫 클릭 직후 <span class="warn">판 생성</span>에 시간이 걸릴 수 있습니다. (지뢰 수↑, 판 크기↑일수록 증가)</li>
+      <ul>
+        <li>초대형과 특대형 판은 초기화에 약 5~10초가 소요됩니다</li>
+      </ul>
+      <li><strong>찍기 패턴 발생 허용의 구제 기능 관련</strong>
+        <ul>
+          <li>복수해가 존재하여 찍기 상황이 발생하였고, 사용자가 지뢰칸을 선택했더라도 사용자의 입력이 이미 공개된 정보에 모순을 만들지 않는다면 그 칸에 지뢰가 없도록 판을 수정합니다</li>
+          <li>하지만 무제한 구제는 난이도를 심각하게 낮춥니다</li>
+        </ul>
+      </li>
+      <li><strong>찍기 패턴 발생 차단</strong> 모드 성능 주의:
+        <ul>
+          <li>음수지뢰가 있으면 매우 느립니다. (중급 크기의 판 이상에서 비권장)</li>
+          <li>1칸당 최대 지뢰 수가 4 이상이면 매우 느립니다.</li>
+          <li>대형 이상의 큰 판에서는 매우 느립니다.</li>
+          <li>해당 모드는 “찍기 없는 풀이 순서”를 항상 보장합니다.</li>
+        </ul>
+      </li>
+
+    </ul>
+    <div id="console-panel" class="console-panel">
+      <div class="console-head">
+        <span class="title">실시간 로그 (Console mirror)</span>
+        <label><input type="checkbox" id="console-autoscroll" checked> 자동 스크롤</label>
+        <button type="button" id="console-play">자동으로 풀기</button>
+        <button type="button" id="console-hint">힌트 제공</button>
+        <button type="button" id="console-pause">콘솔 일시정지</button>
+        <button type="button" id="console-clear">콘솔 비우기</button>
+        <button type="button" id="console-copy">콘솔 내용 복사</button>
+
+      </div>
+      <div class="console-body" id="console-body" aria-live="polite"></div>
+    </div>
   </div>
 
-  <div id="userctrl" class="userctrl" style="margin:0">
+
+        <div style="display:flex; justify-content:center; margin-top:8px;">
+          <button type="button" class="title-button" onclick="closeAboutWin()" style="padding:4px 16px;">확인</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="userctrl" class="userctrl" style="margin:0; display:none">
     <form oninput="applyFormCaps()">
       <a>주문제작:가로</a>
       <input type="number" id="x" min="3" max="9999" step="1" style="width:60px;" value="30">
@@ -1017,48 +1087,6 @@ __threeD.lastInit = {
       <input type="button" onclick="hideViaURL()" value="문구 숨기기">
     </form>
   </div>
-  <!-- Placeholder div to maintain draggable area height when text is hidden -->
-  <div id="userctrl-placeholder" style="display:none; visibility:hidden; height:0; overflow:hidden;"></div>
-  <div id="heavy-notice" class="notice">
-    <h3>안내 / 성능 주의</h3>
-    <ul>
-      <li><strong>3D지뢰찾기 출시:게임-테마에서 3D를 선택하세요</strong></li>
-      <li> 모바일에서 조작:짧게 눌러 좌클릭, 길게 눌러 우클릭, 열린칸을 더블터치해서 chording.</li>
-      <li>첫 클릭 직후 <span class="warn">판 생성</span>에 시간이 걸릴 수 있습니다. (지뢰 수↑, 판 크기↑일수록 증가)</li>
-      <ul>
-        <li>초대형과 특대형 판은 초기화에 약 5~10초가 소요됩니다</li>
-      </ul>
-      <li><strong>찍기 패턴 발생 허용의 구제 기능 관련</strong>
-        <ul>
-          <li>복수해가 존재하여 찍기 상황이 발생하였고, 사용자가 지뢰칸을 선택했더라도 사용자의 입력이 이미 공개된 정보에 모순을 만들지 않는다면 그 칸에 지뢰가 없도록 판을 수정합니다</li>
-          <li>하지만 무제한 구제는 난이도를 심각하게 낮춥니다</li>
-        </ul>
-      </li>
-      <li><strong>찍기 패턴 발생 차단</strong> 모드 성능 주의:
-        <ul>
-          <li>음수지뢰가 있으면 매우 느립니다. (중급 크기의 판 이상에서 비권장)</li>
-          <li>1칸당 최대 지뢰 수가 4 이상이면 매우 느립니다.</li>
-          <li>대형 이상의 큰 판에서는 매우 느립니다.</li>
-          <li>해당 모드는 “찍기 없는 풀이 순서”를 항상 보장합니다.</li>
-        </ul>
-      </li>
-
-    </ul>
-    <div id="console-panel" class="console-panel" style="display:none">
-      <div class="console-head">
-        <span class="title">실시간 로그 (Console mirror)</span>
-        <label><input type="checkbox" id="console-autoscroll" checked> 자동 스크롤</label>
-        <button type="button" id="console-play">자동으로 풀기</button>
-        <button type="button" id="console-hint">힌트 제공</button>
-        <button type="button" id="console-pause">콘솔 일시정지</button>
-        <button type="button" id="console-clear">콘솔 비우기</button>
-        <button type="button" id="console-copy">콘솔 내용 복사</button>
-
-      </div>
-      <div class="console-body" id="console-body" aria-live="polite"></div>
-    </div>
-  </div>
-
   <script src="vendor/jquery.min.js"></script>
   <script src="vendor/jquery-ui.min.js"></script>
   <script src="jquery.mswin.js"></script>
@@ -2012,7 +2040,7 @@ ${spriteSelectors} {
           handled = true;
         } else if (key === 'A') {
           e.preventDefault();
-          alert(window.__APPNAME_SING || 'Minesweeper');
+          openAboutWin();
           handled = true;
         }
 
@@ -2078,6 +2106,10 @@ ${spriteSelectors} {
 setMenuText('li.menu_theme', '　Theme...', '');
   setMenuText('li.menu_othergames', '　Other Games', '');
   setMenuText('li.menu-polycube', '　Polycube', '');
+  setMenuText('li.menu-2048', '　2048', '');
+  setMenuText('li.menu-dino', '　T-Rex', '');
+  setMenuText('li.menu-sudoku', '　Sudoku', '');
+  setMenuText('li.menu-bo2d', '　Atari Breakout', '');
   
 
   // 옵션/테마는 기존 업데이트 함수가 setMenuText를 쓰게 바꿨으니 이것만 호출
@@ -2721,10 +2753,11 @@ __pushSolveLog(mf, step, true); // ★ 힌트는 1스텝이므로 즉시 1줄 �
       clearInterval(mf._macro_timer); mf._macro_timer = null;
       mf._macro_running = false; mf._macro_paused = false;
       __flushSolveLog();
-      btn && (btn.textContent = labelPlay());
+      const _pb = document.getElementById('console-play');            // (btn was not defined in this scope: it threw a ReferenceError when the solver stopped)
+      _pb && (_pb.textContent = labelPlay());
       if (reason) console.info('[macro] stopped:', reason);
     }
-    btn && (btn.textContent = labelPause());
+    const _pb2 = document.getElementById('console-play'); _pb2 && (_pb2.textContent = labelPause());
   }
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', bindConsoleButtons);
@@ -2812,6 +2845,19 @@ if (document.readyState === 'loading') {
       $('#custom-win').hide();
     }
 
+    // information window: the notes + the live log console
+    function openAboutWin() {
+      const $w = $('#about-win');
+      if (!$w.data('mswin-window')) $w.window();
+      const KO = isKorean();
+      const t = document.getElementById('abouttitle'); if (t) t.textContent = KO ? ((window.__APPNAME_SING || '지뢰 찾기') + ' 정보') : ('About ' + (window.__APPNAME_SING || 'Minesweeper'));
+      document.getElementById('about-win').dataset.open = '1';
+      $w.css({ display: 'block', position: 'fixed', left: '10px', top: '10px', 'z-index': 1150, width: 'min(620px, 94vw)', height: 'max-content' });   // (fixed: the page body is only as tall as the game window and would clip it)
+      const wc = document.querySelector('#about-win .window-content'); if (wc) wc.style.maxHeight = 'calc(100vh - 70px)';
+      const ok = document.querySelector('#about-win .window-content > div:last-child button'); if (ok) ok.textContent = KO ? '확인' : 'OK';
+    }
+    function closeAboutWin() { delete document.getElementById('about-win').dataset.open; $('#about-win').hide(); }
+
     // 확인 → 보정 → execute() → ?표시 반영 → 끝내기
     function submitCustomDialog() {
       // 입력
@@ -2862,6 +2908,9 @@ if (document.readyState === 'loading') {
       if (dialog) {
         dialog.style.display = 'none';
       }
+      // the information window stays closed until Help > About is chosen (the window plugin / sizing code must not leave it open)
+      const hideAbout = function () { const w = document.getElementById('about-win'); if (w && !w.dataset.open) w.style.display = 'none'; };
+      hideAbout(); window.addEventListener('load', function () { hideAbout(); setTimeout(hideAbout, 300); setTimeout(hideAbout, 1500); });
     });
 
   </script>
@@ -3360,6 +3409,7 @@ function openHelpContents() {
   // “도움말은 아래에 있습니다”에 해당하는 영역으로 스크롤
   const target = document.getElementById('heavy-notice') || document.getElementById('userctrl');
   if (!target) return;
+  openAboutWin(); return;                                     // the notes live in the information window now
 
   const st = window.getComputedStyle(target);
   if (st.display === 'none' || st.visibility === 'hidden') {

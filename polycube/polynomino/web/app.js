@@ -1434,7 +1434,7 @@ function overflowDie() {          // lines were added to a stack that has no roo
 }
 function gover() {
   state.oscore = state.score;
-  if (!window.__btOpp) try {   // (the battle-mode opponent instance must not touch the player's high score)
+  if (!window.__btOpp && !window.__battle) try {   // (battle mode records a cumulative score instead: battle.js)
     const raw = localStorage.getItem('polynomino_highscore');
     if (raw) {
       const data = JSON.parse(raw);
@@ -2528,9 +2528,9 @@ function drawSidePanel() {
   }
 
   // 2. HIGHSCORE:
-  drawLineStringCentered(ctx, panelCx, panelStartY + rowH * row, labelScale, 'HIGH:', '#888');
+  drawLineStringCentered(ctx, panelCx, panelStartY + rowH * row, labelScale, BATTLE ? 'TOTAL:' : 'HIGH:', '#888');
   row++;
-  drawCenteredDigits(ctx, panelCx, panelStartY + rowH * row, numScale, state.oh, 9, '#0ff');
+  drawCenteredDigits(ctx, panelCx, panelStartY + rowH * row, numScale, BATTLE && window.PolyBattle ? PolyBattle.total : state.oh, 9, '#0ff');
   row++;
 
   // 3. LINES:
@@ -2807,8 +2807,8 @@ function drawGameOverScreen() {
   drawLineStringCentered(ctx, cw / 2, ch * 0.37, scoreScale, String(state.oscore), '#0ff');
 
   // High score
-  drawLineStringCentered(ctx, cw / 2, ch * 0.46, labelScale, 'HIGH:', '#888');
-  drawLineStringCentered(ctx, cw / 2, ch * 0.53, scoreScale * 0.7, String(state.oh), '#fff');
+  drawLineStringCentered(ctx, cw / 2, ch * 0.46, labelScale, BATTLE ? 'TOTAL:' : 'HIGH:', '#888');
+  drawLineStringCentered(ctx, cw / 2, ch * 0.53, scoreScale * 0.7, String(BATTLE && window.PolyBattle ? PolyBattle.total : state.oh), '#fff');
 
   // Button boxes
   const btnW = cw * 0.35;
@@ -2963,11 +2963,16 @@ function drawScene() {
     ctx.globalAlpha = 1.0;
   }
 
+  const X = battleXform();           // battle mode: everything but the control buttons is drawn 1.5x smaller (the buttons stay where they are in normal mode)
+  if (X) { ctx.save(); ctx.translate(X.ox, X.oy); ctx.scale(X.s, X.s); }
   drawBoard();
+  if (X) ctx.translate(-BT_HUD_DX * state.canvasW, 0);
   drawSidePanel();
+  if (X) ctx.translate(BT_HUD_DX * state.canvasW, 0);
   drawItemInfo();
-  drawTouchButtons();
   if (BATTLE) battleDrawSlots();
+  if (X) ctx.restore();
+  drawTouchButtons();
 }
 
 // ====== AI PLAYER ======
@@ -3511,7 +3516,18 @@ function battleLocked() {                       // called when a block has just 
   settleBoard(res === 'reset' ? 0 : acc.tline);
 }
 // a small row of slots right above the special-block description line (see drawItemInfo)
-function battleSlotRect() {
+// battle mode (while a game is running, own window): the part above the control buttons is drawn at 2/3 size, the opponent column takes the left third
+function battleBtnTop() { const b = getButtonLayout(); let t = state.canvasH; for (const x of b) t = Math.min(t, x.y); return t; }
+function battleXform() {
+  const B = window.PolyBattle; if (!BATTLE || window.__btOpp || !B || !B.split) return null;
+  const xf = B.xf || { s: 2 / 3, ox: state.canvasW / 3 }, yb = battleBtnTop();      // (scale and left edge: set by battle.js from the room the opponent window leaves)
+  return { s: xf.s, ox: xf.ox, oy: yb * (1 - xf.s) / 2 };
+}
+const BT_HUD_DX = 0.04;                 // battle mode: the score panel sits this much (x canvas width) closer to the block area
+function battleExtent() { return [Math.min(battleSlotRectN()[0], state.boardX), state.canvasW * (0.94 - BT_HUD_DX)]; }   // the horizontal extent of everything above the buttons
+function battleTr(r) { const X = battleXform(); return X ? [X.ox + X.s * r[0], X.oy + X.s * r[1], X.s * r[2], X.s * r[3]] : r; }
+function battleSlotRect() { return battleTr(battleSlotRectN()); }
+function battleSlotRectN() {
   const boardBottom = state.boardY + state.cellSize * BOARD_H;
   const btnSize = Math.min(state.canvasW * 0.13, state.canvasH * 0.08);
   const gapH = state.canvasH * 0.82 - btnSize - btnSize * 0.1 - boardBottom;
@@ -3523,9 +3539,9 @@ function battleSlotRect() {
 // the item block images of the stored items (no border, no slot boxes: packed from the left)
 function battleDrawSlots() {
   const B = window.PolyBattle; if (!B || !B.slots) return;
-  const r = battleSlotRect(), sz = (r[2] - 3) / B.SLOTS;
-  ctx.save(); ctx.strokeStyle = '#9ab'; ctx.lineWidth = 1.5; ctx.strokeRect(r[0] + 0.75, r[1] + 0.75, r[2] - 1.5, r[3] - 1.5); ctx.restore();   // the box around the 1x10 area (edge only)
-  for (let i = 0; i < B.slots.length; i++) drawCell(r[0] + 1.5 + i * sz + sz * 0.08, r[1] + 1.5 + sz * 0.08, sz * 0.84, sz * 0.84, B.slots[i]);   // packed from the left
+  const X = battleXform(), inv = X ? 1 / X.s : 1, r = battleSlotRectN(), sz = (r[2] - 3 * inv) / B.SLOTS;   // (the border is 1.5 screen pixels wide whatever the scale)
+  ctx.save(); ctx.strokeStyle = '#9ab'; ctx.lineWidth = 1.5 * inv; ctx.strokeRect(r[0] + 0.75 * inv, r[1] + 0.75 * inv, r[2] - 1.5 * inv, r[3] - 1.5 * inv); ctx.restore();   // the box around the 1x10 area (edge only)
+  for (let i = 0; i < B.slots.length; i++) drawCell(r[0] + 1.5 * inv + i * sz + sz * 0.08, r[1] + 1.5 * inv + sz * 0.08, sz * 0.84, sz * 0.84, B.slots[i]);   // packed from the left
 }
 // ---- battle mode: the opponent is rendered HERE from a sanitised state (nothing is copied from the other page) ----
 // every cell is only empty (0) / normal block (1) / special block (2): the type of a special block cannot be told
@@ -3571,14 +3587,14 @@ function battleMakeOpp(areaEl, slotEl) {
     }
   };
 }
-function battleBoardRect() { return [state.boardX, state.boardY, state.cellSize * BOARD_W, state.cellSize * BOARD_H]; }
+function battleBoardRect() { return battleTr([state.boardX, state.boardY, state.cellSize * BOARD_W, state.cellSize * BOARD_H]); }
 if (BATTLE) PolyBattle.attach({ itemDesc: (c) => ITEM_DESC[c], applyStored: battleApplyStored,
   isReady: () => !!state.ready, autostart: () => { state.startscreen = 0; },
   isPlaying: () => !!state.ready && !state.startscreen && !state.goverflg,
   stats: () => ({ score: state.goverflg ? state.oscore : state.score, lines: state.lines, level: state.level, over: state.goverflg }),
   pieceInfo: () => ({ pos: state.blockpos.slice(), cells: state.nowblock ? state.nowblock.cells.map((c) => [c[0], c[1]]) : [] }),
-  boardRect: battleBoardRect, snapshot: battleSnapshot, makeOppRenderer: battleMakeOpp,
-  background: () => ({ url: EMBEDDED_TEXTURES[1] || './assets/texture1.bmp', dim: '5,5,16,0.7' }), slotRect: battleSlotRect, restart: () => { state.goverflg = 0; },
+  boardRect: battleBoardRect, boardRectN: () => [state.boardX, state.boardY, state.cellSize * BOARD_W, state.cellSize * BOARD_H], extent: battleExtent, snapshot: battleSnapshot, makeOppRenderer: battleMakeOpp,
+  background: () => ({ url: EMBEDDED_TEXTURES[1] || './assets/texture1.bmp', dim: '5,5,16,0.7' }), slotRect: battleSlotRect, btnTop: battleBtnTop, restart: () => { state.goverflg = 0; },
   forceOver: () => { if (state.ready && !state.startscreen && !state.goverflg) { gover(); initBlockState(); } },   // the other side died: this game ends too
   overLayout: () => ({ resY: 0.085, msgY: 0.66, mask: [0.612, 0.788] }) });
 window.__poly = { battleBState: (typeof battleBState === 'function' ? battleBState : null), gover: () => gover(), state, ai, logicFrame: () => logicFrame(), init: () => initBlockState(), aiEnumerate: (f) => { aiBeginDecision(); return aiRunSlice(aiEnumerateG(f), Infinity).value; }, aiChildren: (p) => aiRunSlice(aiChildrenG(p), Infinity).value, aiExec, aiMakePlan, aiToggle, aiPressKey,

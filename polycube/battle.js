@@ -1,7 +1,8 @@
 // Battle mode layer shared by the 2D / 3D / 4D games (enabled with ?battle=1, set by the shell's Game > Battle Mode).
 //
-// Main screen / game over:  the game simply uses the whole (1.5x wide) window.
-// While a game is running:  [ opponent: REAL game window, block area only (1/3 width) ] [ own game window (2/3 width, a normal 1:2 window) ]
+// Main screen / game over:  the game simply uses the whole window.
+// While a game is running:  the window keeps the normal 1:2 shape and the control buttons stay exactly where they are in normal mode; everything above them
+//   (the game's own board / panels, drawn by the game at 2/3 size, and the opponent window) is shrunk 1.5x: [ opponent column (1/3 width) ] [ own game, 2/3 scale (2/3 width) ]
 //   - the opponent is a second instance of the same game page (?battle=1&role=opp) that plays itself with the AI, running off-screen. Nothing of
 //     it is copied or cropped: it sends a sanitised state (every cell is just 'empty' / 'normal block' / 'special block', plus the codes of the items
 //     in its slots) and THIS page renders the opponent window itself: all normal blocks the same grey, special blocks a slightly lighter grey (their
@@ -41,6 +42,11 @@
     api: null, ko: /^ko/i.test(root.navigator.language || ''), onUseOnOpponent: null, opp: { items: [], slots: [], info: null, score: 0, lines: 0, level: 1, over: 0 }, peer: null
   };
   root.PolyBattle = B;
+  // Cumulative score (replaces the high score in battle mode): after every game the winner is credited the sum of both scores, the loser 0.
+  var gid = /polynomino/i.test(root.location.pathname) ? 'polynomino' : (/polytesseract/i.test(root.location.pathname) ? 'polytesseract' : 'polycube'), totalKey = gid + '_battle_total';
+  B.total = 0;
+  try { var tv = parseInt(root.localStorage.getItem(totalKey), 10); if (tv > 0) B.total = Math.min(tv, 999999999); } catch (_) {}
+  function saveTotal() { try { root.localStorage.setItem(totalKey, String(B.total)); } catch (_) {} }
   if (!battle) { B.store = function () { return false; }; B.begin = function (cb) { cb(); }; B.attach = function () {}; B.clear = function () {}; B.aiUseSlots = function () {}; return; }
 
   var NOT_STORED = { 1: 1, 30: 1, 31: 1, 120: 1, 121: 1, 122: 1, 123: 1, 98: 1, 103: 1 };   // do not trigger on a line clear
@@ -256,15 +262,14 @@
   css.textContent = [
     '#own{position:absolute;left:0;top:0;width:100%;height:100%;overflow:hidden}',   // main screen / game over: the game uses the whole (wide) window
     '#own>canvas{display:block;position:absolute;left:0;top:0;width:100%;height:100%}',
-    '#oppbg{position:absolute;left:0;top:0;width:33.3333%;height:100%;pointer-events:none}',   // the game's background image continues into the opponent column
+    '#oppbg{display:none}',   // (unused: the game's own canvas covers the whole window, background included)
     '#oppw,#oppslots{display:none}',
-    '#viewport.split #own{left:33.3333%;width:66.6667%}',
     '#viewport.split #oppw{display:block}#viewport.split #oppslots{display:block}',
     '#oppw{position:absolute;left:0;top:0;width:33.3333%;height:66%;overflow:hidden;background:#000;cursor:pointer}',
     '#oppframe{position:absolute;left:0;top:0;border:0;pointer-events:none;opacity:0;z-index:-1}',      // the opponent instance runs off-screen; nothing of it is shown
     '#oppslots{position:absolute;left:0;top:66%;width:33.3333%;display:none;box-sizing:border-box;border:1.5px solid #9ab}',   // the box around the 1x10 item area (edge only)
     '#oppw canvas,#oppslots canvas{display:block;width:100%;height:100%}',
-    '#oppbox{position:absolute;display:none;box-sizing:border-box;border:1.5px solid #9ab;pointer-events:none;text-align:center;color:#dde;font:bold 12px "Noto Sans KR","Malgun Gothic",sans-serif;text-shadow:0 0 3px #000,0 0 3px #000;overflow:hidden;white-space:nowrap}',
+    '#oppbox{position:absolute;display:none;box-sizing:border-box;border:1.5px solid #9ab;pointer-events:none;text-align:center;color:#dde;font:bold 11px "Noto Sans KR","Malgun Gothic",sans-serif;text-shadow:0 0 3px #000,0 0 3px #000;overflow:hidden;white-space:nowrap}',
     '#viewport.split #oppbox{display:block}',
     '#bthint{position:absolute;left:0;width:100%;text-align:center;color:#ff9;font:bold 11px "Noto Sans KR","Malgun Gothic",sans-serif;white-space:nowrap;pointer-events:none;display:none;z-index:30;text-shadow:0 0 3px #000,0 0 3px #000}',
     '.btfly{position:absolute;z-index:60;pointer-events:none;image-rendering:auto;filter:drop-shadow(0 0 6px #ff0)}',
@@ -445,6 +450,7 @@
   // the left third of the widened window shows the same background image as the game window (not black)
   var bgKey = '';
   function applyBackground() {
+    return;                                                                       // (the game draws its background over the whole window itself)
     var bg = B.api && B.api.background && B.api.background(); if (!bg) return;
     var W = vp.clientWidth, H = vp.clientHeight, ow = own.clientWidth, key = [W, H, ow].join(',');
     if (key === bgKey) return; bgKey = key;
@@ -462,17 +468,23 @@
     if (!cv || !B.api || !B.api.boardRect || !cv.width) return;                     // (a human opponent has no hidden page: the layout is the same)
     var W = own.clientWidth, H = own.clientHeight;                                  // the (off-screen) opponent page gets the size of the own window
     if (f && (!W || f.style.width !== W + 'px')) { f.style.width = W + 'px'; f.style.height = H + 'px'; }
-    var k = W / cv.width, r = B.api.boardRect(cv.width, cv.height).map(function (v) { return v * k; });
-    var sc = B.api.oppScale, w, h, M = Math.max(8, Math.round(vp.clientWidth * 0.015)), PAD = 6, LH = 20, colW = vp.clientWidth / 3;
-    if (sc) { w = Math.round(r[2] * sc); h = Math.round(r[3] * sc); }               // 3D / 4D: exactly sc (0.5) times the size of my block area, whatever the window size
-    else {                                                                          // 2D: as wide as the column allows, as tall as the screen allows
+    var k = W / cv.width, r = (B.api.boardRectN || B.api.boardRect)(cv.width, cv.height).map(function (v) { return v * k; });   // (the block area at the normal, unshrunk size)
+    var sc = B.api.oppScale, w, h, M = Math.max(5, Math.round(vp.clientWidth * 0.008)), PAD = 4, LH = 16, colW = vp.clientWidth / 3, OPPK = 0.8, GAP = M;
+    var areaH = B.api.btnTop ? B.api.btnTop(cv.width, cv.height) * k : vp.clientHeight * 0.72;       // the opponent column spans the part above the (unchanged) control buttons
+    if (sc) { w = Math.round(r[2] * sc * (2 / 3) * OPPK); h = Math.round(r[3] * sc * (2 / 3) * OPPK); }   // 3D / 4D: 0.8 x (half the size of my block area as it used to be drawn at 2/3)
+    else {                                                                          // 2D: 0.8 x (as wide as the column allows), as tall as the screen allows
       var a = r[3] / r[2];
-      w = Math.floor(colW - 2 * M - 2 * PAD);
-      w = Math.min(w, Math.floor((vp.clientHeight - 8 - LH - 2 * PAD - 3 + 0.3) / (a + 0.1)));
+      w = Math.floor((colW - 2 * M - 2 * PAD) * OPPK);
+      w = Math.min(w, Math.floor((areaH - 8 - LH - 2 * PAD - 3 + 0.3) / (a + 0.1)));
       h = Math.round(a * w);
     }
     var ch = Math.round((w - 3) / B.SLOTS) + 3;                                     // 1 x 10 square cells (3 = the border)
-    var bw = w + 2 * PAD, bh = LH + PAD + h + ch + PAD, bt = Math.max(0, Math.round((vp.clientHeight - bh) / 2)), bl = M;
+    var bw0 = w + 2 * PAD, ex = B.api.extent ? B.api.extent(cv.width, cv.height) : null;
+    if (ex) {                               // my own window (everything above the buttons) takes all the width the opponent box leaves, as big as that allows (at most its normal size)
+      var left = M + bw0 + GAP, sN = Math.min(1, (W - M - left) / ((ex[1] - ex[0]) * k));
+      B.xf = { s: sN, ox: (left - sN * ex[0] * k) / k };
+    }
+    var bw = w + 2 * PAD, bh = LH + PAD + h + ch + PAD, bt = Math.max(0, Math.round((areaH - bh) / 2)), bl = M;
     // one rectangle around the opponent window + its item strip, vertically centred in the left area, with a small margin on the left; the title sits on top
     oppBox.style.cssText = 'left:' + bl + 'px;top:' + bt + 'px;width:' + bw + 'px;height:' + bh + 'px;line-height:' + LH + 'px';
     oppWrap.style.left = oppSlots.style.left = (bl + PAD) + 'px'; oppWrap.style.width = oppSlots.style.width = w + 'px';
@@ -481,11 +493,11 @@
   var origRaf = root.requestAnimationFrame.bind(root), split = false, lastPeerMsg = 0;
   function setSplit(p) {
     if (p === split) return;
-    split = p; vp.classList.toggle('split', p);
+    split = p; B.split = p; vp.classList.toggle('split', p);
     root.setTimeout(function () { root.dispatchEvent(new root.Event('resize')); }, 0);   // the game re-measures its canvas
 
   }
-  var lastPh = '', oppGone = false, replayMe = false, replayCb = null, lastOppSlots = '', lastPhase = '';
+  var creditT = 0, lastPh = '', oppGone = false, replayMe = false, replayCb = null, lastOppSlots = '', lastPhase = '';
   var T = B.ko ? { wait: '상대방 플레이중', replay: '상대방 재시작을 기다리는 중', win: 'WIN', lose: 'LOSE', draw: 'DRAW' }
                : { wait: 'Opponent is still playing', replay: 'Waiting for the opponent to restart', win: 'WIN', lose: 'LOSE', draw: 'DRAW' };
   function phaseNow(playing) {
@@ -549,6 +561,15 @@
       if (B.oppFrame && B.oppFrame.contentWindow) B.oppFrame.contentWindow.postMessage({ type: 'bt-restart' }, '*');
       if (cb) cb();
       ph = 'play';
+    }
+    if (ph === 'play') { B.credited = false; creditT = 0; }
+    if (ph === 'result' && !B.credited && !role) {          // credit the finished game once (a moment after it ended, so the last score messages of the opponent have arrived)
+      var now = root.performance.now(); if (!creditT) creditT = now;
+      var res = B.result();
+      if (res && now - creditT > 400) {
+        B.credited = true;
+        if (res === 'win') { B.total = Math.min(999999999, B.total + Math.max(0, (B.api.stats && B.api.stats().score) || 0) + Math.max(0, B.opp.score || 0)); saveTotal(); }
+      }
     }
     B.phase = ph;
     showOverlays(ph);

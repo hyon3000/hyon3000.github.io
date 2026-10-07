@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Sudoku</title>
+<meta name="description" content="Sudoku in a Windows 98 frame: square boxes or random-shaped (jigsaw) regions, number buttons under the board, 4-candidate notes.">
+<link href="win98.css" media="screen" rel="stylesheet" type="text/css">
+<style>
+html, body { margin: 0; width: 100%; height: 100%; overflow: auto; background: #fff; }
+.windows { position: relative; width: 100%; min-height: 100%; display: flex; align-items: flex-start; justify-content: center; padding-top: 8px; box-sizing: border-box; }
+.s-main { position: relative; width: auto; display: inline-block; }
+.s-main .title-bar .title-icon, .gdialog .title-bar .title-icon { background-image: url(icon.png); image-rendering: pixelated; }
+.s-main .window-content { padding: 14px 14px 12px; box-sizing: border-box; width: auto; background: #eef1f7; font-family: "Segoe UI", "Noto Sans KR", "Malgun Gothic", Arial, sans-serif; color: #1f2a44; }
+/* top bar */
+.s-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.s-chip { font-size: 12px; font-weight: 600; color: #475577; background: #fff; border-radius: 999px; padding: 5px 12px; box-shadow: 0 1px 2px rgba(31,42,68,.12); white-space: nowrap; }
+#timer { font: 600 20px/1 "Segoe UI", Consolas, monospace; letter-spacing: 1px; color: #1f2a44; font-variant-numeric: tabular-nums; }
+.s-new { border: 0; background: #2563eb; color: #fff; font: 600 12px "Segoe UI", "Noto Sans KR", Arial, sans-serif; padding: 7px 14px; border-radius: 999px; cursor: pointer; box-shadow: 0 1px 3px rgba(37,99,235,.45); }
+.s-new:hover { background: #1d4fd8; }
+/* board */
+#board { display: grid; grid-template-columns: repeat(9, var(--cs)); grid-template-rows: repeat(9, var(--cs)); border: 2px solid #26324f; border-radius: 6px; overflow: hidden; background: #fff; width: max-content; margin: 0 auto; user-select: none; touch-action: manipulation; box-shadow: 0 4px 14px rgba(31,42,68,.18); }
+.sc { position: relative; box-sizing: border-box; width: var(--cs); height: var(--cs); display: flex; align-items: center; justify-content: center; font: 500 calc(var(--cs) * .58) "Segoe UI", Arial, sans-serif; color: #2563eb; cursor: pointer; border: 0 solid #c3cbe0; border-right-width: 1px; border-bottom-width: 1px; transition: background-color .08s; }
+.sc.gv { color: #1f2a44; font-weight: 700; }
+.sc.rt { border-right: 2px solid #26324f; } .sc.bt { border-bottom: 2px solid #26324f; }
+.sc.hl { background-image: linear-gradient(rgba(37,99,235,.10), rgba(37,99,235,.10)); }
+.sc.same { background-image: linear-gradient(rgba(37,99,235,.24), rgba(37,99,235,.24)); }
+.sc.sel { background-image: linear-gradient(rgba(37,99,235,.40), rgba(37,99,235,.40)); }
+.sc.bad { color: #dc2626; background-image: linear-gradient(rgba(220,38,38,.14), rgba(220,38,38,.14)); }
+.sc.try { color: #ea8a00; }
+.sc.auto { color: #7c3aed; }
+.sc.hint { color: #059669; box-shadow: inset 0 0 0 2px #10b981; }
+.sc .nt { position: absolute; left: 0; top: 0; right: 0; bottom: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; padding: 2px 3px; font: 600 calc(var(--cs) * .26) "Segoe UI", Arial, sans-serif; color: #64748b; text-align: center; line-height: 1; }
+.sc .nt i { font-style: normal; display: flex; align-items: center; justify-content: center; }
+/* number pad */
+#pad { display: grid; grid-template-columns: repeat(9, 1fr); gap: 6px; width: calc(var(--cs) * 9 + 4px); margin: 14px auto 0; }
+.nb { position: relative; box-sizing: border-box; height: calc(var(--cs) * 1.15); border: 0; border-radius: 10px; background: #fff; color: #2563eb; cursor: pointer; padding: 0; box-shadow: 0 1px 3px rgba(31,42,68,.2); transition: transform .06s, background .1s; display: flex; align-items: center; justify-content: center; }
+.nb span { color: #2563eb; font: 500 calc(var(--cs) * .62) "Segoe UI", Arial, sans-serif; line-height: 1; }
+.nb em { position: absolute; right: 5px; bottom: 3px; font: 600 10px "Segoe UI", Arial, sans-serif; color: #8a97b5; font-style: normal; }
+.nb:hover { background: #e8efff; } .nb:active { transform: scale(.94); }
+.nb.done { opacity: .35; }
+/* tool buttons */
+#pad2 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: calc(var(--cs) * 9 + 4px); margin: 10px auto 0; }
+.tb { border: 0; text-shadow: none; background: #fff; border-radius: 10px; padding: 9px 4px; font: 600 12px "Segoe UI", "Noto Sans KR", Arial, sans-serif; color: #26324f; cursor: pointer; box-shadow: 0 1px 3px rgba(31,42,68,.2); display: flex; align-items: center; justify-content: center; gap: 7px; }
+.tb:hover { background: #e8efff; } .tb:active { transform: scale(.97); }
+.tb svg { width: 17px; height: 17px; stroke: #26324f; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.memo { display: inline-grid; grid-template-columns: 7px 7px; grid-template-rows: 7px 7px; gap: 1.5px; vertical-align: middle; }
+.memo i { border: 1.8px solid #26324f; box-sizing: border-box; border-radius: 1.5px; }
+.s-msg { text-align: center; font: 600 13px "Segoe UI", "Noto Sans KR", Arial, sans-serif; min-height: 18px; margin-top: 10px; color: #059669; }
+/* popup (still a Win98 window, modern inside) */
+.windows-98 .window.gdialog { position: fixed; left: 50%; top: 100px; transform: translateX(-50%); z-index: 100; display: none; }
+.gdialog .window-content { padding: 12px; box-sizing: border-box; width: auto; background: #eef1f7; font-family: "Segoe UI", "Noto Sans KR", Arial, sans-serif; color: #1f2a44; }
+.gdialog .row { margin: 8px 0 0; text-align: center; }
+.gdialog .btn { border: 0; background: #fff; border-radius: 8px; padding: 6px 14px; font: 600 12px "Segoe UI", "Noto Sans KR", Arial, sans-serif; color: #26324f; cursor: pointer; box-shadow: 0 1px 3px rgba(31,42,68,.2); margin: 0 3px; }
+.gdialog .btn:hover { background: #e8efff; }
+.slots { display: flex; gap: 6px; justify-content: center; margin: 2px 0 10px; }
+.slots span { width: 36px; height: 36px; border-radius: 8px; background: #fff; box-shadow: inset 0 0 0 2px #c3cbe0; display: flex; align-items: center; justify-content: center; font: 700 20px "Segoe UI", Arial, sans-serif; color: #2563eb; }
+.pg { display: grid; grid-template-columns: repeat(3, 46px); gap: 6px; justify-content: center; }
+.pg button { height: 42px; border: 0; border-radius: 10px; background: #fff; box-shadow: 0 1px 3px rgba(31,42,68,.2); font: 500 22px "Segoe UI", Arial, sans-serif; color: #2563eb; cursor: pointer; }
+.pg button:hover { background: #e8efff; }
+.pg button.on { background: #2563eb; color: #fff; font-weight: 700; }
+/* menu items with a shortcut: the label on the left, the shortcut (F2 ...) pushed to the right edge (same as the Minesweeper page) */
+.menu .ui-menu-item > a { display: flex; align-items: center; gap: 16px; }
+.menu .ui-menu-item > a .mi-label { flex: 1 1 auto; text-align: left; }
+.menu .ui-menu-item > a .mi-key { margin-left: auto; flex: 0 0 auto; min-width: 3ch; text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; opacity: .9; }
+.menu, .menu .ui-menu-item > a, .menu .mi-label, .menu .mi-key { white-space: nowrap !important; }
+ul.menu { min-width: 150px; width: max-content; }
+/* the submenu arrow must not take room in the item (it sits at the right edge, like on the Minesweeper page) */
+.menu .ui-menu-item > a { position: relative; }
+.menu .ui-menu-icon.ui-icon { position: absolute !important; right: 4px; top: 50%; transform: translateY(-50%); margin: 0 !important; flex: 0 0 auto !important; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="windows windows-98">
+  <div class="window has-menu s-main" id="mainwin">
+    <div class="title-bar">
+      <div class="title-icon"></div>
+      <div class="title" data-t="title">스도쿠</div>
+      <div class="title-button-group">
+        <div class="title-button minimize"></div>
+        <div class="title-button maximize disabled" onclick="event.preventDefault();event.stopPropagation();return false;"></div>
+        <div class="title-button close"></div>
+      </div>
+    </div>
+    <ul class="menu-bar">
+      <li>
+        <a href="#" data-access-key="g" data-t="game">게임</a>
+        <ul class="menu">
+          <li onclick="return runMenu(function(){ newGame(); });"><a href="#"><span class="mi-label" data-t="new">　새 게임(N)</span><span class="mi-key">F2</span></a></li>
+          <li class="separator"></li>
+          <li class="ty ty0" onclick="return runMenu(function(){ setType(0); });"><a href="#" data-t="t0">　정사각형(S)</a></li>
+          <li class="ty ty1" onclick="return runMenu(function(){ setType(1); });"><a href="#" data-t="t1">　랜덤형(R)</a></li>
+          <li class="separator"></li>
+          <li class="df df0" onclick="return runMenu(function(){ setDiff(0); });"><a href="#" data-t="d0">　쉬움(E)</a></li>
+          <li class="df df1" onclick="return runMenu(function(){ setDiff(1); });"><a href="#" data-t="d1">　보통(M)</a></li>
+          <li class="df df2" onclick="return runMenu(function(){ setDiff(2); });"><a href="#" data-t="d2">　어려움(H)</a></li>
+          <li class="separator"></li>
+          <li onclick="return runMenu(function(){ document.getElementById('mainwin').style.visibility='hidden'; });"><a href="#" data-t="exit">　끝내기(X)</a></li>
+        </ul>
+      </li>
+      <li>
+        <a href="#" data-access-key="h" data-t="help">도움말</a>
+        <ul class="menu">
+          <li onclick="return runMenu(function(){ openDlg('helpWin'); });"><a href="#" data-t="how">　게임 방법(H)</a></li>
+          <li class="separator"></li>
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="cheat">　치트...</a>
+            <ul class="menu">
+              <li class="menu-autosolve" onclick="return runMenu(function(){ toggleAuto(); });"><a href="#"><span class="mi-label" data-t="auto">　자동으로 풀기</span><span class="mi-key">F3</span></a></li>
+              <li class="menu-hint" onclick="return runMenu(function(){ giveHint(); });"><a href="#"><span class="mi-label" data-t="hint">　힌트 제공</span><span class="mi-key">F4</span></a></li>
+            </ul>
+          </li>
+          <li class="separator"></li>
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="other">　다른 게임</a>
+            <ul class="menu">
+              <li onclick="return runMenu(function(){ window.location.href='../index.html'; });"><a href="#" data-t="mine">　지뢰찾기</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../2048/index.html'; });"><a href="#">　2048</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#">　T-Rex</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });"><a href="#">　아타리 브레이크아웃</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　폴리큐브</a></li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+    <div class="window-content">
+      <div class="s-top"><span class="s-chip" id="info"></span><b id="timer">00:00</b><button class="s-new" onclick="newGame()" data-t="newBtn">새 게임</button></div>
+      <div id="board"></div>
+      <div id="pad"></div>
+      <div id="pad2">
+        <button class="tb" id="memoBtn" onclick="openNote()" title="후보 숫자"><span class="memo"><i></i><i></i><i></i><i></i></span><span data-t="memo">후보</span></button>
+        <button class="tb" onclick="eraseCell()"><svg viewBox="0 0 24 24"><path d="M20 20H9L3.5 14.5a2 2 0 0 1 0-2.8L12 3.2a2 2 0 0 1 2.8 0L20.5 9a2 2 0 0 1 0 2.8L11 20"/></svg><span data-t="erase">지우기</span></button>
+        <button class="tb" onclick="giveHint()"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg><span data-t="hintBtn">힌트</span></button>
+      </div>
+      <div class="s-msg" id="msg"></div>
+    </div>
+  </div>
+
+  <div class="window gdialog" id="noteWin">
+    <div class="title-bar"><div class="title-icon"></div><div class="title" data-t="noteT">후보 숫자 (최대 4개)</div>
+      <div class="title-button-group"><div class="title-button close" onclick="closeNote()"></div></div></div>
+    <div class="window-content">
+      <div class="slots" id="slots"></div>
+      <div class="pg" id="notePad"></div>
+      <div class="row"><button type="button" class="btn" onclick="clearNote()" data-t="clear">모두 지우기</button>
+        <button type="button" class="btn" onclick="closeNote()" data-t="close">닫기</button></div>
+    </div>
+  </div>
+
+  <div class="window gdialog" id="helpWin" style="width:320px">
+    <div class="title-bar"><div class="title-icon"></div><div class="title" data-t="howT">게임 방법</div>
+      <div class="title-button-group"><div class="title-button close" onclick="closeDlg('helpWin')"></div></div></div>
+    <div class="window-content"><div id="helpTxt" style="font-size:12px;line-height:1.5"></div>
+      <div class="row"><button type="button" class="btn" onclick="closeDlg('helpWin')" data-t="ok">확인</button></div></div>
+  </div>
+</div>
+
+<script src="vendor/jquery.min.js"></script>
+<script src="vendor/jquery-ui.min.js"></script>
+<script src="jquery.mswin.js"></script>
+<script src="jquery.mswin.menu.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

@@ -25,7 +25,7 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
   image-rendering: pixelated !important;
 }
 .polycube-window .window-content {
-  flex: 1; overflow: hidden;
+  flex: 1; overflow: hidden; box-sizing: border-box;   /* (win98.css gives it width:100% + 6px of border: it stuck out over the right edge of the window frame) */
   border-left: 3px solid #808080; border-top: 3px solid #808080;
   border-right: 3px solid #fff; border-bottom: 3px solid #fff;
   background: #000;
@@ -36,6 +36,15 @@ li.menu_polytheme > ul.menu, li.menu_polyothergames > ul.menu, li.menu_cheat > u
 }
 li.menu_cheat > ul.menu .ui-menu-item-wrapper, li.menu_cheat > ul.menu .mi-label, li.menu_cheat > ul.menu .mi-key { white-space: nowrap !important; }
 li.menu_cheat > ul.menu .mi-key { float: right; margin-left: 24px; }
+/* menu items with a shortcut: the label on the left, the shortcut (F2 ...) pushed to the right edge (same as the Minesweeper page) */
+.menu .ui-menu-item > a { display: flex; align-items: center; gap: 16px; }
+.menu .ui-menu-item > a .mi-label { flex: 1 1 auto; text-align: left; }
+.menu .ui-menu-item > a .mi-key { margin-left: auto; flex: 0 0 auto; min-width: 3ch; text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; opacity: .9; }
+.menu, .menu .ui-menu-item > a, .menu .mi-label, .menu .mi-key { white-space: nowrap !important; }
+ul.menu { min-width: 150px; width: max-content; }
+/* the submenu arrow must not take room in the item (it sits at the right edge, like on the Minesweeper page) */
+.menu .ui-menu-item > a { position: relative; }
+.menu .ui-menu-icon.ui-icon { position: absolute !important; right: 4px; top: 50%; transform: translateY(-50%); margin: 0 !important; flex: 0 0 auto !important; pointer-events: none; }
 </style>
 </head>
 <body>
@@ -90,6 +99,18 @@ li.menu_cheat > ul.menu .mi-key { float: right; margin-left: 24px; }
               <li class="poly-minesweeper" onclick="return runMenu(function(){ window.location.href='../index.html'; });">
                 <a href="#">　지뢰찾기</a>
               </li>
+              <li class="poly-2048" onclick="return runMenu(function(){ window.location.href='../2048/index.html'; });">
+                <a href="#">　2048</a>
+              </li>
+              <li class="poly-dino" onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });">
+                <a href="#">　T-Rex</a>
+              </li>
+              <li class="poly-sudoku" onclick="return runMenu(function(){ window.location.href='../sudoku/index.html'; });">
+                <a href="#">　스도쿠</a>
+              </li>
+              <li class="poly-atari" onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });">
+                <a href="#">　아타리 브레이크아웃</a>
+              </li>
 
             </ul>
           </li>
@@ -116,10 +137,10 @@ $(function() {
 function resize() {
   var vw = window.innerWidth, vh = window.innerHeight;
   var win = document.querySelector('.polycube-window');
-  var chrome = 46, ratio = battleMode ? 3/4 : 1/2, gw, gh;   // battle mode: 1.5x as wide
-  if (vw / (vh - chrome) < ratio) { gw = vw - 8; gh = gw / ratio; }
+  var chrome = 46, ratio = 1/2, gw, gh;
+  if (vw / (vh - chrome) < ratio) { gw = vw - 14; gh = gw / ratio; }       // (14 = 2 x 4 px window frame + 2 x 3 px sunken border of the content area)
   else { gh = vh - chrome - 8; gw = gh * ratio; }
-  win.style.width = Math.floor(gw + 8) + 'px';
+  win.style.width = Math.floor(gw + 14) + 'px';
   win.style.height = Math.floor(gh + chrome + 8) + 'px';
 }
 resize();
@@ -153,6 +174,7 @@ window.addEventListener('blur', closeAllMenus);
     st('li.poly-theme-polycube', '\u3000Polycube (3D)');
     st('li.poly-theme-polynomino', '\u2713 Polynomino (2D)');
     st('li.poly-theme-polytesseract', '\u3000Polytesseract (4D)');
+    st('li.poly-atari', '\u3000Atari Breakout');
     st('li.poly-theme-modern', '\u3000Modern');
     st('li.poly-theme-classic', '\u3000Classic');
     st('li.poly-fullscreen', '\u3000Fullscreen');

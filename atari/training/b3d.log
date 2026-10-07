@@ -1,0 +1,4 @@
+t    0.1m it 1 eps 843 ret   -3.87 len    31.2 score/decision  0.090 deaths/1k  12.86
+t    0.6m it 10 eps 4953 ret   -3.66 len    74.6 score/decision  0.098 deaths/1k   8.40
+t    1.1m it 20 eps 2951 ret   -3.44 len   115.9 score/decision  0.103 deaths/1k   4.50
+t    1.7m it 30 eps 1606 ret   -1.34 len   375.6 score/decision  0.108 deaths/1k   2.08

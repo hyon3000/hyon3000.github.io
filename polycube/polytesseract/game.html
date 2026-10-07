@@ -252,11 +252,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;background:#000}
   }
 })();
 function fitViewport(){
-var vw=window.innerWidth,vh=window.innerHeight,bt=new URLSearchParams(location.search).get('battle')==='1'&&!new URLSearchParams(location.search).get('role'),r=bt?3/4:1/2,w,h;
+var vw=window.innerWidth,vh=window.innerHeight,bt=new URLSearchParams(location.search).get('battle')==='1'&&!new URLSearchParams(location.search).get('role'),r=1/2,w,h;
 if(vw/vh<r){w=vw;h=vw/r}else{h=vh;w=vh*r}
 var el=document.getElementById('viewport');
 el.style.width=Math.floor(w)+'px';el.style.height=Math.floor(h)+'px';
-var fs=Math.max(9,Math.floor(w*(bt?2/3:1)*0.04));
+var fs=Math.max(9,Math.floor(w*0.04));
 document.querySelectorAll('.ai').forEach(function(e){e.style.fontSize=fs+'px'});
 }
 function doResize(){fitViewport();if(window.__ptResize)window.__ptResize();}

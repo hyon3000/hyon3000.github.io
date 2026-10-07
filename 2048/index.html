@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>2048</title>
+<meta name="description" content="2048 with a Windows 98 UI (forked from the Minesweeper shell). 4x4 / 6x6 / 8x8 / custom board sizes.">
+<link href="win98.css" media="screen" rel="stylesheet" type="text/css">
+<style>
+html, body { margin: 0; width: 100%; height: 100%; overflow: auto; background: #fff; }
+.windows { position: relative; width: 100%; min-height: 100%; display: flex; align-items: flex-start; justify-content: center; padding-top: 8px; box-sizing: border-box; }
+.g-main { position: relative; width: auto; height: auto; display: inline-block; }
+.g-main .title-bar .title-icon { background-image: url(icon2048.png); image-rendering: pixelated; }
+.g-main .window-content { padding: 0; }
+.g-head { display: flex; align-items: center; justify-content: space-between; margin: 6px 6px 4px; font-family: "Clear Sans","Helvetica Neue",Arial,sans-serif; }
+.g-title { font-size: 44px; font-weight: bold; color: #776e65; line-height: 1; }
+.g-scores { display: flex; gap: 6px; }
+.g-box { background: #bbada0; color: #fff; border-radius: 3px; padding: 4px 12px 5px; text-align: center; min-width: 62px; }
+.g-box span { display: block; font-size: 11px; font-weight: bold; color: #eee4da; letter-spacing: .5px; }
+.g-box b { font-size: 20px; }
+.g-bar { display: flex; align-items: center; justify-content: space-between; margin: 0 6px 4px; }
+.g-sub { font-size: 12px; color: #555; }
+.g-btn { background: #8f7a66; color: #f9f6f2; border: 0; border-radius: 3px; padding: 7px 14px; font: bold 13px Arial, sans-serif; cursor: pointer; }
+.g-btn:hover { background: #9f8b77; }
+.g-area { margin: 4px; border-top: 3px solid gray; border-left: 3px solid gray; border-bottom: 3px solid white; border-right: 3px solid white; background: #bbada0; position: relative; overflow: hidden; touch-action: none; user-select: none; }
+.g-board { position: relative; margin: 0 auto; }
+.g-cell { position: absolute; background: rgba(238,228,218,.35); border-radius: 3px; }
+.g-tile { position: absolute; left: 0; top: 0; border-radius: 3px; display: flex; align-items: center; justify-content: center; font: bold 28px "Clear Sans","Helvetica Neue",Arial,sans-serif; color: #776e65; background: #eee4da; transition: transform .11s ease-in-out; will-change: transform; }
+.g-tile.new > .g-in { animation: gAppear .18s ease-out .09s backwards; }
+.g-tile.merge > .g-in { animation: gPop .16s ease-out .09s; }
+.g-in { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; border-radius: 3px; background: inherit; }
+@keyframes gAppear { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes gPop { 0% { transform: scale(1); } 50% { transform: scale(1.18); } 100% { transform: scale(1); } }
+.g-over { position: absolute; left: 0; top: 0; right: 0; bottom: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(238,228,218,.72); color: #776e65; font: bold 26px Arial, sans-serif; z-index: 5; text-align: center; }
+.g-over small { font: 13px "굴림", Tahoma, sans-serif; margin-top: 8px; }
+.g-toast { position: absolute; left: 0; right: 0; top: 6px; text-align: center; font: bold 15px Arial, sans-serif; color: #f9f6f2; text-shadow: 0 0 3px #776e65, 0 0 3px #776e65; pointer-events: none; opacity: 0; transition: opacity .3s; z-index: 6; }
+.g-hint { margin: 2px 6px 4px; font-size: 11px; color: #333; }
+.windows-98 .window.gdialog { position: fixed; left: 50%; top: 120px; transform: translateX(-50%); z-index: 100; display: none; width: 250px; }
+.gdialog .window-content { padding: 8px; box-sizing: border-box; width: auto; }
+.gdialog label { display: inline-block; width: 90px; }
+.gdialog input[type=number] { width: 48px; }
+.gdialog .row { margin: 6px 0; }
+.gdialog table { border-collapse: collapse; width: 100%; }
+.gdialog td { padding: 2px 4px; }
+li.checkable a { white-space: nowrap; }
+/* menu items with a shortcut: the label on the left, the shortcut (F2 ...) pushed to the right edge (same as the Minesweeper page) */
+.menu .ui-menu-item > a { display: flex; align-items: center; gap: 16px; }
+.menu .ui-menu-item > a .mi-label { flex: 1 1 auto; text-align: left; }
+.menu .ui-menu-item > a .mi-key { margin-left: auto; flex: 0 0 auto; min-width: 3ch; text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; opacity: .9; }
+.menu, .menu .ui-menu-item > a, .menu .mi-label, .menu .mi-key { white-space: nowrap !important; }
+ul.menu { min-width: 150px; width: max-content; }
+/* the submenu arrow must not take room in the item (it sits at the right edge, like on the Minesweeper page) */
+.menu .ui-menu-item > a { position: relative; }
+.menu .ui-menu-icon.ui-icon { position: absolute !important; right: 4px; top: 50%; transform: translateY(-50%); margin: 0 !important; flex: 0 0 auto !important; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="windows windows-98">
+  <div class="window has-menu g-main" id="mainwin">
+    <div class="title-bar">
+      <div class="title-icon"></div>
+      <div class="title">2048</div>
+      <div class="title-button-group">
+        <div class="title-button minimize"></div>
+        <div class="title-button maximize disabled" onclick="event.preventDefault();event.stopPropagation();return false;"></div>
+        <div class="title-button close"></div>
+      </div>
+    </div>
+    <ul class="menu-bar">
+      <li>
+        <a href="#" data-access-key="g" data-t="game">게임</a>
+        <ul class="menu">
+          <li onclick="return runMenu(function(){ newGame(); });"><a href="#"><span class="mi-label" data-t="new">　새 게임(N)</span><span class="mi-key">F2</span></a></li>
+          <li class="separator"></li>
+          <li class="lv lv1" onclick="return runMenu(function(){ setSize(4, 4, 1); });"><a href="#" data-t="beg">　초급(B) 4×4</a></li>
+          <li class="lv lv2" onclick="return runMenu(function(){ setSize(6, 6, 2); });"><a href="#" data-t="int">　중급(I) 6×6</a></li>
+          <li class="lv lv3" onclick="return runMenu(function(){ setSize(8, 8, 3); });"><a href="#" data-t="exp">　고급(E) 8×8</a></li>
+          <li class="lv lv4" onclick="return runMenu(function(){ openCustom(); });"><a href="#" data-t="cus">　사용자 지정(C)...</a></li>
+          <li class="separator"></li>
+          <li onclick="return runMenu(function(){ openBest(); });"><a href="#" data-t="best">　최고 기록(T)...</a></li>
+          <li class="separator"></li>
+          <li onclick="return runMenu(function(){ document.getElementById('mainwin').style.visibility='hidden'; });"><a href="#" data-t="exit">　끝내기(X)</a></li>
+        </ul>
+      </li>
+      <li>
+        <a href="#" data-access-key="h" data-t="help">도움말</a>
+        <ul class="menu">
+          <li onclick="return runMenu(function(){ openHelp(); });"><a href="#" data-t="how">　게임 방법(H)</a></li>
+          <li class="separator"></li>
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="cheat">　치트...</a>
+            <ul class="menu">
+              <li class="menu-autosolve" onclick="return runMenu(function(){ toggleAuto(); });"><a href="#"><span class="mi-label" data-t="auto">　자동으로 풀기</span><span class="mi-key">F3</span></a></li>
+              <li class="menu-hint" onclick="return runMenu(function(){ giveHint(); });"><a href="#"><span class="mi-label" data-t="hintm">　힌트 제공</span><span class="mi-key">F4</span></a></li>
+            </ul>
+          </li>
+          <li class="separator"></li>
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="other">　다른 게임</a>
+            <ul class="menu">
+              <li onclick="return runMenu(function(){ window.location.href='../index.html'; });"><a href="#" data-t="mine">　지뢰찾기</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　폴리큐브</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#">　T-Rex</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../sudoku/index.html'; });"><a href="#">　스도쿠</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });"><a href="#">　아타리 브레이크아웃</a></li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+    <div class="window-content">
+      <div class="g-head" id="head">
+        <div class="g-title">2048</div>
+        <div class="g-scores">
+          <div class="g-box"><span>SCORE</span><b id="vScore">0</b></div>
+          <div class="g-box"><span>BEST</span><b id="vBest">0</b></div>
+        </div>
+      </div>
+      <div class="g-bar"><div class="g-sub" id="sub"></div><button class="g-btn" onclick="newGame()" id="newBtn" data-t="newBtn">새 게임</button></div>
+      <div class="g-area" id="area">
+        <div class="g-board" id="board"></div>
+        <div class="g-toast" id="toast"></div>
+        <div class="g-over" id="over"><div id="overTxt">Game Over</div><small id="overSub"></small></div>
+      </div>
+      <div class="g-hint" id="hint"></div>
+    </div>
+  </div>
+
+  <div class="window gdialog" id="customWin">
+    <div class="title-bar"><div class="title-icon"></div><div class="title" data-t="cusT">사용자 지정 게임</div>
+      <div class="title-button-group"><div class="title-button close" onclick="closeDlg('customWin')"></div></div></div>
+    <div class="window-content">
+      <form onsubmit="submitCustom(); return false;">
+        <div class="row"><label data-t="rows">높이(H)</label><input type="number" id="cRows" min="2" max="24" value="5"></div>
+        <div class="row"><label data-t="cols">너비(W)</label><input type="number" id="cCols" min="2" max="24" value="5"></div>
+        <div class="row" style="text-align:center"><button type="submit" class="title-button" style="padding:2px 10px;" data-t="ok">확인</button>
+          <button type="button" class="title-button" style="padding:2px 10px;" onclick="closeDlg('customWin')" data-t="cancel">취소</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="window gdialog" id="bestWin">
+    <div class="title-bar"><div class="title-icon"></div><div class="title" data-t="bestT">최고 기록</div>
+      <div class="title-button-group"><div class="title-button close" onclick="closeDlg('bestWin')"></div></div></div>
+    <div class="window-content"><table id="bestTable"></table>
+      <div class="row" style="text-align:center"><button type="button" class="title-button" style="padding:2px 10px;" onclick="resetBest()" data-t="reset">초기화</button>
+        <button type="button" class="title-button" style="padding:2px 10px;" onclick="closeDlg('bestWin')" data-t="ok">확인</button></div></div>
+  </div>
+
+  <div class="window gdialog" id="helpWin" style="width:300px">
+    <div class="title-bar"><div class="title-icon"></div><div class="title" data-t="howT">2048 게임 방법</div>
+      <div class="title-button-group"><div class="title-button close" onclick="closeDlg('helpWin')"></div></div></div>
+    <div class="window-content"><div id="helpTxt" style="font-size:12px;line-height:1.5"></div>
+      <div class="row" style="text-align:center"><button type="button" class="title-button" style="padding:2px 10px;" onclick="closeDlg('helpWin')" data-t="ok">확인</button></div></div>
+  </div>
+</div>
+
+<script src="vendor/jquery.min.js"></script>
+<script src="vendor/jquery-ui.min.js"></script>
+<script src="jquery.mswin.js"></script>
+<script src="jquery.mswin.menu.js"></script>
+<script src="ai-model.js"></script>
+<script src="ai.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Atari Breakout</title>
+<meta name="description" content="Atari-style Breakout in a Windows 98 frame: 2D and 3D versions. Black bricks take 2 hits, white 3, gray 5.">
+<link href="win98.css" media="screen" rel="stylesheet" type="text/css">
+<style>
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #fff; }
+.windows { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.a-window { position: relative; display: flex; flex-direction: column; }
+.a-window .title-bar .title-icon { background-size: 16px 16px; image-rendering: pixelated !important; }
+.a-window .window-content { flex: 1; overflow: hidden; box-sizing: border-box; width: auto; padding: 0; border-left: 3px solid #808080; border-top: 3px solid #808080; border-right: 3px solid #fff; border-bottom: 3px solid #fff; background: #000; }
+.a-window .window-content iframe { width: 100%; height: 100%; border: none; display: block; }
+.windows-98 .window.gdialog { position: fixed; left: 50%; top: 100px; transform: translateX(-50%); z-index: 100; display: none; width: 300px; }
+.gdialog .window-content { padding: 10px; box-sizing: border-box; width: auto; background: silver; }
+.gdialog .row { margin: 8px 0 0; text-align: center; }
+/* menu items with a shortcut: the label on the left, the shortcut (F2 ...) pushed to the right edge (same as the Minesweeper page) */
+.menu .ui-menu-item > a { display: flex; align-items: center; gap: 16px; }
+.menu .ui-menu-item > a .mi-label { flex: 1 1 auto; text-align: left; }
+.menu .ui-menu-item > a .mi-key { margin-left: auto; flex: 0 0 auto; min-width: 3ch; text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; opacity: .9; }
+.menu, .menu .ui-menu-item > a, .menu .mi-label, .menu .mi-key { white-space: nowrap !important; }
+ul.menu { min-width: 150px; width: max-content; }
+/* the submenu arrow must not take room in the item (it sits at the right edge, like on the Minesweeper page) */
+.menu .ui-menu-item > a { position: relative; }
+.menu .ui-menu-icon.ui-icon { position: absolute !important; right: 4px; top: 50%; transform: translateY(-50%); margin: 0 !important; flex: 0 0 auto !important; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="windows windows-98">
+  <div class="window has-menu a-window" id="mainwin">
+    <div class="title-bar">
+      <div class="title-icon" id="ticon" style="background-image:url(icon2d.png)"></div>
+      <div class="title" id="ttitle">Breakout 2D</div>
+      <div class="title-button-group">
+        <div class="title-button minimize"></div>
+        <div class="title-button maximize disabled" onclick="event.preventDefault();event.stopPropagation();return false;"></div>
+        <div class="title-button close"></div>
+      </div>
+    </div>
+    <ul class="menu-bar">
+      <li>
+        <a href="#" data-access-key="g" data-t="game">게임</a>
+        <ul class="menu">
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="theme">　테마...</a>
+            <ul class="menu">
+              <li class="th th2d" onclick="return runMenu(function(){ setTheme('2d'); });"><a href="#">✓ 2D</a></li>
+              <li class="th th3d" onclick="return runMenu(function(){ setTheme('3d'); });"><a href="#">　3D</a></li>
+            </ul>
+          </li>
+          <li onclick="return runMenu(function(){ goFullscreen(); });"><a href="#" data-t="full">　전체화면</a></li>
+          <li class="separator"></li>
+          <li onclick="return runMenu(function(){ document.getElementById('mainwin').style.visibility='hidden'; });"><a href="#" data-t="exit">　끝내기(X)</a></li>
+        </ul>
+      </li>
+      <li>
+        <a href="#" data-access-key="h" data-t="help">도움말</a>
+        <ul class="menu">
+          <li onclick="return runMenu(function(){ openDlg('helpWin'); });"><a href="#" data-t="how">　게임 방법(H)</a></li>
+          <li class="separator"></li>
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="cheat">　치트...</a>
+            <ul class="menu">
+              <li class="menu-autosolve" onclick="return runMenu(function(){ toggleAuto(); });"><a href="#"><span class="mi-label" data-t="auto">　자동으로 풀기</span><span class="mi-key">F3</span></a></li>
+            </ul>
+          </li>
+          <li class="separator"></li>
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="other">　다른 게임</a>
+            <ul class="menu">
+              <li onclick="return runMenu(function(){ window.location.href='../index.html'; });"><a href="#" data-t="mine">　지뢰찾기</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../2048/index.html'; });"><a href="#">　2048</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#">　T-Rex</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../sudoku/index.html'; });"><a href="#" data-t="sudoku">　스도쿠</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　폴리큐브</a></li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+    <div class="window-content"><iframe id="game" src="game.html"></iframe></div>
+  </div>
+
+  <div class="window gdialog" id="helpWin">
+    <div class="title-bar"><div class="title-icon" style="background-image:url(icon2d.png);background-size:16px 16px"></div><div class="title" data-t="howT">게임 방법</div>
+      <div class="title-button-group"><div class="title-button close" onclick="closeDlg('helpWin')"></div></div></div>
+    <div class="window-content"><div id="helpTxt" style="font-size:12px;line-height:1.55"></div>
+      <div class="row"><button type="button" class="title-button" style="padding:2px 10px;" onclick="closeDlg('helpWin')" data-t="ok">확인</button></div></div>
+  </div>
+</div>
+<script src="vendor/jquery.min.js"></script>
+<script src="vendor/jquery-ui.min.js"></script>
+<script src="jquery.mswin.js"></script>
+<script src="jquery.mswin.menu.js"></script>
+<script>
+(function () {
+  var KO = /^ko/i.test(navigator.language || 'ko');
+  var T = KO ? { game: '게임', cheat: '　치트...', auto: '　자동으로 풀기', theme: '　테마...', full: '　전체화면', exit: '　끝내기(X)', help: '도움말', how: '　게임 방법(H)', other: '　다른 게임', mine: '　지뢰찾기', sudoku: '　스도쿠', poly: '　폴리큐브', howT: '게임 방법', ok: '확인',
+    help1: '공을 튕겨 블록을 깨세요. 공은 하나뿐입니다: 처음 쏠 때 점수가 0점에서 시작하고, 공이 떨어지면 그대로 게임 오버이며 점수가 확정됩니다.<br><b>블록</b>: 검정 = 2번, 흰색 = 3번, 회색 = 5번 쳐야 깨집니다. 나머지(채도 100%의 색)는 1번. 맞을 때마다 균열이 생깁니다.<br><b>줄</b>: 항상 5줄이 유지됩니다. 가장 아랫줄을 다 깨면 모든 블록이 한 줄 내려오고 맨 위에 새 줄이 생깁니다(공이 그 자리에 있으면 비켜날 때까지 기다립니다). 점수: 줄을 다 지우면 +100, 블록을 한 번 칠 때마다 +2, 1초가 지날 때마다 −1(점수는 음수가 될 수 있음).<br><b>2D</b>: 판(패들)은 마우스 버튼을 누른 채 드래그할 때(터치는 대고 밀 때)만 움직입니다. 누르고 움직이지 않으면(탭) 발사, Space도 발사입니다.<br><b>3D</b>: 바닥의 판으로 공을 위로 쳐 올립니다. 판 근처를 누르고 밀면 판 이동, 판이 아닌 곳을 누르고 밀면 시점 회전입니다(오른쪽 버튼 드래그도 회전). 왼쪽 아래의 지도는 시점과 함께 회전하는 바닥 지도이고, 지도를 눌러도 판이 그 자리로 갑니다.<br>게임 &gt; 테마에서 2D / 3D를 고릅니다.' }
+  : { game: 'Game', cheat: '　Cheat...', auto: '　Solve Automatically', theme: '　Theme...', full: '　Fullscreen', exit: '　Exit(X)', help: 'Help', how: '　How to Play(H)', other: '　Other Games', mine: '　Minesweeper', sudoku: '　Sudoku', poly: '　Polycube', howT: 'How to play', ok: 'OK',
+    help1: 'Bounce the ball and break bricks. There is only one ball: the score starts from 0 when you shoot it, and when it falls the game is over and the score is final.<br><b>Bricks</b>: black = 2 hits, white = 3, gray = 5; every other brick (a fully saturated colour) = 1. Cracks show the damage.<br><b>Rows</b>: five rows are always kept. When the bottom row is cleared every brick moves down one row and a new row appears at the top (if the ball is in that spot the new row waits until it is clear). Score: +100 for every row you clear completely, +2 for every hit on a brick, -1 for every second that passes (the score can go negative).<br><b>2D</b>: the paddle moves only while you hold the mouse button and drag (touch: put a finger down and slide). A tap / click without dragging launches the ball, and so does Space.<br><b>3D</b>: bounce the ball up from the floor paddle. Press near the paddle and slide to move it; press anywhere else and slide to rotate the view (right-button drag rotates too). The map at the bottom left is the floor map: it rotates with the view, and pressing it puts the paddle there.<br>Choose 2D / 3D in Game &gt; Theme.' };
+  document.documentElement.lang = KO ? 'ko' : 'en';
+  [].forEach.call(document.querySelectorAll('[data-t]'), function (e) { var k = e.getAttribute('data-t'); if (T[k] !== undefined) e.textContent = T[k]; });
+  document.getElementById('helpTxt').innerHTML = T.help1;
+  var theme = '2d';
+  function resize() {
+    var vw = window.innerWidth, vh = window.innerHeight, win = document.getElementById('mainwin'), chrome = 46, ratio = 1 / 2, gw, gh;
+    if (vw / (vh - chrome) < ratio) { gw = vw - 14; gh = gw / ratio; } else { gh = vh - chrome - 8; gw = gh * ratio; }
+    win.style.width = Math.floor(gw + 14) + 'px'; win.style.height = Math.floor(gh + chrome + 8) + 'px';
+  }
+  resize(); window.addEventListener('resize', resize);
+  window.setTheme = function (t) {
+    theme = t; markAuto(false); document.getElementById('game').src = t === '3d' ? 'game3d.html' : 'game.html';
+    document.getElementById('ttitle').textContent = t === '3d' ? 'Breakout 3D' : 'Breakout 2D';
+    document.getElementById('ticon').style.backgroundImage = 'url(icon' + t + '.png)';
+    ['2d', '3d'].forEach(function (k) { var a = document.querySelector('.th' + k + ' a'); a.textContent = (k === t ? '✓ ' : '　') + k.toUpperCase(); });
+  };
+  function closeMenus() {
+    var mb = $('.menu-bar'); try { mb.menubar('collapseAll'); } catch (e) {}
+    mb.find('.ui-state-open').removeClass('ui-state-open'); mb.find('> li').removeClass('ui-state-active ui-state-hover ui-state-focus');
+    mb.find('.menu').hide().attr('aria-hidden', 'true').attr('aria-expanded', 'false');
+  }
+  window.runMenu = function (fn) { closeMenus(); setTimeout(fn, 0); return false; };
+  window.closeDlg = function (id) { document.getElementById(id).style.display = 'none'; };
+  window.openDlg = function (id) { document.getElementById(id).style.display = 'block'; };
+  window.toggleAuto = function () {                    // the game inside the frame plays itself with the trained policy (also bound to F3)
+    try { const w = document.getElementById('game').contentWindow; const on = w.toggleAuto && w.toggleAuto(); markAuto(!!on); } catch (e) {}
+  };
+  function markAuto(on) { const a = document.querySelector('.menu-autosolve .mi-label'); if (a) a.textContent = (on ? '✓ ' : '\u3000') + a.textContent.replace(/^[✓\u2713]\s*/, '').replace(/^\u3000/, ''); }
+  document.addEventListener('keydown', function (e) { if (e.key === 'F3') { e.preventDefault(); window.toggleAuto(); } });
+  window.goFullscreen = function () { var el = document.getElementById('mainwin'); if (el.requestFullscreen) el.requestFullscreen(); };
+  $(function () {
+    if ($('.menu-bar').length) $('.menu-bar').menubar();
+    $('.window').draggable({ handle: '.title' });
+    $('#mainwin .title-button.minimize').on('click', function () { $('#mainwin').hide(); });
+    $('#mainwin .title-button.close').on('click', function () { $('#mainwin').css('visibility', 'hidden'); });
+    document.getElementById('game').addEventListener('load', function () { try { this.contentWindow.document.addEventListener('pointerdown', closeMenus); } catch (e) {} });
+    var g = new URLSearchParams(location.search).get('theme'); if (g === '3d') setTheme('3d');
+  });
+})();
+</script>
+</body>
+</html>

@@ -1772,7 +1772,7 @@ function overflowDie() {          // lines were added to a stack that has no roo
 }
 function gover() {
   state.oscore = state.score;
-  if (!window.__btOpp) try {   // (the battle-mode opponent instance must not touch the player's high score)
+  if (!window.__btOpp && !window.__battle) try {   // (battle mode records a cumulative score instead: battle.js)
     const raw = localStorage.getItem('polytesseract_highscore');
     if (raw) {
       const data = JSON.parse(raw);
@@ -2345,6 +2345,10 @@ function drawGraphOverlay() {
   ], c);
   drawDigitString(8 * 0.03, -8 * 0.03, 0.03, String(state.level), 2, [0, 1, 1, 1]);
   // Highscore label "highscore:" and digits (C++ graph() lines 4254-4445)
+  if (BATTLE) {   // battle mode: the cumulative score instead of the high score
+    drawWord(16 * 0.03, 11 * 0.03, 0.03, 'total', c);
+    pointsDraw([[26*0.03,11.5*0.03,0],[26*0.03,10.5*0.03,0]], c);
+  } else {
   drawPolylines([
     [[12*0.03,11*0.03,0],[13*0.03,11*0.03,0]],
   ], c);
@@ -2371,7 +2375,8 @@ function drawGraphOverlay() {
     [[29*0.03,12*0.03,0],[28*0.03,12*0.03,0],[28*0.03,11*0.03,0],[29*0.03,11*0.03,0],[28*0.03,11*0.03,0],[28*0.03,10*0.03,0],[29*0.03,10*0.03,0]],
   ], c);
   pointsDraw([[30*0.03,11.5*0.03,0],[30*0.03,10.5*0.03,0]], c);
-  drawDigitString(0, 9 * 0.03, 0.03, String(state.oh % 1000000000), 9, c);
+  }
+  drawDigitString(0, 9 * 0.03, 0.03, String((BATTLE && window.PolyBattle ? PolyBattle.total : state.oh) % 1000000000), 9, c);
   // Top-down minimap (w=3 slice)
   const minimapW = 3;
   renderer.pushMatrix();
@@ -3669,7 +3674,14 @@ function drawItemInfoBlock(code) {
 
 function drawItemInfo3d(code) {
   ctx2d.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-  if (BATTLE) { const _r = battleSlotRect(overlayCanvas.width, overlayCanvas.height), _B = window.PolyBattle; ctx2d.save(); ctx2d.strokeStyle = '#9ab'; ctx2d.lineWidth = 1.5; ctx2d.strokeRect(_r[0], _r[1], _r[2], _r[3]); ctx2d.restore(); }   // the box around the 1x10 slot area (edge only)
+  const X = battleXform();
+  ctx2d.save();
+  if (X) { ctx2d.translate(X.ox, X.oy); ctx2d.scale(X.s, X.s); }       // battle mode: drawn 1.5x smaller like the rest above the control buttons
+  drawItemInfo3dBody(code, X ? 1 / X.s : 1);
+  ctx2d.restore();
+}
+function drawItemInfo3dBody(code, inv) {
+  if (BATTLE) { const _r = battleSlotRectN(overlayCanvas.width, overlayCanvas.height); ctx2d.save(); ctx2d.strokeStyle = '#9ab'; ctx2d.lineWidth = 1.5 * inv; ctx2d.strokeRect(_r[0], _r[1], _r[2], _r[3]); ctx2d.restore(); }   // the box around the 1x10 slot area (edge only)
   if (code < 0) return;
   const desc = ITEM_DESC[code] || '';
   const cw = overlayCanvas.width, ch = overlayCanvas.height;
@@ -3697,22 +3709,26 @@ function drawScene3d() {
   // Now enable blending for transparent 4D blocks
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-  renderer.viewport(0, state.activitysizey / 40, state.activitysizex, (state.activitysizey * 41) / 40);
+  battleViewport();
   renderer.loadIdentity();
   renderer.translatef(state.centerx - 0.6, state.centery + BOARD_UP, -4);
   renderer.multMatrixf(buildViewRotationMatrix());
   drawBoardAndBlocks();
   if (!state.captureMode) {
     updateControlOrientation();
-    renderer.viewport(0, state.activitysizey / 40, state.activitysizex, (state.activitysizey * 41) / 40);
+    battleViewport();
     renderer.loadIdentity();
     renderer.translatef(0, -0.2, -4);
     renderer.scalef(1.8, 1.8, 1.8);
-    drawGraphOverlay();
-    drawControlOverlay();
+    battleHud(-1); drawGraphOverlay(); battleHud(1);
     const _itemCode = getItemInfoCode();
     drawItemInfoBlock(_itemCode);
-  if (BATTLE) battleDrawSlots();
+    if (BATTLE) battleDrawSlots();
+    renderer.viewport(0, state.activitysizey / 40, state.activitysizex, (state.activitysizey * 41) / 40);   // the control buttons always keep their normal place and size
+    renderer.loadIdentity();
+    renderer.translatef(0, -0.2, -4);
+    renderer.scalef(1.8, 1.8, 1.8);
+    drawControlOverlay();
     // Background texture
     renderer.viewport(0, 0, state.activitysizex, state.activitysizey);
     renderer.loadIdentity();
@@ -4042,7 +4058,27 @@ function battleLocked() {                       // called when a block has just 
   settleBoard(cells);
 }
 // a small row of slots right above the special-block description line (see drawItemInfo3d)
-function battleSlotRect(w, h) {
+// battle mode (while a game is running, own window): everything above the control buttons is drawn at 2/3 size, the opponent column takes the left third
+function battleBtnTop(w, h) { return overlayToPixel(0, ITEM_OY)[1] + state.activitysizey * 0.012; }     // just below the special-block description line
+function battleXform() {
+  const B = window.PolyBattle; if (!BATTLE || window.__btOpp || !B || !B.split) return null;
+  const xf = B.xf || { s: 2 / 3, ox: state.activitysizex / 3 }, yb = battleBtnTop();      // (scale and left edge: set by battle.js from the room the opponent window leaves)
+  return { s: xf.s, ox: xf.ox, oy: yb * (1 - xf.s) / 2 };
+}
+const BT_HUD_DX = 0.05;                 // battle mode: the score panel / minimap sit this much (x canvas width) closer to the block area
+function battleExtent(w, h) { return [Math.min(battleSlotRectN(w, h)[0], battleBoardRectN(w, h)[0]), w * (0.97 - BT_HUD_DX)]; }   // the horizontal extent of everything above the buttons
+function battleTr(r) { const X = battleXform(); return X ? [X.ox + X.s * r[0], X.oy + X.s * r[1], X.s * r[2], X.s * r[3]] : r; }
+function battleViewport() {              // the viewport of the board / HUD part: the normal one, or in battle mode its 2/3 sized copy (the projection is orthographic: everything scales)
+  const w = state.activitysizex, h = state.activitysizey, X = battleXform();
+  if (X) renderer.viewport(X.ox, h - X.oy - X.s * h * 39 / 40, X.s * w, X.s * h * 41 / 40);
+  else renderer.viewport(0, h / 40, w, (h * 41) / 40);
+}
+function battleHud(dir) {                // battle mode: shift the HUD (score panel + minimap) towards the block area (overlay units: the window width is 3 * viewK / 1.8)
+  if (!battleXform()) return;
+  renderer.translatef(dir * BT_HUD_DX * 3 * viewK(state.activitysizex, state.activitysizey) / 1.8, 0, 0);
+}
+function battleSlotRect(w, h) { return battleTr(battleSlotRectN(w, h)); }
+function battleSlotRectN(w, h) {
   const [bx, by] = overlayToPixel(ITEM_OX, ITEM_OY), sq = w * 0.055;   // 1 x 10 square cells (narrow enough to stay clear of the minimap)
   const left = overlayToPixel(-0.45 - 0.235, ITEM_OY)[0];       // the left end of the box = the leftmost line of the leftmost rotation button (the control overlay is drawn at x = -0.45, its left column starts at -0.235)
   const W = sq * 10, H = (W - 3) / 10 + 3;                      // exactly 10 square cells fit inside the box (1.5 px border all round)
@@ -4057,7 +4093,7 @@ function pixelToOverlay(px, py) {
 // the item block images of the stored items (no border, no slot boxes: packed from the left). Called inside drawScene3d with the overlay matrix set.
 function battleDrawSlots() {
   const B = window.PolyBattle; if (!B || !B.slots) return;
-  const r = battleSlotRect(state.activitysizex, state.activitysizey), sz = (r[2] - 3) / B.SLOTS, step = sz;
+  const r = battleSlotRectN(state.activitysizex, state.activitysizey), sz = (r[2] - 3) / B.SLOTS, step = sz;
   for (let i = 0; i < B.slots.length; i++) {
     const [ox, oy] = pixelToOverlay(r[0] + 1.5 + (i + 0.5) * step, r[1] + r[3] / 2);   // packed from the left
     renderer.pushMatrix();
@@ -4077,7 +4113,8 @@ function battleSnapshot() {
   for (let x = 0; x < 7; x++) for (let y = 0; y < 7; y++) for (let z = 0; z < 7; z++) for (let w = 0; w < 7; w++) now[j++] = cls(state.nowblock[x][y][z][w]);
   return { blk, now, pos: state.blockpos.slice(), blind: btBlind() };       // (blind: the board is hidden from this player: its window is hidden for the opponent too)
 }
-function battleBoardRect(w, h) { return [w * 0.03, h * 0.07 - BOARD_UP * w * 41 / (120 * viewK(w, h)), w * 0.55, h * 0.55]; }   // the block area (well + falling piece) of the default view
+function battleBoardRect(w, h) { return battleTr(battleBoardRectN(w, h)); }
+function battleBoardRectN(w, h) { return [w * 0.03, h * 0.07 - BOARD_UP * w * 41 / (120 * viewK(w, h)), w * 0.55, h * 0.55]; }   // the block area (well + falling piece) of the default view
 function battleMakeOpp(areaEl, slotEl) {
   const cvB = document.createElement('canvas'), cvS = document.createElement('canvas'), cvI = document.createElement('canvas');
   areaEl.appendChild(cvB); slotEl.appendChild(cvS); cvI.width = cvI.height = 64;
@@ -4093,7 +4130,7 @@ function battleMakeOpp(areaEl, slotEl) {
   return {
     draw(snap, codes) {
       fit(cvB); fit(cvS);
-      const W = state.activitysizex, H = state.activitysizey, rc = battleBoardRect(W, H), s = cvB.width / rc[2], h = cvB.height;
+      const W = state.activitysizex, H = state.activitysizey, rc = battleBoardRectN(W, H), s = cvB.width / rc[2], h = cvB.height;
       let i = 0, j = 0;
       for (let x = 0; x < 7; x++) for (let y = 0; y < 7; y++) for (let z = 0; z < 26; z++) for (let w = 0; w < 7; w++) oppBlk[x][y][z][w] = snap.blk[i++];
       for (let x = 0; x < 7; x++) for (let y = 0; y < 7; y++) for (let z = 0; z < 7; z++) for (let w = 0; w < 7; w++) oppNow[x][y][z][w] = snap.now[j++];
@@ -4146,8 +4183,8 @@ if (BATTLE) PolyBattle.attach({ itemDesc: (c) => ITEM_DESC[c], applyStored: batt
   isPlaying: () => !!state.ready && !state.startscreen && !state.goverflg,
   stats: () => ({ score: state.goverflg ? state.oscore : state.score, lines: state.lines, level: state.level, over: state.goverflg }),
   pieceInfo: () => { const out = []; for (let x = 0; x < 7; x++) for (let y = 0; y < 7; y++) for (let z = 0; z < 7; z++) for (let w = 0; w < 7; w++) if (state.nowblock[x][y][z][w]) out.push([x, y, z, w]); return { pos: state.blockpos.slice(), cells: out }; },
-  boardRect: battleBoardRect, snapshot: battleSnapshot, makeOppRenderer: battleMakeOpp, oppScale: 0.5,   // the opponent window is half the size of my block area
-  background: () => ({ url: EMBEDDED_TEXTURES[1] || './assets/texture1.bmp', dim: '0,0,0,0.6', tiles: 3 }), slotRect: battleSlotRect, restart: () => { state.goverflg = 0; },
+  boardRect: battleBoardRect, boardRectN: battleBoardRectN, extent: battleExtent, snapshot: battleSnapshot, makeOppRenderer: battleMakeOpp, oppScale: 0.5,   // the opponent window is half the size of my block area
+  background: () => ({ url: EMBEDDED_TEXTURES[1] || './assets/texture1.bmp', dim: '0,0,0,0.6', tiles: 3 }), slotRect: battleSlotRect, btnTop: battleBtnTop, restart: () => { state.goverflg = 0; },
   forceOver: () => { if (state.ready && !state.startscreen && !state.goverflg) { gover(); initBlockState(); } },   // the other side died: this game ends too
   overLayout: () => ({ resY: 0.255, msgY: 0.62, mask: [0.565, 0.705] }) });
 if (window.PolyND) window.PolyND.attach({ battleSnap: () => (BATTLE ? battleSnap() : null), battleRestore, dim: 4, state, move, tryHoldSwap, stickblock, removeline, calculatescore, execKey: _execKey, now, modelUrl: './web/ai-model-4d.js', modelVar: 'POLY_AI_MODEL_4D', battleUrl: './web/ai-battle-4d.js', battleVar: 'POLY_AI_BATTLE_4D' });
