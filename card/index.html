@@ -21,7 +21,7 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 .menu .ui-menu-item > a .mi-label { flex: 1 1 auto; text-align: left; }
 .menu .ui-menu-item > a .mi-key { margin-left: auto; flex: 0 0 auto; min-width: 3ch; text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; opacity: .9; }
 .menu, .menu .ui-menu-item > a, .menu .mi-label, .menu .mi-key { white-space: nowrap !important; }
-ul.menu { min-width: 150px; width: max-content; }
+ul.menu { min-width: 200px; width: max-content; }
 /* the submenu arrow must not take room in the item (it sits at the right edge, like on the Minesweeper page) */
 .menu .ui-menu-item > a { position: relative; }
 .menu .ui-menu-icon.ui-icon { position: absolute !important; right: 4px; top: 50%; transform: translateY(-50%); margin: 0 !important; flex: 0 0 auto !important; pointer-events: none; }
@@ -118,7 +118,7 @@ ul.menu { min-width: 150px; width: max-content; }
       '<b>간단화</b>: 같은 달 4장이 한 사람 손이나 바닥에 있으면 다시 섞습니다(총통 없음).<br>도움말 &gt; 치트: 힌트(F4)는 낼 패와 가져올 바닥 패를 표시하고, 자동으로 풀기(F3)는 내 차례를 컴퓨터가 대신 두며(고/스톱 포함) 게임이 끝나면 새 게임을 시작합니다. 어느 모드에서나 쓸 수 있습니다.',
     spider: '<b>스파이더 솔리테어</b>: 카드 104장, 10열. 처음 54장(6,6,6,6,5,5,5,5,5,5장)을 깔고 각 열 맨 위만 앞면. 오른쪽 위의 더미(50장)를 누르면 각 열에 한 장씩 10장을 나눠 줍니다(빈 열이 있으면 불가).<br>' +
       '<b>이동</b>: 카드를 숫자가 하나 더 큰 카드 위(무늬 무관)나 빈 열로 옮깁니다. 여러 장은 같은 무늬로 연속 내림차순인 묶음만 한꺼번에 이동. K부터 A까지 같은 무늬 13장이 완성되면 자동으로 치워지고, 8벌을 모두 치우면 승리. 끌어 놓기, 카드를 누른 뒤 목적 열 누르기, 카드 더블클릭/더블탭(가장 좋은 열로 이동) 모두 됩니다.<br>' +
-      '<b>점수</b>: 500점에서 시작, 이동/배분마다 -1, 한 벌 완성마다 +100. 무르기는 제한 없이 직전 상태로 되돌립니다. 난이도: 1무늬(쉬움), 2무늬, 4무늬.<br>도움말 &gt; 치트: 힌트(F4)는 좋은 수 하나를 표시하고(다시 누르면 다음 후보, 마지막은 배분), 자동으로 풀기(F3)는 컴퓨터가 계속 대신 둡니다.'
+      '<b>점수</b>: 500점에서 시작, 이동/배분마다 -1, 한 벌 완성마다 +100. 무르기는 제한 없이 직전 상태로 되돌립니다. 난이도: 1무늬(쉬움), 2무늬, 4무늬.<br>도움말 &gt; 치트: 힌트(F4)는 좋은 수 하나를 표시하고(다시 누르면 다음 후보, 마지막은 배분), 자동으로 풀기(F3)는 컴퓨터가 계속 대신 둡니다(뒤집히지 않은 카드까지 보고 계획하는 치트입니다).'
   } : {
     gostop: '<b>Go-Stop (2-player Matgo)</b>: 48 hwatu cards: 10 each, 8 on the table, 20 in the stock. When it opens, an opponent window appears (two players on the same Wi-Fi swap codes, two windows of one browser connect by themselves, or "Play vs Computer"). Change opponent with Game &gt; Choose Opponent (F5). Online, hidden hands are only hidden by the screen, so honest play is assumed.<br>' +
       '<b>Turn</b>: play one hand card: a table card of the same month is captured as a pair (two match: pick one; three: take all four), otherwise the card stays on the table. Then the top stock card is flipped and handled the same way. Tap a card twice or drag it to play.<br>' +
@@ -128,7 +128,7 @@ ul.menu { min-width: 150px; width: max-content; }
       '<b>Simplified</b>: a deal with 4 cards of one month in a hand or on the table is reshuffled (no Chongtong).<br>Help &gt; Cheat: Give a Hint (F4) marks the card to play and the table card to take; Solve Automatically (F3) plays your side (including Go / Stop) and starts a new game after each one. Works in every mode.',
     spider: '<b>Spider Solitaire</b>: 104 cards, 10 columns. 54 cards are dealt first (6,6,6,6,5,5,5,5,5,5), only the top card of each column face up. Click the stock (50 cards) to deal one card on every column (not allowed while a column is empty).<br>' +
       '<b>Moves</b>: put a card on a card one rank higher (any suit) or on an empty column. Several cards move together only if they are a same-suit descending run. A complete K..A run of one suit is removed automatically; remove all 8 to win. Drag and drop, tap a card then the target column, or double-click / double-tap a card (moves it to the best column).<br>' +
-      '<b>Score</b>: starts at 500, -1 per move or deal, +100 per completed run. Undo is unlimited and restores the earlier state. Difficulty: 1 suit (easy), 2 suits, 4 suits.<br>Help &gt; Cheat: Give a Hint (F4) shows one good move (press again for the next candidate, finally the deal); Solve Automatically (F3) keeps playing for you.'
+      '<b>Score</b>: starts at 500, -1 per move or deal, +100 per completed run. Undo is unlimited and restores the earlier state. Difficulty: 1 suit (easy), 2 suits, 4 suits.<br>Help &gt; Cheat: Give a Hint (F4) shows one good move (press again for the next candidate, finally the deal); Solve Automatically (F3) keeps playing for you (it plans with full knowledge of the face-down cards: it is a cheat).'
   };
 document.documentElement.lang = KO ? 'ko' : 'en';
   [].forEach.call(document.querySelectorAll('[data-t]'), function (e) { var k = e.getAttribute('data-t'); if (T[k] !== undefined) e.textContent = T[k]; });

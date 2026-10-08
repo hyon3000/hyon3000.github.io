@@ -119,6 +119,7 @@ ul.menu { min-width: 150px; width: max-content; }
               <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#">　T-Rex</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../pinball/index.html'; });"><a href="#">　3D 핀볼</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../board/index.html'; });"><a href="#">　보드게임</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../card/index.html'; });"><a href="#">　카드게임</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });"><a href="#">　아타리 브레이크아웃</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../bubble/index.html'; });"><a href="#">　버블 슈터</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../swap/index.html'; });"><a href="#">　스왑 퍼즐</a></li>
@@ -169,7 +170,7 @@ ul.menu { min-width: 150px; width: max-content; }
 /* "Other games" entries that are not translated by the page itself: English names for non-Korean browsers */
 (function () {
   if (/^ko/i.test(navigator.language || 'ko')) return;
-  var EN = { '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '스왑 퍼즐': 'Swap Puzzle', '지뢰찾기': 'Minesweeper', '폴리큐브': 'Polycube' };
+  var EN = { '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '스왑 퍼즐': 'Swap Puzzle', '카드게임': 'Card Games', '지뢰찾기': 'Minesweeper', '폴리큐브': 'Polycube' };
   function run() { [].forEach.call(document.querySelectorAll('.menu a'), function (a) { if (a.children.length) return; var s = a.textContent.replace(/^[\u3000\s]+/, ''); if (EN[s]) a.textContent = '\u3000' + EN[s]; }); }
   if (document.readyState === 'complete') run(); else window.addEventListener('load', run);
 })();
