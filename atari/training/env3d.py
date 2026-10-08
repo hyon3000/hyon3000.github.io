@@ -5,7 +5,7 @@ Score: +2 per hit, +100 per cleared layer, one ball only.  Items are not simulat
 import math
 import torch
 
-N, H, LAYERS = 6, 12, 5
+N, H, TOP, LAYERS = 6, 14, 12, 5
 R = 0.28
 NB = 21                         # per axis: the offset t (-1 .. 1) on the paddle where the ball should land
 OBS = 12 + LAYERS * N * N
@@ -48,7 +48,7 @@ class Env3D:
         cell = torch.arange(N, device=dev).float()
         self.cx = cell[None, None, :, None].expand(1, LAYERS, N, N)
         self.cy = cell[None, None, None, :].expand(1, LAYERS, N, N)
-        self.cz = (H - LAYERS + torch.arange(LAYERS, device=dev).float())[None, :, None, None].expand(1, LAYERS, N, N)
+        self.cz = (TOP - LAYERS + torch.arange(LAYERS, device=dev).float())[None, :, None, None].expand(1, LAYERS, N, N)
         self.reset(torch.ones(B, dtype=torch.bool, device=dev))
 
     def reset(self, m):
@@ -130,7 +130,7 @@ class Env3D:
         score = (depth * 10.0 - dist * 0.3).flatten(1)
         b = score.argmax(1)
         ix, iy = b // N, b % N
-        zt = (H - LAYERS + depth.flatten(1)[self.ar, b]).clamp(max=H - 0.5)
+        zt = (TOP - LAYERS + depth.flatten(1)[self.ar, b]).clamp(max=H - 0.5)
         zt = zt.clamp(min=3.0)
         tx = (1.5 * (cell[ix] - lx) / (0.7 * zt)).clamp(-1, 1)
         ty = (1.5 * (cell[iy] - ly) / (0.7 * zt)).clamp(-1, 1)
@@ -195,7 +195,7 @@ class Env3D:
                 k = bi // (N * N)
                 ix = (bi % (N * N)) // N
                 iy = bi % N
-                cxb, cyb, czb = ix.float(), iy.float(), (H - LAYERS + k).float()
+                cxb, cyb, czb = ix.float(), iy.float(), (TOP - LAYERS + k).float()
                 qx = torch.minimum(torch.maximum(self.x, cxb), cxb + 1)
                 qy = torch.minimum(torch.maximum(self.y, cyb), cyb + 1)
                 qz = torch.minimum(torch.maximum(self.z, czb), czb + 1)
@@ -254,7 +254,7 @@ class Env3D:
         # shaping: get the ball ABOVE cubes (dig a shaft through the layers on one side, the ball then clears them from above): a little reward for being there
         ix = self.x.long().clamp(0, N - 1); iy = self.y.long().clamp(0, N - 1)
         col = self.hits[self.ar, :, ix, iy]                                          # (B, LAYERS) hits of the cubes in the ball's column
-        zlow = (H - LAYERS + torch.arange(LAYERS, device=dev).float())[None, :] + 1.0   # top face of every cube layer
+        zlow = (TOP - LAYERS + torch.arange(LAYERS, device=dev).float())[None, :] + 1.0   # top face of every cube layer
         behind = ((col > 0) & (zlow <= self.z[:, None] + 0.0)).any(1)
         phi = self.channel()
         reward = score / 20.0 - 4.0 * dead.float() + 0.1 * behind.float() - 0.0025 + 4.0 * (phi - self.phi)     # (the last term: potential-based reward for digging a shaft)

@@ -6,7 +6,7 @@
   'use strict';
   const BO = window.BO;
   const canvas = document.getElementById('app'), ctx = canvas.getContext('2d');
-  const N = 6, H = 12, LAYERS = 5;               // five layers of cubes are always kept (see trySpawn)
+  const N = 6, H = 14, TOP = 12, LAYERS = 5;               // five layers of cubes are always kept (see trySpawn)
   const S = { mode: 'start', level: 1, score: 0, started: false, clock: 0, best: 0, items: [], mul: 1, hideT: 0, ghostT: 0, powerT: 0, timeT: 0, timeMul: 1, fakes: [], cleared: 0, pending: 0, rowMsg: '', rowMsgT: 0, nextLayer: null, bricks: [], ball: null, px: N / 2, py: N / 2, speed: 8.5,
     yaw: -0.5, pitch: 0.52, about: 0, auto: false, autoT: 0, cw: 0, ch: 0, sc: 1, cx: 0, cy: 0, tex: null, bg: null, flash: 0, msg: '', msgT: 0, target: null, paused: false, drag: null };
   try { S.best = parseInt(localStorage.getItem('breakout3d_best'), 10) || 0; } catch (e) {}
@@ -42,7 +42,7 @@
     }
   }
   function buildLevel() {
-    S.bricks = []; let lay = null; for (let k = LAYERS - 1; k >= 0; k--) { lay = newLayer(H - 1 - k, lay); S.bricks = S.bricks.concat(lay); }
+    S.bricks = []; let lay = null; for (let k = LAYERS - 1; k >= 0; k--) { lay = newLayer(TOP - 1 - k, lay); S.bricks = S.bricks.concat(lay); }
     S.cleared = 0; S.pending = 0; S.nextLayer = null; S.level = 1; S.speed = 8.5; S.items = []; S.mul = 1; S.hideT = 0; S.ghostT = 0; S.powerT = 0; S.timeT = 0; S.fakes = []; resetBall();
   }
   function hs() { return Math.max(0.5, Math.min(2.5, S.mul)); }                   // half size of the paddle (item factor: x0.5 / x2)
@@ -61,8 +61,8 @@
   }
   function trySpawn(dt) {
     let guard = 0;
-    while (layerCount(H - LAYERS) === 0 && guard++ < LAYERS) {
-      const moved = S.bricks.map(function (k) { return { x: k.x, y: k.y, z: k.z - 1, b: k.b }; }).concat(S.nextLayer || (S.nextLayer = newLayer(H - 1, S.bricks.filter(function (k) { return k.z === H - 1; }).map(function (k) { return { x: k.x, y: k.y, z: k.z - 1, b: k.b }; }))));
+    while (layerCount(TOP - LAYERS) === 0 && guard++ < LAYERS) {
+      const moved = S.bricks.map(function (k) { return { x: k.x, y: k.y, z: k.z - 1, b: k.b }; }).concat(S.nextLayer || (S.nextLayer = newLayer(TOP - 1, S.bricks.filter(function (k) { return k.z === TOP - 1; }).map(function (k) { return { x: k.x, y: k.y, z: k.z - 1, b: k.b }; }))));
       if (!S.ball.stuck && ballHitsCubes(moved)) { S.pending += dt; if (S.pending < 3) return; }
       S.bricks = moved; S.nextLayer = null; S.pending = 0;
       if (!S.ball.stuck && ballHitsCubes(S.bricks)) { let n = 0; while (ballHitsCubes(S.bricks) && S.ball.z > 0.4 && n++ < 400) S.ball.z -= 0.25; if (S.ball.vz > 0) S.ball.vz = -S.ball.vz; }

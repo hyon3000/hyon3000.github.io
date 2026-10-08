@@ -32,7 +32,7 @@
   }
   // ---- 3D: S.bricks = [{x, y, z, b: {hits}}] (z = 7 .. 11), ball {x, y, z, vx, vy, vz}, paddle S.px / S.py with half size hs ----
   function obs3d(S, hs) {
-    const b = S.ball, N = 6, H = 12, R = 0.28, sp = S.speed;
+    const b = S.ball, N = 6, H = 14, R = 0.28, sp = S.speed;
     let lx = b.x, ly = b.y, tt = 0;
     if (b.vz < -0.1) { tt = (b.z - R) / -b.vz; lx = reflect(b.x + b.vx * tt - R, 0, N - 2 * R) + R; ly = reflect(b.y + b.vy * tt - R, 0, N - 2 * R) + R; }
     const x = [b.x / N, b.y / N, b.z / H, b.vx / sp, b.vy / sp, b.vz / sp, S.px / N, S.py / N, hs / 2.5, lx / N, ly / N, Math.min(1, tt / 3)];
