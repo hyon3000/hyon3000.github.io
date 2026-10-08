@@ -29,7 +29,7 @@ def play(i):
             best = max(best, s[2]); mode = s[4]
             present = not (s[0] == 0 and s[1] == 0)
             gone = gone + 1 if (s[3] >= 3 and not present) else 0
-            if gone >= 6: break
+            if gone >= 3: break
         errs = d.execute_script("return __errs")
         return best, mode, time.time() - t0, errs
     except Exception as e:
