@@ -17,3 +17,5 @@ assets/
 !polycube/polytesseract/assets/
 !polycube/polytesseract/assets/**
 /web/
+# the T-Rex sprites must be committed (the page breaks without them)
+!dino/assets/

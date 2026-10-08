@@ -13,7 +13,7 @@ a = ap.parse_args()
 def play(i):
     o = Options(); o.add_argument('-headless'); d = webdriver.Firefox(options=o); d.set_script_timeout(30); d.set_window_size(800, 640)
     try:
-        d.get('http://127.0.0.1:%d/index.html%s' % (a.port, '?bot=vision' if a.mode == 'vision' else ''))
+        d.get('http://127.0.0.1:%d/index.html%s' % (a.port, '?bot=rl' if a.mode == 'rl' else ''))
         d.execute_script("window.__errs=[]; window.addEventListener('error',function(e){__errs.push(e.message)})")
         t = time.time()
         while time.time() - t < 90:

@@ -7,12 +7,12 @@
       autoon: '자동 풀이 중', bl: '◀ 왼쪽', br: '오른쪽 ▶', bs: '발사', bnl: '↖ 흔들기', bnr: '흔들기 ↗', bnu: '↑ 흔들기', bn: '새 게임',
       hint: '스페이스 = 발사 · Z / 왼쪽 Shift = 왼쪽 플리퍼 · / / 오른쪽 Shift = 오른쪽 플리퍼 · X / . / ↑ = 판 흔들기 · F2 = 새 게임',
       help1: '「3D Pinball for Windows - Space Cadet」을 역설계한 오픈소스 <b>SpaceCadetPinball</b>(MIT)의 웹 빌드를 그대로 실행합니다.<br>스페이스(누르고 있다가 놓기)로 공을 쏘고, Z / 오른쪽 Shift 쪽 키로 플리퍼를 칩니다. 화면 안의 게임 메뉴(F2 새 게임, F3 일시정지 등)도 그대로 쓸 수 있습니다.<br>게임 데이터는 이 저장소에 들어 있지 않고 원 게임을 호스팅하는 사이트에서 불러오므로 인터넷 연결이 필요합니다.',
-      help2: '<br><br><b>치트 &gt; 자동으로 풀기(F3)</b>: 강화학습(PPO)으로 훈련한 플레이어가 공의 위치와 점수만 보고 플리퍼를 칩니다(플런저 발사와 새 게임은 규칙으로 처리). 공 위치·점수는 게임의 메모리에서 읽으며, 이 게임 빌드와 맞지 않으면 화면을 보고 치는 단순한 봇으로 대신합니다.' },
+      help2: '<br><br><b>치트 &gt; 자동으로 풀기(F3)</b>: 기본은 화면을 보고 치는 단순한 봇입니다. 주소에 <code>?bot=rl</code>을 붙이면 강화학습(PPO)으로 훈련한 플레이어가 공의 위치와 점수만 보고 플리퍼를 칩니다(플런저 발사와 새 게임은 규칙으로 처리). 공 위치·점수는 게임의 메모리에서 읽으며, 이 게임 빌드와 맞지 않으면 화면을 보고 치는 단순한 봇으로 대신합니다.' },
     en: { title: '3D Pinball', game: 'Game', new: '　New Game(N)', exit: '　Exit(X)', help: 'Help', how: '　How to Play(H)', cheat: '　Cheat...', auto: '　Solve Automatically', other: '　Other Games', mine: '　Minesweeper', poly: '　Polycube', howT: 'How to play', ok: 'OK',
       autoon: 'AUTO PLAY', bl: '◀ Left', br: 'Right ▶', bs: 'Launch', bnl: '↖ Nudge', bnr: 'Nudge ↗', bnu: '↑ Nudge', bn: 'New',
       hint: 'Space = launch · Z / left Shift = left flipper · / / right Shift = right flipper · X / . / Up = nudge · F2 = new game',
       help1: 'Runs the web build of <b>SpaceCadetPinball</b> (MIT), the reverse-engineered "3D Pinball for Windows - Space Cadet", unchanged.<br>Pull and release Space to launch the ball, hit the flippers with Z / right Shift. The game\'s own menu (F2 new game, F3 pause ...) works too.<br>The game data is not part of this repository; it is loaded from the site hosting the web build, so you need an internet connection.',
-      help2: '<br><br><b>Cheat &gt; Solve Automatically (F3)</b>: a player trained with reinforcement learning (PPO) works the flippers from the ball position and the score only (plunger launch and new game are handled by rules). The ball position and score are read from the game\'s memory; if this build of the game does not match, a simple screen-watching bot plays instead.' }
+      help2: '<br><br><b>Cheat &gt; Solve Automatically (F3)</b>: by default a simple screen-watching bot plays. Add <code>?bot=rl</code> to the address to use a player trained with reinforcement learning (PPO) that works the flippers from the ball position and the score only (plunger launch and new game are handled by rules). The ball position and score are read from the game\'s memory; if this build of the game does not match, a simple screen-watching bot plays instead.' }
   };
   var T = KO ? TXT.ko : TXT.en;
   document.documentElement.lang = KO ? 'ko' : 'en';
@@ -58,9 +58,34 @@
   function placePad() { document.getElementById('pad').classList.toggle('on', wantPad()); }
   placePad(); window.addEventListener('resize', placePad); window.addEventListener('touchstart', function () { document.getElementById('pad').classList.add('on'); }, { once: true, passive: true });
 
+  // ---- sound on/off (Game > Sound): the game's WebAudio output goes through one master gain per AudioContext, muted by this switch (remembered) ----
+  var soundOn = true, masters = [];
+  try { soundOn = localStorage.getItem('pinball_sound') !== '0'; } catch (e) {}
+  (function () {
+    var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    var d = null, pr = AC.prototype; while (pr && !d) { d = Object.getOwnPropertyDescriptor(pr, 'destination'); pr = Object.getPrototypeOf(pr); }
+    if (!d || !d.get) return;
+    Object.defineProperty(AC.prototype, 'destination', { configurable: true, get: function () {
+      if (!this.__master) { var real = d.get.call(this); try { var g = this.createGain(); g.gain.value = soundOn ? 1 : 0; g.connect(real); this.__master = g; masters.push(g); } catch (e) { return real; } }
+      return this.__master;
+    } });
+  })();
+  function soundLabel() { var s = document.getElementById('soundLabel'); if (s) s.textContent = (soundOn ? '✓ ' : '\u3000') + (KO ? '소리(S)' : 'Sound'); }
+  window.toggleSound = function () {
+    soundOn = !soundOn; try { localStorage.setItem('pinball_sound', soundOn ? '1' : '0'); } catch (e) {}
+    masters.forEach(function (g) { try { g.gain.value = soundOn ? 1 : 0; } catch (e) {} }); soundLabel(); return soundOn;
+  };
+  soundLabel();
+  // ---- table nudge for the auto player (X / . / Up): used sparingly (the game tilts when it is shaken too often) ----
+  var nudgeLast = 0;
+  function nudge(code, kc, k) {
+    var now = performance.now(); if (now - nudgeLast < 3000) return; nudgeLast = now;
+    var c = document.getElementById('canvas'), mk = function (t) { var o = { key: k, code: code, keyCode: kc, which: kc, bubbles: true, cancelable: true }, e = new KeyboardEvent(t, o); try { Object.defineProperty(e, 'keyCode', { get: function () { return kc; } }); Object.defineProperty(e, 'which', { get: function () { return kc; } }); } catch (x) {} c.dispatchEvent(e); };
+    mk('keydown'); setTimeout(function () { mk('keyup'); }, 110);
+  }
   // ---- auto play (F3): a simple vision bot. The game is a compiled original (no state API), so the bot looks at the canvas: it watches for movement of bright pixels
   // (the steel ball) in the area in front of the flippers and flips the flipper on that side; it plugs the plunger when the ball is waiting. It cannot promise to never lose the ball.
-  var autoOn = false, autoTimer = 0, prev = null, lastMotion = 0, lastLaunch = 0, held = {};
+  var pcy = 0, autoOn = false, autoTimer = 0, prev = null, lastMotion = 0, lastLaunch = 0, held = {};
   var sc = document.createElement('canvas'), sx = sc.getContext('2d', { willReadFrequently: true });
   function press(sel, ms) { var b = document.querySelector(sel); if (!b || held[sel]) return; held[sel] = 1; key('keydown', b); b.classList.add('on'); setTimeout(function () { key('keyup', b); b.classList.remove('on'); held[sel] = 0; }, ms); }
   function look() {
@@ -78,6 +103,8 @@
     if (n >= 8 && n <= 160) {
       cx = cx / n / rw; cy = cy / n / rh; lastMotion = now;
       if (cy > 0.35) press(cx < 0.45 ? '.pb.fl' : '.pb.fr', 140);       // ball in front of a flipper: hit it
+      if (cy > 0.8 && cy - pcy > 0.01) { if (cx > 0.3 && cx < 0.7) nudge('ArrowUp', 38, 'ArrowUp'); else if (cx <= 0.3) nudge('KeyX', 88, 'x'); else nudge('Period', 190, '.'); }       // the ball sinks towards the drain: shake the table
+      pcy = cy;
     }
     if (now - lastLaunch > 6500) {                                        // every few seconds pull the plunger (it does nothing while a ball is in play, but starts the next ball)
       lastLaunch = now; var b = document.querySelector('.pb.ln'); key('keydown', b); b.classList.add('on'); setTimeout(function () { key('keyup', b); b.classList.remove('on'); }, 1000 + Math.random() * 400);
@@ -105,11 +132,11 @@
     if (r.bad) { if (!rlBad) rlBad = now; if (now - rlBad > (now - rlNewAt < 20000 ? 20000 : 4000)) { rlStop(); startVision(); window.pinballAuto = 'vision'; } return; }          // the memory does not look as expected any more (another build?): fall back to the vision bot
     rlBad = 0;
     if (r.done) { if (r.over) rlOverAt = now + 5000; }
-    else rl.apply(window.PinballAI.policy(r.obs));
+    else { rl.apply(window.PinballAI.policy(r.obs)); var ny = r.obs[1] * 12, nx = r.obs[0] * 8, nvy = r.obs[3] * 2.5; if (ny > 10 && nvy > 0.15 && nx > -6.5) nudge('ArrowUp', 38, 'ArrowUp'); }       // sinking towards the drain: shake the table
   }
   function startRL() {
     var addr = null;
-    try { if (!/[?&]bot=vision/.test(location.search) && window.PinballAI && PinballAI.ready() && window.Module) addr = PinballAI.check(window.Module); } catch (e) { addr = null; }
+    try { if (/[?&]bot=rl/.test(location.search) && window.PinballAI && PinballAI.ready() && window.Module) addr = PinballAI.check(window.Module); } catch (e) { addr = null; }
     if (!addr) return false;
     rl = new PinballAI.Driver(window.Module, canvasKey, addr); rlBad = 0; rlOverAt = 0; rlNewAt = 0;
     rlPrevHook = window.Module.preMainLoop || null; window.Module.preMainLoop = rlHook; document.getElementById('canvas').focus();
@@ -122,6 +149,7 @@
       window.pinballAuto = 'wait'; var t0 = performance.now();
       var go = function () {
         if (!autoOn) return;
+        if (!/[?&]bot=rl/.test(location.search)) { clearInterval(rlTimer); rlTimer = 0; window.pinballAuto = 'vision'; startVision(); return; }
         if (startRL()) { clearInterval(rlTimer); rlTimer = 0; return; }
         if (performance.now() - t0 > 12000) { clearInterval(rlTimer); rlTimer = 0; window.pinballAuto = 'vision'; startVision(); }      // state readout not possible (build changed / not loaded yet): vision bot
       };
