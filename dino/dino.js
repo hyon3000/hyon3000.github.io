@@ -55,6 +55,20 @@
     var a = document.querySelector('.menu-autosolve .mi-label');
     if (a) a.textContent = (on ? '✓ ' : '　') + a.textContent.replace(/^[✓✓]\s*/, '').replace(/^　/, '');
   };
+  // touch screens get the forgiving tail hit box (see checkForCollision in index.js); ?forgive=1 / ?forgive=0 forces it
+  (function () {
+    var q = /[?&]forgive=(\d)/.exec(location.search), coarse = false;
+    try { coarse = window.matchMedia && (matchMedia('(pointer: coarse)').matches || matchMedia('(any-pointer: coarse)').matches || matchMedia('(hover: none)').matches); } catch (e) {}
+    window.DinoForgive = q ? q[1] === '1' : (coarse || 'ontouchstart' in window || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent));
+  })();
+  // a narrow screen shows the unchanged 600 px game scaled down (the game physics must not depend on the screen width)
+  function fit() {
+    var frame = document.getElementById('frame'), w = frame && frame.querySelector('.interstitial-wrapper'); if (!w) return;
+    var s = Math.min(1, Math.max(0.3, (window.innerWidth - 40 - 36) / 600));
+    frame.style.width = Math.round(600 * s) + 'px';
+    w.style.transform = s < 1 ? 'scale(' + s + ')' : ''; w.style.marginBottom = s < 1 ? (-190 * (1 - s)) + 'px' : '';
+  }
+  window.addEventListener('resize', fit); window.addEventListener('load', fit); setTimeout(fit, 300); setInterval(fit, 1500);
   // ---- mouse / touch: a tap starts / restarts the game; press and drag UP = jump (keep it held up for a higher jump), press and drag DOWN = duck (in the air: drop faster) ----
   // (a plain press no longer jumps, so ducking by touch is possible without jumping first)
   (function () {

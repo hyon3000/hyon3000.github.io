@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Nonogram</title>
-<meta name="description" content="Nonogram (picross) in a Windows 98 frame: 2D and 3D versions.">
+<title>2D Physics</title>
+<meta name="description" content="2D Physics: draw shapes, they become physical objects - guide the ball to the star (Windows 98 frame).">
 <link href="win98.css" media="screen" rel="stylesheet" type="text/css">
 <style>
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #fff; }
@@ -32,8 +32,8 @@ ul.menu { min-width: 150px; width: max-content; }
 <div class="windows windows-98">
   <div class="window has-menu a-window" id="mainwin">
     <div class="title-bar">
-      <div class="title-icon" id="ticon" style="background-image:url(icon2d.png)"></div>
-      <div class="title" id="ttitle">Nonogram 2D</div>
+      <div class="title-icon" id="ticon" style="background-image:url(icon.png)"></div>
+      <div class="title" id="ttitle">2D Physics</div>
       <div class="title-button-group">
         <div class="title-button minimize"></div>
         <div class="title-button maximize disabled" onclick="event.preventDefault();event.stopPropagation();return false;"></div>
@@ -45,19 +45,9 @@ ul.menu { min-width: 150px; width: max-content; }
         <a href="#" data-access-key="g" data-t="game">게임</a>
         <ul class="menu">
           <li onclick="return runMenu(function(){ newGame(); });"><a href="#"><span class="mi-label" data-t="newg">　새 게임</span><span class="mi-key">F2</span></a></li>
-          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
-            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="sizem">　크기...</a>
-            <ul class="menu">
-              <li class="sz sz0" onclick="return runMenu(function(){ setSize(0); });"><a href="#">　</a></li><li class="sz sz1" onclick="return runMenu(function(){ setSize(1); });"><a href="#">　</a></li><li class="sz sz2" onclick="return runMenu(function(){ setSize(2); });"><a href="#">　</a></li><li class="szc" onclick="return runMenu(function(){ openCustomSize(); });"><a href="#">　</a></li>
-            </ul>
-          </li>
-          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
-            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="theme">　테마...</a>
-            <ul class="menu">
-              <li class="th th2d" onclick="return runMenu(function(){ setTheme('2d'); });"><a href="#">✓ 2D</a></li>
-              <li class="th th3d" onclick="return runMenu(function(){ setTheme('3d'); });"><a href="#">　3D</a></li>
-            </ul>
-          </li>
+          <li onclick="return runMenu(function(){ restartLevel(); });"><a href="#"><span class="mi-label" data-t="restart">　다시 시작(R)</span><span class="mi-key">R</span></a></li>
+          <li onclick="return runMenu(function(){ undoStroke(); });"><a href="#"><span class="mi-label" data-t="undo">　마지막 선 지우기</span><span class="mi-key">Ctrl+Z</span></a></li>
+          <li class="separator"></li>
           <li onclick="return runMenu(function(){ goFullscreen(); });"><a href="#" data-t="full">　전체화면</a></li>
           <li class="separator"></li>
           <li onclick="return runMenu(function(){ document.getElementById('mainwin').style.visibility='hidden'; });"><a href="#" data-t="exit">　끝내기(X)</a></li>
@@ -85,6 +75,7 @@ ul.menu { min-width: 150px; width: max-content; }
               <li onclick="return runMenu(function(){ window.location.href='../2048/index.html'; });"><a href="#" data-t="g2048">　</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../pinball/index.html'; });"><a href="#" data-t="pinball">　</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#" data-t="trex">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../nonogram/index.html'; });"><a href="#" data-t="nono">　</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=mahjong'; });"><a href="#" data-t="mahjong">　</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../chomper/index.html'; });"><a href="#" data-t="chomper">　</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../board/index.html?set=baduk'; });"><a href="#" data-t="baduk">　</a></li>
@@ -105,7 +96,7 @@ ul.menu { min-width: 150px; width: max-content; }
   </div>
 
   <div class="window gdialog" id="helpWin">
-    <div class="title-bar"><div class="title-icon" style="background-image:url(icon2d.png);background-size:16px 16px"></div><div class="title" data-t="howT">게임 방법</div>
+    <div class="title-bar"><div class="title-icon" style="background-image:url(icon.png);background-size:16px 16px"></div><div class="title" data-t="howT">게임 방법</div>
       <div class="title-button-group"><div class="title-button close" onclick="closeDlg('helpWin')"></div></div></div>
     <div class="window-content"><div id="helpTxt" style="font-size:12px;line-height:1.5;max-height:calc(100vh - 210px);overflow-y:auto;padding-right:4px"></div>
       <div class="row"><button type="button" class="title-button" style="padding:2px 10px;" onclick="closeDlg('helpWin')" data-t="ok">확인</button></div></div>
@@ -118,37 +109,18 @@ ul.menu { min-width: 150px; width: max-content; }
 <script>
 (function () {
   var KO = /^ko/i.test(navigator.language || 'ko');
-  var T = KO ? { title: '노노그램', game: '게임', newg: '　새 게임', sizem: '　크기...', custom: '사용자 지정...', cheat: '　치트...', auto: '　자동으로 풀기', hint: '　힌트 보기', theme: '　테마...', full: '　전체화면', exit: '　끝내기(X)', help: '도움말', how: '　게임 방법(H)', other: '　다른 게임', mine: '　지뢰찾기', poly: '　폴리큐브', atari: '　아타리 브레이크아웃', g2048: '　2048', pinball: '　3D 핀볼', trex: '　T-Rex', chomper: '　미로 먹보', bubble: '　버블 슈터', board: '　보드게임', baduk: '　바둑&오목', chess: '　체스', hwatu: '　화투', trump: '　트럼프', mahjong: '　마작', snake: '　스네이크', sudoku: '　스도쿠', swap: '　스왑 퍼즐', card: '　카드게임', cube: '　큐브 퍼즐', howT: '게임 방법', ok: '확인',
-    help1: '<b>노노그램</b>: 칸을 채워서 모든 가로줄과 세로줄의 연속된 채움 덩어리의 길이가 숫자 단서와 같아지게 하세요. 숫자가 2 3이면 그 줄에 2칸 덩어리와 3칸 덩어리가 이 순서로, 사이에 빈칸을 두고 있다는 뜻입니다. 모든 퍼즐은 답이 하나뿐이고 한 줄씩 논리로 추리해서 풀 수 있습니다(찍기 불필요). 줄이 단서와 맞으면 숫자가 회색이 됩니다.<br><b>2D</b> (5x5, 10x10, 15x15): 클릭/탭 = 채우기, 오른쪽 클릭 또는 길게 누르기 = X 표시(비어 있음 표시), 끌어서 한 줄을 한 번에 칠하기(처음 칸이 채움/지움/X를 정함). 위의 모드 버튼으로 채우기/X를 바꿀 수 있고(키보드 X), 되돌리기/다시(Ctrl+Z / Ctrl+Y)가 있습니다. &quot;오류 표시&quot;를 켜면 단서와 어긋난 줄이 빨갛게 보입니다.<br><b>3D</b> (3x3x3, 4x4x4, 5x5x5 큐브): 큐브를 이루는 모든 줄(가로, 세로, 앞뒤 방향)에 단서가 있고, 숫자는 각 줄이 보이는 쪽 바깥 면의 칸 위에 표시됩니다(돌리면 반대쪽 면으로 바뀝니다). 칸을 탭하면 채우기, 더블탭/오른쪽 클릭/길게 누르기 = X(빼기), 빈 곳(또는 칸)을 끌면 큐브가 회전합니다. 안쪽 칸은 아래의 층 슬라이더(Q/E 키)로 바깥 층을 걷어 내고 누르세요. 축 버튼(X/Y/Z)은 걷어 낼 방향입니다.<br><b>새 게임(F2)</b> 새 퍼즐. 시계는 첫 표시부터 갑니다. 크기별 최고 기록이 이 브라우저에 저장됩니다(치트를 쓰면 기록되지 않습니다).<br><b>치트</b>: 도움말 &gt; 치트 &gt; 자동으로 풀기(F3) = 한 줄씩 논리로 계속 풀어 줍니다(잘못 표시한 칸은 먼저 지웁니다), 힌트 보기(F4) = 지금 논리로 확정되는 가장 쉬운 칸 딱 하나를 채워 주고 이유를 알려 줍니다(잘못 표시한 칸이 있으면 그것부터 하나 고칩니다).<br>게임 &gt; 크기 &gt; 사용자 지정...에서 원하는 크기를 직접 정할 수 있습니다(2D: 가로 x 세로 각 2~30, 3D: 축마다 2~8).<br>게임 &gt; 테마에서 2D / 3D를 고릅니다.' }
-  : { title: 'Nonogram', game: 'Game', newg: '　New Game', sizem: '　Size...', custom: 'Custom...', cheat: '　Cheat...', auto: '　Solve Automatically', hint: '　Give a Hint', theme: '　Theme...', full: '　Fullscreen', exit: '　Exit(X)', help: 'Help', how: '　How to Play(H)', other: '　Other Games', mine: '　Minesweeper', poly: '　Polycube', atari: '　Atari Breakout', g2048: '　2048', pinball: '　3D Pinball', trex: '　T-Rex', chomper: '　Maze Chomper', bubble: '　Bubble Shooter', board: '　Board Games', baduk: '　Go & Gomoku', chess: '　Chess', hwatu: '　Hwatu', trump: '　Trump Cards', mahjong: '　Mahjong', snake: '　Snake', sudoku: '　Sudoku', swap: '　Swap Puzzle', card: '　Card Games', cube: '　Cube Puzzles', howT: 'How to play', ok: 'OK',
-    help1: '<b>Nonogram</b> (picross): fill cells so that the runs of filled cells in every row and column match the number clues. A clue 2 3 means a run of 2 and then a run of 3 filled cells, in that order, with at least one empty cell between them. Every puzzle has exactly one solution and can be solved by line-by-line logic (no guessing). A clue turns gray when its line matches.<br><b>2D</b> (5x5, 10x10, 15x15): click/tap = fill, right-click or long-press = cross out (mark empty), drag to paint a whole run (the first cell decides fill / erase / cross). The mode button switches fill/cross (keyboard X); undo/redo with Ctrl+Z / Ctrl+Y. With &quot;Check&quot; on, lines that break their clue turn red.<br><b>3D</b> (3x3x3, 4x4x4, 5x5x5 cube): every line of the cube (along all three axes) has a clue; the numbers sit on the cell at the visible end of each line on the outer faces (they flip to the opposite faces as you rotate). Tap a cell to fill it, double-tap / right-click / long-press = cross it out (remove), drag to rotate the cube. Reach inner cells with the layer slider (Q/E keys) that peels off outer layers; the axis buttons X/Y/Z choose the peel direction.<br><b>New Game (F2)</b> = a new puzzle. The clock starts with your first mark. Best times per size are saved in this browser (not when a cheat was used).<br><b>Cheat</b>: Help &gt; Cheat &gt; Solve Automatically (F3) = solves line by line with logic (wrong marks are removed first), Give a Hint (F4) = fills exactly one cell that logic can deduce right now (the easiest one) and explains why (if you have a wrong mark, one of those is fixed first).<br>Game &gt; Size &gt; Custom... lets you pick your own dimensions (2D: width x height, 2-30 each; 3D: 2-8 per axis).<br>Choose 2D / 3D in Game &gt; Theme.' };
+  var T = KO ? { title: "2D 피직스", game: "게임", newg: "　새 게임", restart: "　다시 시작(R)", undo: "　마지막 선 지우기", full: "　전체화면", exit: "　끝내기(X)", help: "도움말", cheat: "　치트...", auto: "　자동으로 풀기", hint: "　힌트 보기", how: "　게임 방법(H)", other: "　다른 게임", mine: "　지뢰찾기", poly: "　폴리큐브", atari: "　아타리 브레이크아웃", g2048: "　2048", pinball: "　3D 핀볼", trex: "　T-Rex", nono: "　노노그램", mahjong: "　마작", chomper: "　미로 먹보", baduk: "　바둑&오목", bubble: "　버블 슈터", snake: "　스네이크", sudoku: "　스도쿠", swap: "　스왑 퍼즐", chess: "　체스", cube: "　큐브 퍼즐", trump: "　트럼프", hwatu: "　화투", howT: "게임 방법", ok: "확인", help1: "<b>2D 피직스</b>: 펜으로 그리면 그림이 진짜 물체가 됩니다. 공을 모든 별(✦)에 닿게 하면 다음 레벨로 넘어갑니다. 레벨은 매번 새로 만들어지며 갈수록 어려워집니다.<br><b>그리기</b>: 마우스/터치로 끌어서 그립니다. 시작점과 끝점이 가까운(또는 거의 닫힌) 선은 속이 찬 도형이 되고(상자, 바퀴, 쐐기, 추), 열린 선은 얇은 막대가 됩니다(경사로, 다리, 지렛대). 그림은 그린 자리에 그대로 있다가 Space(또는 시작 버튼)를 누르면 모두 움직이기 시작하고, 그 뒤로는 계속 돌아가므로 중간에도 그릴 수 있습니다. 공 밑에 그려 공을 밀 수도 있습니다.<br><b>도구</b>: 그리기(기본) / 지우개(E 키 또는 오른쪽 클릭, 두 손가락 터치) / 자르기(C 키, 밧줄을 가로질러 끌기. 오른쪽 버튼으로 끌면 지우기와 자르기를 동시에). 마지막 선 되돌리기 = Ctrl+Z, 다시(R) = 같은 레벨을 처음부터. 선은 최대 60개입니다.<br><b>레벨 요소</b>: 구덩이(다리를 놓으세요), 벽(경사로), 밧줄에 매달린 공(자르면 떨어집니다. 타이밍이 중요), 시소(균형추를 올려 보세요), 상자와 도미노(굴려서 쓰러뜨리기), 위로 부는 바람 구멍(가벼운 그림은 떠오릅니다), 튀는 판, 미끄러운 얼음 바닥.<br><b>규칙</b>: 공이 아래로 떨어지면 1초 뒤 시작 위치로 돌아옵니다(그린 선은 그대로, 생명 제한 없음). 새 게임(F2) = 새 시드의 1레벨. 위의 시드를 누르면 이 레벨의 주소가 복사되며, 주소 끝에 ?seed=123&amp;level=5 를 붙여 같은 레벨을 다시 할 수 있습니다. 최고 레벨은 이 브라우저에 저장됩니다.<br><b>치트</b>: 도움말 &gt; 치트 &gt; 자동으로 풀기(F3) = 컴퓨터가 물리 엔진 복사본에서 여러 그림을 시험해 해법을 찾은 뒤 사람처럼 직접 그리고 밧줄을 자릅니다(실패하면 다시 계산하고, 못 찾으면 &quot;해답을 찾지 못했습니다&quot;). 켜 두면 레벨이 끝나도 다음 레벨을 계속 풉니다. 힌트 보기(F4) = 해법의 한 단계(선 하나 또는 시작/밧줄 자르기)만 실행합니다. 모든 레벨이 풀리는 것은 아닙니다.<br><b>크레딧</b>: Crayon Physics에서 영감을 받았습니다(그림, 레벨은 직접 만들었습니다). 물리 엔진: planck.js (Box2D의 JavaScript 포팅, MIT 라이선스, Erin Catto &amp; Ali Shakiba)." }
+  : { title: "2D Physics", game: "Game", newg: "　New Game", restart: "　Restart(R)", undo: "　Undo Last Stroke", full: "　Fullscreen", exit: "　Exit(X)", help: "Help", cheat: "　Cheat...", auto: "　Solve Automatically", hint: "　Give a Hint", how: "　How to Play(H)", other: "　Other Games", mine: "　Minesweeper", poly: "　Polycube", atari: "　Atari Breakout", g2048: "　2048", pinball: "　3D Pinball", trex: "　T-Rex", nono: "　Nonogram", mahjong: "　Mahjong", chomper: "　Maze Chomper", baduk: "　Go & Gomoku", bubble: "　Bubble Shooter", snake: "　Snake", sudoku: "　Sudoku", swap: "　Swap Puzzle", chess: "　Chess", cube: "　Cube Puzzles", trump: "　Trump Cards", hwatu: "　Hwatu", howT: "How to play", ok: "OK", help1: "<b>2D Physics</b>: draw with a pen and your drawings become real objects. Make the ball touch every star (✦) to move on to the next level. Levels are generated fresh each time and get harder.<br><b>Drawing</b>: drag with the mouse / finger. A stroke whose end is near its start (or nearly closed) becomes a solid shape (box, wheel, wedge, weight); an open stroke becomes a thin rod (ramp, bridge, lever). Drawings stay where you put them until you press Space (or the Start button); then everything moves and keeps running, so you can draw at any time. You can also nudge the ball by drawing under it.<br><b>Tools</b>: Draw (default) / Eraser (key E, right-click, or a two-finger tap) / Cut (key C, swipe across a rope; dragging with the right button erases and cuts at once). Undo the last stroke with Ctrl+Z, Restart (R) = the same level from scratch. At most 60 strokes.<br><b>Level parts</b>: pits (build a bridge), walls (ramp), a ball hanging on a rope (cut it - timing matters), seesaws (try a counterweight), crates and dominoes (knock them down), upward air vents (light drawings float), bouncy pads, slippery ice floors.<br><b>Rules</b>: if the ball falls off the bottom it returns to its start after 1 s (your strokes stay, no lives). New Game (F2) = level 1 with a new seed. Click the seed chip to copy the link of this level; add ?seed=123&amp;level=5 to the address to replay the same level. Your best level is saved in this browser.<br><b>Cheat</b>: Help &gt; Cheat &gt; Solve Automatically (F3) = the computer tries many drawings in copies of the physics world, then draws them and cuts ropes like a player (if the run fails it re-plans; if it finds nothing it says &quot;No solution found&quot;). While on it keeps going level after level. Give a Hint (F4) = performs just ONE step of the solution (one stroke, or start / rope cut). Not every level is solvable by it.<br><b>Credits</b>: inspired by Crayon Physics (no art or levels copied). Physics engine: planck.js (a JavaScript port of Box2D, MIT licence, Erin Catto &amp; Ali Shakiba)." };
   document.documentElement.lang = KO ? 'ko' : 'en';
+  document.title = T.title; document.getElementById('ttitle').textContent = T.title;
   [].forEach.call(document.querySelectorAll('[data-t]'), function (e) { var k = e.getAttribute('data-t'); if (T[k] !== undefined) e.textContent = T[k]; });
   document.getElementById('helpTxt').innerHTML = T.help1;
-  var theme = '2d', SIZES = { '2d': [5, 10, 15], '3d': [3, 4, 5] };
-  try { var st = localStorage.getItem('nonogram_theme'); if (st === '2d' || st === '3d') theme = st; } catch (e) {}
-  var qt = new URLSearchParams(location.search).get('theme'); if (qt === '2d' || qt === '3d') theme = qt;
-  function frameUrl() { return theme === '3d' ? 'game3d.html' : 'game.html'; }
   function resize() {
-    var vw = window.innerWidth, vh = window.innerHeight, win = document.getElementById('mainwin'), chrome = 46, ratio = 0.78, gw, gh;
+    var vw = window.innerWidth, vh = window.innerHeight, win = document.getElementById('mainwin'), chrome = 46, ratio = (vw / vh < 0.85) ? 0.72 : 1.32, gw, gh;
     if (vw / (vh - chrome) < ratio) { gw = vw - 14; gh = gw / ratio; } else { gh = vh - chrome - 8; gw = gh * ratio; }
     win.style.width = Math.floor(gw + 14) + 'px'; win.style.height = Math.floor(gh + chrome + 8) + 'px';
   }
   resize(); window.addEventListener('resize', resize);
-  var curSize = '';
-  function marks() {
-    ['2d', '3d'].forEach(function (k) { var a = document.querySelector('.th' + k + ' a'); a.textContent = (k === theme ? '✓ ' : '\u3000') + k.toUpperCase(); });
-    var sz = SIZES[theme];
-    for (var i = 0; i < 3; i++) { var a2 = document.querySelector('.sz' + i + ' a'); var lab = sz[i] + '\u00d7' + sz[i] + (theme === '3d' ? '\u00d7' + sz[i] : ''); a2.textContent = (String(sz[i]) === curSize ? '✓ ' : '\u3000') + lab; }
-    document.querySelector('.szc a').textContent = (curSize === 'custom' ? '✓ ' : '\u3000') + T.custom;
-    var ti = T.title + ' ' + theme.toUpperCase(); document.getElementById('ttitle').textContent = ti; document.title = ti;
-    document.getElementById('ticon').style.backgroundImage = 'url(icon' + theme + '.png)';
-  }
-  window.setTheme = function (t) {
-    theme = t; curSize = ''; markAuto(false); marks();
-    try { localStorage.setItem('nonogram_theme', t); } catch (e) {}
-    document.getElementById('game').src = frameUrl();
-  };
   function closeMenus() {
     var mb = $('.menu-bar'); try { mb.menubar('collapseAll'); } catch (e) {}
     mb.find('.ui-state-open').removeClass('ui-state-open'); mb.find('> li').removeClass('ui-state-active ui-state-hover ui-state-focus');
@@ -164,23 +136,24 @@ ul.menu { min-width: 150px; width: max-content; }
     return r;
   };
   window.newGame = function () { markAuto(false); callGame('newGame'); };
-  window.setSize = function (i) { markAuto(false); var n = SIZES[theme][i]; callGame('setSize', n); curSize = String(n); marks(); };
-  window.openCustomSize = function () { callGame('openCustomSize'); };
   window.giveHint = function () { callGame('giveHint'); };
   window.toggleAuto = function () { var on = callGame('toggleAuto'); if (on !== undefined) markAuto(!!on); };
-  window.addEventListener('message', function (e) { var m = e.data; if (m && m.ng === 'autoState') markAuto(!!m.on); });
   window.markAuto = markAuto; window.setAutoMark = markAuto;
-  function markAuto(on) { var a = document.querySelector('.menu-autosolve .mi-label'); if (a) a.textContent = (on ? '✓ ' : '\u3000') + a.textContent.replace(/^[✓\u2713]\s*/, '').replace(/^\u3000/, ''); }
+  function markAuto(on) { var a = document.querySelector('.menu-autosolve .mi-label'); if (a) a.textContent = (on ? '\u2713 ' : '\u3000') + a.textContent.replace(/^[\u2713\u2714]\s*/, '').replace(/^\u3000/, ''); }
+  window.restartLevel = function () { callGame('restartLevel'); };
+  window.undoStroke = function () { callGame('undoStroke'); };
   window.goFullscreen = function () { var el = document.getElementById('mainwin'); if (el.requestFullscreen) el.requestFullscreen(); };
   document.addEventListener('keydown', function (e) {
     if (e.key === 'F2') { e.preventDefault(); window.newGame(); } else if (e.key === 'F3') { e.preventDefault(); window.toggleAuto(); } else if (e.key === 'F4') { e.preventDefault(); window.giveHint(); }
+    else if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); window.undoStroke(); }
+    else if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'r' || e.key === 'R')) { window.restartLevel(); }
   });
   $(function () {
     if ($('.menu-bar').length) $('.menu-bar').menubar();
     $('.window').draggable({ handle: '.title' });
     $('#mainwin .title-button.minimize').on('click', function () { $('#mainwin').hide(); });
     $('#mainwin .title-button.close').on('click', function () { $('#mainwin').css('visibility', 'hidden'); });
-    // forward the cheat keys and close the menus from inside the game frame; hooked on load AND by polling (the frame can finish loading before this code runs, and every theme switch loads a new document)
+    // close the menus when the game frame is clicked and forward F2 from inside the frame; hooked by polling (a frame reload gets a new document)
     function hookFrame() {
       try {
         var fw = document.getElementById('game').contentWindow, fd = fw.document; if (!fd) return;
@@ -189,12 +162,9 @@ ul.menu { min-width: 150px; width: max-content; }
           fd.addEventListener('pointerdown', closeMenus);
           fd.addEventListener('keydown', function (e) { if (/^F[234]$/.test(e.key)) { e.preventDefault(); document.dispatchEvent(new KeyboardEvent('keydown', { key: e.key })); } });
         }
-        if (typeof fw.getSize === 'function') { var s = fw.getSize(); if (s !== curSize) { curSize = s; marks(); } }
       } catch (e) {}
     }
     document.getElementById('game').addEventListener('load', hookFrame); hookFrame(); setInterval(hookFrame, 400);
-    document.getElementById('game').src = frameUrl();
-    marks();
   });
 })();
 </script>

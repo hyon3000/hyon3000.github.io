@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>2D Physics</title>
+<link rel="stylesheet" href="game.css">
+<script>window.__errs=[];window.addEventListener("error",function(e){window.__errs.push(String(e.message)+" @"+e.filename+":"+e.lineno)});</script>
+</head>
+<body>
+<div id="app">
+  <div class="top">
+    <span class="chip" id="chLevel"></span><span class="chip seed" id="chSeed" title="link"></span><span class="chip" id="chStars"></span><span class="chip" id="chBest"></span>
+    <span class="sp"></span>
+    <button type="button" class="btn go" id="btnStart"></button>
+    <button type="button" class="btn" id="btnErase"></button>
+    <button type="button" class="btn" id="btnCut"></button>
+    <button type="button" class="btn" id="btnUndo"></button>
+    <button type="button" class="btn" id="btnRestart"></button>
+  </div>
+  <div class="stage" id="stage"><canvas id="cv"></canvas></div>
+  <div class="status" id="status"></div>
+</div>
+<script src="vendor/planck/planck.min.js"></script>
+<script src="core.js"></script>
+<script src="planner.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

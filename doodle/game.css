@@ -1,0 +1,14 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #efe6cf; color: #4a3b2a; font-family: "Comic Sans MS", "Segoe Print", "Noto Sans KR", "Malgun Gothic", Arial, sans-serif; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
+#app { display: flex; flex-direction: column; width: 100%; height: 100%; padding: 6px 6px 4px; gap: 5px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.top .sp { flex: 1 1 2px; }
+.chip { font-size: 12px; font-weight: 700; background: #fffaf0; border: 2px solid #b8a27a; border-radius: 10px 14px 9px 13px; padding: 3px 9px; white-space: nowrap; }
+.chip.seed { cursor: pointer; }
+.btn { font: 700 12px/1 "Comic Sans MS", "Segoe Print", "Noto Sans KR", "Malgun Gothic", Arial, sans-serif; color: #4a3b2a; background: #fffaf0; border: 2px solid #8c6a46; border-radius: 9px 12px 8px 11px; padding: 5px 9px; min-height: 28px; cursor: pointer; touch-action: manipulation; }
+.btn:hover { background: #fff0cc; }
+.btn.on { background: #ffd8a8; border-color: #e2573a; }
+.btn.go { background: #cdeccb; border-color: #3a9a4a; }
+.stage { position: relative; flex: 1 1 auto; min-height: 0; border: 2px solid #b8a27a; border-radius: 4px; overflow: hidden; background: #f6efdc; }
+.stage canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+.status { min-height: 18px; max-height: 34px; overflow: hidden; font-size: 12px; line-height: 1.3; padding: 0 4px; }

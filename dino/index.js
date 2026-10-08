@@ -424,8 +424,9 @@
             var padding = Number(boxStyles.paddingLeft.substr(0,
                 boxStyles.paddingLeft.length - 2));
 
-            this.dimensions.WIDTH = this.outerContainerEl.offsetWidth - padding * 2;
-            this.dimensions.WIDTH = Math.min(DEFAULT_WIDTH, this.dimensions.WIDTH); //Arcade Mode
+            // always the full 600 px game width (narrow screens scale the whole game down with CSS, see dino.js): on a narrow canvas the original lowers the speed (setSpeed), which
+            // breaks the jump timing a player is used to (the tail lands on the cactus)
+            this.dimensions.WIDTH = DEFAULT_WIDTH;
             if (this.activated) {
                 this.setArcadeModeContainerScale();
             }
@@ -1177,6 +1178,12 @@
                     // Adjust the box to actual positions.
                     var adjTrexBox =
                         createAdjustedCollisionBox(tRexCollisionBoxes[t], tRexBox);
+                    // Touch forgiveness: landing a little too early puts the tail on the cactus.  The early-jump tolerance is only ~15 px at every speed (= 4.5 frames at speed 6, 1.2 frames at 13), i.e. it shrinks in
+                    // TIME as the game speeds up, which a finger cannot keep up with.  On touch screens the tail hit boxes are trimmed by 4*speed-15 px (0..12), which keeps ~4 frames of tolerance.
+                    if (window.DinoForgive && tRexCollisionBoxes[t].x < 12) {
+                        var fsp = Runner.instance_ ? Runner.instance_.currentSpeed : 6, trim = Math.min(12, Math.max(0, 4 * fsp - 15));
+                        adjTrexBox.x += trim; adjTrexBox.width = Math.max(2, adjTrexBox.width - trim);
+                    }
                     var adjObstacleBox =
                         createAdjustedCollisionBox(collisionBoxes[i], obstacleBox);
                     var crashed = boxCompare(adjTrexBox, adjObstacleBox);

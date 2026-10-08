@@ -5,28 +5,28 @@
 
   /* ---------- lines ---------- */
   var lineCache = {};
-  function mkLines(dim, n) {
-    var key = dim + ':' + n; if (lineCache[key]) return lineCache[key];
-    var total = Math.pow(n, dim), lines = [], byCell = [];
-    for (var i = 0; i < total; i++) byCell.push([]);
-    function coords(i) { var c = []; for (var a = 0; a < dim; a++) { c.push(i % n); i = (i - c[a]) / n; } return c; }
-    function index(c) { var i = 0; for (var a = dim - 1; a >= 0; a--) i = i * n + c[a]; return i; }
+  function normDims(dim, d) { if (typeof d === 'number') { var r = []; for (var a = 0; a < dim; a++) r.push(d); return r; } return d.slice(0, dim); }
+  function mkLines(dim, dims) {
+    dims = normDims(dim, dims);
+    var key = dim + ':' + dims.join('x'); if (lineCache[key]) return lineCache[key];
+    var total = 1, a, stride = []; for (a = 0; a < dim; a++) { stride.push(total); total *= dims[a]; }
+    var lines = [], byCell = [], i;
+    for (i = 0; i < total; i++) byCell.push([]);
+    function coords(i) { var c = []; for (var a = 0; a < dim; a++) { c.push(i % dims[a]); i = (i - c[a]) / dims[a]; } return c; }
+    function index(c) { var i = 0; for (var a = 0; a < dim; a++) i += c[a] * stride[a]; return i; }
     // axis 0 = along x (a row in 2D), axis 1 = along y (a column in 2D), axis 2 = along z
     for (var axis = 0; axis < dim; axis++) {
-      var others = Math.pow(n, dim - 1);
-      for (var o = 0; o < others; o++) {
-        var rest = [], t = o; for (var k = 0; k < dim - 1; k++) { rest.push(t % n); t = (t - rest[k]) / n; }
-        var cells = [];
-        for (var p = 0; p < n; p++) {
-          var c = [], r = 0; for (var a = 0; a < dim; a++) { if (a === axis) c.push(p); else c.push(rest[r++]); }
-          cells.push(index(c));
-        }
+      var others = [], cnt = 1; for (a = 0; a < dim; a++) if (a !== axis) { others.push(a); cnt *= dims[a]; }
+      for (var o = 0; o < cnt; o++) {
+        var rest = [], t = o; for (var k = 0; k < others.length; k++) { rest.push(t % dims[others[k]]); t = (t - rest[k]) / dims[others[k]]; }
+        var cells = [], base = 0; for (k = 0; k < others.length; k++) base += rest[k] * stride[others[k]];
+        for (var p = 0; p < dims[axis]; p++) cells.push(base + p * stride[axis]);
         var li = lines.length;
         lines.push({ axis: axis, pos: rest, cells: cells });
-        for (var q = 0; q < n; q++) byCell[cells[q]].push(li);
+        for (var q = 0; q < cells.length; q++) byCell[cells[q]].push(li);
       }
     }
-    return (lineCache[key] = { dim: dim, n: n, total: total, lines: lines, byCell: byCell, coords: coords, index: index });
+    return (lineCache[key] = { dim: dim, dims: dims, n: Math.max.apply(null, dims), total: total, stride: stride, lines: lines, byCell: byCell, coords: coords, index: index });
   }
 
   function runsOf(vals, cells) { // vals: array/typed array indexed by cell, 1 = filled
@@ -109,14 +109,14 @@
   function propagate(L, clues, state) {
     var nl = L.lines.length, queue = [], inq = new Uint8Array(nl), qi = 0, i, li;
     for (li = 0; li < nl; li++) { queue.push(li); inq[li] = 1; }
-    var buf = new Int8Array(L.n);
+    var bufs = {};
     while (qi < queue.length) {
       li = queue[qi++]; inq[li] = 0;
-      var ln = L.lines[li], cells = ln.cells;
-      for (i = 0; i < L.n; i++) buf[i] = state[cells[i]];
+      var ln = L.lines[li], cells = ln.cells, len = cells.length, buf = bufs[len] || (bufs[len] = new Int8Array(len));
+      for (i = 0; i < len; i++) buf[i] = state[cells[i]];
       var r = solveLine(clues[li], buf);
       if (!r) return { ok: false, complete: false, unknown: -1 };
-      for (i = 0; i < L.n; i++) {
+      for (i = 0; i < len; i++) {
         if (r[i] !== buf[i]) {
           state[cells[i]] = r[i];
           var bc = L.byCell[cells[i]];
@@ -131,17 +131,17 @@
   /* ---------- generator ---------- */
   function mulberry(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
-  function densityRange(dim, n) {
+  function densityRange(dim, n, total) {
     if (dim === 3) return [0.45, 0.55];
-    if (n <= 5) return [0.5, 0.62];
+    if (total <= 30) return [0.5, 0.62];
     return [0.5, 0.6];
   }
 
-  function generate(dim, n, opts) {
+  function generate(dim, dimsIn, opts) {
     opts = opts || {};
-    var rnd = opts.rng || Math.random, L = mkLines(dim, n), total = L.total, dr = opts.density || densityRange(dim, n);
+    var rnd = opts.rng || Math.random, L = mkLines(dim, dimsIn), total = L.total, dr = opts.density || densityRange(dim, L.n, total);
     var t0 = Date.now(), tries = 0, flips = 0, i;
-    var maxTries = opts.maxTries || 2000, maxIter = dim === 3 ? 80 : 60;
+    var maxTries = opts.maxTries || 2000, maxIter = Math.max(dim === 3 ? 80 : 60, Math.round(total / 8));
     while (tries < maxTries) {
       tries++;
       var p = dr[0] + rnd() * (dr[1] - dr[0]);
@@ -191,15 +191,15 @@
   /* state: Int8Array (-1/0/1). Returns the easiest line with a new deduction:
      { li, type, clue, changes: [[cell,val],...], unknown } | null if none ; {contradiction:true} if inconsistent */
   function findStep(L, clues, state) {
-    var best = null, buf = new Int8Array(L.n), nl = L.lines.length;
+    var best = null, nl = L.lines.length;
     for (var li = 0; li < nl; li++) {
-      var cells = L.lines[li].cells, unk = 0, i;
-      for (i = 0; i < L.n; i++) { buf[i] = state[cells[i]]; if (buf[i] < 0) unk++; }
+      var cells = L.lines[li].cells, unk = 0, i, len = cells.length, buf = new Int8Array(len);
+      for (i = 0; i < len; i++) { buf[i] = state[cells[i]]; if (buf[i] < 0) unk++; }
       if (!unk) continue;
       var r = solveLine(clues[li], buf);
       if (!r) return { contradiction: true, li: li };
       var ch = [];
-      for (i = 0; i < L.n; i++) if (r[i] !== buf[i]) ch.push([cells[i], r[i]]);
+      for (i = 0; i < len; i++) if (r[i] !== buf[i]) ch.push([cells[i], r[i]]);
       if (!ch.length) continue;
       var type = classify(clues[li], buf), rank = TYPE_RANK[type];
       if (!best || rank < best.rank || (rank === best.rank && unk < best.unknown)) best = { li: li, type: type, rank: rank, clue: clues[li], changes: ch, unknown: unk };
@@ -209,11 +209,11 @@
 
   /* is a line "wrong" given marks (1 filled, 2 crossed, 0 blank)? contradiction with the clue */
   function lineBad(L, li, clue, marks) {
-    var cells = L.lines[li].cells, buf = new Int8Array(L.n);
-    for (var i = 0; i < L.n; i++) buf[i] = marks[cells[i]] === 1 ? 1 : marks[cells[i]] === 2 ? 0 : -1;
+    var cells = L.lines[li].cells, len = cells.length, buf = new Int8Array(len);
+    for (var i = 0; i < len; i++) buf[i] = marks[cells[i]] === 1 ? 1 : marks[cells[i]] === 2 ? 0 : -1;
     return solveLine(clue, buf) === null;
   }
 
-  g.NG = { mkLines: mkLines, runsOf: runsOf, computeClues: computeClues, sameClue: sameClue, solveLine: solveLine, propagate: propagate,
+  g.NG = { mkLines: mkLines, normDims: normDims, runsOf: runsOf, computeClues: computeClues, sameClue: sameClue, solveLine: solveLine, propagate: propagate,
     generate: generate, mulberry: mulberry, findStep: findStep, lineBad: lineBad, densityRange: densityRange };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -9,8 +9,7 @@
   var yaw = -0.62, pitch = 0.52, raf = 0, drag = null, lastTap = null, items = [], frame = null;
   var cutAxis = 1, cutK = 0, lastWin = 0;
 
-  var sv = parseInt(NGC.store('nonogram_size_3d'), 10); if (C.sizes.indexOf(sv) >= 0) C.n = sv;
-  var q = new URLSearchParams(location.search).get('n'); if (q && C.sizes.indexOf(parseInt(q, 10)) >= 0) C.n = parseInt(q, 10);
+  NGC.initSize(C, '3d');
 
   function schedule() { if (!raf) raf = requestAnimationFrame(function () { raf = 0; draw(); }); }
   C.onRedraw = schedule;
@@ -22,14 +21,14 @@
     '<input type="range" id="cutR" min="0" max="3" value="0" step="1"><span class="lab" id="cutV" style="min-width:2.2em;text-align:right">0</span>';
   var cutR = document.getElementById('cutR'), cutV = document.getElementById('cutV');
   function syncCut() {
-    cutR.max = C.n - 1; if (cutK > C.n - 1) cutK = C.n - 1; cutR.value = cutK; cutV.textContent = cutK ? '−' + cutK : t('none');
+    var mx = C.dims[cutAxis] - 1; cutR.max = mx; if (cutK > mx) cutK = mx; cutR.value = cutK; cutV.textContent = cutK ? '−' + cutK : t('none');
     [].forEach.call(bar.querySelectorAll('.ax'), function (b) { b.className = 'btn ax' + (parseInt(b.getAttribute('data-a'), 10) === cutAxis ? ' on' : ''); });
   }
-  function setCut(k) { cutK = Math.max(0, Math.min(C.n - 1, k)); syncCut(); schedule(); }
+  function setCut(k) { cutK = Math.max(0, Math.min(C.dims[cutAxis] - 1, k)); syncCut(); schedule(); }
   cutR.addEventListener('input', function () { setCut(parseInt(cutR.value, 10)); });
   [].forEach.call(bar.querySelectorAll('.ax'), function (b) { b.addEventListener('click', function () { cutAxis = parseInt(b.getAttribute('data-a'), 10); syncCut(); schedule(); }); });
   var baseSync = C.syncUI; C.syncUI = function () { baseSync(); syncCut(); };
-  C.onNew = function () { NGC.store('nonogram_size_3d', String(C.n)); cutK = 0; lastWin = 0; syncCut(); };
+  C.onNew = function () { NGC.saveSize(C, '3d'); cutK = 0; lastWin = 0; syncCut(); };
   C.onWin = function () { cutK = 0; syncCut(); lastWin = performance.now(); };
   document.addEventListener('keydown', function (e) {
     var k = e.key;
@@ -49,30 +48,30 @@
   var LIGHT = (function () { var l = [-0.35, 0.8, 0.5], m = Math.hypot(l[0], l[1], l[2]); return [l[0] / m, l[1] / m, l[2] / m]; })();
 
   function setup() {
-    var v = C.view, n = C.n, R = n * 0.866, D = R * 3.6;
+    var v = C.view, DM = C.dims, R = 0.5 * Math.hypot(DM[0], DM[1], DM[2]), D = R * 3.6;
     var f = 0.47 * Math.min(v.w, v.h) * Math.sqrt(D * D - R * R) / R;
     var cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
-    frame = { n: n, D: D, f: f, cx: v.w / 2, cy: v.h / 2, cyaw: cy, syaw: sy, cp: cp, sp: sp, unit: f / D };
+    frame = { H: [DM[0] / 2, DM[1] / 2, DM[2] / 2], D: D, f: f, cx: v.w / 2, cy: v.h / 2, cyaw: cy, syaw: sy, cp: cp, sp: sp, unit: f / D };
     // rot: world offset -> view
     frame.rot = function (x, y, z) { var x1 = x * cy + z * sy, z1 = -x * sy + z * cy; return [x1, y * cp - z1 * sp, y * sp + z1 * cp]; };
     // eye in world coordinates = inverse rotation of (0,0,D)
     frame.eyeW = [-D * cp * sy, D * sp, D * cp * cy];
     // lattice points
-    var m = n + 1, pts = new Array(m * m * m), i, x, y, z, h = n / 2;
-    for (z = 0; z < m; z++) for (y = 0; y < m; y++) for (x = 0; x < m; x++) {
-      var r = frame.rot(x - h, y - h, z - h), dep = D - r[2], k = f / dep;
-      pts[(z * m + y) * m + x] = [frame.cx + r[0] * k, frame.cy - r[1] * k, dep];
+    var m0 = DM[0] + 1, m1 = DM[1] + 1, m2 = DM[2] + 1, pts = new Array(m0 * m1 * m2), i, x, y, z, H = frame.H;
+    for (z = 0; z < m2; z++) for (y = 0; y < m1; y++) for (x = 0; x < m0; x++) {
+      var r = frame.rot(x - H[0], y - H[1], z - H[2]), dep = D - r[2], k = f / dep;
+      pts[(z * m1 + y) * m0 + x] = [frame.cx + r[0] * k, frame.cy - r[1] * k, dep];
     }
-    frame.pts = pts; frame.m = m;
+    frame.pts = pts; frame.m0 = m0; frame.m1 = m1;
     frame.nviews = DIRS.map(function (d) { return frame.rot(d[0], d[1], d[2]); });
   }
-  function proj(wx, wy, wz) { var h = frame.n / 2, r = frame.rot(wx - h, wy - h, wz - h), dep = frame.D - r[2], k = frame.f / dep; return { x: frame.cx + r[0] * k, y: frame.cy - r[1] * k, dep: dep, v: r }; }
+  function proj(wx, wy, wz) { var H = frame.H, r = frame.rot(wx - H[0], wy - H[1], wz - H[2]), dep = frame.D - r[2], k = frame.f / dep; return { x: frame.cx + r[0] * k, y: frame.cy - r[1] * k, dep: dep, v: r }; }
 
   function hiddenFn() {
-    var n = C.n, ax = cutAxis, sg = frame.eyeW[ax] >= 0 ? 1 : -1, k = cutK, W = C.won;
+    var DM = C.dims, n = DM[cutAxis], ax = cutAxis, sg = frame.eyeW[ax] >= 0 ? 1 : -1, k = cutK, W = C.won;
     return function (i) {
       if (!k) return false;
-      var c = ax === 0 ? i % n : ax === 1 ? Math.floor(i / n) % n : Math.floor(i / (n * n));
+      var c = ax === 0 ? i % DM[0] : ax === 1 ? Math.floor(i / DM[0]) % DM[1] : Math.floor(i / (DM[0] * DM[1]));
       return sg > 0 ? c >= n - k : c < k;
     };
   }
@@ -100,7 +99,7 @@
   function draw() {
     if (!C.view || !C.clues) return;
     setup();
-    var v = C.view, n = C.n, i, x, y, z, m = frame.m, pts = frame.pts;
+    var v = C.view, DM = C.dims, dX = DM[0], dY = DM[1], dZ = DM[2], i, x, y, z, m0 = frame.m0, m1 = frame.m1, pts = frame.pts;
     ctx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
     var g = ctx.createLinearGradient(0, 0, 0, v.h); g.addColorStop(0, '#f7f9fe'); g.addColorStop(1, '#e6ebf6');
     ctx.fillStyle = g; ctx.fillRect(0, 0, v.w, v.h);
@@ -117,18 +116,18 @@
       drawn[i] = (!hidden(i) && mk !== 2 && (!C.won || mk === 1)) ? 1 : 0;
     }
     // order cells far -> near
-    var order = [], h = n / 2, ew = frame.eyeW;
+    var order = [], H = frame.H, ew = frame.eyeW;
     for (i = 0; i < C.L.total; i++) {
       if (hidden(i)) continue;
-      x = i % n; y = Math.floor(i / n) % n; z = Math.floor(i / (n * n));
-      var dx = x + 0.5 - h - ew[0], dy = y + 0.5 - h - ew[1], dz = z + 0.5 - h - ew[2];
+      x = i % dX; y = Math.floor(i / dX) % dY; z = Math.floor(i / (dX * dY));
+      var dx = x + 0.5 - H[0] - ew[0], dy = y + 0.5 - H[1] - ew[1], dz = z + 0.5 - H[2] - ew[2];
       order.push([dx * dx + dy * dy + dz * dz, i]);
     }
     order.sort(function (a, b) { return b[0] - a[0]; });
     var unit = frame.unit, edgeW = Math.max(1, unit * 0.045);
     ctx.lineJoin = 'round';
     for (var oi = 0; oi < order.length; oi++) {
-      i = order[oi][1]; x = i % n; y = Math.floor(i / n) % n; z = Math.floor(i / (n * n));
+      i = order[oi][1]; x = i % dX; y = Math.floor(i / dX) % dY; z = Math.floor(i / (dX * dY));
       var mk2 = C.marks[i];
       if (!drawn[i]) {
         if (mk2 === 2 && !C.won) { // ghost: small x at the cell centre
@@ -141,18 +140,18 @@
         continue;
       }
       var base = mk2 === 1 ? [52, 74, 160] : [236, 242, 255];
-      if (C.won) { var dl = (x + y + z) / (3 * n); var wp = Math.max(0, Math.min(1, (wt - dl * 1.0) / 0.6)); base = mix([52, 74, 160], hsl2rgb(Math.round(190 + 160 * (x + y + z) / (3 * n - 3 || 1)), 0.7, 0.52), wp); }
+      if (C.won) { var dl = (x + y + z) / (dX + dY + dZ); var wp = Math.max(0, Math.min(1, (wt - dl * 1.0) / 0.6)); base = mix([52, 74, 160], hsl2rgb(Math.round(190 + 160 * (x + y + z) / (dX + dY + dZ - 3 || 1)), 0.7, 0.52), wp); }
       if (hlSet[i]) base = mix(base, [255, 205, 50], i === tgt ? 0.7 : 0.45);
       for (var d = 0; d < 6; d++) {
         var dd = DIRS[d], nx = x + dd[0], ny = y + dd[1], nz = z + dd[2];
-        if (nx >= 0 && ny >= 0 && nz >= 0 && nx < n && ny < n && nz < n && drawn[(nz * n + ny) * n + nx]) continue;
+        if (nx >= 0 && ny >= 0 && nz >= 0 && nx < dX && ny < dY && nz < dZ && drawn[(nz * dY + ny) * dX + nx]) continue;
         var nv = frame.nviews[d];
         var fc = proj(x + 0.5 + dd[0] * 0.5, y + 0.5 + dd[1] * 0.5, z + 0.5 + dd[2] * 0.5);
         // visible if the normal points to the eye: dot(nv, eye - fcView) > 0
         var ex = -fc.v[0], ey = -fc.v[1], ez = frame.D - fc.v[2];
         if (nv[0] * ex + nv[1] * ey + nv[2] * ez <= 0) continue;
         var poly = [], F = FACE[d];
-        for (var c = 0; c < 4; c++) { var p = pts[((z + F[c][2]) * m + (y + F[c][1])) * m + (x + F[c][0])]; poly.push([p[0], p[1]]); }
+        for (var c = 0; c < 4; c++) { var p = pts[((z + F[c][2]) * m1 + (y + F[c][1])) * m0 + (x + F[c][0])]; poly.push([p[0], p[1]]); }
         var b = 0.74 + 0.3 * (nv[0] * LIGHT[0] + nv[1] * LIGHT[1] + nv[2] * LIGHT[2]); b = Math.max(0.55, Math.min(1.04, b));
         var col = [base[0] * b, base[1] * b, base[2] * b];
         ctx.beginPath(); ctx.moveTo(poly[0][0], poly[0][1]); for (c = 1; c < 4; c++) ctx.lineTo(poly[c][0], poly[c][1]); ctx.closePath();
@@ -166,9 +165,9 @@
       var sprites = [], eyeAx = [ew[0] >= 0 ? 1 : -1, ew[1] >= 0 ? 1 : -1, ew[2] >= 0 ? 1 : -1];
       for (var li = 0; li < C.L.lines.length; li++) {
         var ln = C.L.lines[li], sg = eyeAx[ln.axis], found = -1, cl = ln.cells;
-        for (var s = 0; s < n; s++) { var cc = cl[sg > 0 ? n - 1 - s : s]; if (!hidden(cc)) { found = cc; break; } }
+        for (var s = 0; s < cl.length; s++) { var cc = cl[sg > 0 ? cl.length - 1 - s : s]; if (!hidden(cc)) { found = cc; break; } }
         if (found < 0) continue;
-        var fx = found % n, fy = Math.floor(found / n) % n, fz = Math.floor(found / (n * n)), cen = [fx + 0.5, fy + 0.5, fz + 0.5];
+        var fx = found % dX, fy = Math.floor(found / dX) % dY, fz = Math.floor(found / (dX * dY)), cen = [fx + 0.5, fy + 0.5, fz + 0.5];
         cen[ln.axis] += 0.5 * sg;
         var P = proj(cen[0], cen[1], cen[2]), dirv = frame.nviews[ln.axis * 2 + (sg > 0 ? 0 : 1)];
         var evx = -P.v[0], evy = -P.v[1], evz = frame.D - P.v[2], el = Math.hypot(evx, evy, evz);
