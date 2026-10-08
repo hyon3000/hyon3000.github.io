@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Riichi Mahjong</title>
+<script>window.__errs=[];window.addEventListener('error',function(e){window.__errs.push(e.message+' @'+e.filename+':'+e.lineno)});</script>
+<style>
+*{box-sizing:border-box}
+:root{--S:600px}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d3b2a;color:#f2f2e8;font:13px/1.3 "Segoe UI","Malgun Gothic",system-ui,sans-serif;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+#app{height:100%;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:4px;padding:3px 4px;background:radial-gradient(ellipse at 50% 35%,#18643f 0,#0d3b2a 85%)}
+#table{position:relative;flex:none;width:var(--S);height:var(--S);border-radius:calc(var(--S)*.02);background:radial-gradient(circle at 50% 50%,#1f7a4c 0,#17603c 60%,#124d31 100%);box-shadow:inset 0 0 0 2px #0a2e1f,0 4px 16px #0008;overflow:hidden}
+/* ---- tiles */
+.t{position:relative;flex:none;width:var(--tw);height:calc(var(--tw)*1.33);border-radius:calc(var(--tw)*.14);background:linear-gradient(180deg,#fbf8ee 0,#efe9d6 100%);box-shadow:0 calc(var(--tw)*.07) 0 #b9ad8c,0 calc(var(--tw)*.1) calc(var(--tw)*.08) #0007;border:1px solid #cfc6aa}
+.t img{position:absolute;left:7%;top:5%;width:86%;height:90%;display:block;pointer-events:none;-webkit-user-drag:none}
+.t.back{background:linear-gradient(135deg,#2c8f6b 0,#1b6b4f 100%);border-color:#0e4733;box-shadow:0 calc(var(--tw)*.07) 0 #0b3a29,0 calc(var(--tw)*.1) calc(var(--tw)*.08) #0007}
+.t.back::after{content:"";position:absolute;inset:14%;border:1px solid #ffffff30;border-radius:calc(var(--tw)*.08)}
+.t.dim{filter:brightness(.55)}
+.t.haku img{display:none}.t.haku::before{content:"";position:absolute;left:24%;right:24%;top:20%;bottom:20%;border:max(2px,calc(var(--tw)*.07)) solid #3a5fb0;border-radius:calc(var(--tw)*.08)}
+.t.last{outline:2px solid #ffd54a;outline-offset:1px}
+.t.tg{filter:brightness(.88)}
+.rot{position:relative;flex:none;width:calc(var(--tw)*1.33);height:var(--tw);align-self:flex-end}
+.rot>.t{position:absolute;left:50%;top:50%;margin-left:calc(var(--tw)*-.5);margin-top:calc(var(--tw)*-.665);transform:rotate(90deg) translate(calc(var(--tw)*.165),calc(var(--tw)*.165))}
+.rot.stk{height:calc(var(--tw)*2);}
+.rot.stk>.t{display:none}
+.rot.stk>.col{position:absolute;inset:0;display:flex;flex-direction:column}
+.rot.stk .rot{width:100%;height:var(--tw);align-self:auto}
+/* ---- boards */
+.bd{position:absolute;inset:0;pointer-events:none}
+.b1{transform:rotate(-90deg)}.b2{transform:rotate(180deg)}.b3{transform:rotate(90deg)}
+.hand{position:absolute;left:0;right:0;bottom:calc(var(--S)*.01);display:flex;justify-content:center;align-items:flex-end;gap:calc(var(--S)*.014)}
+.conc,.melds{display:flex;align-items:flex-end}
+.melds{gap:calc(var(--S)*.008)}
+.meld{display:flex;align-items:flex-end}
+.b0 .conc .t{--tw:calc(var(--S)*.0655)}
+.b0 .melds .t,.b0 .melds .rot{--tw:calc(var(--S)*.046)}
+.b1 .hand .t,.b2 .hand .t,.b3 .hand .t,.b1 .melds .rot,.b2 .melds .rot,.b3 .melds .rot{--tw:calc(var(--S)*.04)}
+.conc .gap{width:calc(var(--S)*.016);flex:none}
+.river{position:absolute;left:50%;transform:translateX(-50%);display:flex;flex-direction:column-reverse;gap:calc(var(--S)*.004)}
+.b0 .river{bottom:calc(var(--S)*.105)}
+.b1 .river,.b2 .river,.b3 .river{bottom:calc(var(--S)*.083)}
+.rrow{display:flex;align-items:flex-end;justify-content:flex-start;gap:calc(var(--S)*.001)}
+.river .t,.river .rot{--tw:calc(var(--S)*.043)}
+#hand0{pointer-events:auto}
+#hand0 .t{cursor:pointer;touch-action:none;transition:transform .08s}
+#hand0 .t.sel{transform:translateY(-14%)}
+#hand0 .t.hint,.t.hint{outline:3px solid #ffe14a;outline-offset:1px;box-shadow:0 0 12px 3px #ffe14a;z-index:5}
+#hand0 .t.ok{box-shadow:0 calc(var(--tw)*.07) 0 #b9ad8c,0 0 8px 2px #7dffb0}
+/* ---- center */
+#center{position:absolute;left:33%;top:33%;width:34%;height:34%;border-radius:calc(var(--S)*.014);background:#0a2e1fb0;border:1px solid #ffffff22;display:grid;grid-template-columns:1fr 1.25fr 1fr;grid-template-rows:1fr 1.25fr 1fr;color:#f5f1de}
+.sc{display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:calc(var(--S)*.0215);line-height:1.15;border-radius:calc(var(--S)*.008);margin:2px;min-width:0}
+.sc b{font-size:calc(var(--S)*.026);font-weight:700;color:#ffe9a6}
+.sc .nm{opacity:.85;font-size:calc(var(--S)*.017);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.sc .wd{display:inline-block;min-width:1.5em;padding:0 .25em;border-radius:3px;background:#ffffff26;font-weight:700;margin-right:.2em}
+.sc.dealer .wd{background:#c43c2e;color:#fff}
+.sc.turn{background:#ffd54a30;box-shadow:inset 0 0 0 1px #ffd54a}
+.sc.s0{grid-area:3/2}.sc.s1{grid-area:2/3}.sc.s2{grid-area:1/2}.sc.s3{grid-area:2/1}
+.sc .rch{color:#ff8a7a;font-size:calc(var(--S)*.015);font-weight:700}
+#mid{grid-area:2/2;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-size:calc(var(--S)*.021);line-height:1.2}
+#mid .rn{font-size:calc(var(--S)*.032);font-weight:800;color:#fff}
+#mid .sm{opacity:.9}
+.stick{display:inline-block;width:calc(var(--S)*.04);height:calc(var(--S)*.007);background:#f3efe0;border-radius:2px;box-shadow:0 0 0 1px #8a8467;vertical-align:middle;position:relative}
+.stick::after{content:"";position:absolute;left:46%;top:1px;width:2px;height:calc(100% - 2px);background:#c1352c;border-radius:50%}
+#corner1{position:absolute;left:calc(var(--S)*.012);top:calc(var(--S)*.012);display:flex;flex-direction:column;gap:calc(var(--S)*.004);font-size:calc(var(--S)*.018);opacity:.97}
+#corner1 .row{display:flex;gap:calc(var(--S)*.003)}
+#corner1 .t{--tw:calc(var(--S)*.036)}
+#corner2{position:absolute;right:calc(var(--S)*.014);top:calc(var(--S)*.012);text-align:right;font-size:calc(var(--S)*.019);line-height:1.25;text-shadow:0 1px 2px #000a}
+#corner3{position:absolute;left:calc(var(--S)*.014);bottom:calc(var(--S)*.115);font-size:calc(var(--S)*.019);}
+.tag{display:inline-block;padding:1px 6px;border-radius:99px;font-weight:700;font-size:calc(var(--S)*.019);background:#0007}
+.tag.bad{background:#b53b30;color:#fff}.tag.ok{background:#2f8f4f}
+.fl{position:absolute;font-weight:900;font-size:calc(var(--S)*.06);color:#ffe14a;text-shadow:0 2px 6px #000,0 0 14px #c60;pointer-events:none;animation:fl 1.1s ease-out forwards;white-space:nowrap;transform:translate(-50%,-50%);z-index:30}
+@keyframes fl{0%{opacity:0;transform:translate(-50%,-30%) scale(.5)}20%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-80%) scale(1)}}
+/* ---- below the table */
+#msg{flex:none;width:var(--S);min-height:calc(var(--S)*.062);font-weight:600;font-size:13px;padding:3px 8px;border-radius:8px;background:rgba(0,0,0,.35);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#msg.you{background:rgba(40,120,60,.75)}
+#msg .t{--tw:20px}
+#acts button{min-height:40px}
+#acts{flex:none;width:var(--S);display:flex;flex-wrap:wrap;gap:6px;justify-content:center;min-height:44px;align-items:center}
+#bar{flex:none;width:var(--S);display:flex;flex-wrap:wrap;gap:5px;justify-content:center}
+button{font:inherit;color:#fff;background:#3b5a4a;border:1px solid #6f9a84;border-radius:8px;padding:6px 12px;cursor:pointer;touch-action:manipulation;min-height:32px}
+button:hover{background:#4b7360}
+button.pri{background:#2f8f4f;border-color:#7ad596}
+button.win{background:#c0392b;border-color:#ff9d8f;font-weight:800;font-size:15px;padding:8px 18px}
+button.call{background:#2a6fb0;border-color:#8ec3f5;font-weight:700;font-size:14px;padding:6px 14px;display:inline-flex;align-items:center;gap:4px}
+button.call .t{--tw:16px}
+button.on{background:#c98a14;border-color:#ffd54a}
+button.hint{outline:3px solid #ffe14a;box-shadow:0 0 10px #ffe14a}
+button:disabled{opacity:.45;cursor:default}
+/* ---- dialogs */
+#res,#help{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,96vw);max-height:94vh;overflow:auto;background:#12261fF2;border:2px solid #ffd54a;border-radius:12px;padding:12px 14px;z-index:60;box-shadow:0 8px 30px #000b;display:none;-webkit-user-select:text;user-select:text}
+#res h3,#help h3{margin:0 0 6px;font-size:18px;text-align:center;color:#ffe9a6}
+#res .win{margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #ffffff22}
+#res .hrow{display:flex;flex-wrap:wrap;align-items:flex-end;gap:4px;margin:4px 0}
+#res .hrow .t,#res .hrow .rot{--tw:min(24px,calc((100vw - 74px)/14.8))}
+#res .hrow .sp{width:10px}
+#res table{width:100%;border-collapse:collapse;font-size:13px}
+#res td{padding:1px 4px}#res td:last-child{text-align:right;font-weight:700}
+#res .big{font-size:16px;font-weight:800;text-align:center;margin:4px 0;color:#ffd54a}
+#res .btns{display:flex;gap:8px;justify-content:center;margin-top:10px}
+#res .pl{display:flex;justify-content:space-between}
+.pos{color:#7dffb0}.neg{color:#ff8a7a}
+#help{font-size:13px;line-height:1.45}
+#help p{margin:5px 0}
+#help a{color:#9fd4ff}
+.ky{display:inline-block;padding:0 5px;border-radius:4px;background:#ffffff22}
+#curtain{position:fixed;inset:0;background:#0006;z-index:50;display:none}
+@media (max-width:520px){#msg{font-size:12px}button{padding:5px 9px}}
+</style>
+</head>
+<body>
+<div id="app">
+ <div id="table">
+  <div class="bd b3" id="bd3"></div><div class="bd b2" id="bd2"></div><div class="bd b1" id="bd1"></div><div class="bd b0" id="bd0"></div>
+  <div id="center"></div>
+  <div id="corner1"></div><div id="corner2"></div><div id="corner3"></div>
+ </div>
+ <div id="msg"></div>
+ <div id="acts"></div>
+ <div id="bar"></div>
+</div>
+<div id="curtain"></div>
+<div id="res"></div>
+<div id="help"></div>
+<script src="mj/riichi-bundle.js"></script>
+<script src="mahjong-core.js"></script>
+<script>
+(function () {
+'use strict';
+var KO = /^ko/i.test(navigator.language || 'en');
+document.documentElement.lang = KO ? 'ko' : 'en';
+function $(i) { return document.getElementById(i); }
+var TX = {
+  title: ['Riichi Mahjong', '리치 마작'],
+  you: ['You', '나'], ai: ['AI %1', '컴퓨터 %1'],
+  wind: [['E', 'S', 'W', 'N'], ['동', '남', '서', '북']],
+  round: ['East %1', '동 %1국'], honba: ['Honba %1', '본장 %1'], sticks: ['Riichi sticks %1', '리치봉 %1'], wall: ['Wall %1', '남은 패 %1'], dora: ['Dora', '도라'],
+  newg: ['New game', '새 게임'], hint: ['Hint', '힌트'], auto: ['Auto', '자동'], autoOn: ['Auto: ON', '자동: 켜짐'], help: ['Help', '도움말'], speed: ['Speed: normal', '속도: 보통'], speedF: ['Speed: fast', '속도: 빠름'],
+  tsumo: ['Tsumo', '쯔모'], ron: ['Ron', '론'], riichi: ['Riichi', '리치'], riichiX: ['Riichi (cancel)', '리치 (취소)'], pon: ['Pon', '퐁'], chi: ['Chi', '치'], kan: ['Kan', '깡'], pass: ['Pass', '패스'], kyuu: ['Abort (9 terminals)', '구종구패 (유국)'],
+  yourT: ['Your turn: tap a tile to select, tap again (or drag it up) to discard.', '내 차례: 패를 눌러 선택하고, 한 번 더 누르거나 위로 끌어 버리세요.'],
+  riichiT: ['Riichi: choose the tile to discard (highlighted).', '리치: 버릴 패를 고르세요 (표시된 패).'],
+  oppT: ['%1 is thinking...', '%1 차례...'], react: ['A tile was discarded: you can call it.', '버려진 패로 선언할 수 있습니다.'],
+  ronT: ['You can win with this tile!', '이 패로 화료할 수 있습니다!'], tsumoT: ['You can win by tsumo!', '쯔모 화료할 수 있습니다!'],
+  furiten: ['Furiten', '후리텐'], tenpai: ['Tenpai - waits', '텐파이 - 대기'], noten: ['Noten', '노텐'],
+  hintDiscard: ['Hint: discard the highlighted tile.', '힌트: 표시된 패를 버리세요.'], hintRiichi: ['Hint: declare riichi and discard the highlighted tile.', '힌트: 리치를 선언하고 표시된 패를 버리세요.'],
+  hintBtn: ['Hint: press the highlighted button.', '힌트: 표시된 버튼을 누르세요.'], hintPass: ['Hint: pass.', '힌트: 패스하세요.'], hintNone: ['No decision is needed from you right now.', '지금은 선택할 것이 없습니다.'],
+  hintNext: ['Press the highlighted button to continue.', '표시된 버튼을 눌러 계속하세요.'],
+  next: ['Next round', '다음 국'], again: ['New game', '새 게임'], close: ['Close', '닫기'],
+  tsumoR: ['Tsumo', '쯔모'], ronR: ['Ron', '론'], chankanR: ['Ron (chankan)', '론 (창깡)'],
+  drawR: ['Exhaustive draw', '유국 (황패)'], abortR: { kyuushu: ['Abortive draw: nine terminals', '도중유국: 구종구패'], suufon: ['Abortive draw: four winds', '도중유국: 사풍연타'], suucha: ['Abortive draw: four riichi', '도중유국: 사가리치'], suukan: ['Abortive draw: four kans', '도중유국: 사개깡'], sanchahou: ['Abortive draw: triple ron', '도중유국: 삼가화'] },
+  nagashi: ['Nagashi mangan', '유국만관'], tenpaiL: ['Tenpai', '텐파이'], notenL: ['Noten', '노텐'],
+  han: ['%1 han', '%1판'], fu: ['%1 fu', '%1부'], pts: ['%1 points', '%1점'], honbaB: ['honba +%1', '본장 +%1'], sticksB: ['riichi sticks +%1', '리치봉 +%1'],
+  all: ['%1 all', '%1 올'], tsumoPay: ['%1 / %2', '%1 / %2'], ykm: ['Yakuman', '역만'],
+  total: ['Total', '합계'], dealer: ['Dealer', '친'], final: ['Final result', '최종 결과'], place: ['place', '위'], yourPlace: ['Your placement: %1', '내 순위: %1위'],
+  renchan: ['Dealer repeats (honba %1)', '친 연장 (본장 %1)'], endNote: ['East round finished.', '동풍전이 끝났습니다.'],
+  autoNote: ['Auto mode is on: the computer plays your seat.', '자동 모드: 컴퓨터가 내 자리를 대신 플레이합니다.'],
+  rn: { riichi: ['Riichi!', '리치!'], pon: ['Pon!', '퐁!'], chi: ['Chi!', '치!'], kan: ['Kan!', '깡!'], tsumo: ['Tsumo!', '쯔모!'], ron: ['Ron!', '론!'] },
+  ura: ['Ura dora', '뒷도라'], bust: ['Somebody went below zero.', '점수가 0 미만이 되었습니다.'], yame: ['Dealer is top: game ends.', '친이 1위: 게임 종료.'],
+  helpT: ['How to play', '게임 방법'],
+  help1: [
+    '<p><b>Riichi Mahjong (Japanese mahjong)</b>, East-only game: you (South seat, bottom) vs 3 computer players. 136 tiles, 25,000 points each. The game lasts East 1-4 (dealer repeats when the dealer wins or is tenpai; the game ends when somebody drops below 0, or when the East-4 dealer is top with 30,000+ after a win or tenpai draw).</p>' +
+    '<p><b>Turn</b>: you draw a tile and discard one. Tap a tile to select it and tap it again (or drag it upwards) to discard. After others discard you may <span class="ky">Chi</span> (only from the player on your left, for a sequence), <span class="ky">Pon</span> (triplet) or <span class="ky">Kan</span>; closed/added kan appears on your turn. <span class="ky">Ron</span> wins on a discard, <span class="ky">Tsumo</span> on your own draw. <span class="ky">Pass</span> declines.</p>' +
+    '<p><b>Riichi</b>: with a closed tenpai hand and 1000+ points press Riichi, then discard the highlighted tile; afterwards the hand is locked (you discard each draw automatically). Bonus: ippatsu, ura-dora. <b>Furiten</b>: you cannot ron if any of your waiting tiles is in your own discards (also temporarily after passing a winning tile; permanently in riichi).</p>' +
+    '<p><b>Scoring</b>: at least one yaku is required. Dora, ura-dora and the red fives (1 per suit) add han. Han/fu give the points (mangan 5 han, haneman 6-7, baiman 8-10, sanbaiman 11-12, yakuman 13+). Honba sticks add 300 per honba. Exhaustive draw: tenpai players share 3000. Abortive draws: nine terminals (you may declare it on your first turn), four winds, four riichi, four kans, triple ron. Nagashi mangan is supported.</p>' +
+    '<p><b>Not implemented / simplified</b>: no pao (responsibility payments), no chankan on a closed kan (kokushi), double ron is allowed (triple = abortive draw), no uma/oka. <b>Online play is not available</b> for this game (the link only supports 2 players): you play against 3 computers.</p>',
+    '<p><b>리치 마작 (일본 마작)</b> 동풍전: 나(남가, 아래)와 컴퓨터 3명. 패 136장, 각자 25,000점. 동1국~동4국까지 진행하며, 친이 화료하거나 텐파이면 연장합니다. 누군가의 점수가 0 미만이 되면 종료하고, 동4국 친이 화료/텐파이 유국이고 30,000점 이상으로 1위이면 종료합니다.</p>' +
+    '<p><b>진행</b>: 패를 뽑아 한 장 버립니다. 패를 눌러 선택하고 한 번 더 누르거나 위로 끌어 버리세요. 다른 사람이 버리면 <span class="ky">치</span>(왼쪽 사람 패로 순자만), <span class="ky">퐁</span>, <span class="ky">깡</span>을 선언할 수 있습니다. 안깡/가깡은 내 차례에 나타납니다. <span class="ky">론</span>은 버려진 패로, <span class="ky">쯔모</span>는 내가 뽑은 패로 화료합니다. <span class="ky">패스</span>는 포기.</p>' +
+    '<p><b>리치</b>: 멘젠 텐파이이고 1000점 이상이면 리치 버튼을 누르고 표시된 패를 버립니다. 이후 손패는 고정되며 뽑은 패가 자동으로 버려집니다. 일발, 뒷도라가 붙습니다. <b>후리텐</b>: 자신이 버린 패 중에 대기 패가 있으면 론할 수 없습니다(패스한 직후는 일시적, 리치 중에는 영구적).</p>' +
+    '<p><b>점수</b>: 역이 하나 이상 필요합니다. 도라, 뒷도라, 적5(무늬별 1장)는 판을 더합니다. 만관 5판, 하네만 6~7판, 배만 8~10판, 삼배만 11~12판, 역만 13판 이상. 본장 1개당 300점. 유국 시 텐파이자가 3000점을 나눠 받습니다. 도중유국: 구종구패(첫 턴에 선언 가능), 사풍연타, 사가리치, 사개깡, 삼가화. 유국만관을 지원합니다.</p>' +
+    '<p><b>미구현/간략화</b>: 책임지불(파오) 없음, 안깡에 대한 창깡(국사무쌍) 없음, 더블론 허용(삼가화는 유국), 우마/오카 없음. <b>온라인 대전은 지원하지 않습니다</b>(링크가 2인만 지원): 컴퓨터 3명과 대전합니다.</p>'],
+  help2: [
+    '<p><b>AI</b>: a rule-based computer player (tile efficiency by shanten and unseen-tile counts, simple yaku-aware calling, riichi decision, folding against riichi with genbutsu/suji). It is clearly stronger than a random or tsumogiri player but much weaker than top human players or neural AIs.</p>' +
+    '<p><b>Credits</b>: hand evaluation (agari, yaku, han, fu, points) by the MIT-licensed npm packages <i>riichi</i>, <i>agari</i>, <i>syanten</i> by takayama-lily (vendored in mj/riichi-bundle.js, one small patch for the penchan-wait fu). Tile artwork: FluffyStuff/riichi-mahjong-tiles (CC0 / public domain). See CREDITS-mahjong.md.</p>',
+    '<p><b>AI</b>: 규칙 기반 컴퓨터 플레이어입니다 (샹텐수와 남은 패 수에 따른 패 효율, 역을 고려한 간단한 울기, 리치 판단, 리치에 대한 겐부츠/스지 방어). 무작위나 쯔모기리보다는 확실히 강하지만 상급 인간이나 신경망 AI보다는 훨씬 약합니다.</p>' +
+    '<p><b>크레딧</b>: 화료 판정(아가리, 역, 판, 부, 점수)은 takayama-lily의 MIT 라이선스 npm 패키지 <i>riichi</i>, <i>agari</i>, <i>syanten</i> (mj/riichi-bundle.js에 포함, 펜짱 대기 부수 버그 패치 1건). 패 그림: FluffyStuff/riichi-mahjong-tiles (CC0 / 퍼블릭 도메인). CREDITS-mahjong.md 참고.</p>']
+};
+function T(k, a, b) { var v = TX[k]; v = v[KO ? 1 : 0]; if (a !== undefined) v = v.replace('%1', a); if (b !== undefined) v = v.replace('%2', b); return v; }
+function NAME(p) { return p === 0 ? T('you') : T('ai', p); }
+function WIND(w) { return TX.wind[KO ? 1 : 0][w]; }
+
+/* ------------------------------------------------------------ tiles */
+var FACE_N = ['Ton', 'Nan', 'Shaa', 'Pei', 'Haku', 'Hatsu', 'Chun'];
+function faceFile(id) {
+  var k = id >> 2;
+  if (k < 27) { var n = (k % 9) + 1, s = ['Man', 'Pin', 'Sou'][(k / 9) | 0]; return 'mj/tiles/' + s + n + (MJ.isRed(id) ? '-Dora' : '') + '.svg'; }
+  return 'mj/tiles/' + FACE_N[k - 27] + '.svg';
+}
+function kindImg(k) { return faceFile(k * 4 + 1); }
+function TL(id, cls, extra) { if ((id >> 2) === 31) cls = (cls ? cls + ' ' : '') + 'haku'; return '<div class="t' + (cls ? ' ' + cls : '') + '" data-id="' + id + '"' + (extra || '') + '><img alt="" draggable="false" src="' + faceFile(id) + '"></div>'; }
+function TB(cls) { return '<div class="t back' + (cls ? ' ' + cls : '') + '"></div>'; }
+function TK(k, cls) { return TL(k * 4 + 1, cls); }
+(function () { for (var k = 0; k < 34; k++) { var i = new Image(); i.src = kindImg(k); } ['Man5-Dora', 'Pin5-Dora', 'Sou5-Dora'].forEach(function (n) { new Image().src = 'mj/tiles/' + n + '.svg'; }); })();
+
+/* ------------------------------------------------------------ state */
+var resDelay = 0, autoPace = 600, G = null, ui = { sel: null, riichiMode: false, hint: null, resShown: -1, flashN: 0 }, auto = false, pace = 520, fast = false, timer = null, autoGames = 0, resTimer = null;
+var HAI = MJ.makeAI('full'), AIS = [null, MJ.makeAI('full'), MJ.makeAI('full'), MJ.makeAI('full')];
+var gen = 0;       // generation counter: invalidates pending timers of an old game
+
+function fit() {
+  var w = window.innerWidth - 8, h = window.innerHeight - 8 - (w < 560 ? 124 : 118);
+  var S = Math.max(280, Math.min(w, h, 1000));
+  document.documentElement.style.setProperty('--S', Math.floor(S) + 'px');
+}
+window.addEventListener('resize', fit); fit();
+
+function newGame() {
+  gen++; clearTimeout(timer); clearTimeout(resTimer);
+  G = new MJ.Game({}); ui = { sel: null, riichiMode: false, hint: null, resShown: -1, flashN: G.callSeq, furiN: 0 };
+  $('res').style.display = 'none'; $('curtain').style.display = 'none';
+  pump();
+}
+
+/* ------------------------------------------------------------ rendering */
+function meldHTML(m, p, owner) {
+  var ids = m.ids.slice(), cells = [], i;
+  if (m.type === 'ankan') {
+    return '<div class="meld">' + TB() + TL(ids[0]) + TL(ids[1]) + TB() + '</div>';
+  }
+  var calledIdx = -1, rel = m.from >= 0 ? (m.from - owner + 4) % 4 : -1; // 3 = kamicha (left), 2 = toimen, 1 = shimocha
+  var base = ids.filter(function (x) { return x !== m.called && x !== m.added; });
+  if (m.type === 'chi') base = ids.filter(function (x) { return x !== m.called; });
+  var order = [], pos = rel === 3 ? 0 : (rel === 2 ? 1 : 2);
+  if (m.type === 'daiminkan' || m.type === 'kakan') { if (rel === 2) pos = 1; }
+  var out = [], arr = base.slice();
+  var called = { id: m.called, rot: true };
+  if (m.type === 'kakan') {
+    var added = m.added;
+    arr = ids.filter(function (x) { return x !== m.called && x !== m.added; });
+    called = { id: m.called, rot: true, stack: added };
+  }
+  if (m.type === 'chi') pos = 0;
+  var maxPos = arr.length;
+  if (pos > maxPos) pos = maxPos;
+  arr.splice(pos, 0, called);
+  return '<div class="meld">' + arr.map(function (x) {
+    if (typeof x === 'number') return TL(x);
+    if (x.stack != null) return '<div class="rot stk"><div class="col"><div class="rot">' + TL(x.stack) + '</div><div class="rot">' + TL(x.id) + '</div></div></div>';
+    return '<div class="rot">' + TL(x.id) + '</div>';
+  }).join('') + '</div>';
+}
+function riverHTML(p) {
+  var P = G.players[p], rows = [], cur = [], n = 0, i;
+  var last = (G.lastDiscard && G.lastDiscard.p === p && (G.phase === 'react' || G.phase === 'discard')) ? G.lastDiscard.id : -1;
+  for (i = 0; i < P.river.length; i++) {
+    var r = P.river[i]; if (r.taken) continue;
+    var cls = (r.id === last ? 'last ' : '') + (r.tsumogiri ? 'tg' : '');
+    var html = r.riichi ? '<div class="rot">' + TL(r.id, cls) + '</div>' : TL(r.id, cls);
+    cur.push(html); n++;
+    if (n % 6 === 0) { rows.push(cur); cur = []; }
+  }
+  if (cur.length) rows.push(cur);
+  return '<div class="river">' + rows.map(function (r) { return '<div class="rrow">' + r.join('') + '</div>'; }).join('') + '</div>';
+}
+function boardHTML(p) {
+  var P = G.players[p], reveal = G.phase === 'roundEnd', html = '', i;
+  var hand = P.hand.slice(), drawn = null;
+  if (G.phase === 'discard' && G.turn === p && G.drawn != null && hand.indexOf(G.drawn) >= 0 && !G.afterCall) {
+    drawn = G.drawn; hand.splice(hand.indexOf(drawn), 1);
+  }
+  hand.sort(function (a, b) { return a - b; });
+  var o = (p === 0 && G.phase === 'discard' && G.turn === 0 && (!auto)) ? G.dopts : null;
+  var legal = o ? o.discard : [], rr = o ? o.riichi : [];
+  function human(id) {
+    var cls = '';
+    if (o) {
+      var ok = ui.riichiMode ? rr.indexOf(id) >= 0 : legal.indexOf(id) >= 0;
+      if (!ok) cls += ' dim'; else if (ui.riichiMode) cls += ' ok';
+      if (ui.sel === id) cls += ' sel';
+      if (ui.hint && ui.hint.t === 'discard' && ui.hint.id === id) cls += ' hint';
+    }
+    return TL(id, cls.trim());
+  }
+  var conc = '';
+  if (p === 0) {
+    conc = hand.map(human).join('');
+    if (drawn != null) conc += '<div class="gap"></div>' + human(drawn);
+    else if (G.phase === 'discard' && G.turn === 0 && G.afterCall) { /* after a call: no drawn tile */ }
+  } else {
+    if (reveal) conc = hand.map(function (id) { return TL(id); }).join('');
+    else { conc = hand.map(function () { return TB(); }).join(''); }
+    if (drawn != null) conc += '<div class="gap"></div>' + (reveal ? TL(drawn) : TB());
+  }
+  var melds = P.melds.map(function (m) { return meldHTML(m, p, p); }).join('');
+  return '<div class="hand"' + (p === 0 ? ' id="hand0"' : '') + '><div class="conc">' + conc + '</div><div class="melds">' + melds + '</div></div>' + riverHTML(p);
+}
+function render() {
+  if (!G) return;
+  for (var p = 0; p < 4; p++) $('bd' + p).innerHTML = boardHTML(p);
+  // centre
+  var cs = '';
+  for (p = 0; p < 4; p++) {
+    var P = G.players[p], w = G.seatWind(p);
+    cs += '<div class="sc s' + p + (p === G.dealer ? ' dealer' : '') + ((G.phase === 'discard' && G.turn === p) ? ' turn' : '') + '"><div class="nm"><span class="wd">' + WIND(w) + '</span>' + NAME(p) + '</div><b>' + P.score + '</b>' + (P.riichi ? '<span class="rch">' + T('riichi') + '</span>' : '') + '</div>';
+  }
+  cs += '<div id="mid"><div class="rn">' + T('round', G.roundNum + 1) + '</div><div class="sm">' + T('honba', G.honba) + '</div><div class="sm"><span class="stick"></span> x' + G.sticks + '</div><div class="sm">' + T('wall', G.wallLeft()) + '</div></div>';
+  $('center').innerHTML = cs;
+  var di = G.doraInds(), dh = '';
+  for (var i = 0; i < 5; i++) dh += i < di.length ? TL(di[i]) : TB();
+  $('corner1').innerHTML = '<div>' + T('dora') + '</div><div class="row">' + dh + '</div>';
+  $('corner2').innerHTML = '';
+  // furiten / tenpai info
+  var info = '';
+  if (G.phase === 'discard' || G.phase === 'react' || G.phase === 'roundEnd') {
+    var P0 = G.players[0];
+    if (G.phase === 'react' || (G.phase === 'discard' && G.turn !== 0)) {
+      var w0 = G.waitsOf(0);
+      if (w0.length) { info = '<span class="tag ok">' + T('tenpai') + '</span> ' + w0.map(function (k) { return TK(k); }).join(''); if (G.isFuriten(0)) info += ' <span class="tag bad">' + T('furiten') + '</span>'; }
+    }
+  }
+  setMsgExtra(info);
+  renderPrompt();
+  hintApply();
+  announce();
+}
+var msgBase = '', msgExtra = '', msgCls = '';
+var msgLock = 0;
+function setMsg(s, cls, lock) { if (lock) msgLock = Date.now() + lock; else if (Date.now() < msgLock) return; msgBase = s; msgCls = cls || ''; paintMsg(); }
+function setMsgExtra(h) { msgExtra = h; paintMsg(); }
+function paintMsg() { var m = $('msg'); m.className = msgCls; m.innerHTML = '<span>' + msgBase + '</span>' + (msgExtra ? '<span style="display:inline-flex;align-items:center;gap:2px">' + msgExtra + '</span>' : ''); }
+function announce() {
+  if (G.furitenNotice && G.furitenNotice.n !== ui.furiN) { ui.furiN = G.furitenNotice.n; if (G.furitenNotice.p === 0) { var fe = document.createElement('div'); fe.className = 'fl'; fe.style.left = '50%'; fe.style.top = '62%'; fe.style.fontSize = 'calc(var(--S)*.045)'; fe.textContent = T('furiten'); $('table').appendChild(fe); setTimeout(function () { if (fe.parentNode) fe.parentNode.removeChild(fe); }, 1200); } }
+  if (G.flash && G.flash.n !== ui.flashN) {
+    ui.flashN = G.flash.n;
+    var f = G.flash, pos = [[50, 74], [78, 50], [50, 26], [22, 50]][f.p];
+    var el = document.createElement('div'); el.className = 'fl'; el.style.left = pos[0] + '%'; el.style.top = pos[1] + '%'; el.textContent = TX.rn[f.t] ? TX.rn[f.t][KO ? 1 : 0] : f.t;
+    $('table').appendChild(el); setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 1200);
+  }
+}
+function flashText(p, t) { var el = document.createElement('div'); el.className = 'fl'; var pos = [[50, 74], [78, 50], [50, 26], [22, 50]][p]; el.style.left = pos[0] + '%'; el.style.top = pos[1] + '%'; el.textContent = TX.rn[t][KO ? 1 : 0]; $('table').appendChild(el); setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 1200); }
+
+/* ------------------------------------------------------------ prompt (buttons for the human) */
+function btn(label, cls, fn, key) { var b = document.createElement('button'); b.className = cls || ''; b.innerHTML = label; b.onclick = fn; if (key) b.setAttribute('data-k', key); return b; }
+function renderPrompt() {
+  var acts = $('acts'); acts.innerHTML = '';
+  var bar = $('bar');
+  var human = humanPending();
+  if (G.phase === 'discard' && G.turn === 0 && human && !auto) {
+    var o = G.dopts;
+    setMsg(ui.riichiMode ? T('riichiT') : (o.tsumo ? T('tsumoT') : T('yourT')), 'you');
+    if (o.tsumo) acts.appendChild(btn(T('tsumo'), 'win', function () { act({ t: 'tsumo' }); }, 'tsumo'));
+    if (o.riichi.length) acts.appendChild(btn(ui.riichiMode ? T('riichiX') : T('riichi'), 'call' + (ui.riichiMode ? ' on' : ''), function () { ui.riichiMode = !ui.riichiMode; ui.sel = null; render(); }, 'riichi'));
+    o.ankan.forEach(function (k) { acts.appendChild(btn(T('kan') + ' ' + TK(k), 'call', function () { act({ t: 'ankan', kind: k }); }, 'ankan' + k)); });
+    o.kakan.forEach(function (id) { acts.appendChild(btn(T('kan') + ' ' + TK(id >> 2), 'call', function () { act({ t: 'kakan', id: id }); }, 'kakan' + id)); });
+    if (o.kyuushu) acts.appendChild(btn(T('kyuu'), 'call', function () { act({ t: 'kyuushu' }); }, 'kyuushu'));
+  } else if (G.phase === 'react' && human && !auto) {
+    var r = G.react.opts[0];
+    setMsg(r.ron ? T('ronT') : T('react'), 'you');
+    if (r.ron) acts.appendChild(btn(T('ron'), 'win', function () { act({ t: 'ron' }); }, 'ron'));
+    if (r.furiten && !r.ron) { var b0 = btn(T('ron') + ' (' + T('furiten') + ')', 'call', null); b0.disabled = true; acts.appendChild(b0); }
+    if (r.kan) acts.appendChild(btn(T('kan'), 'call', function () { act({ t: 'kan' }); }, 'kan'));
+    if (r.pon) acts.appendChild(btn(T('pon'), 'call', function () { act({ t: 'pon' }); }, 'pon'));
+    r.chi.forEach(function (c, i) { acts.appendChild(btn(T('chi') + ' ' + TL(c[0]) + TL(c[1]) , 'call', function () { act({ t: 'chi', ids: c }); }, 'chi' + i)); });
+    acts.appendChild(btn(T('pass'), '', function () { act({ t: 'pass' }); }, 'pass'));
+  } else if (G.phase === 'discard') {
+    if (G.turn === 0 && auto) setMsg(T('autoNote'), '');
+    else setMsg(T('oppT', NAME(G.turn)), '');
+  } else if (G.phase === 'react') {
+    setMsg(auto ? T('autoNote') : '', '');
+  }
+  bar.innerHTML = '';
+  bar.appendChild(btn(T('newg'), '', function () { newGame(); }, 'new'));
+  bar.appendChild(btn(T('hint'), '', function () { giveHint(); }, 'hint'));
+  bar.appendChild(btn(auto ? T('autoOn') : T('auto'), auto ? 'on' : '', function () { toggleAuto(); }, 'auto'));
+  bar.appendChild(btn(fast ? T('speedF') : T('speed'), '', function () { fast = !fast; renderPrompt(); }, 'speed'));
+  bar.appendChild(btn(T('help'), '', function () { showHelp(); }, 'help'));
+}
+function humanPending() { return G.pendingPlayers().indexOf(0) >= 0; }
+
+/* ------------------------------------------------------------ flow */
+function act(a) {
+  if (!G) return;
+  var p = 0, e = G.act(p, a);
+  if (e) { setMsg('Illegal: ' + e, ''); return; }
+  ui.sel = null; ui.riichiMode = false; ui.hint = null;
+  pump();
+}
+function actAI(p, a) {
+  var e = G.act(p, a);
+  if (e) { console.error('AI illegal', p, a, e); }
+  ui.hint = null;
+}
+function pump() {
+  clearTimeout(timer);
+  if (!G) return;
+  var myGen = gen;
+  render();
+  if (G.phase === 'roundEnd') { showResult(); return; }
+  var pend = G.pendingPlayers();
+  if (!pend.length) return;
+  var hum = pend.indexOf(0) >= 0;
+  if (hum && !auto) {
+    // riichi: forced discard of the drawn tile unless something else is possible
+    if (G.phase === 'discard') {
+      var o = G.dopts, P = G.players[0];
+      if (P.riichi && !o.tsumo && !o.ankan.length && !o.kakan.length && !o.kyuushu) {
+        timer = setTimeout(function () { if (myGen !== gen) return; act({ t: 'discard', id: G.drawn }); }, fast ? 100 : 450);
+        return;
+      }
+    }
+    return;                      // wait for the human
+  }
+  // someone else (or the auto player) acts
+  var p = pend.filter(function (x) { return x !== 0; })[0];
+  if (p === undefined) p = 0;
+  var ag = p === 0 ? HAI : AIS[p];
+  var a = ag.decide(G, p);
+  var quiet = (a.t === 'pass');
+  var delay = quiet ? 0 : (auto ? autoPace : (fast ? 120 : pace));
+  if (G.phase === 'react' && !quiet) delay = auto ? autoPace : (fast ? 120 : 380);
+  timer = setTimeout(function () {
+    if (myGen !== gen) return;
+    actAI(p, a); pump();
+  }, delay);
+}
+
+/* ------------------------------------------------------------ human tile input */
+(function () {
+  var drag = null, root = $('table');
+  function legalTile(id) {
+    var o = G && G.phase === 'discard' && G.turn === 0 && !auto ? G.dopts : null; if (!o) return false;
+    return ui.riichiMode ? o.riichi.indexOf(id) >= 0 : o.discard.indexOf(id) >= 0;
+  }
+  function select(id) {
+    ui.sel = id;
+    var els = $('hand0') ? $('hand0').querySelectorAll('.t') : [];
+    for (var i = 0; i < els.length; i++) els[i].classList.toggle('sel', +els[i].getAttribute('data-id') === id);
+    // waits after discarding this tile
+    var P = G.players[0], c = MJ.countsOf(P.hand); c[id >> 2]--;
+    var extra = '';
+    if (MJ.shanten(c, P.melds.length) === 0) {
+      var w = MJ.waitKinds(c, P.melds.length);
+      if (w.length) extra = '<span class="tag ok">' + T('tenpai') + '</span> ' + w.map(function (k) { return TK(k); }).join('');
+    }
+    setMsgExtra(extra);
+  }
+  function discard(id) {
+    var o = G.dopts, rm = ui.riichiMode;
+    act({ t: 'discard', id: id, riichi: rm && o.riichi.indexOf(id) >= 0 });
+  }
+  root.addEventListener('pointerdown', function (e) {
+    var el = e.target.closest ? e.target.closest('#hand0 .t') : null;
+    if (!el || !G) return;
+    var id = +el.getAttribute('data-id');
+    if (!legalTile(id)) return;
+    drag = { id: id, el: el, y: e.clientY, x: e.clientX, was: ui.sel === id, dy: 0, h: el.getBoundingClientRect().height };
+    try { el.setPointerCapture(e.pointerId); } catch (x) {}
+    e.preventDefault();
+  });
+  root.addEventListener('pointermove', function (e) {
+    if (!drag) return;
+    drag.dy = drag.y - e.clientY;
+    if (drag.dy > 6) drag.el.style.transform = 'translateY(' + (-Math.min(drag.dy, drag.h * 1.5)) + 'px)';
+  });
+  function end(e) {
+    if (!drag) return;
+    var d = drag; drag = null;
+    d.el.style.transform = '';
+    if (e.type === 'pointercancel') return;
+    if (d.dy > d.h * 0.6) { discard(d.id); return; }
+    if (Math.abs(d.dy) > 12) return;
+    if (d.was) discard(d.id); else select(d.id);
+  }
+  root.addEventListener('pointerup', end); root.addEventListener('pointercancel', end);
+})();
+
+/* ------------------------------------------------------------ hint */
+function giveHint() {
+  if (!G) return;
+  clearHintMsg();
+  if ($('res').style.display === 'block') { ui.hint = { t: 'dialog' }; hintApply(); return; }
+  var pend = G.pendingPlayers();
+  if (pend.indexOf(0) < 0 || G.phase === 'roundEnd') { ui.hint = null; setMsg(T('hintNone'), '', 2200); return; }
+  var a = HAI.decide(G, 0);
+  ui.hint = a;
+  render();
+}
+function clearHintMsg() {}
+function hintApply() {
+  if (!ui.hint) { return; }
+  var a = ui.hint, acts = $('acts'), key = null, msg = T('hintBtn');
+  if (a.t === 'dialog') {
+    var bs = $('res').querySelectorAll('button'); if (bs.length) bs[0].classList.add('hint'); return;
+  }
+  if (G.phase === 'discard' && G.turn === 0) {
+    if (a.t === 'discard') { msg = a.riichi ? T('hintRiichi') : T('hintDiscard'); if (a.riichi) key = 'riichi'; }
+    else if (a.t === 'tsumo') key = 'tsumo';
+    else if (a.t === 'ankan') key = 'ankan' + a.kind;
+    else if (a.t === 'kakan') key = 'kakan' + a.id;
+    else if (a.t === 'kyuushu') key = 'kyuushu';
+    if (a.t === 'discard' && a.riichi && !ui.riichiMode) { /* riichi button highlighted; the tile too */ var el = $('hand0') && $('hand0').querySelector('.t[data-id="' + a.id + '"]'); if (el) el.classList.add('hint'); }
+  } else if (G.phase === 'react') {
+    if (a.t === 'pass') { key = 'pass'; msg = T('hintPass'); }
+    else if (a.t === 'chi') { var opts = G.react.opts[0].chi; for (var i = 0; i < opts.length; i++) if ((opts[i][0] >> 2) === (a.ids[0] >> 2) && (opts[i][1] >> 2) === (a.ids[1] >> 2)) key = 'chi' + i; }
+    else key = a.t;
+  }
+  if (key) { var b = acts.querySelector('[data-k="' + key + '"]'); if (b) b.classList.add('hint'); }
+  setMsg(msg, 'you', 4000);
+  if (a.t === 'discard') { var e2 = $('hand0') && $('hand0').querySelector('.t[data-id="' + a.id + '"]'); if (e2) e2.classList.add('hint'); }
+}
+window.giveHint = giveHint;
+
+/* ------------------------------------------------------------ auto */
+function toggleAuto() {
+  auto = !auto;
+  ui.sel = null; ui.riichiMode = false; ui.hint = null;
+  try { parent.setAutoMark && parent !== window && parent.setAutoMark(auto); } catch (e) {}
+  if (G) { clearTimeout(timer); pump(); if ($('res').style.display === 'block') scheduleResClose(); }
+  return auto;
+}
+window.toggleAuto = toggleAuto;
+window.newGame = newGame;
+
+/* ------------------------------------------------------------ result dialog */
+function handRow(p, r, winTile, tsumo) {
+  var h = r.hands[p].slice(), i;
+  if (tsumo && winTile != null) { var ix = h.indexOf(winTile); if (ix >= 0) h.splice(ix, 1); }
+  h.sort(function (a, b) { return a - b; });
+  var s = '<div class="hrow">' + h.map(function (x) { return TL(x); }).join('');
+  if (winTile != null) s += '<div class="sp"></div>' + TL(winTile);
+  s += '<div class="sp"></div>' + r.melds[p].map(function (m) { return meldHTML(m, p, p); }).join('') + '</div>';
+  return s;
+}
+function pointsText(w, r) {
+  var e = w.eval, s = '', ko = KO;
+  if (e.yakuman) s += MJ.limitName(e.name, ko) || T('ykm');
+  else { s += T('han', e.han) + ' ' + T('fu', e.fu); if (e.name) s += ' - ' + MJ.limitName(e.name, ko); }
+  s += ' : ' + T('pts', e.ten);
+  if (w.tsumo) { var dealer = w.p === r.dealer; s += dealer ? ' (' + T('all', e.oya[0]) + ')' : ' (' + e.ko[1] + ' / ' + e.ko[0] + ')'; }
+  var extra = [];
+  if (r.honba && (w.tsumo || w.sticks !== undefined)) extra.push(T('honbaB', r.honba));
+  if (w.sticks) extra.push(T('sticksB', w.sticks / 1000));
+  return s + (extra.length ? '<div style="font-size:12px;opacity:.85;font-weight:400">' + extra.join(', ') + '</div>' : '');
+}
+function showResult() {
+  var r = G.result;
+  var key = G.rounds_shown = (G.stats.rounds);
+  if (ui.resShown === key) return;
+  ui.resShown = key;
+  var h = '';
+  if (r.type === 'tsumo' || r.type === 'ron') {
+    r.wins.forEach(function (w) {
+      var title = NAME(w.p) + ' - ' + (w.tsumo ? T('tsumoR') : (w.chankan ? T('chankanR') : T('ronR')));
+      if (!w.tsumo) title += '  (' + NAME(r.from) + ')';
+      h += '<div class="win"><h3>' + title + '</h3>' + handRow(w.p, r, w.tile, w.tsumo);
+      h += '<div class="hrow" style="font-size:12px;align-items:center">' + T('dora') + ': ' + r.doraInds.map(function (x) { return TL(x); }).join('');
+      if (r.riichi[w.p]) h += '<span style="margin-left:8px">' + T('ura') + ': </span>' + r.uraInds.map(function (x) { return TL(x); }).join('');
+      h += '</div><table>';
+      w.eval.yaku.forEach(function (y) { h += '<tr><td>' + MJ.yakuName(y.jp, KO) + '</td><td>' + (y.yakuman ? T('ykm') + (y.yakuman > 1 ? ' x' + y.yakuman : '') : T('han', y.han)) + '</td></tr>'; });
+      h += '</table><div class="big">' + pointsText(w, r) + '</div></div>';
+    });
+  } else if (r.type === 'draw') {
+    h += '<h3>' + (r.reason === 'nagashi' ? T('nagashi') : T('drawR')) + '</h3>';
+    if (r.reason === 'nagashi') h += '<div class="big">' + r.nagashi.map(NAME).join(', ') + '</div>';
+    for (var p = 0; p < 4; p++) {
+      h += '<div style="margin-top:4px"><b>' + NAME(p) + '</b> ' + (r.tenpai[p] ? '<span class="tag ok">' + T('tenpaiL') + '</span>' : '<span class="tag">' + T('notenL') + '</span>') + (r.tenpai[p] ? handRow(p, r, null, false) : '') + '</div>';
+    }
+  } else {
+    h += '<h3>' + TX.abortR[r.reason][KO ? 1 : 0] + (r.who >= 0 ? ' (' + NAME(r.who) + ')' : '') + '</h3>';
+  }
+  // score table
+  h += '<table style="margin-top:6px">';
+  for (var q = 0; q < 4; q++) {
+    var d = r.scores[q] - r.start[q];
+    h += '<tr><td>' + NAME(q) + ' <small>' + WIND((q - r.dealer + 4) % 4) + '</small></td><td style="text-align:right">' + r.start[q] + ' &rarr; <b>' + r.scores[q] + '</b> <span class="' + (d > 0 ? 'pos' : (d < 0 ? 'neg' : '')) + '">(' + (d > 0 ? '+' : '') + d + ')</span></td></tr>';
+  }
+  h += '</table>';
+  if (r.over) {
+    var fr = G.ranking;
+    h += '<div class="big" style="margin-top:8px">' + T('final') + '</div><table>';
+    fr.order.forEach(function (q, i) { h += '<tr><td>' + (i + 1) + T('place') + ' - ' + NAME(q) + '</td><td>' + G.players[q].score + '</td></tr>'; });
+    h += '</table><div class="big">' + T('yourPlace', fr.rank[0]) + '</div>';
+    if (r.overReason === 'bust') h += '<div style="text-align:center;opacity:.8">' + T('bust') + '</div>';
+    if (r.overReason === 'agari-yame') h += '<div style="text-align:center;opacity:.8">' + T('yame') + '</div>';
+  } else if (G.nextHonba > G.honba && G.nextRoundNum === G.roundNum) h += '<div style="text-align:center;opacity:.8;margin-top:4px">' + T('renchan', G.nextHonba) + '</div>';
+  h += '<div class="btns"><button class="pri" id="resNext">' + (r.over ? T('again') : T('next')) + '</button></div>';
+  var el = $('res'); el.innerHTML = h; el.style.display = 'block'; $('curtain').style.display = 'block';
+  $('resNext').onclick = function () { closeResult(); };
+  if (auto) scheduleResClose();
+}
+function scheduleResClose() {
+  clearTimeout(resTimer);
+  var myGen = gen, over = G.over;
+  resTimer = setTimeout(function () { if (myGen !== gen) return; if ($('res').style.display === 'block') closeResult(); }, resDelay || (over ? 2800 : 1900));
+}
+function closeResult() {
+  clearTimeout(resTimer);
+  $('res').style.display = 'none'; $('curtain').style.display = 'none';
+  if (!G) return;
+  if (G.over) { autoGames++; newGame(); return; }
+  G.nextRound(); ui.sel = null; ui.hint = null; pump();
+}
+
+function showHelp() {
+  var el = $('help');
+  el.innerHTML = '<h3>' + T('helpT') + '</h3>' + TX.help1[KO ? 1 : 0] + TX.help2[KO ? 1 : 0] + '<div class="btns" style="display:flex;justify-content:center;margin-top:8px"><button class="pri" id="helpX">' + T('close') + '</button></div>';
+  el.style.display = 'block'; $('curtain').style.display = 'block';
+  $('helpX').onclick = function () { el.style.display = 'none'; if ($('res').style.display !== 'block') $('curtain').style.display = 'none'; };
+}
+$('curtain').addEventListener('click', function () { if ($('help').style.display === 'block') { $('help').style.display = 'none'; if ($('res').style.display !== 'block') $('curtain').style.display = 'none'; } });
+document.addEventListener('keydown', function (e) {
+  var inShell = false; try { inShell = window.parent !== window && !!window.parent.setAutoMark; } catch (x) {}
+  if (inShell) return;      // inside the card shell the shell forwards F2..F4 itself (handling them here too would toggle twice)
+  if (e.key === 'F2') { e.preventDefault(); newGame(); } else if (e.key === 'F3') { e.preventDefault(); toggleAuto(); } else if (e.key === 'F4') { e.preventDefault(); giveHint(); }
+});
+
+/* ------------------------------------------------------------ test hook */
+window.__mj = {
+  G: function () { return G; }, MJ: MJ, auto: function () { return auto; }, autoGames: function () { return autoGames; },
+  sim: function (n, cfg) { cfg = cfg || {}; cfg.seed0 = cfg.seed0 || 1; cfg.agents = cfg.agents || [{ level: 'full' }, { level: 'full' }, { level: 'full' }, { level: 'full' }]; return MJ.simulate(n, cfg); },
+  skipTo: function (minDiscards, callOnly) { clearTimeout(timer); var n = 0; while (G.phase !== 'roundEnd' && n++ < 4000) { var pend = G.pendingPlayers(); if (!pend.length) break; var p = pend[0]; if (p === 0 && G.totalDiscards >= minDiscards && (callOnly ? G.phase === 'react' : G.phase === 'discard')) break; var a = (p === 0 ? HAI : AIS[p]).decide(G, p); G.act(p, a); } ui = { sel: null, riichiMode: false, hint: null, resShown: -1, flashN: G.callSeq }; pump(); return [G.phase, G.totalDiscards]; },
+  setGame: function (g) { gen++; clearTimeout(timer); G = g; ui = { sel: null, riichiMode: false, hint: null, resShown: -1, flashN: G.callSeq, furiN: 0 }; $('res').style.display = 'none'; $('curtain').style.display = 'none'; pump(); },
+  setAutoPace: function (ms) { autoPace = ms; }, setResDelay: function (ms) { resDelay = ms; },
+  setPace: function (ms) { pace = ms; }, setFast: function (f) { fast = !!f; },
+  state: function () { return G ? { phase: G.phase, turn: G.turn, round: G.roundNum, honba: G.honba, scores: G.players.map(function (p) { return p.score; }), sticks: G.sticks, over: G.over, pending: G.pendingPlayers() } : null; }
+};
+
+document.title = T('title');
+newGame();
+})();
+</script>
+</body>
+</html>

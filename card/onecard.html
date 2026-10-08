@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>One Card</title>
+<script>window.__errs=[];window.addEventListener('error',function(e){window.__errs.push(e.message+' @'+e.filename+':'+e.lineno)});</script>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d3b2a;color:#f2f2e8;font:13px/1.3 "Segoe UI","Malgun Gothic",system-ui,sans-serif;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+#app{height:100%;width:100%;max-width:980px;margin:0 auto;padding:4px 6px;display:grid;gap:3px;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto auto auto auto;
+ grid-template-areas:"oinfo" "ohand" "mid" "status" "acts" "mhand" "ctrl"}
+html{background:radial-gradient(ellipse at 50% 40%,#18643f 0,#0d3b2a 80%) fixed}
+.card{position:relative;width:var(--w);height:calc(var(--w)*1.4);flex:none;border-radius:calc(var(--w)*.09);box-shadow:0 1px 4px rgba(0,0,0,.55);background:#fff;transition:transform .12s,box-shadow .12s,filter .12s}
+.card svg{width:100%;height:100%;display:block;pointer-events:none}
+.card.back{background:none}
+#oinfo{grid-area:oinfo;display:flex;align-items:center;gap:8px;min-height:20px;font-weight:600;white-space:nowrap;overflow:hidden}
+#oinfo .sp{flex:1}
+.pill{background:#0006;border-radius:10px;padding:0 9px;font-weight:700}.pill b{color:#ffd54a}
+.pill.warn{background:#c9302c;color:#fff;animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.55}}
+#ohand{grid-area:ohand;display:flex;justify-content:center;align-items:center;height:calc(var(--ow)*1.4 + 4px);--w:var(--ow);overflow:hidden}
+#mid{grid-area:mid;min-height:0;display:flex;align-items:center;justify-content:center;gap:calc(var(--cw)*.5);--w:var(--cw);position:relative}
+.pilebox{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px}
+#drawpile{position:relative;width:var(--cw);height:calc(var(--cw)*1.4);cursor:pointer}
+#drawpile .card{position:absolute;left:0}
+#drawpile .n{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-weight:800;font-size:calc(var(--cw)*.36);color:#fff;text-shadow:0 1px 4px #000,0 0 6px #000;z-index:3}
+#discpile{position:relative;width:var(--cw);height:calc(var(--cw)*1.4)}
+#discpile .card{position:absolute;left:0;top:0}
+.cap{font-size:11px;opacity:.85;min-height:14px;text-align:center;white-space:nowrap}
+#suitchip{position:absolute;right:calc(var(--cw)*-.3);top:calc(var(--cw)*-.1);width:calc(var(--cw)*.5);height:calc(var(--cw)*.5);border-radius:50%;background:#fff;border:3px solid #ffd54a;display:flex;align-items:center;justify-content:center;z-index:5;box-shadow:0 2px 6px #000a}
+#suitchip svg{width:62%;height:62%}
+#atk{position:absolute;left:0;right:0;margin:0 auto;width:fit-content;top:calc(var(--cw)*-.34);min-width:calc(var(--cw)*.62);height:calc(var(--cw)*.5);padding:0 6px;border-radius:calc(var(--cw)*.25);background:#d62839;border:3px solid #fff;color:#fff;font-weight:900;font-size:calc(var(--cw)*.3);display:none;align-items:center;justify-content:center;z-index:6;box-shadow:0 2px 8px #000b}
+#atk.on{display:flex;animation:pop .35s}
+@keyframes pop{0%{transform:scale(.4)}70%{transform:scale(1.25)}100%{transform:scale(1)}}
+.card.hint,#drawpile.hint{outline:3px solid #ffe14a;outline-offset:2px;box-shadow:0 0 14px 4px #ffe14a;z-index:7}
+#drawpile.hint{border-radius:calc(var(--cw)*.09)}
+#status{grid-area:status;display:flex;flex-direction:column;gap:2px}
+#msg{font-weight:600;font-size:13px;padding:3px 8px;border-radius:8px;background:rgba(0,0,0,.35);min-height:24px;display:flex;align-items:center}
+#msg.you{background:rgba(40,120,60,.75)}
+#sub{font-size:11px;opacity:.85;min-height:14px;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#acts{grid-area:acts;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;min-height:36px;align-items:center}
+button{font:inherit;color:#fff;background:#3b5a4a;border:1px solid #6f9a84;border-radius:7px;padding:5px 11px;cursor:pointer;touch-action:manipulation}
+button:hover{background:#4b7360}
+button.pri{background:#2f8f4f;border-color:#7ad596}
+button.one{background:#c98a14;border-color:#ffd54a;font-weight:800;font-size:15px;padding:6px 16px}
+button.one.on{background:#e0a21e;box-shadow:0 0 0 2px #fff6}
+button.catch{background:#b53b30;border-color:#f09a8f;font-weight:800;font-size:15px;padding:6px 16px}
+button.hint{outline:3px solid #ffe14a;box-shadow:0 0 10px #ffe14a}
+button.on{background:#c98a14;border-color:#ffd54a}
+button:disabled{opacity:.45;cursor:default}
+#mhand{grid-area:mhand;--w:var(--hw);display:flex;align-items:flex-end;overflow-x:auto;overflow-y:hidden;padding:calc(var(--hw)*.2) 4px 4px;min-height:calc(var(--hw)*1.4 + var(--hw)*.2 + 8px);scrollbar-width:thin}
+#mhand .card:first-child{margin-left:auto}
+#mhand .card:last-child{margin-right:auto}
+#mhand .card{cursor:pointer}
+#mhand .card.ok{transform:translateY(calc(var(--hw)*-.16))}
+#mhand .card.no{filter:brightness(.62)}
+#mhand .card.fresh{box-shadow:0 0 10px 3px #ff9a3c}
+#ctrl{grid-area:ctrl;display:flex;flex-wrap:wrap;gap:5px;align-items:center;justify-content:center}
+#toast{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);font-size:32px;font-weight:900;color:#ffe14a;text-shadow:0 2px 6px #000,0 0 14px #c60;pointer-events:none;opacity:0;white-space:nowrap;z-index:30}
+#toast.show{animation:tst 1.4s ease-out}
+@keyframes tst{0%{opacity:0;transform:translate(-50%,-30%) scale(.5)}15%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}75%{opacity:1}100%{opacity:0;transform:translate(-50%,-70%) scale(1)}}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:40}
+.dlg{background:#1b2b25;border:2px solid #ffd54a;border-radius:12px;padding:12px 14px;width:min(400px,94vw);max-height:92vh;overflow:auto;box-shadow:0 8px 30px #000a}
+.dlg h3{margin:0 0 8px;font-size:19px;text-align:center}
+.dlg .btns{display:flex;gap:8px;justify-content:center;margin-top:10px}
+#suits{display:flex;gap:10px;justify-content:center}
+#suits button{width:64px;height:64px;padding:8px;background:#fff;border:3px solid #ffd54a;border-radius:12px}
+#suits button svg{width:100%;height:100%}
+#suits button.best{box-shadow:0 0 0 3px #5dff8a}
+#helpTxt{font-size:12px;line-height:1.55}
+#helpTxt p{margin:0 0 6px}
+</style>
+</head>
+<body>
+<div id="app">
+ <div id="oinfo"></div>
+ <div id="ohand"></div>
+ <div id="mid">
+  <div class="pilebox"><div id="drawpile"></div><div class="cap" id="dcap"></div></div>
+  <div class="pilebox"><div id="discpile"></div><div class="cap" id="tcap"></div></div>
+ </div>
+ <div id="status"><div id="msg"></div><div id="sub"></div></div>
+ <div id="acts"></div>
+ <div id="mhand"></div>
+ <div id="ctrl"></div>
+</div>
+<div id="toast"></div>
+<div class="ov" id="picker"><div class="dlg"><h3 id="pickT"></h3><div id="suits"></div><div class="btns"><button id="pickX"></button></div></div></div>
+<div class="ov" id="res"><div class="dlg"><h3 id="resT"></h3><div id="resB" style="text-align:center;line-height:1.6"></div><div class="btns"><button class="pri" id="resNew"></button><button id="resClose"></button></div></div></div>
+<div class="ov" id="help"><div class="dlg"><h3 id="helpH"></h3><div id="helpTxt"></div><div class="btns"><button id="helpX"></button></div></div></div>
+<script src="link.js"></script>
+<script src="onecard-core.js"></script>
+<script src="trumpface.js"></script>
+<script>
+(function () {
+'use strict';
+var KO = /^ko/i.test(navigator.language || 'ko');
+document.documentElement.lang = KO ? 'ko' : 'en';
+function $(i) { return document.getElementById(i); }
+var TXT = {
+  you: ['You', '나'], opp: ['Opponent', '상대'], comp: ['Computer', '컴퓨터'], score: ['Score', '점수'], wins: ['Wins', '승'], cards: ['cards', '장'],
+  new: ['New game', '새 게임'], online: ['Opponent...', '상대 선택'], hint: ['Hint', '힌트'], auto: ['Auto', '자동'], help: ['Rules', '규칙'],
+  yourT: ['Your turn: play a card of the same suit or rank, or tap the draw pile.', '내 차례: 같은 무늬/숫자 카드를 내거나 더미를 누르세요.'],
+  oppT: ["Opponent's turn...", '상대 차례...'],
+  defT: ['Attack +%1! Defend with an attack card or draw %1.', '공격 +%1! 공격 카드로 막거나 %1장을 가져가세요.'],
+  oppDefT: ['Opponent must defend or draw %1...', '상대가 막거나 %1장을 가져가야 합니다...'],
+  drawnT: ['You drew a card you can play: tap it, or pass.', '뽑은 카드를 낼 수 있습니다: 누르거나 넘기세요.'],
+  oppDrawnT: ['Opponent drew a card...', '상대가 카드를 뽑았습니다...'],
+  again: ['Play again', '한 번 더'], pass: ['Pass', '넘기기'], one: ['One Card!', '원카드!'], catch: ['Catch!', '잡기!'],
+  pickSuit: ['Choose the suit', '무늬를 고르세요'], cancel: ['Cancel', '취소'],
+  win: ['You win!', '승리!'], lose: ['You lose', '패배'], bw: ['Burst: 20 cards', '버스트: 20장'],
+  out: ['%1 emptied their hand.', '%1 패를 모두 냈습니다.'], burst: ['%1 reached 20 cards (burst).', '%1 20장이 되어 버스트.'],
+  ptsT: ['Points: %1', '점수: %1'], newg: ['New game', '새 게임'], close: ['Close', '닫기'],
+  played: ['%1 played %2', '%1 %2 냄'], suitIs: [' (suit %1)', ' (무늬 %1)'], drew: ['%1 drew %2', '%1 %2장 가져감'], passed: ['%1 passed', '%1 넘김'],
+  caughtT: ['%1 forgot One Card: +2 cards', '%1 원카드를 안 외쳐 +2장'],
+  noOpp: ['No opponent yet.', '상대가 없습니다.'],
+  disc: ['Opponent disconnected.', '상대가 연결을 끊었습니다.'], desync: ['Out of sync with opponent - start a new game.', '상대와 화면이 맞지 않습니다. 새 게임을 시작하세요.'],
+  waitHost: ['Waiting for the host to deal...', '방장이 패를 돌리길 기다리는 중...'], onl: ['Online', '온라인'], vsc: ['vs Computer', '컴퓨터 대전'],
+  hintT: ['Hint: ', '힌트: '], hPlay: ['play the highlighted card', '표시된 카드를 내세요'], hDraw: ['draw a card', '더미에서 뽑으세요'], hPass: ['pass', '넘기세요'],
+  hSuit: ['then choose %1', '무늬는 %1 선택'], hCall: ['press One Card!', '원카드 버튼을 누르세요'], hCatch: ['press Catch!', '잡기 버튼을 누르세요'],
+  tAtk: ['Attack +%1', '공격 +%1'], tAgain: ['Play again!', '한 번 더!'], tPen: ['Draw %1', '%1장 받음'], tOne: ['One Card!', '원카드!'], tCaught: ['Caught! +2', '잡혔다! +2'],
+  suitCap: ['Suit', '무늬'], dcapAtk: ['Draw %1', '%1장 뽑기'], pile: ['Draw', '더미'], reshuf: ['Reshuffled', '다시 섞음'],
+  sn: ['spade', 'clover'], names: ['Spades', 'Hearts', 'Diamonds', 'Clubs']
+};
+function T(k, a, b) { var v = TXT[k][KO ? 1 : 0]; if (a !== undefined) v = v.replace(/%1/g, a); if (b !== undefined) v = v.replace('%2', b); return v; }
+var SUITNAME = KO ? ['스페이드', '하트', '다이아', '클로버'] : ['Spades', 'Hearts', 'Diamonds', 'Clubs'];
+var HELP = KO ? [
+  '<p><b>원카드 (2인)</b>: 카드 54장(조커 2장 포함). 각자 7장, 맨 위에 공격·특수가 아닌 카드 한 장을 놓고 시작. 먼저 패를 모두 내면 승리.</p>',
+  '<p><b>내기</b>: 맨 위 카드와 같은 무늬 또는 같은 숫자를 냅니다(조커는 언제든). 낼 수 없으면(또는 원하면) 더미를 눌러 1장 뽑고, 뽑은 카드를 낼 수 있으면 바로 내거나 넘깁니다. 더미가 비면 버린 카드를 섞어 씁니다.</p>',
+  '<p><b>공격</b>: 2 = +2, A = +3, ♠A = +5, 흑백 조커 = +5, 컬러 조커 = +7. 공격을 받으면 막거나 쌓인 장수만큼 가져가고(그 턴 끝) 공격은 사라집니다. 막기: 2는 2 또는 같은 무늬 A, A는 A, ♠A와 조커는 모든 공격을 막고 ♠A/조커는 조커나 ♠A로만 막습니다. 막는 카드는 무늬·숫자가 맞지 않아도 됩니다. 쌓인 공격은 계속 더해집니다.</p>',
+  '<p><b>특수</b>: J·Q·K = 상대를 건너뛰어 한 번 더(2인에서는 모두 같음). 7 = 무늬를 지정. 조커 뒤에는 직전 무늬가 유지됩니다.</p>',
+  '<p><b>원카드</b>: 패가 1장 남으면 「원카드!」 버튼을 눌러야 합니다(내기 전에 미리 눌러도 됩니다). 상대가 먼저 「잡기」를 누르면 2장을 받습니다. 컴퓨터는 항상 외치고, 내가 잊으면 컴퓨터가 약 2초 뒤 확률적으로 잡습니다. 패가 20장이 되면 패배(버스트).</p>',
+  '<p><b>점수</b>: 이기면 상대의 남은 카드 수만큼 점수(진 쪽은 감점). 도움말 &gt; 치트: 힌트(F4)는 낼 카드를 표시하고, 자동(F3)은 내 쪽을 컴퓨터가 대신 두며(원카드 외치기 포함) 끝나면 새 게임을 시작합니다. 어느 모드에서나 됩니다. 온라인에서 상대 패는 화면에서만 가려지므로 정직한 플레이를 전제로 합니다.</p>'
+].join('') : [
+  '<p><b>One Card (2 players)</b>: 54 cards (52 + 2 jokers). 7 each; one plain card (not an attack / special) starts the discard pile. Empty your hand first to win.</p>',
+  '<p><b>Playing</b>: play a card of the same suit or rank as the top card (jokers go on anything). If you cannot (or do not want to), tap the draw pile to draw 1; if the drawn card fits you may play it at once or pass. An empty pile is refilled by reshuffling the discards.</p>',
+  '<p><b>Attacks</b>: 2 = +2, A = +3, spade A = +5, black/white joker = +5, colour joker = +7. When attacked you either defend with an attack card or draw the whole stack (your turn ends and the stack is gone). Defence: a 2 is answered by any 2 or the A of the same suit, an A by any A; spade A and jokers answer any attack, and spade A / jokers can only be answered by a joker or the spade A. A defending card need not match suit or rank. Attacks add up.</p>',
+  '<p><b>Specials</b>: J, Q, K = the opponent is skipped, so you play again (all the same with 2 players). 7 = you name the suit. After a joker the previous suit stays.</p>',
+  '<p><b>One Card!</b>: with one card left you must press the One Card! button (you may press it before the play that leaves one card). If the opponent presses Catch first, you draw 2. The computer always calls; if you forget it catches you after about 2 s with some probability. A hand of 20 cards loses (burst).</p>',
+  '<p><b>Score</b>: the winner scores the loser\'s remaining cards (the loser loses as many). Help &gt; Cheat: Hint (F4) marks the card to play; Auto (F3) plays your side (including the One Card! call) and starts a new game after each one. Works in every mode. Online, hidden hands are only hidden by the screen, so honest play is assumed.</p>'
+].join('');
+window.helpHtml = HELP;
+
+/* ---------- controller state ---------- */
+var OC = window.OC, TF = window.TrumpFace;
+var S = null, mode = 'idle', me = 0, link = null, autoOn = false, hintObj = null, pendingHint = false, timer = 0, gen = 0, fast = false, speed = 1;
+var gid = 0, lastWinner = -1, notice = '', stats = { w: 0, l: 0, score: 0 }, pairing = false, preCall = false, waiting = false, pickCard = -1, fresh = -1, toastTimer = 0, resShown = false;
+var local = /[?&]ai=1/.test(location.search);
+function D(ms) { return fast ? 0 : ms * speed; }
+function rndSeed() { return (Math.random() * 4294967296) >>> 0; }
+function pickFirst() { return lastWinner >= 0 ? lastWinner : (Math.random() < 0.5 ? 0 : 1); }
+function nameOf(p) { return p === me ? T('you') : (mode === 'ai' ? T('comp') : T('opp')); }
+
+/* ---------- games ---------- */
+function initGame(seed, first, g) {
+  S = OC.newState(seed, first); gid = g; hintObj = null; preCall = false; waiting = false; pickCard = -1; fresh = -1; resShown = false; notice = '';
+  $('res').style.display = 'none'; $('picker').style.display = 'none';
+  render(); kick();
+}
+function newLocal() { initGame(rndSeed(), pickFirst(), gid + 1); }
+function hostNew() { var seed = rndSeed(), first = pickFirst(), g = gid + 1; if (link) link.send({ t: 'new', seed: seed, first: first, gid: g }); initGame(seed, first, g); }
+function startAI() {
+  if (link) { var l = link; link = null; try { l.close(); } catch (e) {} }
+  pairing = false; mode = 'ai'; me = 0; lastWinner = -1; newLocal();
+}
+function startOnline() {
+  if (typeof BoardLink === 'undefined') return;
+  if (link) { var l = link; link = null; try { l.close(); } catch (e) {} }
+  mode = 'idle'; pairing = true; clearTimeout(timer); gen++; render();
+  BoardLink.pair({
+    onOpen: function (l) { pairing = false; link = l; mode = 'online'; me = l.isHost ? 0 : 1; lastWinner = -1; S = null; notice = T('waitHost'); resShown = false; $('res').style.display = 'none'; render(); if (l.isHost) hostNew(); },
+    onMessage: onMsg,
+    onClose: function () { if (mode !== 'online') return; link = null; mode = 'idle'; clearTimeout(timer); gen++; waiting = false; notice = T('disc'); $('res').style.display = 'none'; render(); setTimeout(startOnline, 0); },
+    onCancel: function () { pairing = false; render(); },
+    onAI: startAI
+  });
+}
+function onMsg(d) {
+  if (mode !== 'online' || !d) return;
+  if (d.t === 'new') { if (link && !link.isHost) { lastWinner = -1; initGame(d.seed >>> 0, d.first, d.gid); } }
+  else if (d.t === 'req') { if (link && link.isHost && d.gid >= gid) hostNew(); }
+  else if (d.t === 'a') {
+    if (!S || S.phase === 'over' || S.turn === me || d.n !== S.n || !OC.apply(S, d.a)) { notice = T('desync'); render(); return; }
+    afterAct();
+  }
+  else if (d.t === 'call') { if (S && S.pend1 === 1 - me) { S.pend1 = -1; render(); } }
+  else if (d.t === 'catch') {     /* the opponent (to move) says I forgot One Card: I decide, so a race with my own call cannot desync */
+    if (S && S.phase !== 'over' && S.turn !== me && S.pend1 === me && d.n === S.n && OC.penalty(S, me)) { link.send({ t: 'catchok', n: d.n }); afterAct(); }
+    else link.send({ t: 'catchno', n: d.n });
+  }
+  else if (d.t === 'catchok') { if (waiting && S && OC.penalty(S, 1 - me)) { waiting = false; afterAct(); } else { waiting = false; render(); } }
+  else if (d.t === 'catchno') { waiting = false; if (S && S.pend1 === 1 - me) S.pend1 = -1; render(); kick(); }
+}
+function ensurePlaying() { if (mode === 'idle') { try { BoardLink.cancel(); } catch (e) {} startAI(); } }
+
+/* ---------- acting ---------- */
+function act(a) {
+  if (!S || S.phase === 'over') return false;
+  var n = S.n, who = S.turn;
+  if (!OC.apply(S, a)) return false;
+  if (mode === 'online' && who === me && link) link.send({ t: 'a', n: n, a: a });
+  afterAct(); return true;
+}
+function afterAct() {
+  hintObj = null; preCall = false; pickCard = -1; $('picker').style.display = 'none';
+  fresh = S.phase === 'drawn' && S.turn === me ? S.drawn : -1;
+  if (S.phase === 'over') onOver();
+  if (!fast) {
+    var ev = S.ev || [], t = [];
+    ev.forEach(function (e) {
+      if (e.k === 'atk') t.push(T('tAtk', e.x)); else if (e.k === 'again') t.push(T('tAgain')); else if (e.k === 'pen') t.push(T('tPen', e.x));
+      else if (e.k === 'caught') t.push(T('tCaught')); else if (e.k === 'reshuffle') t.push(T('reshuf'));
+    });
+    if (S.last && S.last.k === 'play' && S.hands[S.last.p].length === 1 && S.pend1 === -1) t.push(T('tOne'));
+    if (t.length) toast(t.join(' '));
+    render(); kick();
+  }
+}
+function toast(t) { var e = $('toast'); e.textContent = t; e.classList.remove('show'); void e.offsetWidth; e.classList.add('show'); }
+function onOver() {
+  if (S.counted) return; S.counted = true;
+  var r = S.result;
+  if (r.winner === me) { stats.w++; stats.score += r.pts; } else { stats.l++; stats.score -= r.pts; }
+  lastWinner = r.winner;
+  if (!fast) showResult();
+}
+function showResult() {
+  var r = S.result, won = r.winner === me, who = nameOf(r.winner);
+  $('resT').textContent = won ? T('win') : T('lose');
+  $('resB').innerHTML = (r.reason === 'burst' ? T('burst', nameOf(1 - r.winner)) : T('out', who)) + '<br>' + (won ? '+' : '-') + r.pts + ' ' + T('score') + '<br>' + T('score') + ' ' + stats.score + ' &middot; ' + T('wins') + ' ' + stats.w + ' : ' + stats.l;
+  $('resNew').textContent = T('newg'); $('resClose').textContent = T('close');
+  $('res').style.display = autoOn ? 'none' : 'flex'; resShown = true;
+}
+function autoStep() {
+  if (waiting || !S || S.turn !== me || S.phase === 'over') return;
+  if (OC.catchable(S, me)) { doCatch(); if (waiting) return; }
+  var a = OC.choose(S, me); if (a) act(a);
+}
+function kick() {
+  clearTimeout(timer); var g = ++gen;
+  if (fast || !S) return;
+  if (S.phase === 'over') { if (autoOn) timer = setTimeout(function () { if (g === gen) newGame(true); }, D(1800)); return; }
+  if (S.turn === me) {
+    if (pendingHint) { pendingHint = false; showHint(); }
+    if (autoOn) timer = setTimeout(function () { if (g === gen) autoStep(); }, D(650));
+  } else if (mode === 'ai') {
+    var wait = S.pend1 === me ? 2000 : 900;
+    timer = setTimeout(function () {
+      if (g !== gen || !S || S.turn === me || S.phase === 'over') return;
+      if (S.pend1 === me && Math.random() < 0.7) { if (OC.penalty(S, me)) { afterAct(); return; } }
+      var a = OC.choose(S, S.turn); if (a) act(a);
+    }, D(wait));
+  }
+}
+
+/* ---------- public API (called by the shell) ---------- */
+function newGame(auto) {
+  if (mode === 'ai') newLocal();
+  else if (mode === 'online' && link) { if (link.isHost) hostNew(); else link.send({ t: 'req', gid: gid }); }
+  else if (!auto) startOnline();
+}
+function showHint() {
+  if (!S || S.phase === 'over' || S.turn !== me) return false;
+  hintObj = OC.hint(S, me); if (!hintObj) return false;
+  if (S.pend1 === me && hintObj.type !== 'catch') { /* nothing to call out of turn: the call is part of the hint text only */ }
+  render(); return true;
+}
+function giveHint() {
+  if (mode === 'idle') ensurePlaying();
+  if (!S || S.phase === 'over') return false;
+  if (S.turn !== me) { pendingHint = true; return true; }
+  return showHint();
+}
+function toggleAuto() {
+  if (mode === 'idle') ensurePlaying();
+  autoOn = !autoOn; if (autoOn) $('res').style.display = 'none'; render(); kick(); try { parent.setAutoMark && parent.setAutoMark(autoOn); } catch (e) {} return autoOn;
+}
+function isAuto() { return autoOn; }
+
+/* ---------- user input ---------- */
+function myAction() { return S && S.phase !== 'over' && S.turn === me && !autoOn && !waiting && pickCard < 0; }
+function tapHand(id) {
+  if (!myAction()) return;
+  if (!OC.legal(S, me, id)) { notice = ''; flashNo(id); return; }
+  if (OC.rank(id) === 7 && !OC.isJoker(id)) { openPicker(id); return; }
+  act({ type: 'play', card: id, call: preCall });
+}
+function flashNo(id) { var e = document.querySelector('#mhand .card[data-id="' + id + '"]'); if (e) { e.style.transition = 'transform .08s'; e.style.transform = 'translateX(4px)'; setTimeout(function () { e.style.transform = ''; }, 90); } }
+function tapDraw() {
+  if (!myAction() || S.phase !== 'play') return;
+  act({ type: 'draw' });
+}
+function doPass() { if (myAction() && S.phase === 'drawn') act({ type: 'pass' }); }
+function doCall() {
+  if (!S || S.phase === 'over') return;
+  if (S.pend1 === me) { OC.call(S, me); if (mode === 'online' && link) link.send({ t: 'call' }); hintObj = hintObj && hintObj.type === 'call' ? null : hintObj; render(); }
+  else if (S.hands[me].length === 2 && S.turn === me) { preCall = !preCall; render(); }
+}
+function doCatch() {
+  if (!S || waiting || !OC.catchable(S, me) ) return;
+  if (mode === 'online' && link) { waiting = true; link.send({ t: 'catch', n: S.n }); render(); }
+  else if (OC.penalty(S, 1 - me)) afterAct();
+}
+function openPicker(id) {
+  pickCard = id; var h = S.hands[me].filter(function (x) { return x !== id; }), cs = [0, 0, 0, 0], best = 0, i;
+  h.forEach(function (x) { if (!OC.isJoker(x)) cs[OC.suit(x)]++; }); for (i = 1; i < 4; i++) if (cs[i] > cs[best]) best = i;
+  $('pickT').textContent = T('pickSuit'); $('pickX').textContent = T('cancel');
+  $('suits').innerHTML = [0, 1, 2, 3].map(function (s) { return '<button data-s="' + s + '" title="' + SUITNAME[s] + '"' + (s === best ? ' class="best"' : '') + '>' + TF.suit(s, 48) + '</button>'; }).join('');
+  $('picker').style.display = 'flex';
+  render();
+}
+$('suits').addEventListener('click', function (e) {
+  var b = e.target.closest('button'); if (!b || pickCard < 0) return;
+  var id = pickCard, s = +b.dataset.s; pickCard = -1; $('picker').style.display = 'none';
+  act({ type: 'play', card: id, suit: s, call: preCall });
+});
+$('pickX').onclick = function () { pickCard = -1; $('picker').style.display = 'none'; render(); };
+$('drawpile').addEventListener('click', tapDraw);
+$('mhand').addEventListener('click', function (e) { var c = e.target.closest('.card'); if (c) tapHand(+c.dataset.id); });
+$('resNew').onclick = function () { $('res').style.display = 'none'; newGame(); };
+$('resClose').onclick = function () { $('res').style.display = 'none'; };
+$('helpX').onclick = function () { $('help').style.display = 'none'; };
+function showHelp() { $('helpH').textContent = KO ? '원카드 규칙' : 'One Card rules'; $('helpTxt').innerHTML = HELP; $('helpX').textContent = T('close'); $('help').style.display = 'flex'; }
+document.addEventListener('keydown', function (e) {
+  if (window.parent !== window && window.parent.setAutoMark) return;      // inside the card shell: the shell forwards F2..F5 itself (handling them here too would toggle twice)
+  if (e.key === 'F2') { e.preventDefault(); newGame(); } else if (e.key === 'F3') { e.preventDefault(); toggleAuto(); } else if (e.key === 'F4') { e.preventDefault(); giveHint(); } else if (e.key === 'F5') { e.preventDefault(); startOnline(); }
+});
+
+/* ---------- rendering ---------- */
+function cardHtml(id, cls, extra) { return '<div class="card ' + (cls || '') + '" data-id="' + id + '"' + (extra || '') + '>' + (id < 0 ? TF.back() : TF.svg(id)) + '</div>'; }
+function fit(n, w, avail, min) {   /* margin-left of the cards 2..n so that n cards of width w fit into avail (never tighter than min*w visible) */
+  if (n <= 1) return 0;
+  var step = Math.max(min * w, Math.min(w * 1.06, (avail - w) / (n - 1)));
+  return step - w;
+}
+function render() {
+  var W = window.innerWidth, H = window.innerHeight, app = $('app'), st = document.documentElement.style;
+  var hw = Math.max(46, Math.min(96, (H - 215) / 3.6, Math.min(W, 980) * 0.2));
+  st.setProperty('--hw', hw.toFixed(1) + 'px'); st.setProperty('--cw', (hw * 0.95).toFixed(1) + 'px'); st.setProperty('--ow', (hw * 0.5).toFixed(1) + 'px');
+  var avail = Math.min(W, 980) - 20;
+  /* opponent info */
+  var oc = S ? S.hands[1 - me].length : 0, modeTxt = mode === 'ai' ? T('vsc') : mode === 'online' ? T('onl') : '';
+  var oname = mode === 'ai' ? T('comp') : T('opp');
+  $('oinfo').innerHTML = '<span>' + oname + '</span><span class="pill"><b>' + oc + '</b> ' + T('cards') + '</span>' + (S && S.pend1 === 1 - me && S.phase !== 'over' ? '<span class="pill warn">' + T('one') + '?</span>' : '') +
+    '<span class="sp"></span><span class="pill">' + T('score') + ' <b>' + stats.score + '</b></span><span class="pill">' + T('wins') + ' <b>' + stats.w + '</b>:' + stats.l + '</span>';
+  var oh = '', i;
+  if (S) { var ow = hw * 0.5, ml = fit(oc, ow, avail, 0.28); for (i = 0; i < oc; i++) oh += cardHtml(-1, 'back', i ? ' style="margin-left:' + ml.toFixed(1) + 'px"' : ''); }
+  $('ohand').innerHTML = oh;
+  /* piles */
+  var dp = S ? S.draw.length : 0, dh = '', k, lim = Math.min(3, dp);
+  for (k = 0; k < lim; k++) dh += cardHtml(-1, 'back', ' style="top:' + (-(lim - 1 - k) * 2) + 'px;left:' + (-(lim - 1 - k) * 1) + 'px;width:var(--cw)"');
+  $('drawpile').innerHTML = dh + (S ? '<div class="n">' + dp + '</div>' : '');
+  $('drawpile').className = hintObj && hintObj.type === 'draw' ? 'hint' : '';
+  var dc = '';
+  if (S) { var from = Math.max(0, S.disc.length - 3); for (k = from; k < S.disc.length; k++) { var top = k === S.disc.length - 1, rot = top ? 0 : ((k * 37) % 17 - 8); dc += '<div class="card" style="width:var(--cw);transform:rotate(' + rot + 'deg)">' + TF.svg(S.disc[k]) + '</div>'; } }
+  $('discpile').innerHTML = dc + (S ? '<div id="suitchip" title="' + T('suitCap') + '">' + TF.suit(S.suit, 40) + '</div><div id="atk" class="' + (S.atk > 0 ? 'on' : '') + '">+' + S.atk + '</div>' : '');
+  $('dcap').textContent = S && S.atk > 0 && S.turn === me && S.phase === 'play' ? T('dcapAtk', S.atk) : T('pile');
+  $('tcap').textContent = S ? T('suitCap') + ': ' + SUITNAME[S.suit] : '';
+  /* my hand */
+  var mh = '', h = S ? S.hands[me] : [], mine = S && S.turn === me && S.phase !== 'over' && !waiting, lg = mine ? OC.legalCards(S, me) : [];
+  var ml2 = fit(h.length, hw, avail, 0.4);
+  h.forEach(function (c, j) {
+    var cls = (mine && lg.indexOf(c) >= 0 ? 'ok ' : (mine ? 'no ' : '')) + (hintObj && hintObj.type === 'play' && hintObj.card === c ? 'hint ' : '') + (c === fresh && mine ? 'fresh ' : '');
+    mh += cardHtml(c, cls, j ? ' style="margin-left:' + ml2.toFixed(1) + 'px"' : '');
+  });
+  $('mhand').innerHTML = mh;
+  /* status */
+  var msg = '', you = false;
+  if (!S) msg = notice || (pairing ? '' : T('noOpp'));
+  else if (S.phase === 'over') msg = S.result.winner === me ? T('win') : T('lose');
+  else if (S.turn === me) {
+    you = true;
+    msg = waiting ? '...' : S.phase === 'drawn' ? T('drawnT') : S.atk > 0 ? T('defT', S.atk) : T('yourT');
+    if (hintObj) msg += '  ' + T('hintT') + hintText(hintObj);
+  } else msg = S.phase === 'drawn' ? T('oppDrawnT') : S.atk > 0 ? T('oppDefT', S.atk) : T('oppT');
+  if (notice && S) msg = notice;
+  $('msg').textContent = msg; $('msg').className = you ? 'you' : '';
+  $('sub').textContent = S ? lastText() : '';
+  /* action buttons */
+  var ab = '';
+  if (S && S.phase !== 'over') {
+    if (S.phase === 'drawn' && S.turn === me) ab += '<button id="bPass" class="pri' + (hintObj && hintObj.type === 'pass' ? ' hint' : '') + '">' + T('pass') + '</button>';
+    if (S.pend1 === me || (S.turn === me && h.length === 2 && S.phase !== 'drawn')) ab += '<button id="bOne" class="one' + (preCall ? ' on' : '') + (S.pend1 === me ? ' hint' : '') + '">' + T('one') + '</button>';
+    if (OC.catchable(S, me)) ab += '<button id="bCatch" class="catch' + (hintObj && hintObj.type === 'catch' ? ' hint' : '') + '"' + (waiting ? ' disabled' : '') + '>' + T('catch') + '</button>';
+  }
+  $('acts').innerHTML = ab;
+  var bp = $('bPass'), bo = $('bOne'), bc = $('bCatch');
+  if (bp) bp.onclick = doPass; if (bo) bo.onclick = doCall; if (bc) bc.onclick = doCatch;
+  /* controls */
+  $('ctrl').innerHTML = '<button data-k="new">' + T('new') + '</button><button data-k="hint">' + T('hint') + '</button><button data-k="auto" class="' + (autoOn ? 'on' : '') + '">' + T('auto') + '</button><button data-k="online">' + T('online') + '</button><button data-k="help">' + T('help') + '</button>';
+}
+function hintText(h) {
+  if (h.type === 'play') return T('hPlay') + (OC.rank(h.card) === 7 && !OC.isJoker(h.card) ? ' (' + T('hSuit', SUITNAME[h.suit]) + ')' : '');
+  if (h.type === 'draw') return T('hDraw'); if (h.type === 'pass') return T('hPass'); if (h.type === 'catch') return T('hCatch'); return '';
+}
+function lastText() {
+  var l = S.last; if (!l) return '';
+  if (l.k === 'play') return T('played', nameOf(l.p), TF.name(l.card)) + (l.suit != null ? T('suitIs', TF.SUITCH[l.suit]) : '');
+  if (l.k === 'draw') return T('drew', nameOf(l.p), l.x);
+  if (l.k === 'pass') return T('passed', nameOf(l.p));
+  if (l.k === 'caught') return T('caughtT', nameOf(l.p));
+  return '';
+}
+$('ctrl').addEventListener('click', function (e) {
+  var b = e.target.closest('button'); if (!b) return;
+  ({ new: function () { newGame(); }, hint: giveHint, auto: toggleAuto, online: startOnline, help: showHelp })[b.dataset.k]();
+});
+window.newGame = function () { newGame(); };
+window.giveHint = giveHint;
+window.hint = giveHint;
+window.toggleAuto = toggleAuto;
+window.startOnline = startOnline;
+window.isOnline = function () { return mode === 'online'; };
+window.isVsAI = function () { return mode === 'ai'; };
+window.isAuto = isAuto;
+window.__oc = {
+  OC: OC, state: function () { return S; }, mode: function () { return mode; }, me: function () { return me; }, act: act, setSpeed: function (x) { speed = x; },
+  stats: function () { return stats; }, hintObj: function () { return hintObj; }, pairing: function () { return pairing; }, notice: function () { return notice; }, gid: function () { return gid; },
+  startAI: startAI, waiting: function () { return waiting; }, preCall: function () { return preCall; }, setFast: function (f) { fast = !!f; },
+  put: function (s) { S = s; hintObj = null; render(); kick(); }, tapHand: tapHand, tapDraw: tapDraw, doCall: doCall, doCatch: doCatch
+};
+window.addEventListener('resize', function () { render(); });
+render();
+window.addEventListener('load', function () { setTimeout(function () { if (mode === 'idle' && !pairing) { if (local) startAI(); else startOnline(); } }, 50); });
+})();
+</script>
+</body>
+</html>

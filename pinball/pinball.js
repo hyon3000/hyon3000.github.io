@@ -4,19 +4,21 @@
   var KO = /^ko/i.test(navigator.language || 'ko');
   var TXT = {
     ko: { title: '3D 핀볼', game: '게임', new: '　새 게임(N)', exit: '　끝내기(X)', help: '도움말', how: '　게임 방법(H)', cheat: '　치트...', auto: '　자동으로 풀기', other: '　다른 게임', mine: '　지뢰찾기', poly: '　폴리큐브', howT: '게임 방법', ok: '확인',
-      bl: '◀ 왼쪽', br: '오른쪽 ▶', bs: '발사', bnl: '↖ 흔들기', bnr: '흔들기 ↗', bnu: '↑ 흔들기', bn: '새 게임',
+      autoon: '자동 풀이 중', bl: '◀ 왼쪽', br: '오른쪽 ▶', bs: '발사', bnl: '↖ 흔들기', bnr: '흔들기 ↗', bnu: '↑ 흔들기', bn: '새 게임',
       hint: '스페이스 = 발사 · Z / 왼쪽 Shift = 왼쪽 플리퍼 · / / 오른쪽 Shift = 오른쪽 플리퍼 · X / . / ↑ = 판 흔들기 · F2 = 새 게임',
-      help1: '「3D Pinball for Windows - Space Cadet」을 역설계한 오픈소스 <b>SpaceCadetPinball</b>(MIT)의 웹 빌드를 그대로 실행합니다.<br>스페이스(누르고 있다가 놓기)로 공을 쏘고, Z / 오른쪽 Shift 쪽 키로 플리퍼를 칩니다. 화면 안의 게임 메뉴(F2 새 게임, F3 일시정지 등)도 그대로 쓸 수 있습니다.<br>게임 데이터는 이 저장소에 들어 있지 않고 원 게임을 호스팅하는 사이트에서 불러오므로 인터넷 연결이 필요합니다.' },
+      help1: '「3D Pinball for Windows - Space Cadet」을 역설계한 오픈소스 <b>SpaceCadetPinball</b>(MIT)의 웹 빌드를 그대로 실행합니다.<br>스페이스(누르고 있다가 놓기)로 공을 쏘고, Z / 오른쪽 Shift 쪽 키로 플리퍼를 칩니다. 화면 안의 게임 메뉴(F2 새 게임, F3 일시정지 등)도 그대로 쓸 수 있습니다.<br>게임 데이터는 이 저장소에 들어 있지 않고 원 게임을 호스팅하는 사이트에서 불러오므로 인터넷 연결이 필요합니다.',
+      help2: '<br><br><b>치트 &gt; 자동으로 풀기(F3)</b>: 강화학습(PPO)으로 훈련한 플레이어가 공의 위치와 점수만 보고 플리퍼를 칩니다(플런저 발사와 새 게임은 규칙으로 처리). 공 위치·점수는 게임의 메모리에서 읽으며, 이 게임 빌드와 맞지 않으면 화면을 보고 치는 단순한 봇으로 대신합니다.' },
     en: { title: '3D Pinball', game: 'Game', new: '　New Game(N)', exit: '　Exit(X)', help: 'Help', how: '　How to Play(H)', cheat: '　Cheat...', auto: '　Solve Automatically', other: '　Other Games', mine: '　Minesweeper', poly: '　Polycube', howT: 'How to play', ok: 'OK',
-      bl: '◀ Left', br: 'Right ▶', bs: 'Launch', bnl: '↖ Nudge', bnr: 'Nudge ↗', bnu: '↑ Nudge', bn: 'New',
+      autoon: 'AUTO PLAY', bl: '◀ Left', br: 'Right ▶', bs: 'Launch', bnl: '↖ Nudge', bnr: 'Nudge ↗', bnu: '↑ Nudge', bn: 'New',
       hint: 'Space = launch · Z / left Shift = left flipper · / / right Shift = right flipper · X / . / Up = nudge · F2 = new game',
-      help1: 'Runs the web build of <b>SpaceCadetPinball</b> (MIT), the reverse-engineered "3D Pinball for Windows - Space Cadet", unchanged.<br>Pull and release Space to launch the ball, hit the flippers with Z / right Shift. The game\'s own menu (F2 new game, F3 pause ...) works too.<br>The game data is not part of this repository; it is loaded from the site hosting the web build, so you need an internet connection.' }
+      help1: 'Runs the web build of <b>SpaceCadetPinball</b> (MIT), the reverse-engineered "3D Pinball for Windows - Space Cadet", unchanged.<br>Pull and release Space to launch the ball, hit the flippers with Z / right Shift. The game\'s own menu (F2 new game, F3 pause ...) works too.<br>The game data is not part of this repository; it is loaded from the site hosting the web build, so you need an internet connection.',
+      help2: '<br><br><b>Cheat &gt; Solve Automatically (F3)</b>: a player trained with reinforcement learning (PPO) works the flippers from the ball position and the score only (plunger launch and new game are handled by rules). The ball position and score are read from the game\'s memory; if this build of the game does not match, a simple screen-watching bot plays instead.' }
   };
   var T = KO ? TXT.ko : TXT.en;
   document.documentElement.lang = KO ? 'ko' : 'en';
   [].forEach.call(document.querySelectorAll('[data-t]'), function (e) { var k = e.getAttribute('data-t'); if (T[k]) e.textContent = T[k]; });
   document.getElementById('hint').textContent = T.hint;
-  document.getElementById('helpTxt').innerHTML = T.help1;
+  document.getElementById('helpTxt').innerHTML = T.help1 + T.help2;
   document.title = T.title;
   $(function () {
     if ($('.menu-bar').length) $('.menu-bar').menubar();
@@ -81,9 +83,51 @@
       lastLaunch = now; var b = document.querySelector('.pb.ln'); key('keydown', b); b.classList.add('on'); setTimeout(function () { key('keyup', b); b.classList.remove('on'); }, 1000 + Math.random() * 400);
     }
   }
+  // RL player (ai.js + ai-model.js): reads the ball position and the score from the game's memory and picks the flipper combination every 4 frames (training/ has the code);
+  // it runs inside the game's own main loop (Module.preMainLoop), so it keeps its pace whatever the screen refresh rate is.
+  var rl = null, rlPrevHook = null, rlTimer = 0, rlBad = 0, rlOverAt = 0, rlNewAt = 0;
+  function canvasKey(type, code, kc, k) {
+    var o = { key: k, code: code, keyCode: kc, which: kc, bubbles: true, cancelable: true }, e = new KeyboardEvent(type, o);
+    try { Object.defineProperty(e, 'keyCode', { get: function () { return kc; } }); Object.defineProperty(e, 'which', { get: function () { return kc; } }); } catch (x) {}
+    document.getElementById('canvas').dispatchEvent(e);
+  }
+  function rlStop() {
+    if (rl) { rl.setKey('L', 0); rl.setKey('R', 0); rl.setKey('S', 0); window.Module.preMainLoop = rlPrevHook; rl = null; }
+    clearInterval(rlTimer); rlTimer = 0;
+  }
+  function rlHook() {
+    if (rlPrevHook && rlPrevHook() === false) return false;
+    if (!rl) return;
+    var now = performance.now();
+    if (rlOverAt) { if (now > rlOverAt) { rlOverAt = 0; rlNewAt = now; rl.newGame(); } return; }       // game over: look at the score for a few seconds, then start a new game
+    var r = rl.tick(now);
+    if (!r) return;
+    if (r.bad) { if (!rlBad) rlBad = now; if (now - rlBad > (now - rlNewAt < 20000 ? 20000 : 4000)) { rlStop(); startVision(); window.pinballAuto = 'vision'; } return; }          // the memory does not look as expected any more (another build?): fall back to the vision bot
+    rlBad = 0;
+    if (r.done) { if (r.over) rlOverAt = now + 5000; }
+    else rl.apply(window.PinballAI.policy(r.obs));
+  }
+  function startRL() {
+    var addr = null;
+    try { if (!/[?&]bot=vision/.test(location.search) && window.PinballAI && PinballAI.ready() && window.Module) addr = PinballAI.check(window.Module); } catch (e) { addr = null; }
+    if (!addr) return false;
+    rl = new PinballAI.Driver(window.Module, canvasKey, addr); rlBad = 0; rlOverAt = 0; rlNewAt = 0;
+    rlPrevHook = window.Module.preMainLoop || null; window.Module.preMainLoop = rlHook; document.getElementById('canvas').focus();
+    window.pinballAuto = 'rl'; return true;
+  }
+  function startVision() { prev = null; lastMotion = performance.now(); lastLaunch = performance.now() - 5500; autoTimer = setInterval(look, 45); }
   window.toggleAuto = function () {
-    autoOn = !autoOn; prev = null; lastMotion = performance.now(); lastLaunch = performance.now() - 5500;
-    if (autoOn) autoTimer = setInterval(look, 45); else { clearInterval(autoTimer); autoTimer = 0; }
+    autoOn = !autoOn;
+    if (autoOn) {
+      window.pinballAuto = 'wait'; var t0 = performance.now();
+      var go = function () {
+        if (!autoOn) return;
+        if (startRL()) { clearInterval(rlTimer); rlTimer = 0; return; }
+        if (performance.now() - t0 > 12000) { clearInterval(rlTimer); rlTimer = 0; window.pinballAuto = 'vision'; startVision(); }      // state readout not possible (build changed / not loaded yet): vision bot
+      };
+      rlTimer = setInterval(go, 250); go();
+    } else { clearInterval(autoTimer); autoTimer = 0; rlStop(); window.pinballAuto = ''; }
+    var ab = document.getElementById('autoBadge'); if (ab) ab.style.display = autoOn ? '' : 'none';
     var a = document.querySelector('.menu-autosolve .mi-label'); if (a) a.textContent = (autoOn ? '✓ ' : '\u3000') + a.textContent.replace(/^[✓\u2713]\s*/, '').replace(/^\u3000/, '');
     return autoOn;
   };

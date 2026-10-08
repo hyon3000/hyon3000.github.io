@@ -52,6 +52,8 @@ ul.menu { min-width: 200px; width: max-content; }
             <ul class="menu">
               <li class="th thgostop" onclick="return runMenu(function(){ setTheme('gostop'); });"><a href="#">✓ 고스톱</a></li>
               <li class="th thspider" onclick="return runMenu(function(){ setTheme('spider'); });"><a href="#">　스파이더</a></li>
+              <li class="th thonecard" onclick="return runMenu(function(){ setTheme('onecard'); });"><a href="#">　원카드</a></li>
+              <li class="th thmahjong" onclick="return runMenu(function(){ setTheme('mahjong'); });"><a href="#">　마작</a></li>
             </ul>
           </li>
           <li onclick="return runMenu(function(){ goFullscreen(); });"><a href="#" data-t="full">　전체화면</a></li>
@@ -84,6 +86,8 @@ ul.menu { min-width: 200px; width: max-content; }
               <li onclick="return runMenu(function(){ window.location.href='../board/index.html'; });"><a href="#">　보드게임</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../bubble/index.html'; });"><a href="#">　버블 슈터</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../swap/index.html'; });"><a href="#">　스왑 퍼즐</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../rubik/index.html'; });"><a href="#">　큐브 퍼즐</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../snake/index.html'; });"><a href="#">　스네이크</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　폴리큐브</a></li>
             </ul>
           </li>
@@ -112,20 +116,24 @@ ul.menu { min-width: 200px; width: max-content; }
   var HELP = KO ? {
     gostop: '<b>고스톱 (2인 맞고)</b>: 화투 48장, 각자 10장 · 바닥 8장 · 더미 20장. 시작하면 대전 상대 창이 뜹니다(같은 와이파이에서 코드를 주고받아 연결, 같은 브라우저의 두 창은 자동 연결, 또는 「컴퓨터와 플레이」). 상대 변경: 게임 &gt; 상대 선택(F5). 온라인에서는 패가 화면에서만 가려지므로 정직한 플레이를 전제로 합니다.<br>' +
       '<b>진행</b>: 내 패 한 장을 내면 같은 달 바닥 패와 짝이 맞아 가져옵니다(2장이면 하나 선택, 3장이면 4장 모두). 짝이 없으면 바닥에 놓입니다. 이어서 더미 맨 위 패를 뒤집어 같은 방식으로 처리합니다. 패는 두 번 누르거나 끌어서 냅니다.<br>' +
-      '<b>특수</b>: 뻑(낸 패·뒤집은 패·바닥 패가 같은 달 3장 → 못 먹고 쌓임. 나중에 4번째를 먹은 사람이 상대 피 1장, 자기가 만든 뻑이면 2장, 3번 뻑하면 즉시 패배) · 쪽(방금 낸 패와 뒤집은 패가 짝, 피 1장) · 따닥(바닥에 같은 달 2장, 손패와 뒤집은 패로 모두 먹음, 피 1장) · 싹쓸이(바닥이 비면 피 1장) · 폭탄(같은 달 3장을 손에 들고 바닥에 1장: 3장을 한꺼번에 내고 4장 획득, 피 1장, x2, 이후 2번 뒤집기만 하는 폭탄패) · 흔들기(같은 달 3장이 손에 있고 바닥에 없을 때 선언, x2).<br>' +
-      '<b>점수</b>: 광 3장 3점(비광 포함 2점), 4장 4점, 5장 15점 · 열끗 5장 이상 1점(+1씩), 고도리(2·4·8월 새) +5 · 띠 5장 이상 1점(+1씩), 홍단·청단·초단 각 +3 · 피 10장 이상 1점(+1씩, 쌍피는 2장). 9월 열끗은 일반 열끗입니다.<br>' +
-      '<b>고/스톱</b>: 7점 이상이면 고 또는 스톱(고 뒤에는 점수가 더 오를 때마다 다시 선택). 스톱하면 승리. 1고 +1점, 2고 +2점, 3고부터는 고마다 x2. 흔들기·폭탄은 x2(양쪽 합산). 박(각 x2): 광박(승자 광 3점 이상, 패자 광 0) · 피박(승자 피 점수, 패자 피 5장 이하) · 멍박(승자 열끗 7장 이상) · 고박(패자가 고를 외침). 아무도 7점에 못 미치면 나가리(무승부), 고를 부른 뒤 패가 끝나면 고를 부른 사람이 승리.<br>' +
-      '<b>간단화</b>: 같은 달 4장이 한 사람 손이나 바닥에 있으면 다시 섞습니다(총통 없음).<br>도움말 &gt; 치트: 힌트(F4)는 낼 패와 가져올 바닥 패를 표시하고, 자동으로 풀기(F3)는 내 차례를 컴퓨터가 대신 두며(고/스톱 포함) 게임이 끝나면 새 게임을 시작합니다. 어느 모드에서나 쓸 수 있습니다.',
+      '<b>특수</b>: 뻑(낸 패·뒤집은 패·바닥 패가 같은 달 3장 → 못 먹고 쌓임. 나중에 4번째를 먹은 사람이 상대 피 1장, 자기가 만든 뻑이면 2장, 연속 3번 뻑하면 즉시 승리, 10점) · 쪽(방금 낸 패와 뒤집은 패가 짝, 피 1장) · 따닥(바닥에 같은 달 2장, 손패와 뒤집은 패로 모두 먹음, 피 1장) · 싹쓸이(바닥이 비면 피 1장) · 폭탄(같은 달 3장을 손에 들고 바닥에 1장: 3장을 한꺼번에 내고 4장 획득, 피 1장, x2, 이후 2번 뒤집기만 하는 폭탄패) · 흔들기(같은 달 3장이 손에 있고 바닥에 없을 때 선언, x2).<br>' +
+      '<b>점수</b>: 광 3장 3점(비광 포함 2점), 4장 4점, 5장 15점 · 열끗 5장 이상 1점(+1씩), 고도리(2·4·8월 새) +5 · 띠 5장 이상 1점(+1씩), 홍단·청단·초단 각 +3 · 피 10장 이상 1점(+1씩, 쌍피는 2장). 9월 열끗(술잔)은 열끗 또는 쌍피로 계산하며 버튼으로 고릅니다(기본은 점수가 높은 쪽, 고도리에는 포함 안 됨).<br>' +
+      '<b>고/스톱</b>: 7점 이상이면 고 또는 스톱(고 뒤에는 점수가 더 오를 때마다 다시 선택). 스톱하면 승리. 1고 +1점, 2고 +2점, 3고부터는 고마다 x2. 흔들기·폭탄은 x2(양쪽 합산). 박(각 x2): 광박(승자 광 3점 이상, 패자 광 0) · 피박(승자 피 점수, 패자 피 5장 이하) · 멍박(승자 열끗 7장 이상) · 고박(패자가 고를 외침). 아무도 7점에 못 미치면 나가리(무승부): 다음 판 점수가 x2(연속이면 계속 x2)이고 선은 그대로. 고를 부른 뒤 패가 끝나면 고를 부른 사람이 승리. 선은 이전 판의 승자.<br>' +
+      '<b>총통</b>: 처음 10장에 같은 달 4장이 있으면 즉시 승리(10점). 바닥에 같은 달 4장이 깔리면 다시 섞습니다.<br>카드 그림: Marcus Richert / Spenĉjo (Wikimedia Commons, 루이 만티아 하나후다 기반), CC BY-SA 4.0 - 자세한 내용은 CREDITS.md.<br>도움말 &gt; 치트: 힌트(F4)는 낼 패와 가져올 바닥 패를 표시하고, 자동으로 풀기(F3)는 내 차례를 컴퓨터가 대신 두며(고/스톱 포함) 게임이 끝나면 새 게임을 시작합니다. 어느 모드에서나 쓸 수 있습니다.',
+    onecard: '<b>원카드 (2인)</b>: 트럼프 52장 + 조커 2장, 각자 7장. 같은 무늬나 같은 숫자를 내고, 낼 수 없으면 한 장 뽑습니다. 공격: 2(+2) A(+3) ♠A(+5) 조커(+5/+7), 방어는 공격 카드로, 못 막으면 쌓인 장수만큼 뽑습니다. J·Q·K는 한 번 더, 7은 무늬 변경. 한 장 남으면 「원카드」를 눌러야 하고 손패가 20장이 되면 집니다. 시작하면 대전 상대 창이 뜹니다(온라인 또는 컴퓨터). 자세한 규칙은 게임 안의 「규칙」 버튼을 보세요.',
+    mahjong: '<b>리치 마작</b>: 나(남가)와 컴퓨터 3명, 동풍전. 패를 두 번 누르거나 위로 끌어 버리세요. 치/퐁/깡/론/쯔모/리치 버튼은 테이블 아래에 나타납니다. 힌트(F4)는 추천 수를 표시하고, 자동(F3)은 컴퓨터가 내 자리를 대신 플레이합니다. 온라인 대전은 지원하지 않습니다. 패 그림: FluffyStuff/riichi-mahjong-tiles (CC0), 계산 라이브러리: takayama-lily riichi (MIT).',
     spider: '<b>스파이더 솔리테어</b>: 카드 104장, 10열. 처음 54장(6,6,6,6,5,5,5,5,5,5장)을 깔고 각 열 맨 위만 앞면. 오른쪽 위의 더미(50장)를 누르면 각 열에 한 장씩 10장을 나눠 줍니다(빈 열이 있으면 불가).<br>' +
       '<b>이동</b>: 카드를 숫자가 하나 더 큰 카드 위(무늬 무관)나 빈 열로 옮깁니다. 여러 장은 같은 무늬로 연속 내림차순인 묶음만 한꺼번에 이동. K부터 A까지 같은 무늬 13장이 완성되면 자동으로 치워지고, 8벌을 모두 치우면 승리. 끌어 놓기, 카드를 누른 뒤 목적 열 누르기, 카드 더블클릭/더블탭(가장 좋은 열로 이동) 모두 됩니다.<br>' +
       '<b>점수</b>: 500점에서 시작, 이동/배분마다 -1, 한 벌 완성마다 +100. 무르기는 제한 없이 직전 상태로 되돌립니다. 난이도: 1무늬(쉬움), 2무늬, 4무늬.<br>도움말 &gt; 치트: 힌트(F4)는 좋은 수 하나를 표시하고(다시 누르면 다음 후보, 마지막은 배분), 자동으로 풀기(F3)는 컴퓨터가 계속 대신 둡니다(뒤집히지 않은 카드까지 보고 계획하는 치트입니다).'
   } : {
     gostop: '<b>Go-Stop (2-player Matgo)</b>: 48 hwatu cards: 10 each, 8 on the table, 20 in the stock. When it opens, an opponent window appears (two players on the same Wi-Fi swap codes, two windows of one browser connect by themselves, or "Play vs Computer"). Change opponent with Game &gt; Choose Opponent (F5). Online, hidden hands are only hidden by the screen, so honest play is assumed.<br>' +
       '<b>Turn</b>: play one hand card: a table card of the same month is captured as a pair (two match: pick one; three: take all four), otherwise the card stays on the table. Then the top stock card is flipped and handled the same way. Tap a card twice or drag it to play.<br>' +
-      '<b>Specials</b>: Ppeok (played card, flipped card and a table card are the same month: nothing is captured and the 3 stay stuck; whoever captures the 4th gets 1 junk card from the opponent, 2 if it was their own ppeok; three ppeok in one game lose the game) · Jjok (the flipped card matches the card you just put down: take both + 1 junk) · Ttadak (two same-month cards on the table, you take both pairs with the hand card and the flipped card: + 1 junk) · Sweep (table empty: + 1 junk) · Bomb (3 cards of a month in hand + 1 on the table: play all 3, take 4, + 1 junk, x2, and you get 2 flip-only bomb cards) · Shake (3 cards of a month in hand, none on the table: declare it, x2).<br>' +
-      '<b>Scoring</b>: Bright 3 = 3 pts (2 with the Rain bright), 4 = 4, 5 = 15 · Animal 5+ = 1 (+1 each more), Godori (the 3 birds of Feb/Apr/Aug) +5 · Ribbon 5+ = 1 (+1 each more), Hongdan / Cheongdan / Chodan +3 each · Junk 10+ = 1 (+1 each more, double junk counts 2). The September animal is a normal animal.<br>' +
-      '<b>Go / Stop</b>: with 7+ points you choose Go or Stop (after a Go, again whenever your score rises). Stop wins. 1 Go +1, 2 Go +2, from the 3rd Go each Go doubles. Shake / bomb = x2 each (both players counted). Bak (each x2): Gwang-bak (winner has 3+ points of Brights, loser none) · Pi-bak (winner scores Junk, loser has 5 or fewer) · Meong-bak (winner has 7+ Animals) · Go-bak (loser had called Go). Nobody reaches 7: Nagari (draw); if the cards run out after a Go, the Go caller wins.<br>' +
-      '<b>Simplified</b>: a deal with 4 cards of one month in a hand or on the table is reshuffled (no Chongtong).<br>Help &gt; Cheat: Give a Hint (F4) marks the card to play and the table card to take; Solve Automatically (F3) plays your side (including Go / Stop) and starts a new game after each one. Works in every mode.',
+      '<b>Specials</b>: Ppeok (played card, flipped card and a table card are the same month: nothing is captured and the 3 stay stuck; whoever captures the 4th gets 1 junk card from the opponent, 2 if it was their own ppeok; three ppeok in a row by the same player win the game at once, 10 points) · Jjok (the flipped card matches the card you just put down: take both + 1 junk) · Ttadak (two same-month cards on the table, you take both pairs with the hand card and the flipped card: + 1 junk) · Sweep (table empty: + 1 junk) · Bomb (3 cards of a month in hand + 1 on the table: play all 3, take 4, + 1 junk, x2, and you get 2 flip-only bomb cards) · Shake (3 cards of a month in hand, none on the table: declare it, x2).<br>' +
+      '<b>Scoring</b>: Bright 3 = 3 pts (2 with the Rain bright), 4 = 4, 5 = 15 · Animal 5+ = 1 (+1 each more), Godori (the 3 birds of Feb/Apr/Aug) +5 · Ribbon 5+ = 1 (+1 each more), Hongdan / Cheongdan / Chodan +3 each · Junk 10+ = 1 (+1 each more, double junk counts 2). The September animal (sake cup) counts either as an animal or as double junk, your choice by button (default: whichever scores more; it is not a Godori bird).<br>' +
+      '<b>Go / Stop</b>: with 7+ points you choose Go or Stop (after a Go, again whenever your score rises). Stop wins. 1 Go +1, 2 Go +2, from the 3rd Go each Go doubles. Shake / bomb = x2 each (both players counted). Bak (each x2): Gwang-bak (winner has 3+ points of Brights, loser none) · Pi-bak (winner scores Junk, loser has 5 or fewer) · Meong-bak (winner has 7+ Animals) · Go-bak (loser had called Go). Nobody reaches 7: Nagari (draw): the next game\'s points are x2 (x2 again for each further Nagari) and the same player moves first. If the cards run out after a Go, the Go caller wins. The winner of the previous game moves first.<br>' +
+      '<b>Chongtong</b>: four cards of one month in the first 10 cards win at once (10 points). Four of a month on the table: reshuffle.<br>Card art: Marcus Richert / Spenĉjo (Wikimedia Commons, based on Louie Mantia Jr.\'s Hanafuda), CC BY-SA 4.0 - see CREDITS.md.<br>Help &gt; Cheat: Give a Hint (F4) marks the card to play and the table card to take; Solve Automatically (F3) plays your side (including Go / Stop) and starts a new game after each one. Works in every mode.',
+    onecard: '<b>One Card (2 players)</b>: 52 cards + 2 jokers, 7 each. Play the same suit or rank, otherwise draw one. Attacks: 2 (+2), A (+3), spade A (+5), jokers (+5/+7); defend with an attack card or draw the stack. J/Q/K = play again, 7 = change suit. Press One Card when you have one left; 20 cards in hand and you lose. An opponent window opens on start (online or computer). See the Rules button in the game for details.',
+    mahjong: '<b>Riichi Mahjong</b>: you (South) vs 3 computers, East round only. Tap a tile twice (or drag it up) to discard; Chi/Pon/Kan/Ron/Tsumo/Riichi buttons appear below the table. Hint (F4) marks the recommended move, Auto (F3) lets the computer play your seat. Online play is not available. Tile art: FluffyStuff/riichi-mahjong-tiles (CC0); scoring library: takayama-lily riichi (MIT).',
     spider: '<b>Spider Solitaire</b>: 104 cards, 10 columns. 54 cards are dealt first (6,6,6,6,5,5,5,5,5,5), only the top card of each column face up. Click the stock (50 cards) to deal one card on every column (not allowed while a column is empty).<br>' +
       '<b>Moves</b>: put a card on a card one rank higher (any suit) or on an empty column. Several cards move together only if they are a same-suit descending run. A complete K..A run of one suit is removed automatically; remove all 8 to win. Drag and drop, tap a card then the target column, or double-click / double-tap a card (moves it to the best column).<br>' +
       '<b>Score</b>: starts at 500, -1 per move or deal, +100 per completed run. Undo is unlimited and restores the earlier state. Difficulty: 1 suit (easy), 2 suits, 4 suits.<br>Help &gt; Cheat: Give a Hint (F4) shows one good move (press again for the next candidate, finally the deal); Solve Automatically (F3) keeps playing for you (it plans with full knowledge of the face-down cards: it is a cheat).'
@@ -133,7 +141,7 @@ ul.menu { min-width: 200px; width: max-content; }
 document.documentElement.lang = KO ? 'ko' : 'en';
   [].forEach.call(document.querySelectorAll('[data-t]'), function (e) { var k = e.getAttribute('data-t'); if (T[k] !== undefined) e.textContent = T[k]; });
   
-  var theme = 'gostop', NAMES = { gostop: KO ? '고스톱' : 'Go-Stop', spider: KO ? '스파이더' : 'Spider' }, TH = ['gostop', 'spider'];
+  var theme = 'gostop', NAMES = { gostop: KO ? '고스톱' : 'Go-Stop', spider: KO ? '스파이더' : 'Spider', onecard: KO ? '원카드' : 'One Card', mahjong: KO ? '마작' : 'Mahjong' }, TH = ['gostop', 'spider', 'onecard', 'mahjong'];
   function setHelp() { document.getElementById('helpTxt').innerHTML = HELP[theme]; }
   function resize() {
     var vw = window.innerWidth, vh = window.innerHeight, win = document.getElementById('mainwin'), chrome = 46;
@@ -147,7 +155,7 @@ document.documentElement.lang = KO ? 'ko' : 'en';
     document.getElementById('ttitle').textContent = NAMES[t]; document.title = NAMES[t];
     document.getElementById('ticon').style.backgroundImage = 'url(icon' + t + '.png)';
     TH.forEach(function (k) { var a = document.querySelector('.th' + k + ' a'); a.textContent = (k === t ? '✓ ' : '\u3000') + NAMES[k]; });
-    [].forEach.call(document.querySelectorAll('.onlyGS'), function (e) { e.style.display = t === 'gostop' ? '' : 'none'; });
+    [].forEach.call(document.querySelectorAll('.onlyGS'), function (e) { e.style.display = (t === 'gostop' || t === 'onecard') ? '' : 'none'; });
     setHelp();
   };
   function closeMenus() {
@@ -185,7 +193,7 @@ document.documentElement.lang = KO ? 'ko' : 'en';
     hookFrame();
     TH.forEach(function (k) { var a = document.querySelector('.th' + k + ' a'); a.textContent = (k === theme ? '✓ ' : '\u3000') + NAMES[k]; });
     document.getElementById('ttitle').textContent = NAMES.gostop; document.title = NAMES.gostop; setHelp();
-    var g = new URLSearchParams(location.search).get('theme'); if (g === 'spider') setTheme('spider');
+    var g = new URLSearchParams(location.search).get('theme'); if (g === 'spider' || g === 'onecard' || g === 'mahjong') setTheme(g);
   });
 })();
 </script>
@@ -193,7 +201,7 @@ document.documentElement.lang = KO ? 'ko' : 'en';
 /* "Other games" entries that are not translated by the page itself: English names for non-Korean browsers */
 (function () {
   if (/^ko/i.test(navigator.language || 'ko')) return;
-  var EN = { '스왑 퍼즐': 'Swap Puzzle', '카드게임': 'Card Games', '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '스왑 퍼즐': 'Swap Puzzle', '지뢰찾기': 'Minesweeper', '폴리큐브': 'Polycube' };
+  var EN = { '큐브 퍼즐': 'Cube Puzzles', '스네이크': 'Snake', '스왑 퍼즐': 'Swap Puzzle', '카드게임': 'Card Games', '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '스왑 퍼즐': 'Swap Puzzle', '지뢰찾기': 'Minesweeper', '폴리큐브': 'Polycube' };
   function run() { [].forEach.call(document.querySelectorAll('.menu a'), function (a) { if (a.children.length) return; var s = a.textContent.replace(/^[\u3000\s]+/, ''); if (EN[s]) a.textContent = '\u3000' + EN[s]; }); }
   if (document.readyState === 'complete') run(); else window.addEventListener('load', run);
 })();

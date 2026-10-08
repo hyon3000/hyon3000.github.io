@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"><title>pb harness</title></head><body style="margin:0;background:#000">
+<canvas id="canvas" width="640" height="480" tabindex="0"></canvas>
+<script>
+// virtual clock: the game only sees time that we advance (16.667 ms per game frame) and a requestAnimationFrame that we call ourselves
+(function(){
+  var vt = 1000, rafCb = null, realNow = performance.now.bind(performance);
+  var tick = 0;      // every read advances the clock by 2 us so busy-wait loops (SDL_Delay / sleep) end; reset every frame -> deterministic
+  performance.now = function(){ tick += 0.002; return vt + tick; };
+  Date.now = function(){ tick += 0.002; return Math.floor(vt + tick) + 1.6e12; };
+  window.requestAnimationFrame = function(cb){ rafCb = cb; return 1; };
+  window.LOG=[]; window.onerror=function(m){LOG.push('err '+m)}; window.addEventListener('unhandledrejection',function(e){LOG.push('rej '+e.reason)}); var ost=window.setTimeout; window.setTimeout=function(f,t){ if(f && f.name==='Browser_mainLoop_runner'){ rafCb=f; return 1; } return ost.apply(window,arguments); };
+  window.PB = { key: function(type, code, kc, k){ var e = new KeyboardEvent(type, { key: k, code: code, keyCode: kc, which: kc, bubbles: true, cancelable: true });
+      try { Object.defineProperty(e, 'keyCode', { get: function(){ return kc; } }); Object.defineProperty(e, 'which', { get: function(){ return kc; } }); } catch (x) {}
+      document.getElementById('canvas').dispatchEvent(e); },
+    f32: function(){ var b = Module.HEAPU8.buffer; return new Float32Array(b, 0, b.byteLength >> 2); },
+    frames: 0, hasLoop: function(){ return !!rafCb; }, ready: false, realNow: realNow,
+    step: function(n){ for (var i = 0; i < n; i++) { vt += 1000/60; tick = 0; var cb = rafCb; rafCb = null; if (cb) { cb(vt); PB.frames++; } } return PB.frames; } };
+  var cv = document.getElementById('canvas');
+  try { cv.getContext('webgl', { preserveDrawingBuffer: true, alpha: false, antialias: false, depth: true, stencil: false }); } catch (e) {}
+  window.Module = { canvas: cv, locateFile: function(p){ return p; }, print: function(x){LOG.push('o '+x)}, printErr: function(x){LOG.push('e '+x)},
+    setStatus: function(s){ if (!s) PB.ready = true; }, totalDependencies: 0, monitorRunDependencies: function(){} };
+  var sc = document.createElement('script'); sc.src = 'SpaceCadetPinball.js'; document.body.appendChild(sc);
+})();
+</script><script src="ai.js"></script><script src="env.js"></script></body></html>

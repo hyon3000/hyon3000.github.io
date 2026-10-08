@@ -33,10 +33,12 @@
   function has4(arr) { var c = cnt4(arr); return Object.keys(c).some(function (m) { return c[m] >= 4; }); }
 
   /* ---- scoring of a captured pile */
-  function score(cap) {
+  var CUP = 32;     /* 9월 열끗 (sake cup): counts as an animal or as a double junk, the owner's choice */
+  function score1(cap, cupPi) {
     var g = 0, rain = 0, a = 0, bird = 0, r = 0, h = 0, c = 0, o = 0, pi = 0, cj = 0;
     cap.forEach(function (id) {
       var s = SUB[id];
+      if (id === CUP && cupPi) { pi += 2; cj++; return; }
       switch (CLS[id]) {
         case 'G': g++; if (s === 'r') rain = 1; break;
         case 'A': a++; if (s === 'b') bird++; break;
@@ -48,22 +50,35 @@
       rb: r >= 5 ? r - 4 : 0, hong: h === 3 ? 3 : 0, cheong: c === 3 ? 3 : 0, cho: o === 3 ? 3 : 0, jk: pi >= 10 ? pi - 9 : 0 };
     P.total = P.gw + P.an + P.bird + P.rb + P.hong + P.cheong + P.cho + P.jk;
     P.n = { g: g, a: a, r: r, pi: pi, cards: cap.length, rain: rain };
+    P.cupPi = !!(cupPi && cap.indexOf(CUP) >= 0);
     return P;
   }
+  /* mode: true = cup counts as double junk, false = as animal, null/undefined = whichever scores more (ties: animal) */
+  function score(cap, mode) {
+    if (cap.indexOf(CUP) < 0) return score1(cap, false);
+    if (mode === true || mode === false) return score1(cap, mode);
+    var a = score1(cap, false), b = score1(cap, true);
+    return b.total > a.total ? b : a;
+  }
+  function scoreOf(s, p) { return score(s.cap[p], s.cup[p]); }
 
   /* ---- state */
-  function newState(seed, first) {
+  function newState(seed, first, carry) {
     var k0 = 0, deck, h0, h1, f;
     for (;;) {
       deck = shuffled((seed + k0 * 7919) >>> 0);
       h0 = deck.slice(0, 10); h1 = deck.slice(10, 20); f = deck.slice(20, 28);
-      if (!has4(h0) && !has4(h1) && !has4(f)) break;      /* redeal on 4 of a month (simplification of the 'chongtong' rule) */
+      if (!has4(f)) break;      /* 4 cards of one month on the table: redeal */
       k0++;
     }
     var srt = function (a) { return a.sort(function (x, y) { return x - y; }); };
-    return { seed: seed >>> 0, first: first, hands: [srt(h0), srt(h1)], field: f, stock: deck.slice(28).reverse(), cap: [[], []],
+    var s = { carry: carry || 1, cup: [null, null], ppeokStreak: [0, 0], seed: seed >>> 0, first: first, hands: [srt(h0), srt(h1)], field: f, stock: deck.slice(28).reverse(), cap: [[], []],
       turn: first, phase: 'play', goCount: [0, 0], goScore: [0, 0], shakes: [0, 0], shaken: [{}, {}], skips: [0, 0],
       ppeok: {}, ppeokCnt: [0, 0], cur: null, ev: [], cands: null, result: null, n: 0 };
+    /* chongtong: 4 cards of one month in a hand wins at once with 10 points */
+    var ct = [0, 1].filter(function (q) { return has4(s.hands[q]); });
+    if (ct.length) { var w = ct.indexOf(first) >= 0 ? first : ct[0]; s.phase = 'over'; s.result = { winner: w, draw: false, base: 10, goBonus: 0, goMul: 1, shakeMul: 1, bak: [], special: 'chongtong', carry: s.carry, pts: 10 * s.carry, sc: [0, 0] }; }
+    return s;
   }
   function remaining(s, p) { return s.hands[p].length + s.skips[p]; }
   function fieldOf(s, m) { return s.field.filter(function (id) { return mon(id) === m; }); }
@@ -158,8 +173,8 @@
         break;
       case 'pair':
         if (mx === c.hm) {            /* ppeok: the three cards stay on the table */
-          s.field.push(c.hc, x); s.ppeok[c.hm] = p; s.ppeokCnt[p]++; ev(s, 'ppeok', p);
-          if (s.ppeokCnt[p] >= 3) { endGame(s, p, '3ppeok'); return; }
+          s.field.push(c.hc, x); s.ppeok[c.hm] = p; s.ppeokCnt[p]++; s.ppeokStreak[p]++; ev(s, 'ppeok', p);
+          if (s.ppeokStreak[p] >= 3) { endGame(s, p, '3ppeok'); return; }
         } else { capture(s, p, c.pair); stockNormal(s, x); }
         break;
       case 'pick2':
@@ -181,9 +196,11 @@
   }
   function finish(s) {
     if (s.phase === 'over') return;
-    var c = s.cur, p = c.p, rem = remaining(s, 0) + remaining(s, 1);
+    var c = s.cur, p = c.p;
+    if (!s.ev.some(function (e) { return e.k === 'ppeok'; })) s.ppeokStreak[p] = 0;
+    var rem = remaining(s, 0) + remaining(s, 1);
     if (s.field.length === 0 && c.got.length > 0 && rem > 0) { steal(s, p, 1); ev(s, 'sweep', p); }
-    var sc = score(s.cap[p]).total;
+    var sc = scoreOf(s, p).total;
     if (rem === 0) { if (sc >= 7 && sc > s.goScore[p]) endGame(s, p); else endGame(s, null); return; }
     if (sc >= 7 && sc > s.goScore[p]) { s.phase = 'go'; return; }
     nextTurn(s);
@@ -195,13 +212,13 @@
   function go(s, yes) {
     if (s.phase !== 'go') return false;
     var p = s.turn; s.n++;
-    if (yes) { s.goCount[p]++; s.goScore[p] = score(s.cap[p]).total; s.ev = [{ k: 'go', p: p, x: s.goCount[p] }]; nextTurn(s); }
+    if (yes) { s.goCount[p]++; s.goScore[p] = scoreOf(s, p).total; s.ev = [{ k: 'go', p: p, x: s.goCount[p] }]; nextTurn(s); }
     else endGame(s, p);
     return true;
   }
   function settle(s, w, special) {
-    var l = 1 - w, sw = score(s.cap[w]), sl = score(s.cap[l]), goN = s.goCount[w];
-    var base = special === '3ppeok' ? 7 : sw.total, gb = Math.min(goN, 2), gm = goN > 2 ? Math.pow(2, goN - 2) : 1;
+    var l = 1 - w, sw = scoreOf(s, w), sl = scoreOf(s, l), goN = s.goCount[w];
+    var base = special ? 10 : sw.total, gb = Math.min(goN, 2), gm = goN > 2 ? Math.pow(2, goN - 2) : 1;
     var shake = Math.pow(2, s.shakes[0] + s.shakes[1]), bak = [];
     if (!special) {
       if (sw.gw > 0 && sl.n.g === 0) bak.push('gwang');
@@ -209,18 +226,24 @@
       if (sw.n.a >= 7) bak.push('meong');
       if (s.goCount[l] > 0) bak.push('go');
     }
-    return { winner: w, draw: false, base: base, goBonus: gb, goMul: gm, shakeMul: shake, bak: bak, special: special || '',
-      pts: (base + gb) * gm * shake * Math.pow(2, bak.length), sc: [score(s.cap[0]).total, score(s.cap[1]).total] };
+    var carry = s.carry || 1;
+    return { winner: w, draw: false, base: base, goBonus: special ? 0 : gb, goMul: special ? 1 : gm, shakeMul: special ? 1 : shake, bak: bak, special: special || '', carry: carry,
+      pts: special ? 10 * carry : (base + gb) * gm * shake * Math.pow(2, bak.length) * carry, sc: [scoreOf(s, 0).total, scoreOf(s, 1).total] };
   }
   function endGame(s, stopper, special) {
     var w = stopper;
     if (w == null) {
       var goers = [0, 1].filter(function (q) { return s.goCount[q] > 0; });
       if (goers.length === 1) w = goers[0];
-      else if (goers.length === 2) { var a = score(s.cap[0]).total, b = score(s.cap[1]).total; w = a > b ? 0 : b > a ? 1 : null; }
+      else if (goers.length === 2) { var a = scoreOf(s, 0).total, b = scoreOf(s, 1).total; w = a > b ? 0 : b > a ? 1 : null; }
     }
     s.phase = 'over'; s.cands = null;
-    s.result = w == null ? { winner: -1, draw: true, pts: 0, base: 0, bak: [], special: '', sc: [score(s.cap[0]).total, score(s.cap[1]).total] } : settle(s, w, special);
+    s.result = w == null ? { winner: -1, draw: true, pts: 0, base: 0, bak: [], special: '', carry: s.carry || 1, sc: [scoreOf(s, 0).total, scoreOf(s, 1).total] } : settle(s, w, special);
+  }
+  function cup(s, pi) {
+    var p = s.turn;
+    if ((s.phase !== 'play' && s.phase !== 'go') || s.cap[p].indexOf(CUP) < 0) return false;
+    s.cup[p] = !!pi; s.n++; s.ev = []; return true;
   }
   function apply(s, a) {
     if (!a) return false;
@@ -231,6 +254,7 @@
       case 'shake': return shake(s, a.month);
       case 'bomb': return bomb(s, a.month);
       case 'skip': return skip(s);
+      case 'cup': return cup(s, a.pi);
     }
     return false;
   }
@@ -263,7 +287,7 @@
       if (owned(s, p, function (x) { return CLS[x] === 'R'; }) >= 4) v += 2;
     } else {
       v = sub === 'd' ? 4.5 : 2.2;
-      if (score(mine).n.pi >= 7) v += 1;
+      if (score(mine, s.cup[p]).n.pi >= 7) v += 1;
     }
     return v;
   }
@@ -302,7 +326,7 @@
     return best;
   }
   function danger(s, p) {
-    var o = 1 - p, sc = score(s.cap[o]), d = sc.total, n = sc.n;
+    var o = 1 - p, sc = scoreOf(s, o), d = sc.total, n = sc.n;
     var part = 0;
     if (n.g === 2) part += 1.5;
     ['h', 'c', 'o'].forEach(function (k) { var c = owned(s, o, function (x) { return SUB[x] === k && CLS[x] === 'R'; }); if (c === 2) part += 1.5; });
@@ -311,7 +335,7 @@
     return d + part;
   }
   function decideGo(s, p) {
-    var sc = score(s.cap[p]).total, left = remaining(s, p), d = danger(s, p), g = s.goCount[p];
+    var sc = scoreOf(s, p).total, left = remaining(s, p), d = danger(s, p), g = s.goCount[p];
     if (left <= 2) return false;
     if (d >= 4.5) return false;
     if (g >= 2 && sc < 12) return false;
@@ -349,7 +373,7 @@
     return a;
   }
 
-  var GS = { DEF: DEF, CLS: CLS, SUB: SUB, mon: mon, piVal: piVal, kindKey: kindKey, score: score, newState: newState, apply: apply, play: play, pick: pick, go: go, bomb: bomb, skip: skip, shake: shake,
+  var GS = { DEF: DEF, CLS: CLS, SUB: SUB, mon: mon, piVal: piVal, kindKey: kindKey, score: score, scoreOf: scoreOf, CUP: CUP, newState: newState, apply: apply, play: play, pick: pick, go: go, bomb: bomb, skip: skip, shake: shake,
     bombable: bombable, shakable: shakable, remaining: remaining, fieldOf: fieldOf, settle: settle, shuffled: shuffled, cv: cv, choose: choose, hint: hint, danger: danger, decideGo: decideGo, clone: function (s) { return JSON.parse(JSON.stringify(s)); } };
   root.GS = GS;
   if (typeof module !== 'undefined' && module.exports) module.exports = GS;

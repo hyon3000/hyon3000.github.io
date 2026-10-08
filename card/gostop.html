@@ -14,16 +14,17 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d3b2a;color:#f2f2e8;
 #app.wide{grid-template-columns:minmax(0,1fr) 36%;grid-template-rows:auto minmax(0,1fr) auto auto;column-gap:8px;
  grid-template-areas:"ohand ocap" "mid status" "mhand mcap" "ctrl ctrl"}
 #app.wide #oinfo{display:none}
-.card{position:relative;width:var(--cw);height:calc(var(--cw)*1.55);flex:none;border-radius:calc(var(--cw)*.11);box-shadow:0 1px 3px rgba(0,0,0,.55);background:#fbf6e6;transition:transform .12s,box-shadow .12s}
-.card svg{width:100%;height:100%;display:block;pointer-events:none}
-.card.back{background:repeating-linear-gradient(45deg,#a32a2a 0 4px,#8a2020 4px 8px);border:2px solid #f0e6c8}
-.card.back::after{content:"";position:absolute;left:50%;top:50%;width:46%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;background:#f0e6c8;opacity:.8}
+.card{position:relative;width:var(--cw);height:calc(var(--cw)*1.55);flex:none;border-radius:calc(var(--cw)*.11);box-shadow:0 1px 3px rgba(0,0,0,.55);background:#ef1d1d;overflow:hidden;transition:transform .12s,box-shadow .12s}
+.card img{width:100%;height:100%;display:block;pointer-events:none;-webkit-user-drag:none}
+.card .lb{position:absolute;left:50%;bottom:3%;transform:translateX(-50%);color:#fff;font-weight:700;font-size:calc(var(--cw)*.2);line-height:1.25;padding:0 .35em;border-radius:99px;border:1px solid #fffc;white-space:nowrap;pointer-events:none;box-shadow:0 1px 2px #0008}
+body.nolb .card .lb,.mini .lb{display:none}
+.card.back{background:repeating-linear-gradient(45deg,transparent 0 4px,rgba(255,255,255,.17) 4px 5px),repeating-linear-gradient(-45deg,transparent 0 4px,rgba(255,255,255,.17) 4px 5px),#a8212b;border:2px solid #f4ead0;box-shadow:inset 0 0 0 2px #a8212b,inset 0 0 0 3px #f4ead0,0 1px 3px rgba(0,0,0,.55)}
 .mini{--cw:var(--mw)}
 #oinfo,#minfo{display:flex;align-items:center;gap:8px;min-height:18px;font-weight:600;white-space:nowrap;overflow:hidden}
 .nm{opacity:.9}.pts{background:#0006;border-radius:10px;padding:0 8px;font-weight:700}.pts b{color:#ffd54a}
 .tag{font-size:11px;opacity:.85}
-#ohand{grid-area:ohand;display:flex;justify-content:center;height:calc(var(--cw)*.82);overflow:hidden}
-#ohand .card{--cw:calc(var(--cw0)*.9);height:calc(var(--cw0)*1.4);margin-left:calc(var(--cw0)*-.42)}
+#ohand{grid-area:ohand;display:flex;justify-content:center;align-items:center;height:calc(var(--cw0)*.96)}
+#ohand .card{width:calc(var(--cw0)*.6);height:calc(var(--cw0)*.93);margin-left:calc(var(--cw0)*-.26)}
 #ohand .card:first-child{margin-left:0}
 .cap{display:flex;flex-direction:column;gap:2px}
 .caprow{display:flex;gap:6px;align-items:flex-end}
@@ -114,10 +115,11 @@ var TXT = {
   win: ['You win!', '승리!'], lose: ['You lose', '패배'], draw: ['Draw (Nagari) - nobody reached 7', '나가리 - 아무도 7점에 못 미침'],
   base: ['Card points', '패 점수'], goB: ['Go bonus', '고 보너스'], goM: ['Go multiplier', '고 배수'], shM: ['Shake / bomb multiplier', '흔들기·폭탄 배수'],
   bak: { gwang: ['Gwang-bak x2', '광박 x2'], pi: ['Pi-bak x2', '피박 x2'], meong: ['Meong-bak x2', '멍박 x2'], go: ['Go-bak x2', '고박 x2'] },
-  total: ['Result', '결과'], ppeok3: ['Three ppeok: instant win', '쓰리뻑: 즉시 승리'], newg: ['New game', '새 게임'], close: ['Close', '닫기'],
+  total: ['Result', '결과'], ppeok3: ['Three ppeok in a row: instant win (10)', '3연뻑: 즉시 승리 (10점)'], chong: ['Chongtong: four of a month in the first hand, instant win (10)', '총통: 처음 패에 같은 달 4장, 즉시 승리 (10점)'], carryT: ['Nagari carry-over', '나가리 이월'], cupPi: ['Sep cup counts as: Double junk (tap to switch)', '9월 술잔: 쌍피로 계산 (누르면 변경)'], cupAn: ['Sep cup counts as: Animal (tap to switch)', '9월 술잔: 열끗으로 계산 (누르면 변경)'], newg: ['New game', '새 게임'], close: ['Close', '닫기'],
   session: ['Session', '누적'], wlose: ['W-L-D', '승-패-무'],
   ev: { ppeok: ['Ppeok!', '뻑!'], jjok: ['Jjok!', '쪽!'], ttadak: ['Ttadak!', '따닥!'], sweep: ['Sweep!', '싹쓸이!'], bomb: ['Bomb!', '폭탄!'], shake: ['Shake! x2', '흔들기! x2'], eat: ['Ppeok eaten', '뻑 먹기'], selfeat: ['Self-ppeok!', '자뻑!'], go: ['Go %1!', '%1고!'] },
   pwho: ['Last: ', '직전: '], played: ['hand', '낸 패'], flipped: ['stock', '뒤집은 패'], stolen: ['took a junk card', '피 한 장 가져옴'],
+  labels: ['Labels', '라벨'],
   bombc: ['Bomb cards', '폭탄패'],
   noOpp: ['No opponent yet - use Game > Choose Opponent (F5).', '상대가 없습니다 - 게임 > 상대 선택(F5).'],
   disc: ['Opponent disconnected.', '상대가 연결을 끊었습니다.'], desync: ['Out of sync with opponent - start a new game.', '상대와 화면이 맞지 않습니다. 새 게임을 시작하세요.'],
@@ -132,31 +134,31 @@ var CLS = GS.CLS, SUB = GS.SUB, mon = GS.mon;
 
 /* ---------- controller state ---------- */
 var S = null, mode = 'idle', me = 0, link = null, autoOn = false, hintObj = null, pendingHint = false, sel = -1, timer = 0, gen = 0, speed = 1, fast = false;
-var gid = 0, lastWinner = -1, firstP = -1, notice = '', stats = { w: 0, l: 0, d: 0, pts: 0 }, snaps = [], resShown = false, toastTimer = 0, pairing = false, drag = null;
+var gid = 0, nextFirst = -1, carry = 1, firstP = -1, notice = '', stats = { w: 0, l: 0, d: 0, pts: 0 }, snaps = [], resShown = false, toastTimer = 0, pairing = false, drag = null;
 var local = /[?&]ai=1/.test(location.search);
 function D(ms) { return fast ? 0 : ms * speed; }
 
 /* ---------- start / games ---------- */
 function rndSeed() { return (Math.random() * 4294967296) >>> 0; }
-function pickFirst() { return lastWinner >= 0 ? lastWinner : (Math.random() < 0.5 ? 0 : 1); }
-function initGame(seed, first, g) {
-  S = GS.newState(seed, first); gid = g; hintObj = null; sel = -1; resShown = false; snaps = []; notice = '';
+function pickFirst() { return nextFirst >= 0 ? nextFirst : (Math.random() < 0.5 ? 0 : 1); }   /* winner of the last game goes first; after a Nagari the same player again */
+function initGame(seed, first, g, cr) {
+  S = GS.newState(seed, first, cr || 1); gid = g; hintObj = null; sel = -1; resShown = false; snaps = []; notice = '';
   $('res').style.display = 'none'; $('gsbox').style.display = 'none';
-  snapNow(); render(); kick();
+  snapNow(); render(); if (S.phase === 'over') onOver(); kick();
 }
 function snapNow() { if (mode === 'ai' && S && S.phase === 'play' && S.turn === me) snaps.push({ n: S.n, j: JSON.stringify(S) }); }
-function newLocal() { initGame(rndSeed(), pickFirst(), gid + 1); }
-function hostNew() { var seed = rndSeed(), first = pickFirst(), g = gid + 1; if (link) link.send({ t: 'new', seed: seed, first: first, gid: g }); initGame(seed, first, g); }
+function newLocal() { initGame(rndSeed(), pickFirst(), gid + 1, carry); }
+function hostNew() { var seed = rndSeed(), first = pickFirst(), g = gid + 1; if (link) link.send({ t: 'new', seed: seed, first: first, gid: g, carry: carry }); initGame(seed, first, g, carry); }
 function startAI() {
   if (link) { var l = link; link = null; try { l.close(); } catch (e) {} }
-  pairing = false; mode = 'ai'; me = 0; lastWinner = -1; newLocal();
+  pairing = false; mode = 'ai'; me = 0; nextFirst = -1; carry = 1; newLocal();
 }
 function startOnline() {
   if (typeof BoardLink === 'undefined') return;
   if (link) { var l = link; link = null; try { l.close(); } catch (e) {} }
   mode = 'idle'; pairing = true; clearTimeout(timer); gen++; render();
   BoardLink.pair({
-    onOpen: function (l) { pairing = false; link = l; mode = 'online'; me = l.isHost ? 0 : 1; lastWinner = -1; S = null; notice = T('waitHost'); resShown = false; $('res').style.display = 'none'; render(); if (l.isHost) hostNew(); },
+    onOpen: function (l) { pairing = false; link = l; mode = 'online'; me = l.isHost ? 0 : 1; nextFirst = -1; carry = 1; S = null; notice = T('waitHost'); resShown = false; $('res').style.display = 'none'; render(); if (l.isHost) hostNew(); },
     onMessage: onMsg,
     onClose: function () { if (mode !== 'online') return; link = null; mode = 'idle'; clearTimeout(timer); gen++; autoOn = autoOn; notice = T('disc'); render(); setTimeout(startOnline, 0); },
     onCancel: function () { pairing = false; render(); },
@@ -165,7 +167,7 @@ function startOnline() {
 }
 function onMsg(d) {
   if (mode !== 'online' || !d) return;
-  if (d.t === 'new') { if (link && !link.isHost) { lastWinner = -1; initGame(d.seed >>> 0, d.first, d.gid); } }
+  if (d.t === 'new') { if (link && !link.isHost) { nextFirst = -1; carry = 1; initGame(d.seed >>> 0, d.first, d.gid, d.carry); } }
   else if (d.t === 'req') { if (link && link.isHost && d.gid >= gid) hostNew(); }
   else if (d.t === 'a') {
     if (!S || S.phase === 'over' || S.turn === me || d.n !== S.n || !GS.apply(S, d.a)) { notice = T('desync'); render(); return; }
@@ -198,7 +200,7 @@ function T0(x) { var t = TXT.ev[x.k]; return t ? t[KO ? 1 : 0].replace('%1', x.x
 function toast(t) { var e = $('toast'); e.textContent = t; e.classList.remove('show'); void e.offsetWidth; e.classList.add('show'); }
 function onOver() {
   if (S.counted) return; S.counted = true;
-  var r = S.result; lastWinner = r.draw ? lastWinner : r.winner;
+  var r = S.result; if (r.draw) { nextFirst = S.first; carry = (S.carry || 1) * 2; } else { nextFirst = r.winner; carry = 1; }
   if (r.draw) stats.d++; else if (r.winner === me) { stats.w++; stats.pts += r.pts; } else { stats.l++; stats.pts -= r.pts; }
   if (!fast) showResult();
 }
@@ -251,6 +253,8 @@ function toggleAuto() {
 }
 function isAuto() { return autoOn; }
 
+function toggleLabels() { var on = document.body.classList.toggle('nolb'); try { localStorage.setItem('gs_nolb', on ? '1' : '0'); } catch (e) {} }
+try { if (localStorage.getItem('gs_nolb') === '1') document.body.classList.add('nolb'); } catch (e) {}
 /* ---------- user input ---------- */
 function myAction() { return S && S.phase !== 'over' && S.turn === me && !autoOn; }
 function tapHand(id) {
@@ -293,11 +297,11 @@ $('gsbox').addEventListener('click', function (e) { var b = e.target.closest('bu
 $('acts').addEventListener('click', function (e) {
   var b = e.target.closest('button'); if (!b || !myAction()) return;
   var k = b.dataset.k, m = +b.dataset.m;
-  if (k === 'shake') act({ type: 'shake', month: m }); else if (k === 'bomb') act({ type: 'bomb', month: m }); else if (k === 'skip') act({ type: 'skip' });
+  if (k === 'cup') act({ type: 'cup', pi: !GS.scoreOf(S, me).cupPi }); else if (k === 'shake') act({ type: 'shake', month: m }); else if (k === 'bomb') act({ type: 'bomb', month: m }); else if (k === 'skip') act({ type: 'skip' });
 });
 $('ctrl').addEventListener('click', function (e) {
   var b = e.target.closest('button'); if (!b) return;
-  ({ new: function () { newGame(); }, undo: undo, online: startOnline, hint: giveHint, auto: toggleAuto })[b.dataset.k]();
+  ({ lb: toggleLabels, new: function () { newGame(); }, undo: undo, online: startOnline, hint: giveHint, auto: toggleAuto })[b.dataset.k]();
   if (b.dataset.k === 'auto') window.parent !== window && 0;
 });
 
@@ -319,14 +323,14 @@ function capHTML(p) {
 function wide() { return $('app').classList.contains('wide'); }
 function scoreLine(p) {
   if (!S) return '';
-  var sc = GS.score(S.cap[p]), parts = [];
+  var sc = GS.scoreOf(S, p), parts = [];
   Object.keys(TXT.sc).forEach(function (k) { if (sc[k]) parts.push(TXT.sc[k][KO ? 1 : 0] + ' ' + sc[k]); });
   return parts.join(' + ');
 }
 function infoHTML(p) {
   var name = p === me ? T('you') : (mode === 'ai' ? T('comp') : T('opp'));
   if (!S) return '<span class="nm">' + name + '</span>';
-  var sc = GS.score(S.cap[p]).total, extra = [];
+  var sc = GS.scoreOf(S, p).total, extra = [];
   if (S.goCount[p]) extra.push(T('goN') + ' ' + S.goCount[p]);
   if (S.shakes[p]) extra.push('x' + Math.pow(2, S.shakes[p]));
   if (S.skips[p] > 0) extra.push(T('bombc') + ' ' + S.skips[p]);
@@ -384,16 +388,20 @@ function render() {
   /* status + actions */
   var m = $('msg'), t, you = false;
   if (S.phase === 'over') t = S.result.draw ? T('draw') : (S.result.winner === me ? T('win') : T('lose')) + ' ' + S.result.pts;
-  else if (S.turn === me) { you = true; t = (S.phase === 'pickHand' || S.phase === 'pickStock') ? T('pickT') : S.phase === 'go' ? T('goT', GS.score(S.cap[me]).total) : T('yourT'); if (autoOn) t = '▶ ' + t.split(':')[0]; }
+  else if (S.turn === me) { you = true; t = (S.phase === 'pickHand' || S.phase === 'pickStock') ? T('pickT') : S.phase === 'go' ? T('goT', GS.scoreOf(S, me).total) : T('yourT'); if (autoOn) t = '▶ ' + t.split(':')[0]; }
   else t = S.phase === 'go' ? T('oppGo') : T('oppT');
+  if (S.carry > 1) t += '  [' + T('carryT') + ' x' + S.carry + ']';
   if (notice) t = notice + ' ' + t;
   if (mode === 'online') t += '  [' + T('onl') + ': ' + (me === 0 ? T('host') : T('guest')) + (S.first === me ? ', ' + T('first') : '') + ']';
   m.textContent = t; m.className = you ? 'you' : '';
   var acts = '';
-  if (myAction() && S.phase === 'play') {
+  if (myAction() && (S.phase === 'play' || S.phase === 'go')) {
+   if (S.phase === 'play') {
     GS.bombable(S, me).forEach(function (mm) { acts += '<button class="pri' + (hintObj && hintObj.type === 'bomb' ? ' hint' : '') + '" data-k="bomb" data-m="' + mm + '">' + T('bomb', mm + 1) + '</button>'; });
     GS.shakable(S, me).forEach(function (mm) { acts += '<button class="pri' + (hintObj && hintObj.type === 'shake' ? ' hint' : '') + '" data-k="shake" data-m="' + mm + '">' + T('shake', mm + 1) + '</button>'; });
-    if (S.skips[me] > 0) acts += '<button data-k="skip"' + (hintObj && hintObj.type === 'skip' ? ' class="hint"' : '') + '>' + T('skip') + ' (' + S.skips[me] + ')</button>';
+   }
+    if (S.cap[me].indexOf(GS.CUP) >= 0) acts += '<button data-k="cup">' + T(GS.scoreOf(S, me).cupPi ? 'cupPi' : 'cupAn') + '</button>';
+    if (S.phase === 'play' && S.skips[me] > 0) acts += '<button data-k="skip"' + (hintObj && hintObj.type === 'skip' ? ' class="hint"' : '') + '>' + T('skip') + ' (' + S.skips[me] + ')</button>';
   }
   $('acts').innerHTML = acts;
   var gb = $('gsbox');
@@ -408,18 +416,19 @@ function render() {
 function ctrlHTML() {
   var c = $('ctrl');
   c.innerHTML = '<button data-k="new">' + T('new') + '</button>' + (mode === 'ai' ? '<button data-k="undo">' + T('undo') + '</button>' : '') + '<button data-k="online">' + T('online') + '</button>' +
-    '<button data-k="hint">' + T('hint') + '</button><button data-k="auto" class="' + (autoOn ? 'on' : '') + '">' + T('auto') + '</button>';
+    '<button data-k="lb">' + T('labels') + '</button><button data-k="hint">' + T('hint') + '</button><button data-k="auto" class="' + (autoOn ? 'on' : '') + '">' + T('auto') + '</button>';
 }
 function showResult() {
   var r = S.result, h;
-  if (r.draw) h = '<h3>' + T('draw') + '</h3>';
+  if (r.draw) h = '<h3>' + T('draw') + '</h3><div style="text-align:center;font-size:12px">' + T('carryT') + ' x' + carry + '</div>';
   else {
     var won = r.winner === me, rows = '';
-    rows += '<tr><td>' + T('base') + (r.special === '3ppeok' ? ' (' + T('ppeok3') + ')' : '') + '</td><td>' + r.base + '</td></tr>';
+    rows += '<tr><td>' + T('base') + (r.special === '3ppeok' ? ' (' + T('ppeok3') + ')' : r.special === 'chongtong' ? ' (' + T('chong') + ')' : '') + '</td><td>' + r.base + '</td></tr>';
     if (r.goBonus) rows += '<tr><td>' + T('goB') + ' (' + S.goCount[r.winner] + T('goN') + ')</td><td>+' + r.goBonus + '</td></tr>';
     if (r.goMul > 1) rows += '<tr><td>' + T('goM') + '</td><td>x' + r.goMul + '</td></tr>';
     if (r.shakeMul > 1) rows += '<tr><td>' + T('shM') + '</td><td>x' + r.shakeMul + '</td></tr>';
     r.bak.forEach(function (b) { rows += '<tr><td>' + TXT.bak[b][KO ? 1 : 0] + '</td><td>x2</td></tr>'; });
+    if (r.carry > 1) rows += '<tr><td>' + T('carryT') + '</td><td>x' + r.carry + '</td></tr>';
     rows += '<tr><td><b>' + T('total') + '</b></td><td>' + (won ? '+' : '-') + r.pts + '</td></tr>';
     h = '<h3 style="color:' + (won ? '#7dff9b' : '#ff9a8a') + '">' + (won ? T('win') : T('lose')) + '</h3><table>' + rows + '</table>';
   }
@@ -436,13 +445,14 @@ function fastRun(n, opts) {
   var oldAuto = autoOn; autoOn = true; fast = true;
   var res = { games: 0, wins: 0, losses: 0, draws: 0, bad: 0, steps: 0, maxsteps: 0, pts: 0, go: 0, bombs: 0, ev: {}, maxPts: 0 };
   for (var g = 0; g < n; g++) {
-    S = null; stats.pts = stats.pts; newLocalSilent(opts.seed != null ? opts.seed + g * 17 : null);
+    S = null; newLocalSilent(opts.seed != null ? opts.seed + g * 17 : null);
     var st = 0;
     while (S.phase !== 'over' && st < 600) {
       var a = GS.choose(S, S.turn); if (!a || !act(a)) { res.bad++; break; }
       S.ev.forEach(function (e) { res.ev[e.k] = (res.ev[e.k] || 0) + 1; });
       if (a.type === 'go' && a.yes) res.go++; if (a.type === 'bomb') res.bombs++; st++;
     }
+    if (!S.counted) onOver();
     res.steps += st; res.maxsteps = Math.max(res.maxsteps, st); res.games++;
     if (S.phase !== 'over') { res.bad++; continue; }
     var r = S.result; if (r.draw) res.draws++; else { if (r.winner === me) res.wins++; else res.losses++; res.pts += r.pts; res.maxPts = Math.max(res.maxPts, r.pts); }
@@ -451,7 +461,7 @@ function fastRun(n, opts) {
   }
   fast = false; autoOn = oldAuto; render(); kick(); return res;
 }
-function newLocalSilent(seed) { S = GS.newState(seed != null ? seed >>> 0 : rndSeed(), pickFirst()); gid++; S.counted = false; snaps = []; }
+function newLocalSilent(seed) { S = GS.newState(seed != null ? seed >>> 0 : rndSeed(), pickFirst(), carry); gid++; S.counted = false; snaps = []; }
 window.newGame = function () { newGame(); };
 window.undo = undo;
 window.giveHint = giveHint;

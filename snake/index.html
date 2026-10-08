@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Snake</title>
+<meta name="description" content="Snake (slither.io style) in a Windows 98 frame: 2D and 3D versions.">
+<link href="win98.css" media="screen" rel="stylesheet" type="text/css">
+<style>
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #fff; }
+.windows { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.a-window { position: relative; display: flex; flex-direction: column; }
+.a-window .title-bar .title-icon { background-size: 16px 16px; image-rendering: pixelated !important; }
+.a-window .window-content { flex: 1; overflow: hidden; box-sizing: border-box; width: auto; padding: 0; border-left: 3px solid #808080; border-top: 3px solid #808080; border-right: 3px solid #fff; border-bottom: 3px solid #fff; background: #000; }
+.a-window .window-content iframe { width: 100%; height: 100%; border: none; display: block; }
+.windows-98 .window.gdialog { position: fixed; left: 50%; top: 100px; transform: translateX(-50%); z-index: 100; display: none; width: 300px; }
+.gdialog .window-content { padding: 10px; box-sizing: border-box; width: auto; background: silver; }
+.windows-98 .window.gdialog { top: 30px; width: 380px; }
+#helpTxt { max-height: calc(100vh - 150px); overflow: auto; padding-right: 4px; }
+.gdialog .row { margin: 8px 0 0; text-align: center; }
+/* menu items with a shortcut: the label on the left, the shortcut (F2 ...) pushed to the right edge (same as the Minesweeper page) */
+.menu .ui-menu-item > a { display: flex; align-items: center; gap: 16px; }
+.menu .ui-menu-item > a .mi-label { flex: 1 1 auto; text-align: left; }
+.menu .ui-menu-item > a .mi-key { margin-left: auto; flex: 0 0 auto; min-width: 3ch; text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; opacity: .9; }
+.menu, .menu .ui-menu-item > a, .menu .mi-label, .menu .mi-key { white-space: nowrap !important; }
+ul.menu { min-width: 150px; width: max-content; }
+/* the submenu arrow must not take room in the item (it sits at the right edge, like on the Minesweeper page) */
+.menu .ui-menu-item > a { position: relative; }
+.menu .ui-menu-icon.ui-icon { position: absolute !important; right: 4px; top: 50%; transform: translateY(-50%); margin: 0 !important; flex: 0 0 auto !important; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="windows windows-98">
+  <div class="window has-menu a-window" id="mainwin">
+    <div class="title-bar">
+      <div class="title-icon" id="ticon" style="background-image:url(icon2d.png)"></div>
+      <div class="title" id="ttitle">Snake 2D</div>
+      <div class="title-button-group">
+        <div class="title-button minimize"></div>
+        <div class="title-button maximize disabled" onclick="event.preventDefault();event.stopPropagation();return false;"></div>
+        <div class="title-button close"></div>
+      </div>
+    </div>
+    <ul class="menu-bar">
+      <li>
+        <a href="#" data-access-key="g" data-t="game">게임</a>
+        <ul class="menu">
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="theme">　테마...</a>
+            <ul class="menu">
+              <li class="th th2d" onclick="return runMenu(function(){ setTheme('2d'); });"><a href="#">✓ 2D</a></li>
+              <li class="th th3d" onclick="return runMenu(function(){ setTheme('3d'); });"><a href="#">　3D</a></li>
+            </ul>
+          </li>
+          <li onclick="return runMenu(function(){ call('newGame'); });"><a href="#"><span class="mi-label" data-t="new">　새 게임(N)</span><span class="mi-key">F2</span></a></li>
+          <li class="separator"></li>
+          <li onclick="return runMenu(function(){ goFullscreen(); });"><a href="#" data-t="full">　전체화면</a></li>
+          <li class="separator"></li>
+          <li onclick="return runMenu(function(){ document.getElementById('mainwin').style.visibility='hidden'; });"><a href="#" data-t="exit">　끝내기(X)</a></li>
+        </ul>
+      </li>
+      <li>
+        <a href="#" data-access-key="h" data-t="help">도움말</a>
+        <ul class="menu">
+          <li onclick="return runMenu(function(){ openDlg('helpWin'); });"><a href="#" data-t="how">　게임 방법(H)</a></li>
+          <li class="separator"></li>
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="cheat">　치트...</a>
+            <ul class="menu">
+              <li class="menu-autosolve" onclick="return runMenu(function(){ toggleAuto(); });"><a href="#"><span class="mi-label" data-t="auto">　자동으로 풀기</span><span class="mi-key">F3</span></a></li>
+              <li class="menu-hint" onclick="return runMenu(function(){ giveHint(); });"><a href="#"><span class="mi-label" data-t="hint">　힌트 보기</span><span class="mi-key">F4</span></a></li>
+            </ul>
+          </li>
+          <li class="separator"></li>
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="other">　다른 게임</a>
+            <ul class="menu">
+              <li onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });"><a href="#" data-t="atari">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../index.html'; });"><a href="#" data-t="mine">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../2048/index.html'; });"><a href="#" data-t="g2048">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#" data-t="trex">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../pinball/index.html'; });"><a href="#" data-t="pinball">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../board/index.html'; });"><a href="#" data-t="board">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../card/index.html'; });"><a href="#" data-t="card">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../swap/index.html'; });"><a href="#" data-t="swap">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../sudoku/index.html'; });"><a href="#" data-t="sudoku">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../bubble/index.html'; });"><a href="#" data-t="bubble">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../rubik/index.html'; });"><a href="#" data-t="cube">　</a></li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+    <div class="window-content"><iframe id="game" src="game.html"></iframe></div>
+  </div>
+
+  <div class="window gdialog" id="helpWin">
+    <div class="title-bar"><div class="title-icon" style="background-image:url(icon2d.png);background-size:16px 16px"></div><div class="title" data-t="howT">게임 방법</div>
+      <div class="title-button-group"><div class="title-button close" onclick="closeDlg('helpWin')"></div></div></div>
+    <div class="window-content"><div id="helpTxt" style="font-size:12px;line-height:1.55"></div>
+      <div class="row"><button type="button" class="title-button" style="padding:2px 10px;" onclick="closeDlg('helpWin')" data-t="ok">확인</button></div></div>
+  </div>
+</div>
+<script src="vendor/jquery.min.js"></script>
+<script src="vendor/jquery-ui.min.js"></script>
+<script src="jquery.mswin.js"></script>
+<script src="jquery.mswin.menu.js"></script>
+<script>
+(function () {
+  var KO = /^ko/i.test(navigator.language || 'ko');
+  var T = KO ? { game: '게임', new: '　새 게임(N)', cheat: '　치트...', auto: '　자동으로 풀기', hint: '　힌트 보기', theme: '　테마...', full: '　전체화면', exit: '　끝내기(X)', help: '도움말', how: '　게임 방법(H)', other: '　다른 게임', mine: '　지뢰찾기', g2048: '　2048', trex: '　T-Rex', pinball: '　3D 핀볼', board: '　보드게임', card: '　카드게임', sudoku: '　스도쿠', poly: '　폴리큐브', bubble: '　버블 슈터', cube: '　큐브 퍼즐', swap: '　스왑 퍼즐', atari: '　아타리 브레이크아웃', howT: '게임 방법', ok: '확인', help1: '슬리더(slither.io)처럼 넓은 경기장을 연속으로 움직이는 뱀 게임입니다. 뱀은 일정한 속도로 앞으로 가고, 회전 속도에는 한계가 있습니다(길어질수록 조금 느리게 돕니다). 구슬을 먹으면 길어지고, <b>내 머리가 다른 뱀의 몸이나 벽에 닿으면 죽습니다</b>. 내 몸에 다른 뱀의 머리가 닿으면 그 뱀이 죽고, 내 몸에 내 머리가 닿는 것은 괜찮습니다. 죽은 뱀은 몸을 따라 큰 구슬을 떨어뜨립니다. 컴퓨터 뱀(봇) 7~8마리가 함께 있고, 가끔 내 앞을 가로막으려 합니다.<br><b>점수</b> = 뱀의 길이(질량). 오른쪽 위에 상위 5위 순위(처치 수 포함)가 보입니다. 최고 기록은 브라우저에 저장됩니다.<br><b>2D</b> (2400x2400 경기장, 가장자리는 붉은 위험 구역): 머리(점선 고리)를 누른 채 끌면 그 방향으로 머리가 돌고(터치도 같음), 놓으면 현재 방향으로 계속 갑니다. 머리가 아닌 곳을 눌러도 아무 일도 없고 마우스를 올려놓는 것만으로는 조종되지 않습니다. 스페이스, 오른쪽 버튼, 두 번째 손가락, 화면 오른쪽 아래 부스트 영역 = 부스트(속도 2배, 길이를 소모하며 구슬을 흘림). 방향키/WASD로도 조종할 수 있습니다. 왼쪽 아래 미니맵.<br><b>3D</b> (1200^3 정육면체 경기장): <b>조종은 지금 화면과 수직인 평면 안에서만</b> 됩니다. 머리 둘레의 점선 고리를 누른 채 끌면 그 방향으로 머리가 돌지만, 카메라 깊이 방향 성분은 바뀌지 않습니다(시점을 돌리기 전까지 그대로). 깊이 방향으로 꺾으려면 먼저 시점을 돌리세요: 머리가 아닌 곳을 누른 채 끌면 시점이 회전합니다(마우스 오른쪽 드래그, Q/E, Shift+방향키도 가능). 왼쪽 아래 축 표시기에서 지금 조종 가능한 두 축(밝은 색)과 깊이 축(*, 점선)을 볼 수 있고, 머리와 구슬에서 바닥으로 내려오는 선과 그림자, 머리에서 벽으로 뻗는 십자선으로 깊이를 가늠합니다. 방향키/WASD로 조종, 스페이스 또는 두 번째 손가락으로 부스트.<br><b>치트</b>: 도움말 &gt; 치트 &gt; 자동으로 풀기(F3) = 컴퓨터가 (머리를 누르고 끄는 조종을 흉내 내어) 구슬을 모으고 벽과 다른 뱀의 몸을 피하면서 대신 플레이합니다(죽으면 새로 시작). 사람과 똑같은 입력 규칙을 따릅니다: 2D는 목표 방향으로 제한된 회전 속도로만 조종하고, 3D는 화면 평면 안에서만 조종하며 깊이 성분을 바꾸려면 먼저 시점을 (애니메이션으로) 돌립니다. 죽지 않는다는 보장은 없습니다. 힌트 보기(F4) = 추천 방향을 약 1초 동안 머리에 화살표로 표시하고 그 방향으로 한 번만 조종합니다(3D에서는 필요하면 시점을 먼저 돌립니다). 새 게임은 F2. 게임 &gt; 테마에서 2D / 3D를 고릅니다.' }
+  : { game: 'Game', new: '　New Game(N)', cheat: '　Cheat...', auto: '　Solve Automatically', hint: '　Give a Hint', theme: '　Theme...', full: '　Fullscreen', exit: '　Exit(X)', help: 'Help', how: '　How to Play(H)', other: '　Other Games', mine: '　Minesweeper', g2048: '　2048', trex: '　T-Rex', pinball: '　3D Pinball', board: '　Board Games', card: '　Card Games', sudoku: '　Sudoku', poly: '　Polycube', bubble: '　Bubble Shooter', cube: '　Cube Puzzles', swap: '　Swap Puzzle', atari: '　Atari Breakout', howT: 'How to play', ok: 'OK', help1: 'A slither.io style snake game: your snake moves continuously at a constant speed in a big arena and can only turn at a limited rate (a little slower the longer you get). Eat orbs to grow. <b>You die when YOUR HEAD touches another snake\'s body or the wall</b>; when another snake\'s head touches your body, that snake dies; touching your own body is harmless. A dead snake drops big orbs along its body. 7-8 computer snakes (bots) share the arena and sometimes try to cut you off.<br><b>Score</b> = your length (mass). The top 5 (with kill counts) are shown at the top right. Your best length is saved in the browser.<br><b>2D</b> (2400x2400 arena, red danger zone at the border): press the head (dashed ring) and drag: the head turns toward the pointer (same on touch); release and it keeps its current heading. Pressing elsewhere does nothing, and hovering the mouse never steers. Space / right button / a second finger / the BOOST zone at the lower right = boost (2x speed, costs length and leaves orbs). Arrow keys / WASD also steer. Minimap at the lower left.<br><b>3D</b> (1200^3 cube arena): <b>you can only steer inside the plane perpendicular to the current viewing (depth) direction</b>. Press and hold on the dashed ring around your head and drag: the head turns toward that screen direction, but the part of the heading along the camera depth direction never changes (it stays until you rotate the view). To turn along the depth axis, rotate the view first: press and drag anywhere that is NOT your head (also right-mouse drag, Q/E, or Shift+arrows). The axis gizmo at the lower left shows the two axes you can steer now (bright) and the depth axis (*, dashed). Drop lines and shadows from heads and orbs to the floor and cross-hair lines from your head to the far walls help judging depth. Arrows / WASD steer, Space or a second finger boosts.<br><b>Cheat</b>: Help &gt; Cheat &gt; Solve Automatically (F3) = the computer plays for you, collecting orbs and avoiding the wall and other snakes\' bodies (a new game starts after a death). It emulates the same input as a human (virtual press on the head and drag) and obeys the same rules: in 2D it can only steer toward a target direction at the limited turn rate; in 3D it can only steer in the screen plane and must first rotate the camera (animated) to change the depth component. It is not invincible. Give a Hint (F4) = shows the suggested heading as an arrow on your head for about a second and performs one single steering action (in 3D the view is rotated first if needed). New game: F2. Choose 2D / 3D in Game > Theme.' };
+  document.documentElement.lang = KO ? 'ko' : 'en';
+  var NAME = KO ? '스네이크' : 'Snake';
+  [].forEach.call(document.querySelectorAll('[data-t]'), function (e) { var k = e.getAttribute('data-t'); if (T[k] !== undefined) e.textContent = T[k]; });
+  document.getElementById('helpTxt').innerHTML = T.help1;
+  var theme = '2d';
+  function resize() {
+    var vw = window.innerWidth, vh = window.innerHeight, win = document.getElementById('mainwin'), chrome = 46, ratio = 0.95, gw, gh;
+    if (vw / (vh - chrome) < ratio) { gw = vw - 14; gh = gw / ratio; } else { gh = vh - chrome - 8; gw = gh * ratio; }
+    win.style.width = Math.floor(gw + 14) + 'px'; win.style.height = Math.floor(gh + chrome + 8) + 'px';
+  }
+  resize(); window.addEventListener('resize', resize);
+  function setTitle() { var t = NAME + ' ' + theme.toUpperCase(); document.getElementById('ttitle').textContent = t; document.title = t; }
+  window.setTheme = function (t) {
+    theme = t; markAuto(false); document.getElementById('game').src = t === '3d' ? 'game3d.html' : 'game.html';
+    setTitle(); document.getElementById('ticon').style.backgroundImage = 'url(icon' + t + '.png)';
+    ['2d', '3d'].forEach(function (k) { var a = document.querySelector('.th' + k + ' a'); a.textContent = (k === t ? '\u2713 ' : '\u3000') + k.toUpperCase(); });
+  };
+  function closeMenus() {
+    var mb = $('.menu-bar'); try { mb.menubar('collapseAll'); } catch (e) {}
+    mb.find('.ui-state-open').removeClass('ui-state-open'); mb.find('> li').removeClass('ui-state-active ui-state-hover ui-state-focus');
+    mb.find('.menu').hide().attr('aria-hidden', 'true').attr('aria-expanded', 'false');
+  }
+  window.runMenu = function (fn) { closeMenus(); setTimeout(fn, 0); return false; };
+  window.closeDlg = function (id) { document.getElementById(id).style.display = 'none'; };
+  window.openDlg = function (id) { document.getElementById(id).style.display = 'block'; };
+  function call(name) { try { var w = document.getElementById('game').contentWindow; if (typeof w[name] === 'function') return w[name](); } catch (e) {} return undefined; }
+  window.call = call;
+  window.toggleAuto = function () { var on = call('toggleAuto'); if (on !== undefined) markAuto(!!on); };
+  window.giveHint = function () { call('giveHint'); };
+  window.setAutoMark = function (on) { markAuto(!!on); };      // the pages report their own auto state
+  function markAuto(on) { var a = document.querySelector('.menu-autosolve .mi-label'); if (a) a.textContent = (on ? '\u2713 ' : '\u3000') + a.textContent.replace(/^[\u2713]\s*/, '').replace(/^\u3000/, ''); }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'F2') { e.preventDefault(); call('newGame'); } else if (e.key === 'F3') { e.preventDefault(); window.toggleAuto(); } else if (e.key === 'F4') { e.preventDefault(); call('giveHint'); }
+  });
+  /* the page inside the iframe: closes menus on pointerdown and forwards F2..F5 (key events of a focused iframe never reach this document).
+     Hooked on every load of the iframe, once now and by polling (the document object is replaced on every navigation). */
+  function hookFrame() {
+    var f = document.getElementById('game');
+    try {
+      var doc = f.contentWindow.document;
+      if (!doc || doc.__hooked || doc.readyState === 'loading' || !/\.html/.test(f.contentWindow.location.pathname)) return;
+      doc.__hooked = true;
+      doc.addEventListener('pointerdown', closeMenus);
+      doc.addEventListener('keydown', function (e) { if (/^F[2345]$/.test(e.key)) { e.preventDefault(); document.dispatchEvent(new KeyboardEvent('keydown', { key: e.key })); } });
+      try { f.contentWindow.focus(); } catch (x) {}
+    } catch (x) {}
+  }
+  document.getElementById('game').addEventListener('load', hookFrame);
+  setInterval(hookFrame, 400);
+  window.goFullscreen = function () { var el = document.getElementById('mainwin'); if (el.requestFullscreen) el.requestFullscreen(); };
+  $(function () {
+    if ($('.menu-bar').length) $('.menu-bar').menubar();
+    $('.window').draggable({ handle: '.title' });
+    $('#mainwin .title-button.minimize').on('click', function () { $('#mainwin').hide(); });
+    $('#mainwin .title-button.close').on('click', function () { $('#mainwin').css('visibility', 'hidden'); });
+    hookFrame(); setTitle();
+    var g = new URLSearchParams(location.search).get('theme'); if (g === '3d') setTheme('3d');
+  });
+})();
+</script>
+</body>
+</html>
