@@ -23,6 +23,7 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: auto; background: #
 .sc { position: relative; box-sizing: border-box; width: var(--cs); height: var(--cs); display: flex; align-items: center; justify-content: center; font: 500 calc(var(--cs) * .58) "Segoe UI", Arial, sans-serif; color: #2563eb; cursor: pointer; border: 0 solid #c3cbe0; border-right-width: 1px; border-bottom-width: 1px; transition: background-color .08s; }
 .sc.gv { color: #1f2a44; font-weight: 700; }
 .sc.rt { border-right: 2px solid #26324f; } .sc.bt { border-bottom: 2px solid #26324f; }
+.sc.dg { background-color: #fff3d6; }
 .sc.hl { background-image: linear-gradient(rgba(37,99,235,.10), rgba(37,99,235,.10)); }
 .sc.same { background-image: linear-gradient(rgba(37,99,235,.24), rgba(37,99,235,.24)); }
 .sc.sel { background-image: linear-gradient(rgba(37,99,235,.40), rgba(37,99,235,.40)); }
@@ -90,6 +91,7 @@ ul.menu { min-width: 150px; width: max-content; }
           <li class="separator"></li>
           <li class="ty ty0" onclick="return runMenu(function(){ setType(0); });"><a href="#" data-t="t0">　정사각형(S)</a></li>
           <li class="ty ty1" onclick="return runMenu(function(){ setType(1); });"><a href="#" data-t="t1">　랜덤형(R)</a></li>
+          <li class="ty ty2" onclick="return runMenu(function(){ setType(2); });"><a href="#" data-t="t2">　X 스도쿠(X)</a></li>
           <li class="separator"></li>
           <li class="df df0" onclick="return runMenu(function(){ setDiff(0); });"><a href="#" data-t="d0">　쉬움(E)</a></li>
           <li class="df df1" onclick="return runMenu(function(){ setDiff(1); });"><a href="#" data-t="d1">　보통(M)</a></li>
@@ -120,12 +122,17 @@ ul.menu { min-width: 150px; width: max-content; }
               <li onclick="return runMenu(function(){ window.location.href='../2048/index.html'; });"><a href="#">　2048</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../pinball/index.html'; });"><a href="#">　3D 핀볼</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#">　T-Rex</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../nonogram/index.html'; });"><a href="#">　노노그램</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=mahjong'; });"><a href="#">　마작</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../chomper/index.html'; });"><a href="#">　미로 먹보</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../board/index.html?set=baduk'; });"><a href="#">　바둑&amp;오목</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../bubble/index.html'; });"><a href="#">　버블 슈터</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../board/index.html'; });"><a href="#">　보드게임</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../snake/index.html'; });"><a href="#">　스네이크</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../swap/index.html'; });"><a href="#">　스왑 퍼즐</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../card/index.html'; });"><a href="#">　카드게임</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../board/index.html?set=chess'; });"><a href="#">　체스</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../rubik/index.html'; });"><a href="#">　큐브 퍼즐</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=trump'; });"><a href="#">　트럼프</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=hwatu'; });"><a href="#">　화투</a></li>
             </ul>
           </li>
         </ul>
@@ -172,7 +179,7 @@ ul.menu { min-width: 150px; width: max-content; }
 /* "Other games" entries that are not translated by the page itself: English names for non-Korean browsers */
 (function () {
   if (/^ko/i.test(navigator.language || 'ko')) return;
-  var EN = { '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '스왑 퍼즐': 'Swap Puzzle', '카드게임': 'Card Games', '큐브 퍼즐': 'Cube Puzzles', '스네이크': 'Snake', '지뢰찾기': 'Minesweeper', '폴리큐브': 'Polycube' };
+  var EN = { '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '미로 먹보': 'Maze Chomper', '스왑 퍼즐': 'Swap Puzzle', '카드게임': 'Card Games', '바둑&오목': 'Go & Gomoku', '체스': 'Chess', '화투': 'Hwatu', '트럼프': 'Trump Cards', '마작': 'Mahjong', '노노그램': 'Nonogram', '큐브 퍼즐': 'Cube Puzzles', '스네이크': 'Snake', '지뢰찾기': 'Minesweeper', '폴리큐브': 'Polycube' };
   function run() { [].forEach.call(document.querySelectorAll('.menu a'), function (a) { if (a.children.length) return; var s = a.textContent.replace(/^[\u3000\s]+/, ''); if (EN[s]) a.textContent = '\u3000' + EN[s]; }); }
   if (document.readyState === 'complete') run(); else window.addEventListener('load', run);
 })();
