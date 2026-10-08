@@ -46,12 +46,19 @@
     ready: function (mode) { return !!window['ATARI_AI_' + mode.toUpperCase()]; },
     // returns the target for the paddle (2D: x, 3D: [x, y]).  The policy's action is the offset t (-1 .. 1) on the paddle where the ball should land: it sets the angle the ball leaves with,
     // so the paddle goes to (landing place - t * half size)
+    // training only lets the policy decide ONCE per descent (when the ball is within 0.6 s of the paddle line); the choice is held until the ball goes up again (see training/ppo.py)
     act2d: function (S) {
-      const d = decode(window.ATARI_AI_2D), x = obs2d(S), a = argmaxHeads(d, logits(d, x))[0], t = -1 + 2 * a / (d.heads[0] - 1), xl = x[6] * 100;
+      const d = decode(window.ATARI_AI_2D), x = obs2d(S), b = S.ball, n = d.heads[0];
+      if (b.vy <= 0.5) S._dec = false;
+      if (b.vy > 0.5 && x[7] * 3 <= 0.6 && !S._dec) { S._a = argmaxHeads(d, logits(d, x))[0]; S._dec = true; }
+      const a = S._a === undefined ? (n - 1) / 2 : S._a, t = -1 + 2 * a / (n - 1), xl = x[6] * 100;
       return Math.min(100 - S.pw / 2, Math.max(S.pw / 2, xl - t * S.pw / 2));
     },
     act3d: function (S, hs) {
-      const d = decode(window.ATARI_AI_3D), x = obs3d(S, hs), a = argmaxHeads(d, logits(d, x)), lx = x[9] * 6, ly = x[10] * 6, n = d.heads[0] - 1;
+      const d = decode(window.ATARI_AI_3D), x = obs3d(S, hs), b = S.ball, n = d.heads[0] - 1;
+      if (b.vz >= -0.1) S._dec = false;
+      if (b.vz < -0.1 && x[11] * 3 <= 0.6 && !S._dec) { S._a = argmaxHeads(d, logits(d, x)); S._dec = true; }
+      const a = S._a || [n / 2, n / 2], lx = x[9] * 6, ly = x[10] * 6;
       const cl = function (v) { return Math.min(6 - hs, Math.max(hs, v)); };
       return [cl(lx - (-1 + 2 * a[0] / n) * hs), cl(ly - (-1 + 2 * a[1] / n) * hs)];
     }

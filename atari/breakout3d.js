@@ -353,13 +353,13 @@
     if (S.mode !== 'play' || !S.drag) return; const p = pos(e), d = S.drag;
     if (d.kind === 'map') S.target = mapXform().from(p.x, p.y);
     else if (d.kind === 'paddle') { if (Math.hypot(p.x - d.x, p.y - d.y) > 6) d.moved = true; if (d.moved) { const f = toFloor(p); S.target = [d.px + f[0] - d.f[0], d.py + f[1] - d.f[1]]; } }
-    else if (d.kind === 'view') { S.yaw = d.yaw + (p.x - d.x) / S.cw * 3.2; S.pitch = Math.max(0.12, Math.min(1.3, d.pitch + (p.y - d.y) / S.ch * 2.2)); }
+    else if (d.kind === 'view') { S.yaw = d.yaw - (p.x - d.x) / S.cw * 3.2; S.pitch = Math.max(0.12, Math.min(1.3, d.pitch + (p.y - d.y) / S.ch * 2.2)); }
   });
   window.addEventListener('pointerup', function () { if (S.drag && S.drag.kind === 'paddle' && !S.drag.moved && S.mode === 'play') launch(); if (S.drag && S.drag.kind !== 'view') S.target = null; S.drag = null; });
   window.addEventListener('keydown', function (e) {
     if (e.key === 'F3') { e.preventDefault(); window.toggleAuto(); }
     else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (S.mode === 'start' && S.about) S.about = S.about >= window.ATARI_ABOUT_PAGES ? 0 : S.about + 1; else if (S.mode !== 'play') newGame(); else launch(); }
-    else if (e.key === 'q' || e.key === 'Q') S.yaw -= 0.12; else if (e.key === 'e' || e.key === 'E') S.yaw += 0.12;
+    else if (e.key === 'q' || e.key === 'Q') S.yaw += 0.12; else if (e.key === 'e' || e.key === 'E') S.yaw -= 0.12;
     else if (e.key === 'p' || e.key === 'P') S.paused = !S.paused;
   });
 

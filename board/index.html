@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Atari Breakout</title>
-<meta name="description" content="Atari-style Breakout in a Windows 98 frame: 2D and 3D versions. Black bricks take 2 hits, white 3, gray 5.">
+<title>Board Games</title>
+<meta name="description" content="Chess and Go (Baduk) in a Windows 98 frame: two players on one screen, or against Stockfish / GNU Go.">
 <link href="win98.css" media="screen" rel="stylesheet" type="text/css">
 <style>
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #fff; }
@@ -31,8 +31,8 @@ ul.menu { min-width: 150px; width: max-content; }
 <div class="windows windows-98">
   <div class="window has-menu a-window" id="mainwin">
     <div class="title-bar">
-      <div class="title-icon" id="ticon" style="background-image:url(icon2d.png)"></div>
-      <div class="title" id="ttitle">Breakout 2D</div>
+      <div class="title-icon" id="ticon" style="background-image:url(iconchess.png)"></div>
+      <div class="title" id="ttitle">Chess</div>
       <div class="title-button-group">
         <div class="title-button minimize"></div>
         <div class="title-button maximize disabled" onclick="event.preventDefault();event.stopPropagation();return false;"></div>
@@ -43,11 +43,14 @@ ul.menu { min-width: 150px; width: max-content; }
       <li>
         <a href="#" data-access-key="g" data-t="game">게임</a>
         <ul class="menu">
+          <li onclick="return runMenu(function(){ call('newGame'); });"><a href="#"><span class="mi-label" data-t="new">　새 게임(N)</span><span class="mi-key">F2</span></a></li>
+          <li onclick="return runMenu(function(){ call('undo'); });"><a href="#"><span class="mi-label" data-t="undo">　무르기(U)</span></a></li>
+          <li class="separator"></li>
           <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
             <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="theme">　테마...</a>
             <ul class="menu">
-              <li class="th th2d" onclick="return runMenu(function(){ setTheme('2d'); });"><a href="#">✓ 2D</a></li>
-              <li class="th th3d" onclick="return runMenu(function(){ setTheme('3d'); });"><a href="#">　3D</a></li>
+              <li class="th thchess" onclick="return runMenu(function(){ setTheme('chess'); });"><a href="#">✓ 체스</a></li>
+              <li class="th thgo" onclick="return runMenu(function(){ setTheme('go'); });"><a href="#">　바둑</a></li>
             </ul>
           </li>
           <li onclick="return runMenu(function(){ goFullscreen(); });"><a href="#" data-t="full">　전체화면</a></li>
@@ -63,7 +66,8 @@ ul.menu { min-width: 150px; width: max-content; }
           <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
             <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="cheat">　치트...</a>
             <ul class="menu">
-              <li class="menu-autosolve" onclick="return runMenu(function(){ toggleAuto(); });"><a href="#"><span class="mi-label" data-t="auto">　자동으로 풀기</span><span class="mi-key">F3</span></a></li>
+              <li class="menu-autosolve" onclick="return runMenu(function(){ toggleAuto(); });"><a href="#"><span class="mi-label" data-t="auto">　컴퓨터와 대전</span><span class="mi-key">F3</span></a></li>
+              <li onclick="return runMenu(function(){ call('hint'); });"><a href="#"><span class="mi-label" data-t="hint">　컴퓨터 힌트</span><span class="mi-key">F4</span></a></li>
             </ul>
           </li>
           <li class="separator"></li>
@@ -74,19 +78,19 @@ ul.menu { min-width: 150px; width: max-content; }
               <li onclick="return runMenu(function(){ window.location.href='../2048/index.html'; });"><a href="#">　2048</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#">　T-Rex</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../pinball/index.html'; });"><a href="#">　3D 핀볼</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../board/index.html'; });"><a href="#">　보드게임</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../sudoku/index.html'; });"><a href="#" data-t="sudoku">　스도쿠</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });"><a href="#">　아타리 브레이크아웃</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　폴리큐브</a></li>
             </ul>
           </li>
         </ul>
       </li>
     </ul>
-    <div class="window-content"><iframe id="game" src="game.html"></iframe></div>
+    <div class="window-content"><iframe id="game" src="chess.html"></iframe></div>
   </div>
 
   <div class="window gdialog" id="helpWin">
-    <div class="title-bar"><div class="title-icon" style="background-image:url(icon2d.png);background-size:16px 16px"></div><div class="title" data-t="howT">게임 방법</div>
+    <div class="title-bar"><div class="title-icon" style="background-image:url(iconchess.png);background-size:16px 16px"></div><div class="title" data-t="howT">게임 방법</div>
       <div class="title-button-group"><div class="title-button close" onclick="closeDlg('helpWin')"></div></div></div>
     <div class="window-content"><div id="helpTxt" style="font-size:12px;line-height:1.55"></div>
       <div class="row"><button type="button" class="title-button" style="padding:2px 10px;" onclick="closeDlg('helpWin')" data-t="ok">확인</button></div></div>
@@ -99,25 +103,26 @@ ul.menu { min-width: 150px; width: max-content; }
 <script>
 (function () {
   var KO = /^ko/i.test(navigator.language || 'ko');
-  var T = KO ? { game: '게임', cheat: '　치트...', auto: '　자동으로 풀기', theme: '　테마...', full: '　전체화면', exit: '　끝내기(X)', help: '도움말', how: '　게임 방법(H)', other: '　다른 게임', mine: '　지뢰찾기', sudoku: '　스도쿠', poly: '　폴리큐브', howT: '게임 방법', ok: '확인',
-    help1: '공을 튕겨 블록을 깨세요. 공은 하나뿐입니다: 처음 쏠 때 점수가 0점에서 시작하고, 공이 떨어지면 그대로 게임 오버이며 점수가 확정됩니다.<br><b>블록</b>: 검정 = 2번, 흰색 = 3번, 회색 = 5번 쳐야 깨집니다. 나머지(채도 100%의 색)는 1번. 맞을 때마다 균열이 생깁니다.<br><b>줄</b>: 항상 5줄이 유지됩니다. 가장 아랫줄을 다 깨면 모든 블록이 한 줄 내려오고 맨 위에 새 줄이 생깁니다(공이 그 자리에 있으면 비켜날 때까지 기다립니다). 점수: 줄을 다 지우면 +100, 블록을 한 번 칠 때마다 +2, 1초가 지날 때마다 −1(점수는 음수가 될 수 있음).<br><b>2D</b>: 판(패들)은 마우스 버튼을 누른 채 드래그할 때(터치는 대고 밀 때)만 움직입니다. 누르고 움직이지 않으면(탭) 발사, Space도 발사입니다.<br><b>3D</b>: 바닥의 판으로 공을 위로 쳐 올립니다. 판 근처를 누르고 밀면 판 이동, 판이 아닌 곳을 누르고 밀면 시점 회전입니다(오른쪽 버튼 드래그도 회전). 왼쪽 아래의 지도는 시점과 함께 회전하는 바닥 지도이고, 지도를 눌러도 판이 그 자리로 갑니다.<br>게임 &gt; 테마에서 2D / 3D를 고릅니다.' }
-  : { game: 'Game', cheat: '　Cheat...', auto: '　Solve Automatically', theme: '　Theme...', full: '　Fullscreen', exit: '　Exit(X)', help: 'Help', how: '　How to Play(H)', other: '　Other Games', mine: '　Minesweeper', sudoku: '　Sudoku', poly: '　Polycube', howT: 'How to play', ok: 'OK',
-    help1: 'Bounce the ball and break bricks. There is only one ball: the score starts from 0 when you shoot it, and when it falls the game is over and the score is final.<br><b>Bricks</b>: black = 2 hits, white = 3, gray = 5; every other brick (a fully saturated colour) = 1. Cracks show the damage.<br><b>Rows</b>: five rows are always kept. When the bottom row is cleared every brick moves down one row and a new row appears at the top (if the ball is in that spot the new row waits until it is clear). Score: +100 for every row you clear completely, +2 for every hit on a brick, -1 for every second that passes (the score can go negative).<br><b>2D</b>: the paddle moves only while you hold the mouse button and drag (touch: put a finger down and slide). A tap / click without dragging launches the ball, and so does Space.<br><b>3D</b>: bounce the ball up from the floor paddle. Press near the paddle and slide to move it; press anywhere else and slide to rotate the view (right-button drag rotates too). The map at the bottom left is the floor map: it rotates with the view, and pressing it puts the paddle there.<br>Choose 2D / 3D in Game &gt; Theme.' };
+  var T = KO ? { game: '게임', new: '　새 게임(N)', undo: '　무르기(U)', board: '　보드게임', cheat: '　치트...', auto: '　컴퓨터와 대전', hint: '　컴퓨터 힌트', theme: '　테마...', full: '　전체화면', exit: '　끝내기(X)', help: '도움말', how: '　게임 방법(H)', other: '　다른 게임', mine: '　지뢰찾기', sudoku: '　스도쿠', poly: '　폴리큐브', howT: '게임 방법', ok: '확인',
+    help1: '<b>체스</b>: 말을 클릭(또는 끌어서) 옮깁니다. 캐슬링 · 앙파상 · 프로모션과 체크메이트 · 스테일메이트 · 3회 반복 · 50수 규칙을 모두 지원합니다.<br><b>바둑</b>: 교차점을 눌러 돌을 놓습니다(터치는 한 번 누르면 미리보기, 같은 곳을 다시 누르면 착수). 둘이 연속 패스하면 사석을 눌러 표시한 뒤 계가합니다(중국식 집 계산).<br>기본은 한 화면에서 둘이 두는 대전입니다. 도움말 &gt; 치트 &gt; 컴퓨터와 대전(F3)을 켜면 체스는 Stockfish, 바둑은 GNU Go가 상대합니다(오픈소스 엔진, 첫 사용 때 불러오느라 잠시 걸립니다). 컴퓨터 힌트(F4)는 컴퓨터가 추천하는 수를 보여 줍니다.' }
+  : { game: 'Game', new: '　New Game(N)', undo: '　Undo(U)', cheat: '　Cheat...', auto: '　Play the Computer', hint: '　Computer Hint', theme: '　Theme...', full: '　Fullscreen', exit: '　Exit(X)', help: 'Help', how: '　How to Play(H)', other: '　Other Games', mine: '　Minesweeper', sudoku: '　Sudoku', poly: '　Polycube', howT: 'How to play', ok: 'OK',
+    help1: '<b>Chess</b>: click (or drag) a piece to move it. Castling, en passant, promotion, checkmate, stalemate, threefold repetition and the 50-move rule are all supported.<br><b>Go (Baduk)</b>: click an intersection to place a stone (on touch screens the first tap previews, a second tap on the same point plays it). After two passes mark the dead stones and the game is scored (area counting).<br>By default two people play on one screen. Help &gt; Cheat &gt; Play the Computer (F3) lets Stockfish (chess) or GNU Go (Go) play against you (open-source engines, loaded on first use). Computer Hint (F4) shows the engine\'s suggested move.' };
   document.documentElement.lang = KO ? 'ko' : 'en';
   [].forEach.call(document.querySelectorAll('[data-t]'), function (e) { var k = e.getAttribute('data-t'); if (T[k] !== undefined) e.textContent = T[k]; });
   document.getElementById('helpTxt').innerHTML = T.help1;
-  var theme = '2d';
+  var theme = 'chess', NAMES = { chess: KO ? '체스' : 'Chess', go: KO ? '바둑' : 'Go (Baduk)' };
   function resize() {
-    var vw = window.innerWidth, vh = window.innerHeight, win = document.getElementById('mainwin'), chrome = 46, ratio = 1 / 2, gw, gh;
-    if (vw / (vh - chrome) < ratio) { gw = vw - 14; gh = gw / ratio; } else { gh = vh - chrome - 8; gw = gh * ratio; }
-    win.style.width = Math.floor(gw + 14) + 'px'; win.style.height = Math.floor(gh + chrome + 8) + 'px';
+    var vw = window.innerWidth, vh = window.innerHeight, win = document.getElementById('mainwin'), chrome = 46;
+    win.style.width = Math.min(vw - 8, Math.max(320, Math.floor((vh - chrome - 8) * 1.45 + 14))) + 'px'; win.style.height = Math.max(300, vh - 8) + 'px';
   }
   resize(); window.addEventListener('resize', resize);
+  function gw() { try { return document.getElementById('game').contentWindow; } catch (e) { return null; } }
+  window.call = function (f) { var w = gw(); try { if (w && w[f]) return w[f](); } catch (e) {} };
   window.setTheme = function (t) {
-    theme = t; markAuto(false); document.getElementById('game').src = t === '3d' ? 'game3d.html' : 'game.html';
-    document.getElementById('ttitle').textContent = t === '3d' ? 'Breakout 3D' : 'Breakout 2D';
+    theme = t; markAuto(false); document.getElementById('game').src = t + '.html';
+    document.getElementById('ttitle').textContent = NAMES[t]; document.title = NAMES[t];
     document.getElementById('ticon').style.backgroundImage = 'url(icon' + t + '.png)';
-    ['2d', '3d'].forEach(function (k) { var a = document.querySelector('.th' + k + ' a'); a.textContent = (k === t ? '✓ ' : '　') + k.toUpperCase(); });
+    ['chess', 'go'].forEach(function (k) { var a = document.querySelector('.th' + k + ' a'); a.textContent = (k === t ? '✓ ' : '\u3000') + NAMES[k]; });
   };
   function closeMenus() {
     var mb = $('.menu-bar'); try { mb.menubar('collapseAll'); } catch (e) {}
@@ -127,19 +132,19 @@ ul.menu { min-width: 150px; width: max-content; }
   window.runMenu = function (fn) { closeMenus(); setTimeout(fn, 0); return false; };
   window.closeDlg = function (id) { document.getElementById(id).style.display = 'none'; };
   window.openDlg = function (id) { document.getElementById(id).style.display = 'block'; };
-  window.toggleAuto = function () {                    // the game inside the frame plays itself with the trained policy (also bound to F3)
-    try { const w = document.getElementById('game').contentWindow; const on = w.toggleAuto && w.toggleAuto(); markAuto(!!on); } catch (e) {}
-  };
-  function markAuto(on) { const a = document.querySelector('.menu-autosolve .mi-label'); if (a) a.textContent = (on ? '✓ ' : '\u3000') + a.textContent.replace(/^[✓\u2713]\s*/, '').replace(/^\u3000/, ''); }
-  document.addEventListener('keydown', function (e) { if (e.key === 'F3') { e.preventDefault(); window.toggleAuto(); } });
+  window.toggleAuto = function () { var on = call('toggleVsAI'); markAuto(!!on); };      // computer opponent (open-source engine) on / off
+  function markAuto(on) { var a = document.querySelector('.menu-autosolve .mi-label'); if (a) a.textContent = (on ? '✓ ' : '\u3000') + a.textContent.replace(/^[✓\u2713]\s*/, '').replace(/^\u3000/, ''); }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'F2') { e.preventDefault(); call('newGame'); } else if (e.key === 'F3') { e.preventDefault(); window.toggleAuto(); } else if (e.key === 'F4') { e.preventDefault(); call('hint'); }
+  });
   window.goFullscreen = function () { var el = document.getElementById('mainwin'); if (el.requestFullscreen) el.requestFullscreen(); };
   $(function () {
     if ($('.menu-bar').length) $('.menu-bar').menubar();
     $('.window').draggable({ handle: '.title' });
     $('#mainwin .title-button.minimize').on('click', function () { $('#mainwin').hide(); });
     $('#mainwin .title-button.close').on('click', function () { $('#mainwin').css('visibility', 'hidden'); });
-    document.getElementById('game').addEventListener('load', function () { try { this.contentWindow.document.addEventListener('pointerdown', closeMenus); } catch (e) {} });
-    var g = new URLSearchParams(location.search).get('theme'); if (g === '3d') setTheme('3d');
+    document.getElementById('game').addEventListener('load', function () { try { this.contentWindow.document.addEventListener('pointerdown', closeMenus); this.contentWindow.document.addEventListener('keydown', function (e) { if (/^F[234]$/.test(e.key)) document.dispatchEvent(new KeyboardEvent('keydown', { key: e.key })); }); } catch (e) {} });
+    var g = new URLSearchParams(location.search).get('theme'); if (g === 'go') setTheme('go');
   });
 })();
 </script>

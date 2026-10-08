@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>T-Rex</title>
 <meta name="description" content="T-Rex (the Chromium offline dinosaur game, BSD-3-Clause) in a Windows 98 frame, with an auto-play cheat.">
+<script>
+/* if something fails to load / run (old phones, blocked scripts) show the reason instead of a blank white page */
+(function () {
+  function show(m) { var d = document.getElementById('__err'); if (!d) { d = document.createElement('pre'); d.id = '__err'; d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;margin:0;padding:6px;background:#fee;color:#900;font:11px monospace;white-space:pre-wrap;z-index:99999'; (document.body || document.documentElement).appendChild(d); } d.textContent += m + '\n'; }
+  window.addEventListener('error', function (e) { show((e.message || 'error') + (e.filename ? ' @' + e.filename.split('/').pop() + ':' + e.lineno : '')); }, true);
+  window.addEventListener('unhandledrejection', function (e) { show('promise: ' + (e.reason && e.reason.message || e.reason)); });
+})();
+</script>
 <link href="win98.css" media="screen" rel="stylesheet" type="text/css">
 <link href="index.css" media="screen" rel="stylesheet" type="text/css">
 <style>
@@ -78,6 +86,8 @@ ul.menu { min-width: 150px; width: max-content; }
               <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　폴리큐브</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../sudoku/index.html'; });"><a href="#">　스도쿠</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });"><a href="#">　아타리 브레이크아웃</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../pinball/index.html'; });"><a href="#">　3D 핀볼</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../board/index.html'; });"><a href="#">　보드게임</a></li>
             </ul>
           </li>
         </ul>
