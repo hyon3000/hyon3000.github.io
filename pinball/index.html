@@ -13,8 +13,22 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: auto; background: #
 .d-main .title-bar .title-icon { background-image: url(icon_pinball.png); image-rendering: pixelated; }
 .d-main .window-content { padding: 0; box-sizing: border-box; width: auto; border-left: 3px solid #808080; border-top: 3px solid #808080; border-right: 3px solid #fff; border-bottom: 3px solid #fff; background: #fff; }
 /* the original page centres the runner in a 600px column; here it sits inside the window */
-#frame { width: 640px; max-width: 100%; height: 478px; }
-#frame iframe { width: 100%; height: 100%; border: 0; display: block; background: #000; }
+#frame { width: 640px; max-width: 100%; aspect-ratio: 640 / 478; height: auto; }
+#frame canvas { width: 100%; height: 100%; display: block; background: #000; outline: none; }
+#status { position: absolute; left: 0; right: 0; top: 40%; text-align: center; color: #fff; font: 13px sans-serif; pointer-events: none; }
+#frame { position: relative; background: #000; }
+#pad { position: absolute; inset: 0; pointer-events: none; display: none; }
+#pad.on { display: block; }
+.pb { position: absolute; pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none; border: 2px solid rgba(255,255,255,.55); background: rgba(40,60,140,.38); color: #fff !important; font: bold 13px sans-serif; border-radius: 14px; padding: 0; opacity: .8; text-shadow: 0 1px 2px #000; }
+.pb span { color: #fff !important; }
+.pb.on { background: rgba(255,200,40,.6); }
+.pb.fl { left: 1%; bottom: 2%; width: 26%; height: 14%; }
+.pb.fr { right: 1%; bottom: 2%; width: 26%; height: 14%; }
+.pb.ln { right: 1%; bottom: 18%; width: 22%; height: 11%; background: rgba(40,140,60,.42); }
+.pb.nl { left: 1%; bottom: 18%; width: 22%; height: 9%; font-size: 11px; }
+.pb.nr { left: 24%; bottom: 18%; width: 22%; height: 9%; font-size: 11px; }
+.pb.nu { left: 37%; bottom: 3%; width: 22%; height: 9%; font-size: 11px; }
+.pb.ng { right: 1%; top: 8%; width: 17%; height: 8%; font-size: 11px; }
 .d-hint { font-size: 11px; color: #333; margin: 3px 6px 4px; }
 .windows-98 .window.gdialog { position: fixed; left: 50%; top: 120px; transform: translateX(-50%); z-index: 100; display: none; width: 300px; }
 .gdialog .window-content { padding: 8px; box-sizing: border-box; width: auto; }
@@ -64,6 +78,8 @@ ul.menu { min-width: 150px; width: max-content; }
               <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　폴리큐브</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../sudoku/index.html'; });"><a href="#">　스도쿠</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });"><a href="#">　아타리 브레이크아웃</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../bubble/index.html'; });"><a href="#">　버블 슈터</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../swap/index.html'; });"><a href="#">　스왑 퍼즐</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#">　T-Rex</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../board/index.html'; });"><a href="#">　보드게임</a></li>
             </ul>
@@ -72,7 +88,16 @@ ul.menu { min-width: 150px; width: max-content; }
       </li>
     </ul>
     <div class="window-content">
-      <div id="frame"><iframe id="game" src="https://pinball.alula.me/" allow="fullscreen; autoplay" title="3D Pinball"></iframe></div>
+      <div id="frame"><div id="status">Downloading...</div><canvas id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
+        <div id="pad">
+          <button class="pb fl" data-key="KeyZ" data-kc="90" data-k="z"><span data-t="bl">◀ 왼쪽</span></button>
+          <button class="pb fr" data-key="Slash" data-kc="191" data-k="/"><span data-t="br">오른쪽 ▶</span></button>
+          <button class="pb ln" data-key="Space" data-kc="32" data-k=" "><span data-t="bs">발사</span></button>
+          <button class="pb nl" data-key="KeyX" data-kc="88" data-k="x"><span data-t="bnl">↖ 흔들기</span></button>
+          <button class="pb nr" data-key="Period" data-kc="190" data-k="."><span data-t="bnr">흔들기 ↗</span></button>
+          <button class="pb nu" data-key="ArrowUp" data-kc="38" data-k="ArrowUp"><span data-t="bnu">↑ 흔들기</span></button>
+          <button class="pb ng" id="padNew"><span data-t="bn">새 게임</span></button>
+        </div></div>
       <div class="d-hint" id="hint"></div>
     </div>
   </div>
@@ -90,5 +115,14 @@ ul.menu { min-width: 150px; width: max-content; }
 <script src="jquery.mswin.js"></script>
 <script src="jquery.mswin.menu.js"></script>
 <script src="pinball.js"></script>
+<script>
+/* "Other games" entries that are not translated by the page itself: English names for non-Korean browsers */
+(function () {
+  if (/^ko/i.test(navigator.language || 'ko')) return;
+  var EN = { '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '스왑 퍼즐': 'Swap Puzzle', '지뢰찾기': 'Minesweeper', '폴리큐브': 'Polycube' };
+  function run() { [].forEach.call(document.querySelectorAll('.menu a'), function (a) { if (a.children.length) return; var s = a.textContent.replace(/^[\u3000\s]+/, ''); if (EN[s]) a.textContent = '\u3000' + EN[s]; }); }
+  if (document.readyState === 'complete') run(); else window.addEventListener('load', run);
+})();
+</script>
 </body>
 </html>

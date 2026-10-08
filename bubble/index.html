@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Bubble Shooter</title>
+<meta name="description" content="Bubble Shooter in a Windows 98 frame: 2D and 3D versions.">
+<link href="win98.css" media="screen" rel="stylesheet" type="text/css">
+<style>
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #fff; }
+.windows { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.a-window { position: relative; display: flex; flex-direction: column; }
+.a-window .title-bar .title-icon { background-size: 16px 16px; image-rendering: pixelated !important; }
+.a-window .window-content { flex: 1; overflow: hidden; box-sizing: border-box; width: auto; padding: 0; border-left: 3px solid #808080; border-top: 3px solid #808080; border-right: 3px solid #fff; border-bottom: 3px solid #fff; background: #000; }
+.a-window .window-content iframe { width: 100%; height: 100%; border: none; display: block; }
+.windows-98 .window.gdialog { position: fixed; left: 50%; top: 100px; transform: translateX(-50%); z-index: 100; display: none; width: 300px; }
+.gdialog .window-content { padding: 10px; box-sizing: border-box; width: auto; background: silver; }
+.gdialog .row { margin: 8px 0 0; text-align: center; }
+/* menu items with a shortcut: the label on the left, the shortcut (F2 ...) pushed to the right edge (same as the Minesweeper page) */
+.menu .ui-menu-item > a { display: flex; align-items: center; gap: 16px; }
+.menu .ui-menu-item > a .mi-label { flex: 1 1 auto; text-align: left; }
+.menu .ui-menu-item > a .mi-key { margin-left: auto; flex: 0 0 auto; min-width: 3ch; text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; opacity: .9; }
+.menu, .menu .ui-menu-item > a, .menu .mi-label, .menu .mi-key { white-space: nowrap !important; }
+ul.menu { min-width: 150px; width: max-content; }
+/* the submenu arrow must not take room in the item (it sits at the right edge, like on the Minesweeper page) */
+.menu .ui-menu-item > a { position: relative; }
+.menu .ui-menu-icon.ui-icon { position: absolute !important; right: 4px; top: 50%; transform: translateY(-50%); margin: 0 !important; flex: 0 0 auto !important; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="windows windows-98">
+  <div class="window has-menu a-window" id="mainwin">
+    <div class="title-bar">
+      <div class="title-icon" id="ticon" style="background-image:url(icon2d.png)"></div>
+      <div class="title" id="ttitle">Bubble Shooter 2D</div>
+      <div class="title-button-group">
+        <div class="title-button minimize"></div>
+        <div class="title-button maximize disabled" onclick="event.preventDefault();event.stopPropagation();return false;"></div>
+        <div class="title-button close"></div>
+      </div>
+    </div>
+    <ul class="menu-bar">
+      <li>
+        <a href="#" data-access-key="g" data-t="game">게임</a>
+        <ul class="menu">
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="theme">　테마...</a>
+            <ul class="menu">
+              <li class="th th2d" onclick="return runMenu(function(){ setTheme('2d'); });"><a href="#">✓ 2D</a></li>
+              <li class="th th3d" onclick="return runMenu(function(){ setTheme('3d'); });"><a href="#">　3D</a></li>
+            </ul>
+          </li>
+          <li onclick="return runMenu(function(){ goFullscreen(); });"><a href="#" data-t="full">　전체화면</a></li>
+          <li class="separator"></li>
+          <li onclick="return runMenu(function(){ document.getElementById('mainwin').style.visibility='hidden'; });"><a href="#" data-t="exit">　끝내기(X)</a></li>
+        </ul>
+      </li>
+      <li>
+        <a href="#" data-access-key="h" data-t="help">도움말</a>
+        <ul class="menu">
+          <li onclick="return runMenu(function(){ openDlg('helpWin'); });"><a href="#" data-t="how">　게임 방법(H)</a></li>
+          <li class="separator"></li>
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="cheat">　치트...</a>
+            <ul class="menu">
+              <li class="menu-autosolve" onclick="return runMenu(function(){ toggleAuto(); });"><a href="#"><span class="mi-label" data-t="auto">　자동으로 풀기</span><span class="mi-key">F3</span></a></li>
+              <li class="menu-hint" onclick="return runMenu(function(){ giveHint(); });"><a href="#"><span class="mi-label" data-t="hint">　힌트 보기</span><span class="mi-key">F4</span></a></li>
+            </ul>
+          </li>
+          <li class="separator"></li>
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="other">　다른 게임</a>
+            <ul class="menu">
+              <li onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });"><a href="#" data-t="atari">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../index.html'; });"><a href="#" data-t="mine">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../2048/index.html'; });"><a href="#" data-t="g2048">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#" data-t="trex">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../pinball/index.html'; });"><a href="#" data-t="pinball">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../board/index.html'; });"><a href="#" data-t="board">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../swap/index.html'; });"><a href="#" data-t="swap">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../sudoku/index.html'; });"><a href="#" data-t="sudoku">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　</a></li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+    <div class="window-content"><iframe id="game" src="game.html"></iframe></div>
+  </div>
+
+  <div class="window gdialog" id="helpWin">
+    <div class="title-bar"><div class="title-icon" style="background-image:url(icon2d.png);background-size:16px 16px"></div><div class="title" data-t="howT">게임 방법</div>
+      <div class="title-button-group"><div class="title-button close" onclick="closeDlg('helpWin')"></div></div></div>
+    <div class="window-content"><div id="helpTxt" style="font-size:12px;line-height:1.55"></div>
+      <div class="row"><button type="button" class="title-button" style="padding:2px 10px;" onclick="closeDlg('helpWin')" data-t="ok">확인</button></div></div>
+  </div>
+</div>
+<script src="vendor/jquery.min.js"></script>
+<script src="vendor/jquery-ui.min.js"></script>
+<script src="jquery.mswin.js"></script>
+<script src="jquery.mswin.menu.js"></script>
+<script>
+(function () {
+  var KO = /^ko/i.test(navigator.language || 'ko');
+  var T = KO ? { game: '게임', cheat: '　치트...', auto: '　자동으로 풀기', hint: '　힌트 보기', theme: '　테마...', full: '　전체화면', exit: '　끝내기(X)', help: '도움말', how: '　게임 방법(H)', other: '　다른 게임', mine: '　지뢰찾기', g2048: '　2048', trex: '　T-Rex', pinball: '　3D 핀볼', board: '　보드게임', swap: '　스왑 퍼즐', sudoku: '　스도쿠', poly: '　폴리큐브', atari: '　아타리 브레이크아웃', howT: '게임 방법', ok: '확인',
+    help1: '같은 색 버블을 3개 이상 이어 붙이면 터집니다. 천장에서 떨어져 매달린 버블은 모두 떨어지며 추가 점수를 줍니다.<br><b>점수</b>: 터진 버블 +10, 떨어진 버블 +20, 레벨 클리어 +100.<br><b>새 줄</b>: 맞히든 못 맞히든 2발을 쏠 때마다 맨 위에 새 줄(3D는 새 층)이 생기고 무리 전체가 한 칸 내려옵니다(오른쪽 아래에 '새 줄까지 n발' 표시). 가장 아래 버블이 위험선(3D는 위험 평면, 발사대 근처)을 넘으면 게임 오버이며, 그 밖의 이유로는 끝나지 않습니다. 무리를 모두 없애면 +100점을 받고 계속하며 줄이 바로 하나 생깁니다.<br><b>레벨</b>: 2D는 줄이 10번, 3D는 층이 6번 생길 때마다 레벨이 오릅니다. 레벨이 올라도 이미 있는 버블은 바뀌지 않고, 그때부터 새로 생기는 줄과 내가 쏘는 버블의 색 수만 올림(√(2+레벨))로 늘어납니다(1레벨 2색, 3레벨 3색, 8레벨 4색, 15레벨 5색 ...). 색마다 작은 무늬가 있습니다. 쏘는 버블은 항상 무리에 남아 있는 색입니다. 시작할 때 2D는 5줄, 3D는 3층입니다(3D의 새 층은 약 40%만 채워집니다).<br><b>2D</b>: 필드를 누르고 움직여 조준하고(점선: 벽에 한 번 튕김) 손을 떼면 발사. 마우스는 움직이면 조준, 클릭하면 발사. 다음 버블(왼쪽 아래)을 누르면 서로 바뀝니다. 키보드: 좌우 조준, Space 발사, X 교체.<br><b>3D</b>: 바닥 지도나 아래의 발사대를 누르고 움직여 조준(발사대에서 먼 곳일수록 낮고 먼 각도), 떼면 발사. 그 밖의 곳을 누르고 움직이면 시점이 회전합니다(오른쪽 버튼 드래그도 회전). 오른쪽 아래의 다음 버블을 누르면 교체. 버블은 6방향(위/아래/앞뒤/좌우)으로 이웃합니다.<br><b>치트</b>: 도움말 &gt; 치트 &gt; 자동으로 풀기(F3) = 규칙 기반 자동 플레이, 힌트 보기(F4) = 가장 좋은 한 발만 대신 쏴 줍니다.<br>게임 &gt; 테마에서 2D / 3D를 고릅니다.' }
+  : { game: 'Game', cheat: '　Cheat...', auto: '　Solve Automatically', hint: '　Give a Hint', theme: '　Theme...', full: '　Fullscreen', exit: '　Exit(X)', help: 'Help', how: '　How to Play(H)', other: '　Other Games', mine: '　Minesweeper', g2048: '　2048', trex: '　T-Rex', pinball: '　3D Pinball', board: '　Board Games', swap: '　Swap Puzzle', sudoku: '　Sudoku', poly: '　Polycube', atari: '　Atari Breakout', howT: 'How to play', ok: 'OK',
+    help1: 'Connect 3 or more bubbles of the same colour to pop them. Every bubble that is no longer connected to the ceiling falls and gives extra points.<br><b>Score</b>: popped bubble +10, fallen bubble +20, clearing a level +100.<br><b>New rows</b>: every 2 shots, whatever they did, a new row (3D: layer) appears on top and the whole cluster moves down one step (shown as 'new row in n shots' at the bottom right). The game ends only when the lowest bubble crosses the danger line (3D: the danger plane near the shooter). Clearing the whole cluster gives +100 and play simply continues (a row appears at once).<br><b>Levels</b>: the level rises every 10 added rows in 2D, every 6 added layers in 3D. A level-up never changes bubbles that already exist: it only raises the number of colours, ceil(sqrt(2+level)), for bubbles created from then on (new rows and the bubbles you shoot): level 1: 2, level 3: 3, level 8: 4, level 15: 5 ... Every colour has a small mark. The bubble you shoot always has a colour that is still in the cluster. You start with 5 rows (3D: 3 layers; new 3D layers are only about 40% filled).<br><b>2D</b>: press the field and move to aim (dotted line, one wall bounce shown), release to fire. With a mouse, moving aims and clicking fires. Tap the next bubble (bottom left) to swap. Keyboard: left/right aim, Space fire, X swap.<br><b>3D</b>: press the floor map or the shooter and move to aim (the farther from the centre, the flatter the shot), release to fire. Press anywhere else and move to rotate the view (right-button drag rotates too). Tap the next bubble at the bottom right to swap. Bubbles touch their 6 face neighbours (up/down/front/back/left/right).<br><b>Cheat</b>: Help &gt; Cheat &gt; Solve Automatically (F3) = rule-based auto play, Give a Hint (F4) = fires only the single best shot for you.<br>Choose 2D / 3D in Game &gt; Theme.' };
+  document.documentElement.lang = KO ? 'ko' : 'en';
+  [].forEach.call(document.querySelectorAll('[data-t]'), function (e) { var k = e.getAttribute('data-t'); if (T[k] !== undefined) e.textContent = T[k]; });
+  document.getElementById('helpTxt').innerHTML = T.help1;
+  var theme = '2d';
+  function resize() {
+    var vw = window.innerWidth, vh = window.innerHeight, win = document.getElementById('mainwin'), chrome = 46, ratio = 0.62, gw, gh;
+    if (vw / (vh - chrome) < ratio) { gw = vw - 14; gh = gw / ratio; } else { gh = vh - chrome - 8; gw = gh * ratio; }
+    win.style.width = Math.floor(gw + 14) + 'px'; win.style.height = Math.floor(gh + chrome + 8) + 'px';
+  }
+  resize(); window.addEventListener('resize', resize);
+  window.setTheme = function (t) {
+    theme = t; markAuto(false); document.getElementById('game').src = t === '3d' ? 'game3d.html' : 'game.html';
+    document.getElementById('ttitle').textContent = t === '3d' ? 'Bubble Shooter 3D' : 'Bubble Shooter 2D';
+    document.getElementById('ticon').style.backgroundImage = 'url(icon' + t + '.png)';
+    ['2d', '3d'].forEach(function (k) { var a = document.querySelector('.th' + k + ' a'); a.textContent = (k === t ? '✓ ' : '　') + k.toUpperCase(); });
+  };
+  function closeMenus() {
+    var mb = $('.menu-bar'); try { mb.menubar('collapseAll'); } catch (e) {}
+    mb.find('.ui-state-open').removeClass('ui-state-open'); mb.find('> li').removeClass('ui-state-active ui-state-hover ui-state-focus');
+    mb.find('.menu').hide().attr('aria-hidden', 'true').attr('aria-expanded', 'false');
+  }
+  window.runMenu = function (fn) { closeMenus(); setTimeout(fn, 0); return false; };
+  window.closeDlg = function (id) { document.getElementById(id).style.display = 'none'; };
+  window.openDlg = function (id) { document.getElementById(id).style.display = 'block'; };
+  // the game frame is called directly; if the browser forbids that (file:// pages in Chrome are cross-origin) a message is sent instead
+  function callGame(name, cmd) {
+    const fr = document.getElementById('game'); let r;
+    try { const w = fr.contentWindow; if (typeof w[name] !== 'function') throw new Error('x'); r = w[name](); } catch (e) { try { fr.contentWindow.postMessage({ bubbleCmd: cmd }, '*'); } catch (e2) {} return undefined; }
+    return r;
+  }
+  window.giveHint = function () { callGame('giveHint', 'hint'); };                  // fires exactly one rule-based best shot (F4)
+  window.toggleAuto = function () { const on = callGame('toggleAuto', 'auto'); if (on !== undefined) markAuto(!!on); };   // rule-based auto play (F3); the frame reports its state back by message too
+  window.addEventListener('message', function (e) { const m = e.data; if (m && m.bubble === 'autoState') markAuto(!!m.on); });
+  window.markAuto = markAuto;
+  function markAuto(on) { const a = document.querySelector('.menu-autosolve .mi-label'); if (a) a.textContent = (on ? '✓ ' : '\u3000') + a.textContent.replace(/^[✓\u2713]\s*/, '').replace(/^\u3000/, ''); }
+  document.addEventListener('keydown', function (e) { if (e.key === 'F3') { e.preventDefault(); window.toggleAuto(); } else if (e.key === 'F4') { e.preventDefault(); window.giveHint(); } });
+  window.goFullscreen = function () { var el = document.getElementById('mainwin'); if (el.requestFullscreen) el.requestFullscreen(); };
+  $(function () {
+    if ($('.menu-bar').length) $('.menu-bar').menubar();
+    $('.window').draggable({ handle: '.title' });
+    $('#mainwin .title-button.minimize').on('click', function () { $('#mainwin').hide(); });
+    $('#mainwin .title-button.close').on('click', function () { $('#mainwin').css('visibility', 'hidden'); });
+    document.getElementById('game').addEventListener('load', function () { try { this.contentWindow.document.addEventListener('pointerdown', closeMenus); } catch (e) {} });
+    var g = new URLSearchParams(location.search).get('theme'); if (g === '3d') setTheme('3d');
+  });
+})();
+</script>
+</body>
+</html>

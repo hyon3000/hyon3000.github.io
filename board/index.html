@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Board Games</title>
-<meta name="description" content="Chess and Go (Baduk) in a Windows 98 frame: two players on one screen, or against Stockfish / GNU Go.">
+<meta name="description" content="Chess and Go in a Windows 98 frame: two players online, or against Stockfish / GNU Go.">
 <link href="win98.css" media="screen" rel="stylesheet" type="text/css">
 <style>
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #fff; }
@@ -44,6 +44,7 @@ ul.menu { min-width: 150px; width: max-content; }
         <a href="#" data-access-key="g" data-t="game">게임</a>
         <ul class="menu">
           <li onclick="return runMenu(function(){ call('newGame'); });"><a href="#"><span class="mi-label" data-t="new">　새 게임(N)</span><span class="mi-key">F2</span></a></li>
+          <li onclick="return runMenu(function(){ call('startOnline'); });"><a href="#"><span class="mi-label" data-t="online">　상대 선택...</span><span class="mi-key">F5</span></a></li>
           <li onclick="return runMenu(function(){ call('undo'); });"><a href="#"><span class="mi-label" data-t="undo">　무르기(U)</span></a></li>
           <li class="separator"></li>
           <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
@@ -51,6 +52,7 @@ ul.menu { min-width: 150px; width: max-content; }
             <ul class="menu">
               <li class="th thchess" onclick="return runMenu(function(){ setTheme('chess'); });"><a href="#">✓ 체스</a></li>
               <li class="th thgo" onclick="return runMenu(function(){ setTheme('go'); });"><a href="#">　바둑</a></li>
+              <li class="th thomok" onclick="return runMenu(function(){ setTheme('omok'); });"><a href="#">　오목</a></li>
             </ul>
           </li>
           <li onclick="return runMenu(function(){ goFullscreen(); });"><a href="#" data-t="full">　전체화면</a></li>
@@ -66,7 +68,7 @@ ul.menu { min-width: 150px; width: max-content; }
           <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
             <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="cheat">　치트...</a>
             <ul class="menu">
-              <li class="menu-autosolve" onclick="return runMenu(function(){ toggleAuto(); });"><a href="#"><span class="mi-label" data-t="auto">　컴퓨터와 대전</span><span class="mi-key">F3</span></a></li>
+              <li class="menu-autosolve" onclick="return runMenu(function(){ toggleAuto(); });"><a href="#"><span class="mi-label" data-t="auto">　자동으로 풀기</span><span class="mi-key">F3</span></a></li>
               <li onclick="return runMenu(function(){ call('hint'); });"><a href="#"><span class="mi-label" data-t="hint">　컴퓨터 힌트</span><span class="mi-key">F4</span></a></li>
             </ul>
           </li>
@@ -80,6 +82,8 @@ ul.menu { min-width: 150px; width: max-content; }
               <li onclick="return runMenu(function(){ window.location.href='../pinball/index.html'; });"><a href="#">　3D 핀볼</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../sudoku/index.html'; });"><a href="#" data-t="sudoku">　스도쿠</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });"><a href="#">　아타리 브레이크아웃</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../bubble/index.html'; });"><a href="#">　버블 슈터</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../swap/index.html'; });"><a href="#">　스왑 퍼즐</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　폴리큐브</a></li>
             </ul>
           </li>
@@ -103,14 +107,14 @@ ul.menu { min-width: 150px; width: max-content; }
 <script>
 (function () {
   var KO = /^ko/i.test(navigator.language || 'ko');
-  var T = KO ? { game: '게임', new: '　새 게임(N)', undo: '　무르기(U)', board: '　보드게임', cheat: '　치트...', auto: '　컴퓨터와 대전', hint: '　컴퓨터 힌트', theme: '　테마...', full: '　전체화면', exit: '　끝내기(X)', help: '도움말', how: '　게임 방법(H)', other: '　다른 게임', mine: '　지뢰찾기', sudoku: '　스도쿠', poly: '　폴리큐브', howT: '게임 방법', ok: '확인',
-    help1: '<b>체스</b>: 말을 클릭(또는 끌어서) 옮깁니다. 캐슬링 · 앙파상 · 프로모션과 체크메이트 · 스테일메이트 · 3회 반복 · 50수 규칙을 모두 지원합니다.<br><b>바둑</b>: 교차점을 눌러 돌을 놓습니다(터치는 한 번 누르면 미리보기, 같은 곳을 다시 누르면 착수). 둘이 연속 패스하면 사석을 눌러 표시한 뒤 계가합니다(중국식 집 계산).<br>기본은 한 화면에서 둘이 두는 대전입니다. 도움말 &gt; 치트 &gt; 컴퓨터와 대전(F3)을 켜면 체스는 Stockfish, 바둑은 GNU Go가 상대합니다(오픈소스 엔진, 첫 사용 때 불러오느라 잠시 걸립니다). 컴퓨터 힌트(F4)는 컴퓨터가 추천하는 수를 보여 줍니다.' }
-  : { game: 'Game', new: '　New Game(N)', undo: '　Undo(U)', cheat: '　Cheat...', auto: '　Play the Computer', hint: '　Computer Hint', theme: '　Theme...', full: '　Fullscreen', exit: '　Exit(X)', help: 'Help', how: '　How to Play(H)', other: '　Other Games', mine: '　Minesweeper', sudoku: '　Sudoku', poly: '　Polycube', howT: 'How to play', ok: 'OK',
-    help1: '<b>Chess</b>: click (or drag) a piece to move it. Castling, en passant, promotion, checkmate, stalemate, threefold repetition and the 50-move rule are all supported.<br><b>Go (Baduk)</b>: click an intersection to place a stone (on touch screens the first tap previews, a second tap on the same point plays it). After two passes mark the dead stones and the game is scored (area counting).<br>By default two people play on one screen. Help &gt; Cheat &gt; Play the Computer (F3) lets Stockfish (chess) or GNU Go (Go) play against you (open-source engines, loaded on first use). Computer Hint (F4) shows the engine\'s suggested move.' };
+  var T = KO ? { game: '게임', new: '　새 게임(N)', online: '　상대 선택...', undo: '　무르기(U)', board: '　보드게임', cheat: '　치트...', auto: '　자동으로 풀기', hint: '　힌트 제공', theme: '　테마...', full: '　전체화면', exit: '　끝내기(X)', help: '도움말', how: '　게임 방법(H)', other: '　다른 게임', mine: '　지뢰찾기', sudoku: '　스도쿠', poly: '　폴리큐브', howT: '게임 방법', ok: '확인',
+    help1: '<b>대전</b>: 시작하면 대전 상대 창이 뜹니다. 같은 와이파이의 두 사람이 코드를 주고받아 연결하거나(같은 브라우저의 두 창은 자동 연결), 「컴퓨터와 플레이」를 고르면 체스는 Stockfish, 바둑은 GNU Go가 상대합니다(오픈소스 엔진, 첫 사용 때 불러오느라 잠시 걸립니다). 상대 변경은 게임 &gt; 상대 선택(F5). 체스는 방장이 백, 바둑은 방장이 흑입니다.<br><b>오목</b>: 15×15 판에서 흑이 먼저 두고, 가로·세로·대각선으로 다섯 알 이상(정석 규칙은 정확히 다섯)을 먼저 이으면 이깁니다.<br><b>체스</b>: 말을 클릭(또는 끌어서) 옮깁니다. 캐슬링 · 앙파상 · 프로모션과 체크메이트 · 스테일메이트 · 3회 반복 · 50수 규칙을 모두 지원합니다.<br><b>바둑</b>: 교차점을 눌러 돌을 놓습니다(터치는 한 번 누르면 미리보기, 같은 곳을 다시 누르면 착수). 둘이 연속 패스하면 사석을 눌러 표시한 뒤 계가합니다(중국식 집 계산).<br>도움말 &gt; 치트: 힌트 제공(F4)은 엔진이 추천하는 수를 하나 보여 주고, 자동으로 풀기(F3)는 내 차례마다 엔진이 대신 두어 줍니다. 컴퓨터와 둘 때도, 사람과 온라인으로 둘 때도 항상 쓸 수 있습니다.' }
+  : { game: 'Game', online: '　Choose Opponent...', new: '　New Game(N)', undo: '　Undo(U)', cheat: '　Cheat...', auto: '　Solve Automatically', hint: '　Give a Hint', theme: '　Theme...', full: '　Fullscreen', exit: '　Exit(X)', help: 'Help', how: '　How to Play(H)', other: '　Other Games', mine: '　Minesweeper', sudoku: '　Sudoku', poly: '　Polycube', howT: 'How to play', ok: 'OK',
+    help1: '<b>Matches</b>: when you start, an opponent window opens. Two players on the same Wi-Fi swap codes to connect (two windows of one browser connect by themselves), or pick "Play vs Computer": Stockfish (chess) or GNU Go (Go), open-source engines loaded on first use. Change opponent with Game &gt; Choose Opponent (F5). In chess the host is White, in Go the host is Black.<br><b>Gomoku (Omok)</b>: on a 15x15 board Black moves first; whoever first gets five (or more; exactly five under the standard rule) in a row horizontally, vertically or diagonally wins.<br><b>Chess</b>: click (or drag) a piece to move it. Castling, en passant, promotion, checkmate, stalemate, threefold repetition and the 50-move rule are all supported.<br><b>Go</b>: click an intersection to place a stone (on touch screens the first tap previews, a second tap on the same point plays it). After two passes mark the dead stones and the game is scored (area counting).<br>Help > Cheat: Give a Hint (F4) shows one suggested move from the engine; Solve Automatically (F3) lets the engine play your moves on every turn. Both always work, against the computer or a human online.' };
   document.documentElement.lang = KO ? 'ko' : 'en';
   [].forEach.call(document.querySelectorAll('[data-t]'), function (e) { var k = e.getAttribute('data-t'); if (T[k] !== undefined) e.textContent = T[k]; });
   document.getElementById('helpTxt').innerHTML = T.help1;
-  var theme = 'chess', NAMES = { chess: KO ? '체스' : 'Chess', go: KO ? '바둑' : 'Go (Baduk)' };
+  var theme = 'chess', NAMES = { chess: KO ? '체스' : 'Chess', go: KO ? '바둑' : 'Go', omok: KO ? '오목' : 'Gomoku (Omok)' };
   function resize() {
     var vw = window.innerWidth, vh = window.innerHeight, win = document.getElementById('mainwin'), chrome = 46;
     win.style.width = Math.min(vw - 8, Math.max(320, Math.floor((vh - chrome - 8) * 1.45 + 14))) + 'px'; win.style.height = Math.max(300, vh - 8) + 'px';
@@ -122,7 +126,7 @@ ul.menu { min-width: 150px; width: max-content; }
     theme = t; markAuto(false); document.getElementById('game').src = t + '.html';
     document.getElementById('ttitle').textContent = NAMES[t]; document.title = NAMES[t];
     document.getElementById('ticon').style.backgroundImage = 'url(icon' + t + '.png)';
-    ['chess', 'go'].forEach(function (k) { var a = document.querySelector('.th' + k + ' a'); a.textContent = (k === t ? '✓ ' : '\u3000') + NAMES[k]; });
+    ['chess', 'go', 'omok'].forEach(function (k) { var a = document.querySelector('.th' + k + ' a'); a.textContent = (k === t ? '✓ ' : '\u3000') + NAMES[k]; });
   };
   function closeMenus() {
     var mb = $('.menu-bar'); try { mb.menubar('collapseAll'); } catch (e) {}
@@ -132,10 +136,10 @@ ul.menu { min-width: 150px; width: max-content; }
   window.runMenu = function (fn) { closeMenus(); setTimeout(fn, 0); return false; };
   window.closeDlg = function (id) { document.getElementById(id).style.display = 'none'; };
   window.openDlg = function (id) { document.getElementById(id).style.display = 'block'; };
-  window.toggleAuto = function () { var on = call('toggleVsAI'); markAuto(!!on); };      // computer opponent (open-source engine) on / off
+  window.toggleAuto = function () { var on = call('toggleAuto'); markAuto(!!on); };      // computer opponent (open-source engine) on / off
   function markAuto(on) { var a = document.querySelector('.menu-autosolve .mi-label'); if (a) a.textContent = (on ? '✓ ' : '\u3000') + a.textContent.replace(/^[✓\u2713]\s*/, '').replace(/^\u3000/, ''); }
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'F2') { e.preventDefault(); call('newGame'); } else if (e.key === 'F3') { e.preventDefault(); window.toggleAuto(); } else if (e.key === 'F4') { e.preventDefault(); call('hint'); }
+    if (e.key === 'F2') { e.preventDefault(); call('newGame'); } else if (e.key === 'F3') { e.preventDefault(); window.toggleAuto(); } else if (e.key === 'F4') { e.preventDefault(); call('hint'); } else if (e.key === 'F5') { e.preventDefault(); call('startOnline'); }
   });
   window.goFullscreen = function () { var el = document.getElementById('mainwin'); if (el.requestFullscreen) el.requestFullscreen(); };
   $(function () {
@@ -143,9 +147,20 @@ ul.menu { min-width: 150px; width: max-content; }
     $('.window').draggable({ handle: '.title' });
     $('#mainwin .title-button.minimize').on('click', function () { $('#mainwin').hide(); });
     $('#mainwin .title-button.close').on('click', function () { $('#mainwin').css('visibility', 'hidden'); });
-    document.getElementById('game').addEventListener('load', function () { try { this.contentWindow.document.addEventListener('pointerdown', closeMenus); this.contentWindow.document.addEventListener('keydown', function (e) { if (/^F[234]$/.test(e.key)) document.dispatchEvent(new KeyboardEvent('keydown', { key: e.key })); }); } catch (e) {} });
-    var g = new URLSearchParams(location.search).get('theme'); if (g === 'go') setTheme('go');
+    document.getElementById('game').addEventListener('load', function () { try { this.contentWindow.document.addEventListener('pointerdown', closeMenus); this.contentWindow.document.addEventListener('keydown', function (e) { if (/^F[2345]$/.test(e.key)) document.dispatchEvent(new KeyboardEvent('keydown', { key: e.key })); }); } catch (e) {} });
+    ['chess', 'go', 'omok'].forEach(function (k) { var a = document.querySelector('.th' + k + ' a'); a.textContent = (k === theme ? '✓ ' : '\u3000') + NAMES[k]; });
+    document.getElementById('ttitle').textContent = NAMES.chess; document.title = NAMES.chess;
+    var g = new URLSearchParams(location.search).get('theme'); if (g === 'go' || g === 'omok') setTheme(g);
   });
+})();
+</script>
+<script>
+/* "Other games" entries that are not translated by the page itself: English names for non-Korean browsers */
+(function () {
+  if (/^ko/i.test(navigator.language || 'ko')) return;
+  var EN = { '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '스왑 퍼즐': 'Swap Puzzle', '지뢰찾기': 'Minesweeper', '폴리큐브': 'Polycube' };
+  function run() { [].forEach.call(document.querySelectorAll('.menu a'), function (a) { if (a.children.length) return; var s = a.textContent.replace(/^[\u3000\s]+/, ''); if (EN[s]) a.textContent = '\u3000' + EN[s]; }); }
+  if (document.readyState === 'complete') run(); else window.addEventListener('load', run);
 })();
 </script>
 </body>

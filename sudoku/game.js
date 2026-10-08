@@ -15,6 +15,7 @@
   var T = KO ? TXT.ko : TXT.en;
   document.documentElement.lang = KO ? 'ko' : 'en'; document.title = T.title;
   [].forEach.call(document.querySelectorAll('[data-t]'), function (e) { var k = e.getAttribute('data-t'); if (T[k] !== undefined) e.textContent = T[k]; });
+  (function () { var b = document.getElementById("memoBtn"); if (b && T.noteT) b.title = T.noteT.replace(/\s*[(（].*$/, ""); })();
   document.getElementById('helpTxt').innerHTML = T.help1;
 
   var type = 0, diff = 1, CLUES = [40, 32, 26];

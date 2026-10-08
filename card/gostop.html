@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Go-Stop</title>
+<script>window.__errs=[];window.addEventListener('error',function(e){window.__errs.push(e.message+' @'+e.filename+':'+e.lineno)});</script>
+<style>
+*{box-sizing:border-box}
+html{--cw:40px;--cw0:40px;--mw:24px}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d3b2a;color:#f2f2e8;font:13px/1.3 "Segoe UI","Malgun Gothic",system-ui,sans-serif;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+#app{height:100%;width:100%;padding:4px 6px;display:grid;gap:3px;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto minmax(0,1fr) auto auto auto auto;
+ grid-template-areas:"oinfo" "ohand" "ocap" "mid" "mcap" "status" "mhand" "ctrl";background:radial-gradient(ellipse at 50% 40%,#18643f 0,#0d3b2a 80%)}
+#app.wide{grid-template-columns:minmax(0,1fr) 36%;grid-template-rows:auto minmax(0,1fr) auto auto;column-gap:8px;
+ grid-template-areas:"ohand ocap" "mid status" "mhand mcap" "ctrl ctrl"}
+#app.wide #oinfo{display:none}
+.card{position:relative;width:var(--cw);height:calc(var(--cw)*1.55);flex:none;border-radius:calc(var(--cw)*.11);box-shadow:0 1px 3px rgba(0,0,0,.55);background:#fbf6e6;transition:transform .12s,box-shadow .12s}
+.card svg{width:100%;height:100%;display:block;pointer-events:none}
+.card.back{background:repeating-linear-gradient(45deg,#a32a2a 0 4px,#8a2020 4px 8px);border:2px solid #f0e6c8}
+.card.back::after{content:"";position:absolute;left:50%;top:50%;width:46%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;background:#f0e6c8;opacity:.8}
+.mini{--cw:var(--mw)}
+#oinfo,#minfo{display:flex;align-items:center;gap:8px;min-height:18px;font-weight:600;white-space:nowrap;overflow:hidden}
+.nm{opacity:.9}.pts{background:#0006;border-radius:10px;padding:0 8px;font-weight:700}.pts b{color:#ffd54a}
+.tag{font-size:11px;opacity:.85}
+#ohand{grid-area:ohand;display:flex;justify-content:center;height:calc(var(--cw)*.82);overflow:hidden}
+#ohand .card{--cw:calc(var(--cw0)*.9);height:calc(var(--cw0)*1.4);margin-left:calc(var(--cw0)*-.42)}
+#ohand .card:first-child{margin-left:0}
+.cap{display:flex;flex-direction:column;gap:2px}
+.caprow{display:flex;gap:6px;align-items:flex-end}
+.grp{position:relative}
+.grp .gl{font-size:10px;line-height:11px;height:11px;opacity:.85;white-space:nowrap}
+.grp .cw{position:relative}
+.grp .cw .card{position:absolute;top:0}
+#ocap{grid-area:ocap}#mcap{grid-area:mcap}#oinfo{grid-area:oinfo}
+#mid{grid-area:mid;display:flex;gap:8px;min-height:0;align-items:stretch}
+#field{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;gap:calc(var(--cw)*.2) calc(var(--cw)*.28);padding:4px;border-radius:12px;background:rgba(0,0,0,.18);position:relative;overflow:hidden}
+.stack{display:flex;position:relative}
+.stack .card + .card{margin-left:calc(var(--cw)*-.62)}
+.stack.sp .card + .card{margin-left:calc(var(--cw)*.12)}
+.stack .lbl{position:absolute;left:0;right:0;bottom:-13px;text-align:center;font-size:11px;font-weight:700;color:#ffd54a;text-shadow:0 1px 2px #000}
+#stockbox{flex:none;width:calc(var(--cw)*1.7);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px}
+#pile{position:relative}
+#pile .card{position:absolute;left:0;top:0}
+#pile .n{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-weight:800;font-size:calc(var(--cw)*.5);text-shadow:0 1px 3px #000;z-index:2}
+#last{display:flex;gap:3px;min-height:calc(var(--mw)*1.55 + 14px);flex-direction:column;align-items:center;font-size:10px;opacity:.95}
+#last .pair{display:flex;gap:3px}
+.card.hint{outline:3px solid #ffe14a;outline-offset:1px;box-shadow:0 0 12px 3px #ffe14a;z-index:5}
+.card.tgt{outline:3px solid #5dff8a;outline-offset:1px;box-shadow:0 0 10px 2px #5dff8a;cursor:pointer;z-index:4}
+.card.new{box-shadow:0 0 9px 3px #ff9a3c}
+.card.dim{filter:brightness(.78)}
+#mhand{grid-area:mhand;display:flex;justify-content:center;align-items:flex-end;gap:calc(var(--cw)*.06);min-height:calc(var(--cw)*1.8);padding-top:calc(var(--cw)*.2)}
+#mhand .card{cursor:pointer}
+#mhand .card.sel{transform:translateY(-22%)}
+#status{grid-area:status;display:flex;flex-direction:column;gap:3px;min-height:40px}
+#msg{font-weight:600;font-size:13px;padding:3px 8px;border-radius:8px;background:rgba(0,0,0,.35);min-height:24px;display:flex;align-items:center}
+#msg.you{background:rgba(40,120,60,.7)}
+#acts{display:flex;flex-wrap:wrap;gap:5px}
+#acts:empty{display:none}
+button{font:inherit;color:#fff;background:#3b5a4a;border:1px solid #6f9a84;border-radius:7px;padding:5px 10px;cursor:pointer;touch-action:manipulation}
+button:hover{background:#4b7360}
+button.pri{background:#2f8f4f;border-color:#7ad596}
+button.stop{background:#b53b30;border-color:#f09a8f}
+button.hint{outline:3px solid #ffe14a;box-shadow:0 0 10px #ffe14a}
+button.on{background:#c98a14;border-color:#ffd54a}
+button:disabled{opacity:.45;cursor:default}
+#ctrl{grid-area:ctrl;display:flex;flex-wrap:wrap;gap:5px;align-items:center;justify-content:center}
+#ctrl .sp{flex:1}
+#toast{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);font-size:34px;font-weight:900;color:#ffe14a;text-shadow:0 2px 6px #000,0 0 14px #c60;pointer-events:none;opacity:0;white-space:nowrap;z-index:30}
+#toast.show{animation:tst 1.5s ease-out}
+@keyframes tst{0%{opacity:0;transform:translate(-50%,-30%) scale(.5)}15%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}75%{opacity:1}100%{opacity:0;transform:translate(-50%,-70%) scale(1)}}
+#res{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(380px,92vw);background:#1b2b25f2;border:2px solid #ffd54a;border-radius:12px;padding:12px 14px;z-index:40;box-shadow:0 8px 30px #000a;display:none}
+#res h3{margin:0 0 6px;font-size:20px;text-align:center}
+#res table{width:100%;border-collapse:collapse;font-size:13px}#res td{padding:1px 4px}#res td:last-child{text-align:right;font-weight:700}
+#res .btns{display:flex;gap:8px;justify-content:center;margin-top:10px}
+#gsbox{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--cw)*1.9 + 70px);z-index:35;display:none;background:#1b2b25f2;border:2px solid #ffd54a;border-radius:12px;padding:10px 14px;text-align:center;width:min(360px,94vw);box-shadow:0 8px 26px #000a}
+#gsbox .t{font-weight:700;margin-bottom:8px}
+#gsbox button{font-size:18px;padding:8px 22px;margin:0 6px}
+#ghost{position:fixed;z-index:60;pointer-events:none;display:none;transform:translate(-50%,-60%) scale(1.1);opacity:.92}
+#note{position:absolute;left:0;right:0;top:3px;text-align:center;font-size:11px;color:#ffb0a0;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="app">
+ <div id="oinfo"></div>
+ <div id="ohand"></div>
+ <div id="ocap" class="cap"></div>
+ <div id="mid"><div id="field"></div><div id="stockbox"><div id="pile"></div><div id="last"></div></div></div>
+ <div id="mcap" class="cap"></div>
+ <div id="status"><div id="msg"></div><div id="acts"></div></div>
+ <div id="mhand"></div>
+ <div id="ctrl"></div>
+</div>
+<div id="toast"></div>
+<div id="gsbox"></div>
+<div id="res"></div>
+<div id="ghost" class="card"></div>
+<div id="note"></div>
+<script src="link.js"></script>
+<script src="gostop-core.js"></script>
+<script src="cardface.js"></script>
+<script>
+(function () {
+'use strict';
+var KO = /^ko/i.test(navigator.language || 'ko');
+function $(i) { return document.getElementById(i); }
+var TXT = {
+  you: ['You', '나'], opp: ['Opponent', '상대'], comp: ['Computer', '컴퓨터'], pts: ['Score', '점수'], goN: ['Go', '고'],
+  new: ['New game', '새 게임'], undo: ['Undo', '무르기'], online: ['Opponent...', '상대 선택'], hint: ['Hint', '힌트'], auto: ['Auto', '자동'],
+  yourT: ['Your turn: pick a card to play (tap twice or drag it to the table).', '내 차례: 낼 패를 고르세요 (두 번 누르거나 끌어 놓기).'],
+  oppT: ["Opponent's turn...", '상대 차례...'], pickT: ['Pick the table card to capture.', '가져올 바닥 패를 고르세요.'],
+  goT: ['%1 points! Go or Stop?', '%1점! 고 or 스톱?'], oppGo: ['Opponent is deciding Go / Stop...', '상대가 고/스톱을 결정 중...'],
+  go: ['Go', '고'], stop: ['Stop', '스톱'], shake: ['Shake (x2) %1', '흔들기(x2) %1월'], bomb: ['Bomb %1', '폭탄 %1월'], skip: ['Use bomb card (flip only)', '폭탄패 사용(뒤집기만)'],
+  stopV: ['Stop: you win %1 pts', '스톱하면 %1점 획득'], goV: ['Go: +1 bonus per go (2: +2, 3+: x2 each)', '고: 1고 +1, 2고 +2, 3고부터 매번 x2'],
+  win: ['You win!', '승리!'], lose: ['You lose', '패배'], draw: ['Draw (Nagari) - nobody reached 7', '나가리 - 아무도 7점에 못 미침'],
+  base: ['Card points', '패 점수'], goB: ['Go bonus', '고 보너스'], goM: ['Go multiplier', '고 배수'], shM: ['Shake / bomb multiplier', '흔들기·폭탄 배수'],
+  bak: { gwang: ['Gwang-bak x2', '광박 x2'], pi: ['Pi-bak x2', '피박 x2'], meong: ['Meong-bak x2', '멍박 x2'], go: ['Go-bak x2', '고박 x2'] },
+  total: ['Result', '결과'], ppeok3: ['Three ppeok: instant win', '쓰리뻑: 즉시 승리'], newg: ['New game', '새 게임'], close: ['Close', '닫기'],
+  session: ['Session', '누적'], wlose: ['W-L-D', '승-패-무'],
+  ev: { ppeok: ['Ppeok!', '뻑!'], jjok: ['Jjok!', '쪽!'], ttadak: ['Ttadak!', '따닥!'], sweep: ['Sweep!', '싹쓸이!'], bomb: ['Bomb!', '폭탄!'], shake: ['Shake! x2', '흔들기! x2'], eat: ['Ppeok eaten', '뻑 먹기'], selfeat: ['Self-ppeok!', '자뻑!'], go: ['Go %1!', '%1고!'] },
+  pwho: ['Last: ', '직전: '], played: ['hand', '낸 패'], flipped: ['stock', '뒤집은 패'], stolen: ['took a junk card', '피 한 장 가져옴'],
+  bombc: ['Bomb cards', '폭탄패'],
+  noOpp: ['No opponent yet - use Game > Choose Opponent (F5).', '상대가 없습니다 - 게임 > 상대 선택(F5).'],
+  disc: ['Opponent disconnected.', '상대가 연결을 끊었습니다.'], desync: ['Out of sync with opponent - start a new game.', '상대와 화면이 맞지 않습니다. 새 게임을 시작하세요.'],
+  waitHost: ['Waiting for the host to deal...', '방장이 패를 돌리길 기다리는 중...'], onl: ['Online', '온라인'], vsc: ['vs Computer', '컴퓨터 대전'],
+  host: ['host', '방장'], guest: ['guest', '손님'], first: ['moves first', '선공'],
+  cnt: { G: ['Bright', '광'], A: ['Animal', '열끗'], R: ['Ribbon', '띠'], J: ['Junk', '피'] },
+  sc: { gw: ['Bright', '광'], an: ['Animal', '열끗'], bird: ['Godori', '고도리'], rb: ['Ribbon', '띠'], hong: ['Hongdan', '홍단'], cheong: ['Cheongdan', '청단'], cho: ['Chodan', '초단'], jk: ['Junk', '피'] },
+  hintT: ['Hint: ', '힌트: '], hPlay: ['play the highlighted card', '표시된 패를 내세요'], hPick: ['take the highlighted table card', '표시된 바닥 패를 가져가세요']
+};
+function T(k, a) { var v = TXT[k][KO ? 1 : 0]; if (a !== undefined) v = v.replace('%1', a); return v; }
+var CLS = GS.CLS, SUB = GS.SUB, mon = GS.mon;
+
+/* ---------- controller state ---------- */
+var S = null, mode = 'idle', me = 0, link = null, autoOn = false, hintObj = null, pendingHint = false, sel = -1, timer = 0, gen = 0, speed = 1, fast = false;
+var gid = 0, lastWinner = -1, firstP = -1, notice = '', stats = { w: 0, l: 0, d: 0, pts: 0 }, snaps = [], resShown = false, toastTimer = 0, pairing = false, drag = null;
+var local = /[?&]ai=1/.test(location.search);
+function D(ms) { return fast ? 0 : ms * speed; }
+
+/* ---------- start / games ---------- */
+function rndSeed() { return (Math.random() * 4294967296) >>> 0; }
+function pickFirst() { return lastWinner >= 0 ? lastWinner : (Math.random() < 0.5 ? 0 : 1); }
+function initGame(seed, first, g) {
+  S = GS.newState(seed, first); gid = g; hintObj = null; sel = -1; resShown = false; snaps = []; notice = '';
+  $('res').style.display = 'none'; $('gsbox').style.display = 'none';
+  snapNow(); render(); kick();
+}
+function snapNow() { if (mode === 'ai' && S && S.phase === 'play' && S.turn === me) snaps.push({ n: S.n, j: JSON.stringify(S) }); }
+function newLocal() { initGame(rndSeed(), pickFirst(), gid + 1); }
+function hostNew() { var seed = rndSeed(), first = pickFirst(), g = gid + 1; if (link) link.send({ t: 'new', seed: seed, first: first, gid: g }); initGame(seed, first, g); }
+function startAI() {
+  if (link) { var l = link; link = null; try { l.close(); } catch (e) {} }
+  pairing = false; mode = 'ai'; me = 0; lastWinner = -1; newLocal();
+}
+function startOnline() {
+  if (typeof BoardLink === 'undefined') return;
+  if (link) { var l = link; link = null; try { l.close(); } catch (e) {} }
+  mode = 'idle'; pairing = true; clearTimeout(timer); gen++; render();
+  BoardLink.pair({
+    onOpen: function (l) { pairing = false; link = l; mode = 'online'; me = l.isHost ? 0 : 1; lastWinner = -1; S = null; notice = T('waitHost'); resShown = false; $('res').style.display = 'none'; render(); if (l.isHost) hostNew(); },
+    onMessage: onMsg,
+    onClose: function () { if (mode !== 'online') return; link = null; mode = 'idle'; clearTimeout(timer); gen++; autoOn = autoOn; notice = T('disc'); render(); setTimeout(startOnline, 0); },
+    onCancel: function () { pairing = false; render(); },
+    onAI: startAI
+  });
+}
+function onMsg(d) {
+  if (mode !== 'online' || !d) return;
+  if (d.t === 'new') { if (link && !link.isHost) { lastWinner = -1; initGame(d.seed >>> 0, d.first, d.gid); } }
+  else if (d.t === 'req') { if (link && link.isHost && d.gid >= gid) hostNew(); }
+  else if (d.t === 'a') {
+    if (!S || S.phase === 'over' || S.turn === me || d.n !== S.n || !GS.apply(S, d.a)) { notice = T('desync'); render(); return; }
+    afterAct(d.a);
+  }
+}
+function ensurePlaying() { if (mode === 'idle') { try { BoardLink.cancel(); } catch (e) {} startAI(); } }
+
+/* ---------- acting ---------- */
+function act(a) {
+  if (!S || S.phase === 'over') return false;
+  var n = S.n, who = S.turn;
+  if (!GS.apply(S, a)) return false;
+  if (mode === 'online' && who === me && link) link.send({ t: 'a', n: n, a: a });
+  afterAct(a); return true;
+}
+var EVTXT = null;
+function afterAct(a) {
+  hintObj = null; sel = -1;
+  if (fast) { if (S.phase === 'over') onOver(); return; }
+  if (S.ev && S.ev.length) {
+    var e = S.ev[S.ev.length - 1], ks = S.ev.map(function (x) { return x.k; });
+    var txt = S.ev.map(function (x) { return T0(x); }).join(' ');
+    if (txt) toast(txt);
+  }
+  if (S.phase === 'over') onOver();
+  snapNow(); render(); kick();
+}
+function T0(x) { var t = TXT.ev[x.k]; return t ? t[KO ? 1 : 0].replace('%1', x.x) : ''; }
+function toast(t) { var e = $('toast'); e.textContent = t; e.classList.remove('show'); void e.offsetWidth; e.classList.add('show'); }
+function onOver() {
+  if (S.counted) return; S.counted = true;
+  var r = S.result; lastWinner = r.draw ? lastWinner : r.winner;
+  if (r.draw) stats.d++; else if (r.winner === me) { stats.w++; stats.pts += r.pts; } else { stats.l++; stats.pts -= r.pts; }
+  if (!fast) showResult();
+}
+function kick() {
+  clearTimeout(timer); var g = ++gen;
+  if (fast) return;
+  if (!S) return;
+  if (S.phase === 'over') {
+    if (autoOn) timer = setTimeout(function () { if (g === gen) newGame(true); }, D(1800));
+    return;
+  }
+  var actor = S.turn;
+  if (actor === me) {
+    if (pendingHint) { pendingHint = false; showHint(); }
+    if (autoOn) timer = setTimeout(function () { if (g !== gen || !S || S.turn !== me) return; var a = GS.choose(S, me); if (a) act(a); }, D(550));
+    else if (S.phase === 'play' && S.hands[me].length === 0 && S.skips[me] > 0) timer = setTimeout(function () { if (g === gen) act({ type: 'skip' }); }, D(700));
+  } else if (mode === 'ai') {
+    timer = setTimeout(function () { if (g !== gen || !S || S.turn === me) return; var a = GS.choose(S, S.turn); if (a) act(a); }, D(S.phase === 'go' ? 1100 : 850));
+  }
+}
+
+/* ---------- public API (called by the shell) ---------- */
+function newGame(auto) {
+  if (mode === 'ai') { newLocal(); }
+  else if (mode === 'online' && link) { if (link.isHost) hostNew(); else link.send({ t: 'req', gid: gid }); }
+  else if (!auto) startOnline();
+}
+function undo() {
+  if (mode !== 'ai' || !S || !snaps.length) return;
+  var top = snaps[snaps.length - 1], j;
+  if (top.n === S.n && snaps.length > 1) { snaps.pop(); top = snaps[snaps.length - 1]; }
+  S = JSON.parse(top.j); hintObj = null; sel = -1; resShown = false; $('res').style.display = 'none'; S.counted = false;
+  render(); kick();
+}
+function showHint() {
+  if (!S || S.phase === 'over' || S.turn !== me) return false;
+  hintObj = GS.hint(S, me); if (!hintObj) return false;
+  if (hintObj.type === 'play') sel = -1;
+  render(); return true;
+}
+function giveHint() {
+  if (mode === 'idle') ensurePlaying();
+  if (!S || S.phase === 'over') return false;
+  if (S.turn !== me) { pendingHint = true; return true; }
+  return showHint();
+}
+function toggleAuto() {
+  if (mode === 'idle') ensurePlaying();
+  autoOn = !autoOn; render(); kick(); try { parent.setAutoMark && parent.setAutoMark(autoOn); } catch (e) {} return autoOn;
+}
+function isAuto() { return autoOn; }
+
+/* ---------- user input ---------- */
+function myAction() { return S && S.phase !== 'over' && S.turn === me && !autoOn; }
+function tapHand(id) {
+  if (!myAction() || S.phase !== 'play') return;
+  if (sel === id) { hintObj = null; act({ type: 'play', card: id }); } else { sel = id; hintObj = null; render(); }
+}
+function tapField(id) {
+  if (!myAction()) return;
+  if (S.phase === 'pickHand' || S.phase === 'pickStock') { if (S.cands.indexOf(id) >= 0) act({ type: 'pick', card: id }); }
+  else if (S.phase === 'play' && sel >= 0 && mon(id) === mon(sel)) act({ type: 'play', card: sel });
+}
+$('mhand').addEventListener('pointerdown', function (e) {
+  var el = e.target.closest('.card'); if (!el || !myAction() || S.phase !== 'play') return;
+  var id = +el.dataset.id; drag = { id: id, x: e.clientX, y: e.clientY, moved: false, pid: e.pointerId };
+  try { $('mhand').setPointerCapture(e.pointerId); } catch (x) {}
+});
+$('mhand').addEventListener('pointermove', function (e) {
+  if (!drag || e.pointerId !== drag.pid) return;
+  if (!drag.moved && Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 10) {
+    drag.moved = true; var g = $('ghost'); g.innerHTML = CardFace.svg(drag.id); g.style.display = 'block'; sel = drag.id; render();
+  }
+  if (drag.moved) { var g2 = $('ghost'); g2.style.left = e.clientX + 'px'; g2.style.top = e.clientY + 'px'; }
+});
+function endDrag(e, cancel) {
+  if (!drag || e.pointerId !== drag.pid) return;
+  var d = drag; drag = null; $('ghost').style.display = 'none';
+  try { $('mhand').releasePointerCapture(e.pointerId); } catch (x) {}
+  if (!d.moved) { if (!cancel) tapHand(d.id); return; }
+  var r = $('mid').getBoundingClientRect();
+  if (!cancel && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top - 10 && e.clientY <= r.bottom) { hintObj = null; act({ type: 'play', card: d.id }); } else render();
+}
+$('mhand').addEventListener('pointerup', function (e) { endDrag(e, false); });
+$('mhand').addEventListener('pointercancel', function (e) { endDrag(e, true); });
+$('field').addEventListener('click', function (e) { var el = e.target.closest('.card'); if (el) tapField(+el.dataset.id); });
+$('res').addEventListener('click', function (e) {
+  var b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.a === 'new') { $('res').style.display = 'none'; newGame(); } else $('res').style.display = 'none';
+});
+$('gsbox').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b && myAction() && S.phase === 'go') act({ type: 'go', yes: b.dataset.a === 'go' }); });
+$('acts').addEventListener('click', function (e) {
+  var b = e.target.closest('button'); if (!b || !myAction()) return;
+  var k = b.dataset.k, m = +b.dataset.m;
+  if (k === 'shake') act({ type: 'shake', month: m }); else if (k === 'bomb') act({ type: 'bomb', month: m }); else if (k === 'skip') act({ type: 'skip' });
+});
+$('ctrl').addEventListener('click', function (e) {
+  var b = e.target.closest('button'); if (!b) return;
+  ({ new: function () { newGame(); }, undo: undo, online: startOnline, hint: giveHint, auto: toggleAuto })[b.dataset.k]();
+  if (b.dataset.k === 'auto') window.parent !== window && 0;
+});
+
+/* ---------- rendering ---------- */
+function card(id, cls) { return '<div class="card ' + (cls || '') + '" data-id="' + id + '">' + CardFace.svg(id) + '</div>'; }
+function capHTML(p) {
+  var cap = S ? S.cap[p].slice().sort(function (a, b) { return a - b; }) : [], g = { G: [], A: [], R: [], J: [] };
+  cap.forEach(function (id) { g[CLS[id]].push(id); });
+  var rowW = Math.max(120, ($('app').clientWidth - 12) * (wide() ? 0.36 : 1) - 6), mw = parseFloat(document.documentElement.style.getPropertyValue('--mw')) || 24, mh = mw * 1.55;
+  var step = Math.max(4, Math.min(mw * 0.85, (rowW - 3 * mw - 14) / 21)), step2 = Math.max(4, Math.min(mw * 0.85, (rowW - mw) / 23));
+  var news = S && S.cur ? S.cur.got : [];
+  function grp(k, capN, st) {
+    var arr = g[k], w = (capN - 1) * st + mw;
+    return '<div class="grp" style="width:' + w + 'px"><div class="gl">' + TXT.cnt[k][KO ? 1 : 0] + ' ' + arr.length + '</div><div class="cw" style="height:' + mh + 'px">' +
+      arr.map(function (id, i) { return '<div class="card mini' + (news.indexOf(id) >= 0 && S.cur.p === p ? ' new' : '') + '" data-id="' + id + '" style="left:' + (i * st) + 'px">' + CardFace.svg(id) + '</div>'; }).join('') + '</div></div>';
+  }
+  return '<div class="caprow">' + grp('G', 5, step) + grp('A', 9, step) + grp('R', 10, step) + '</div><div class="caprow">' + grp('J', 24, step2) + '</div>';
+}
+function wide() { return $('app').classList.contains('wide'); }
+function scoreLine(p) {
+  if (!S) return '';
+  var sc = GS.score(S.cap[p]), parts = [];
+  Object.keys(TXT.sc).forEach(function (k) { if (sc[k]) parts.push(TXT.sc[k][KO ? 1 : 0] + ' ' + sc[k]); });
+  return parts.join(' + ');
+}
+function infoHTML(p) {
+  var name = p === me ? T('you') : (mode === 'ai' ? T('comp') : T('opp'));
+  if (!S) return '<span class="nm">' + name + '</span>';
+  var sc = GS.score(S.cap[p]).total, extra = [];
+  if (S.goCount[p]) extra.push(T('goN') + ' ' + S.goCount[p]);
+  if (S.shakes[p]) extra.push('x' + Math.pow(2, S.shakes[p]));
+  if (S.skips[p] > 0) extra.push(T('bombc') + ' ' + S.skips[p]);
+  return '<span class="nm">' + name + (S.turn === p && S.phase !== 'over' ? ' ◀' : '') + '</span><span class="pts">' + T('pts') + ' <b>' + sc + '</b></span><span class="tag">' + scoreLine(p) + (extra.length ? ' · ' + extra.join(' ') : '') + '</span>';
+}
+function render() {
+  var app = $('app');
+  /* ---- layout */
+  var W = window.innerWidth, H = window.innerHeight, w = W > H * 1.3 && W > 640;
+  app.classList.toggle('wide', w);
+  var cw, fixed = w ? 150 : 205;
+  if (w) { var left = W * 0.64 - 20; cw = Math.min(left / 10.6, (H - fixed) / 5.9, 78); }
+  else cw = Math.min((W - 14) / 10.9, (H - fixed) / 9.3, 74);
+  cw = Math.max(22, Math.floor(cw));
+  var rs = document.documentElement.style; rs.setProperty('--cw', cw + 'px'); rs.setProperty('--cw0', cw + 'px'); rs.setProperty('--mw', Math.floor(cw * (w ? 0.62 : 0.6)) + 'px');
+  /* ---- content */
+  var cl = document.body.classList; cl.toggle('online', mode === 'online');
+  if (!S) {
+    $('oinfo').innerHTML = infoHTML(1 - me); $('ohand').innerHTML = ''; $('ocap').innerHTML = ''; $('mcap').innerHTML = ''; $('field').innerHTML = ''; $('pile').innerHTML = ''; $('last').innerHTML = ''; $('mhand').innerHTML = '';
+    $('msg').className = ''; $('msg').textContent = notice || T('noOpp'); $('acts').innerHTML = ''; $('gsbox').style.display = 'none'; ctrlHTML(); return;
+  }
+  var o = 1 - me, oh = S.hands[o].length;
+  $('oinfo').innerHTML = infoHTML(o);
+  if (w) $('ocap').innerHTML = '<div id="oinfo2" style="display:flex;gap:8px;align-items:center;font-weight:600;overflow:hidden;white-space:nowrap">' + infoHTML(o) + '</div>' + capHTML(o); else $('ocap').innerHTML = capHTML(o);
+  $('ohand').innerHTML = Array(oh + 1).join('<div class="card back"></div>');
+  $('mcap').innerHTML = capHTML(me) + '<div style="display:flex;gap:8px;align-items:center;font-weight:600;overflow:hidden;white-space:nowrap">' + infoHTML(me) + '</div>';
+  /* field: stacks by month */
+  var by = {}, order = [];
+  S.field.forEach(function (id) { var m = mon(id); if (!by[m]) { by[m] = []; order.push(m); } by[m].push(id); });
+  var canTgt = myAction() && (S.phase === 'pickHand' || S.phase === 'pickStock') ? S.cands : [];
+  var selM = sel >= 0 && S.phase === 'play' && myAction() ? mon(sel) : -1, hf = hintObj && hintObj.target, hpick = hintObj && hintObj.type === 'pick' ? hintObj.card : -1;
+  $('field').innerHTML = order.map(function (m) {
+    var arr = by[m];
+    return '<div class="stack' + (canTgt.length && mon(canTgt[0]) === m ? ' sp' : '') + '">' + arr.map(function (id) {
+      var c = '';
+      if (canTgt.indexOf(id) >= 0 || (selM === m)) c += ' tgt'; if ((hf != null && hintObj.type !== 'pick' && id === hf) || id === hpick) c += ' hint';
+      if (S.cur && S.cur.got.indexOf(id) >= 0) c += ' new';
+      return card(id, c);
+    }).join('') + (arr.length >= 3 && S.ppeok[m] != null ? '<div class="lbl">' + T0({ k: 'ppeok' }).replace('!', '') + '</div>' : '') + '</div>';
+  }).join('');
+  /* stock + last */
+  var sn = S.stock.length, pw = cw;
+  $('pile').style.width = pw + 'px'; $('pile').style.height = (pw * 1.55 + 4) + 'px';
+  $('pile').innerHTML = (sn > 1 ? '<div class="card back" style="left:3px;top:3px"></div>' : '') + (sn > 0 ? '<div class="card back"></div>' : '') + '<div class="n">' + sn + '</div>';
+  var lh = '';
+  if (S.cur && S.n > 0) {
+    var cc = S.cur;
+    lh = '<div>' + (cc.p === me ? T('you') : (mode === 'ai' ? T('comp') : T('opp'))) + '</div><div class="pair">' + (cc.hc != null ? '<div class="card mini">' + CardFace.svg(cc.hc) + '</div>' : '') + (cc.x != null ? '<div class="card mini">' + CardFace.svg(cc.x) + '</div>' : '') + '</div>';
+  }
+  $('last').innerHTML = lh;
+  /* my hand */
+  var hand = S.hands[me], hset = [];
+  if (hintObj) { if (hintObj.type === 'play' || hintObj.type === 'shake') hset = [hintObj.card]; else if (hintObj.type === 'bomb') hset = hand.filter(function (x) { return mon(x) === hintObj.month; }); }
+  $('mhand').innerHTML = hand.map(function (id) { return card(id, (id === sel ? 'sel ' : '') + (hset.indexOf(id) >= 0 ? 'hint' : '')); }).join('');
+  /* status + actions */
+  var m = $('msg'), t, you = false;
+  if (S.phase === 'over') t = S.result.draw ? T('draw') : (S.result.winner === me ? T('win') : T('lose')) + ' ' + S.result.pts;
+  else if (S.turn === me) { you = true; t = (S.phase === 'pickHand' || S.phase === 'pickStock') ? T('pickT') : S.phase === 'go' ? T('goT', GS.score(S.cap[me]).total) : T('yourT'); if (autoOn) t = '▶ ' + t.split(':')[0]; }
+  else t = S.phase === 'go' ? T('oppGo') : T('oppT');
+  if (notice) t = notice + ' ' + t;
+  if (mode === 'online') t += '  [' + T('onl') + ': ' + (me === 0 ? T('host') : T('guest')) + (S.first === me ? ', ' + T('first') : '') + ']';
+  m.textContent = t; m.className = you ? 'you' : '';
+  var acts = '';
+  if (myAction() && S.phase === 'play') {
+    GS.bombable(S, me).forEach(function (mm) { acts += '<button class="pri' + (hintObj && hintObj.type === 'bomb' ? ' hint' : '') + '" data-k="bomb" data-m="' + mm + '">' + T('bomb', mm + 1) + '</button>'; });
+    GS.shakable(S, me).forEach(function (mm) { acts += '<button class="pri' + (hintObj && hintObj.type === 'shake' ? ' hint' : '') + '" data-k="shake" data-m="' + mm + '">' + T('shake', mm + 1) + '</button>'; });
+    if (S.skips[me] > 0) acts += '<button data-k="skip"' + (hintObj && hintObj.type === 'skip' ? ' class="hint"' : '') + '>' + T('skip') + ' (' + S.skips[me] + ')</button>';
+  }
+  $('acts').innerHTML = acts;
+  var gb = $('gsbox');
+  if (myAction() && S.phase === 'go') {
+    var pv = GS.settle(S, me);
+    gb.innerHTML = '<div class="t">' + T('goT', pv.sc[me]) + '</div><div style="font-size:12px;margin-bottom:8px;opacity:.9">' + T('stopV', pv.pts) + '<br>' + T('goV') + '</div><button class="pri' + (hintObj && hintObj.yes ? ' hint' : '') + '" data-a="go">' + T('go') + '</button><button class="stop' + (hintObj && hintObj.type === 'go' && !hintObj.yes ? ' hint' : '') + '" data-a="stop">' + T('stop') + '</button>';
+    gb.style.display = 'block';
+  } else gb.style.display = 'none';
+  ctrlHTML();
+  $('note').textContent = '';
+}
+function ctrlHTML() {
+  var c = $('ctrl');
+  c.innerHTML = '<button data-k="new">' + T('new') + '</button>' + (mode === 'ai' ? '<button data-k="undo">' + T('undo') + '</button>' : '') + '<button data-k="online">' + T('online') + '</button>' +
+    '<button data-k="hint">' + T('hint') + '</button><button data-k="auto" class="' + (autoOn ? 'on' : '') + '">' + T('auto') + '</button>';
+}
+function showResult() {
+  var r = S.result, h;
+  if (r.draw) h = '<h3>' + T('draw') + '</h3>';
+  else {
+    var won = r.winner === me, rows = '';
+    rows += '<tr><td>' + T('base') + (r.special === '3ppeok' ? ' (' + T('ppeok3') + ')' : '') + '</td><td>' + r.base + '</td></tr>';
+    if (r.goBonus) rows += '<tr><td>' + T('goB') + ' (' + S.goCount[r.winner] + T('goN') + ')</td><td>+' + r.goBonus + '</td></tr>';
+    if (r.goMul > 1) rows += '<tr><td>' + T('goM') + '</td><td>x' + r.goMul + '</td></tr>';
+    if (r.shakeMul > 1) rows += '<tr><td>' + T('shM') + '</td><td>x' + r.shakeMul + '</td></tr>';
+    r.bak.forEach(function (b) { rows += '<tr><td>' + TXT.bak[b][KO ? 1 : 0] + '</td><td>x2</td></tr>'; });
+    rows += '<tr><td><b>' + T('total') + '</b></td><td>' + (won ? '+' : '-') + r.pts + '</td></tr>';
+    h = '<h3 style="color:' + (won ? '#7dff9b' : '#ff9a8a') + '">' + (won ? T('win') : T('lose')) + '</h3><table>' + rows + '</table>';
+  }
+  h += '<div style="text-align:center;margin-top:6px;font-size:12px;opacity:.85">' + T('session') + ': ' + stats.w + '-' + stats.l + '-' + stats.d + ' (' + (stats.pts >= 0 ? '+' : '') + stats.pts + ')</div>';
+  h += '<div class="btns"><button class="pri" data-a="new">' + T('newg') + '</button><button data-a="close">' + T('close') + '</button></div>';
+  var e = $('res'); e.innerHTML = h; e.style.display = autoOn ? 'none' : 'block';
+}
+
+/* ---------- test / headless hooks ---------- */
+function fastRun(n, opts) {
+  opts = opts || {};
+  if (mode === 'idle') ensurePlaying();
+  if (mode !== 'ai') startAI();
+  var oldAuto = autoOn; autoOn = true; fast = true;
+  var res = { games: 0, wins: 0, losses: 0, draws: 0, bad: 0, steps: 0, maxsteps: 0, pts: 0, go: 0, bombs: 0, ev: {}, maxPts: 0 };
+  for (var g = 0; g < n; g++) {
+    S = null; stats.pts = stats.pts; newLocalSilent(opts.seed != null ? opts.seed + g * 17 : null);
+    var st = 0;
+    while (S.phase !== 'over' && st < 600) {
+      var a = GS.choose(S, S.turn); if (!a || !act(a)) { res.bad++; break; }
+      S.ev.forEach(function (e) { res.ev[e.k] = (res.ev[e.k] || 0) + 1; });
+      if (a.type === 'go' && a.yes) res.go++; if (a.type === 'bomb') res.bombs++; st++;
+    }
+    res.steps += st; res.maxsteps = Math.max(res.maxsteps, st); res.games++;
+    if (S.phase !== 'over') { res.bad++; continue; }
+    var r = S.result; if (r.draw) res.draws++; else { if (r.winner === me) res.wins++; else res.losses++; res.pts += r.pts; res.maxPts = Math.max(res.maxPts, r.pts); }
+    var tot = S.hands[0].length + S.hands[1].length + S.field.length + S.stock.length + S.cap[0].length + S.cap[1].length;
+    if (tot !== 48) res.bad++;
+  }
+  fast = false; autoOn = oldAuto; render(); kick(); return res;
+}
+function newLocalSilent(seed) { S = GS.newState(seed != null ? seed >>> 0 : rndSeed(), pickFirst()); gid++; S.counted = false; snaps = []; }
+window.newGame = function () { newGame(); };
+window.undo = undo;
+window.giveHint = giveHint;
+window.hint = giveHint;
+window.toggleAuto = toggleAuto;
+window.startOnline = startOnline;
+window.isAuto = isAuto;
+window.__gs = {
+  GS: GS, state: function () { return S; }, mode: function () { return mode; }, me: function () { return me; }, act: act, fastRun: fastRun, setSpeed: function (x) { speed = x; },
+  stats: function () { return stats; }, hintObj: function () { return hintObj; }, pairing: function () { return pairing; }, sel: function () { return sel; }, notice: function () { return notice; },
+  summary: function () { return S && JSON.parse(JSON.stringify({ n: S.n, turn: S.turn, phase: S.phase, hands: S.hands.map(function (h) { return h.length; }), myHand: S.hands[me], field: S.field, stock: S.stock.length, cap: S.cap, goCount: S.goCount, result: S.result, gid: gid })); },
+  gid: function () { return gid; }, startAI: startAI
+};
+window.addEventListener('resize', function () { render(); });
+render();
+window.addEventListener('load', function () { setTimeout(function () { if (mode === 'idle' && !pairing) { if (local) startAI(); else startOnline(); } }, 50); });
+})();
+</script>
+</body>
+</html>

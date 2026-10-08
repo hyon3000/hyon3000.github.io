@@ -46,11 +46,15 @@ html,body{margin:0;height:100%;overflow:hidden;background:#2b2a28;color:#eee;fon
 #moves td.cur{background:#5a5030;border-radius:3px}
 #ctrl{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 #ctrl button,#ctrl select{background:#5b5a56;color:#fff;border:0;border-radius:5px;padding:6px 10px;font:inherit;cursor:pointer}
+#ctrl button.on{background:#3d8f4a}
 #ctrl button:hover{background:#74726d}
 #ctrl label{display:flex;gap:4px;align-items:center;cursor:pointer}
-.eng{display:none}
-body.hasEng .eng{display:inline-flex}
-body.hasEng button.eng,body.hasEng select.eng{display:inline-block}
+.aio,.onl,#ctrl #lAuto{display:none}
+body.ai .aio{display:inline-block}body.ai label.aio{display:inline-flex}
+body.online .onl{display:inline-block}
+body.local #ctrl #lAuto{display:flex}
+body.online #bUndo,body.online #bFlip{display:none}
+body:not(.ai):not(.local) #bUndo{display:none}
 </style>
 </head>
 <body>
@@ -62,16 +66,16 @@ body.hasEng button.eng,body.hasEng select.eng{display:inline-block}
   <div id="moves"></div>
   <div id="ctrl">
    <button id="bNew"></button><button id="bUndo"></button>
-   <button id="bFlip"></button>
-   <button id="bHint" class="eng"></button>
-   <label class="eng"><input type="checkbox" id="cAI"><span id="tAI"></span></label>
-   <select id="sLvl" class="eng"></select>
-   <button id="bSwap" class="eng"></button>
+   <button id="bFlip"></button><button id="bOnline"></button><button id="bResign" class="onl"></button>
+   <button id="bHint"></button><button id="bAuto"></button>
+   <select id="sLvl" class="aio"></select>
+   <button id="bSwap" class="aio"></button>
    <label id="lAuto"><input type="checkbox" id="cAuto"><span id="tAuto"></span></label>
   </div>
  </div>
 </div>
 <div id="ghost" class="pc"></div>
+<script src="link.js"></script>
 <script>
 /* ===================== Rules engine (0x88) ===================== */
 function CE(){
@@ -231,17 +235,17 @@ var TX={
  en:{newg:'New',undo:'Undo',hint:'Hint',flip:'Flip',ai:'vs Computer',easy:'Easy',normal:'Normal',hard:'Hard',asB:'Play as Black',asW:'Play as White',auto:'Auto-flip',
   wt:'White to move',bt:'Black to move',chk:' - check!',think:'Computer is thinking...',
   mateW:'Checkmate - White wins',mateB:'Checkmate - Black wins',stale:'Draw - stalemate',rep:'Draw - threefold repetition',fifty:'Draw - 50-move rule',insuf:'Draw - insufficient material',
-  promo:'Promote to',engErr:'Computer failed to move',moves:'Moves'},
+  promo:'Promote to',auto:'Auto',autoT:' [auto play]',pick:'Choose an opponent (Opponent button)',onl:'Opponent',resign:'Resign',disc:'Opponent disconnected',desync:'Out of sync with opponent',youW:' (you: White)',youB:' (you: Black)',resW:'White resigns - Black wins',resB:'Black resigns - White wins',engErr:'Computer failed to move',moves:'Moves'},
  ko:{newg:'새 게임',undo:'무르기',hint:'힌트',flip:'뒤집기',ai:'컴퓨터와 대결',easy:'쉬움',normal:'보통',hard:'어려움',asB:'흑으로 플레이',asW:'백으로 플레이',auto:'자동 뒤집기',
   wt:'백 차례',bt:'흑 차례',chk:' - 체크!',think:'컴퓨터가 생각 중...',
   mateW:'체크메이트 - 백 승리',mateB:'체크메이트 - 흑 승리',stale:'무승부 - 스테일메이트',rep:'무승부 - 3회 동형 반복',fifty:'무승부 - 50수 규칙',insuf:'무승부 - 기물 부족',
-  promo:'승급 선택',engErr:'컴퓨터가 수를 두지 못했습니다',moves:'기보'}
+  promo:'승급 선택',auto:'자동',autoT:' [자동 대국]',pick:'상대를 선택하세요 (상대 버튼)',onl:'상대',resign:'기권',disc:'상대방의 연결이 끊어졌습니다',desync:'상대와 동기화 오류',youW:' (나: 백)',youB:' (나: 흑)',resW:'백 기권 - 흑 승리',resB:'흑 기권 - 백 승리',engErr:'컴퓨터가 수를 두지 못했습니다',moves:'기보'}
 }[KO?'ko':'en'];
 var G=CE(),FILES='abcdefgh',GL=['','♟','♞','♝','♜','♛','♚'];
 function $(id){return document.getElementById(id);}
 function glyph(p){return GL[p&7]+'︎';}
 
-var engineFn=null,vsAI=false,level=2,human=0,userFlip=false,autoFlip=false;
+var autoOn=false,autoPending=false,hintId=0,local=/[?&]local=1/.test(location.search),online=null,myCol=0,notice='',engineFn=null,vsAI=false,level=2,human=0,userFlip=false,autoFlip=false;
 var sel=-1,dests=[],hintMv=null,over=null,thinking=false,jobId=0,rec=[],cur=[],drag=null,promoPending=null;
 var cells=[],board=$('board');
 
@@ -249,15 +253,15 @@ var cells=[],board=$('board');
 (function(){
  for(var i=0;i<64;i++){var c=document.createElement('div');c.className='sq';
   c.innerHTML='<i class="r"></i><i class="f"></i><span class="pc"></span>';board.appendChild(c);cells.push(c);}
- $('bNew').textContent=TX.newg;$('bUndo').textContent=TX.undo;$('bFlip').textContent=TX.flip;$('bHint').textContent=TX.hint;
- $('tAI').textContent=TX.ai;$('tAuto').textContent=TX.auto;
+ $('bNew').textContent=TX.newg;$('bUndo').textContent=TX.undo;$('bFlip').textContent=TX.flip;$('bHint').textContent=TX.hint;$('bAuto').textContent=TX.auto;$('bAuto').onclick=toggleAuto;
+ $('tAuto').textContent=TX.auto;
  var s=$('sLvl');[TX.easy,TX.normal,TX.hard].forEach(function(t,i){var o=document.createElement('option');o.value=i+1;o.textContent=t;s.appendChild(o);});
  s.value=level;$('promoT').textContent=TX.promo;
  if(KO)document.documentElement.lang='ko';
 })();
 
 function flipped(){
- var f=vsAI?human===1:(autoFlip&&G.side===1);
+ var f=online?myCol===1:vsAI?human===1:(autoFlip&&G.side===1);
  return f!==userFlip;
 }
 function sqToCell(sq,fl){var r=sq>>4,f=sq&7;return fl?(r*8+(7-f)):((7-r)*8+f);}
@@ -275,7 +279,7 @@ function toSAN(m){
  return s+(cap?'x':'')+G.sqName(t);
 }
 
-function humanTurn(){return !over&&!thinking&&(!vsAI||G.side===human);}
+function humanTurn(){if(online)return !over&&G.side===myCol;if(vsAI)return !over&&!thinking&&G.side===human;return local&&!over;}
 
 function render(){
  var fl=flipped(),i,last=rec.length?rec[rec.length-1].m:0,lf=last&127,lt=(last>>7)&127;
@@ -300,7 +304,7 @@ function render(){
  var st=$('status'),txt;
  if(over){txt=over.txt;st.className='end';}
  else{st.className='';txt=thinking?TX.think:(G.side?TX.bt:TX.wt);if(!thinking&&G.inCheck())txt+=TX.chk;}
- st.textContent=txt;
+ if(!online&&!vsAI&&!local&&!over)txt=TX.pick;if(online&&!over)txt+=myCol?TX.youB:TX.youW;if(autoOn&&!over)txt+=TX.autoT;if(notice)txt=notice+(over?' / '+txt:'');st.textContent=txt;
  /* captured */
  var capsW=[],capsB=[],vals=[0,1,3,3,5,9,0],mw=0,mb=0;
  rec.forEach(function(r){if(r.cap){if(r.cap>>3){capsW.push(r.cap);mw+=vals[r.cap&7];}else{capsB.push(r.cap);mb+=vals[r.cap&7];}}});
@@ -313,25 +317,29 @@ function render(){
   html+='<tr><td class="n">'+(k/2+1)+'.</td><td'+(k===rec.length-1?' class="cur"':'')+'>'+rec[k].san+'</td><td'+(k+1===rec.length-1?' class="cur"':'')+'>'+(rec[k+1]?rec[k+1].san:'')+'</td></tr>';
  }
  var mv=$('moves');mv.innerHTML=html+'</table>';mv.scrollTop=mv.scrollHeight;
- $('lAuto').style.display=vsAI?'none':'';
- $('cAI').checked=vsAI;$('bSwap').textContent=human===0?TX.asB:TX.asW;
+ $('bAuto').classList.toggle('on',autoOn);$('bHint').classList.toggle('on',!!hintMv);
+ var cl=document.body.classList;cl.toggle('online',!!online);cl.toggle('ai',!online&&vsAI&&!!engineFn);cl.toggle('local',local&&!online&&!vsAI);
+ $('bSwap').textContent=human===0?TX.asB:TX.asW;
 }
 
 function afterMove(){
- cur=G.legalMoves();sel=-1;dests=[];hintMv=null;over=null;
+ cur=G.legalMoves();sel=-1;dests=[];hintMv=null;hintId++;over=null;
  if(!cur.length){over=G.inCheck()?{txt:G.side?TX.mateW:TX.mateB}:{txt:TX.stale};}
  else if(G.half>=100)over={txt:TX.fifty};
  else if(G.repCount()>=3)over={txt:TX.rep};
  else if(G.insufficient())over={txt:TX.insuf};
  render();
  if(!over&&vsAI&&engineFn&&G.side!==human)requestAI();
+ scheduleAuto();
 }
 
-function doMove(m){
+function doMove(m,remote){
  var san=toSAN(m),cap=G.make(m);
  var chk=G.inCheck(),n=G.legalMoves().length;
  san+=n===0?(chk?'#':''):(chk?'+':'');
  rec.push({m:m,san:san,cap:cap});
+ if(online&&!remote)online.send({t:'move',uci:G.toUci(m),n:rec.length});
+ notice='';
  afterMove();
 }
 
@@ -413,12 +421,13 @@ board.addEventListener('pointerup',function(e){endDrag(e,false);});
 board.addEventListener('pointercancel',function(e){endDrag(e,true);});
 
 /* ---------- public API ---------- */
-function newGame(){
- jobId++;thinking=false;G.setFen(G.START);rec=[];hidePromo();drag=null;$('ghost').style.display='none';
+function newGame(){if(online){online.send({t:'new'});resetGame();}else if(vsAI||local)resetGame();else startOnline();}
+function resetGame(){
+ notice='';jobId++;thinking=false;G.setFen(G.START);rec=[];hidePromo();drag=null;$('ghost').style.display='none';
  afterMove();
 }
 function undo(){
- if(!rec.length)return;
+ if(online||!rec.length||(!vsAI&&!local))return;
  jobId++;var wasThinking=thinking;thinking=false;hidePromo();
  if(vsAI&&engineFn){
   var n=wasThinking?1:(G.side===human?2:1);   /* undo last human+computer pair */
@@ -426,47 +435,94 @@ function undo(){
  }else{G.unmake();rec.pop();}
  afterMove();
 }
+function userTurn(){return online?G.side===myCol:vsAI?(G.side===human&&!thinking):true;}
+function askEngine(){
+ var p;try{p=Promise.resolve(engineFn(G.getFen(),level));}catch(e){p=Promise.reject(e);}
+ return p.then(function(u){return typeof u==='string'?G.fromUci(u.trim().toLowerCase()):0;});
+}
 function hint(){
- if(!engineFn||over||thinking)return;
- var id=++jobId,p;thinking=true;render();
- try{p=Promise.resolve(engineFn(G.getFen(),level));}catch(e){p=Promise.reject(e);}
- p.then(function(u){
-  if(id!==jobId)return;thinking=false;
-  var m=typeof u==='string'?G.fromUci(u.trim().toLowerCase()):0;
-  hintMv=m||null;render();
- }).catch(function(){if(id!==jobId)return;thinking=false;render();});
+ if(!engineFn||over)return;
+ if(hintMv){hintMv=null;hintId++;render();return;}
+ if(!userTurn())return;
+ var id=++hintId,n=rec.length;
+ askEngine().then(function(m){if(id!==hintId||n!==rec.length||over)return;hintMv=m||null;render();}).catch(function(){});
+}
+function scheduleAuto(){
+ if(!autoOn||!engineFn||over||autoPending||!userTurn())return;
+ autoPending=true;var n=rec.length;
+ setTimeout(function(){
+  if(!autoOn||over||n!==rec.length||!userTurn()){autoPending=false;scheduleAuto();return;}
+  askEngine().then(function(m){
+   autoPending=false;
+   if(!autoOn||over||n!==rec.length||!userTurn()){scheduleAuto();return;}
+   if(!m)m=cur[Math.floor(Math.random()*cur.length)];
+   hidePromo();doMove(m);
+  }).catch(function(){autoPending=false;autoOn=false;render();});
+ },400);
+}
+function toggleAuto(){
+ if(!engineFn){autoOn=false;render();return false;}
+ autoOn=!autoOn;render();if(autoOn)scheduleAuto();return autoOn;
+}
+function startAI(){
+ if(online){var l=online;online=null;try{l.close();}catch(e){}}
+ vsAI=true;human=0;userFlip=false;resetGame();
 }
 function toggleVsAI(){
- if(!engineFn){vsAI=false;render();return false;}
- vsAI=!vsAI;jobId++;thinking=false;hintMv=null;
- render();
- if(vsAI&&!over&&G.side!==human)requestAI();
- return vsAI;
+ if(online||!engineFn){render();return false;}
+ if(vsAI){vsAI=false;jobId++;thinking=false;hintMv=null;render();if(!local)startOnline();return false;}
+ startAI();return true;
 }
-function isVsAI(){return !!(vsAI&&engineFn);}
+function isVsAI(){return !online&&!!(vsAI&&engineFn);}
+function isOnline(){return !!online;}
 function setLevel(n){n=+n;if(n>=1&&n<=3){level=n;$('sLvl').value=n;}}
 function flipBoard(){userFlip=!userFlip;render();}
 function swapSides(){
- if(engineFn&&vsAI){human^=1;userFlip=false;newGame();}else flipBoard();
+ if(!online&&engineFn&&vsAI){human^=1;userFlip=false;newGame();}else flipBoard();
 }
 function attachEngine(fn){
  if(typeof fn!=='function')return;
- engineFn=fn;vsAI=true;human=0;document.body.classList.add('hasEng');
- jobId++;thinking=false;render();
+ engineFn=fn;render();
+}
+function goLocal(){online=null;}
+function startOnline(){
+ if(online){var l=online;goLocal();try{l.close();}catch(e){}render();}
+ if(typeof BoardLink==='undefined')return;
+ var opts={
+  onOpen:function(l){autoPending=false;vsAI=false;jobId++;thinking=false;online=l;myCol=l.isHost?0:1;userFlip=false;resetGame();},
+  onMessage:function(d){
+   if(!online||!d)return;
+   if(d.t==='new'){resetGame();}
+   else if(d.t==='resign'){if(!over){over={txt:myCol?TX.resW:TX.resB};hidePromo();sel=-1;dests=[];render();}}
+   else if(d.t==='move'){
+    var m=(!over&&G.side!==myCol&&d.n===rec.length+1&&typeof d.uci==='string')?G.fromUci(d.uci):0;
+    if(!m){notice=TX.desync;render();return;}
+    doMove(m,true);
+   }
+  },
+  onClose:function(){if(!online)return;goLocal();notice=TX.disc;sel=-1;dests=[];hidePromo();render();setTimeout(startOnline,0);},
+  onCancel:function(){render();}
+ };
+ if(engineFn)opts.onAI=startAI;
+ BoardLink.pair(opts);
+}
+function resign(){
+ if(!online||over)return;
+ online.send({t:'resign'});over={txt:myCol?TX.resB:TX.resW};hidePromo();sel=-1;dests=[];render();
 }
 function getFen(){return G.getFen();}
 
-window.newGame=newGame;window.undo=undo;window.hint=hint;window.toggleVsAI=toggleVsAI;window.isVsAI=isVsAI;
-window.setLevel=setLevel;window.flipBoard=flipBoard;window.swapSides=swapSides;window.attachEngine=attachEngine;window.getFen=getFen;
+window.newGame=newGame;window.undo=undo;window.hint=hint;window.toggleAuto=toggleAuto;window.toggleVsAI=toggleVsAI;window.isVsAI=isVsAI;
+window.setLevel=setLevel;window.flipBoard=flipBoard;window.swapSides=swapSides;window.attachEngine=attachEngine;window.getFen=getFen;window.startOnline=startOnline;window.isOnline=isOnline;window.resign=resign;
 window.__chess={
  CE:CE,
  perft:function(fen,d){var e=CE();e.setFen(!fen||fen==='start'?e.START:fen);return e.perft(d);},
  state:function(){return {fen:G.getFen(),over:over&&over.txt,moves:rec.map(function(r){return r.san;}),vsAI:isVsAI()};},
- playUci:function(u){var m=G.fromUci(u);if(!m)return false;doMove(m);return true;}
+ playUci:function(u){if(online?(over||G.side!==myCol):(!vsAI&&!local))return false;var m=G.fromUci(u);if(!m)return false;doMove(m);return true;}
 };
 
+$('bOnline').textContent=TX.onl;$('bResign').textContent=TX.resign;$('bOnline').onclick=startOnline;$('bResign').onclick=resign;
 $('bNew').onclick=newGame;$('bUndo').onclick=undo;$('bFlip').onclick=flipBoard;$('bHint').onclick=hint;
-$('cAI').onchange=function(){toggleVsAI();};
 $('sLvl').onchange=function(){setLevel(this.value);};
 $('bSwap').onclick=swapSides;
 $('cAuto').onchange=function(){autoFlip=this.checked;render();};
@@ -480,7 +536,8 @@ function layout(){
  $('boardWrap').style.setProperty('--bs',bs+'px');$('ghost').style.setProperty('--bs',bs+'px');
 }
 window.addEventListener('resize',layout);layout();
-newGame();
+resetGame();
+if(!local)window.addEventListener('load',function(){setTimeout(function(){if(!online&&!vsAI)startOnline();},50);});
 })();
 </script>
 <script src="engines.js"></script>

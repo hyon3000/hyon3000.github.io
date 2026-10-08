@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Omok</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;font:14px/1.35 system-ui,-apple-system,"Segoe UI","Malgun Gothic",sans-serif;color:#2b2620;background:#ece6d8;-webkit-user-select:none;user-select:none}
+#app{display:flex;flex-direction:row;width:100vw;height:100vh}
+#boardbox{flex:1 1 auto;min-width:0;min-height:0;display:flex;align-items:center;justify-content:center;padding:6px}
+#cv{display:block;touch-action:manipulation;border-radius:6px;box-shadow:0 4px 18px rgba(0,0,0,.35);cursor:pointer}
+#panel{flex:0 0 250px;overflow:auto;padding:10px 12px;background:#f7f3ea;border-left:1px solid #cfc6b0;display:flex;flex-direction:column;gap:9px}
+.turn{display:flex;align-items:center;gap:8px;font-weight:600;font-size:15px}
+#dot{width:20px;height:20px;border-radius:50%;flex:none;border:1px solid #0006}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:13px;color:#555}
+.stats b{color:#222}
+#msg{min-height:2.7em;font-size:13px;color:#7a3b12}
+#detail{font-size:12px;color:#555}
+.btns,.opts{display:flex;flex-wrap:wrap;gap:6px}
+button,select{font:inherit;padding:5px 10px;border:1px solid #b9ae93;border-radius:6px;background:#fff;color:#222;cursor:pointer}
+button:hover{background:#f0e8d2}button:active{background:#e4d9bb}
+button.pri{background:#4a7c3a;color:#fff;border-color:#3b6a2d}
+button:disabled,select:disabled{opacity:.45;cursor:default}
+label{display:flex;align-items:center;gap:5px;font-size:13px}
+.hidden{display:none!important}
+@media (max-aspect-ratio:1/1),(max-width:640px){
+ #app{flex-direction:column}
+ #panel{flex:0 0 auto;max-height:46%;border-left:0;border-top:1px solid #cfc6b0;padding:6px 10px;gap:6px}
+ #boardbox{padding:3px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+ <div id="boardbox"><canvas id="cv"></canvas></div>
+ <div id="panel">
+  <div class="turn"><span id="dot"></span><span id="turnTxt"></span></div>
+  <div class="stats"><span id="sMove"></span><span id="sRule"></span><span id="sB"></span><span id="sW"></span></div>
+  <div id="msg"></div>
+  <div id="detail"></div>
+  <div class="btns">
+   <button id="bNew"></button><button id="bUndo"></button><button id="bResign"></button>
+   <button id="bHint"></button><button id="bAutoPlay"></button><button id="bOnline"></button>
+  </div>
+  <div class="opts">
+   <label><span id="lRule"></span><select id="selRule"><option value="free"></option><option value="std"></option></select></label>
+   <label><input type="checkbox" id="chkNum"><span id="lNum"></span></label>
+   <label class="eng hidden"><span id="lLevel"></span><select id="selLevel"></select></label>
+   <button id="bSide" class="eng hidden"></button>
+  </div>
+ </div>
+</div>
+<script>
+(function(){
+'use strict';
+var ko_=(navigator.language||'').toLowerCase().indexOf('ko')===0;
+var TX={
+ new:['New','새 게임'],undo:['Undo','무르기'],resign:['Resign','기권'],hint:['Hint','힌트'],
+ rule:['Rule','규칙'],free:['Free-style (5+)','자유 오목 (5목 이상)'],std:['Standard (exactly 5)','정확히 5목'],
+ numbers:['Move numbers','수순 번호'],level:['Level','난이도'],
+ lv1:['Easy','쉬움'],lv2:['Normal','보통'],lv3:['Hard','어려움'],
+ asW:['Play as White','백으로 두기'],asB:['Play as Black','흑으로 두기'],
+ bTurn:['Black to move','흑 차례'],wTurn:['White to move','백 차례'],think:['Computer is thinking...','컴퓨터가 생각 중...'],
+ move:['Move','수'],ruleS:['Rule','규칙'],stB:['Black stones','흑돌'],stW:['White stones','백돌'],
+ ruleFreeS:['Free-style','자유'],ruleStdS:['Standard','정확히 5'],
+ occ:['That point is occupied.','이미 돌이 있습니다.'],
+ black:['Black','흑'],white:['White','백'],
+ hintTxt:['Hint shown','힌트 표시'],autoOn:['auto play','자동 대국'],autoPlay:['Auto','자동'],
+ over:['Game over','대국 종료'],resigned:['resigned','기권'],wins:['wins','승리'],drawT:['Draw','무승부'],drawD:['The board is full.','판이 가득 찼습니다.'],
+ five:['five in a row','5목 완성'],
+ online:['Opponent','상대'],noOpp:['No opponent - press Opponent to connect or play the computer.','상대가 없습니다. 상대 버튼으로 연결하거나 컴퓨터와 대국하세요.'],
+ youB:['You are Black','당신은 흑'],youW:['You are White','당신은 백'],
+ oppTurn:["Opponent's turn",'상대 차례'],disc:['Opponent disconnected','상대가 연결을 끊었습니다'],
+ desync:['Out of sync with opponent - start a new game.','상대와 화면이 맞지 않습니다. 새 게임을 시작하세요.'],
+ notYours:["It is not your turn.",'당신의 차례가 아닙니다.'],connected:['Connected','연결되었습니다'],
+ loading:['Loading the engine...','엔진을 불러오는 중...'],fallback:['Engine unavailable - simple built-in player in use.','엔진을 쓸 수 없어 간단한 내장 AI를 사용합니다.']
+};
+function t(k){return TX[k][ko_?1:0];}
+var $=function(id){return document.getElementById(id);};
+var N=15,NN=225,BL=1,WH=2;
+
+/* ---------------- rules ---------------- */
+var DIRS=[[1,0],[0,1],[1,1],[1,-1]];
+// cells of the winning line(s) made by the stone just placed at p (colour c), or null. free-style: 5 or more; standard: exactly 5
+function winCells(b,p,c,rule){
+ var x=p%N,y=(p/N)|0,out=null;
+ for(var d=0;d<4;d++){
+  var dx=DIRS[d][0],dy=DIRS[d][1],cells=[p],i,px,py;
+  for(i=1;;i++){px=x+dx*i;py=y+dy*i;if(px<0||py<0||px>=N||py>=N||b[py*N+px]!==c)break;cells.push(py*N+px);}
+  for(i=1;;i++){px=x-dx*i;py=y-dy*i;if(px<0||py<0||px>=N||py>=N||b[py*N+px]!==c)break;cells.unshift(py*N+px);}
+  if(rule==='std'?cells.length===5:cells.length>=5){out=out?out.concat(cells.filter(function(q){return out.indexOf(q)<0;})):cells;}
+ }
+ return out;
+}
+
+/* ---------------- game state ---------------- */
+var G={b:new Uint8Array(NN),toMove:BL,last:-1};
+var mvs=[],phase='play',result=null,resultDetail='',winLine=null;
+var rule='free',showNum=false;
+var human=BL,vsAI=false,level=2;
+var engine=null,thinking=false,jobId=0,hintTok=0,hintPt=null,flash='',hintMsg='',engMsg='';
+var local=/[?&]local=1/.test(location.search),pairing=false;
+var online=null,myColor=BL,discMsg='';
+var autoOn=false,autoTimer=0,newTimer=0;
+
+function rebuild(){
+ G.b=new Uint8Array(NN);
+ mvs.forEach(function(m){G.b[m.y*N+m.x]=m.c;});
+ G.last=mvs.length?mvs[mvs.length-1].y*N+mvs[mvs.length-1].x:-1;
+ G.toMove=(mvs.length&1)?WH:BL;
+}
+function resetBoard(){
+ mvs=[];rebuild();phase='play';result=null;resultDetail='';winLine=null;hintPt=null;hintMsg='';flash='';
+}
+function startGame(){
+ cancelJob();discMsg='';
+ resetBoard();
+ update();maybeAI();
+}
+function doMove(p){
+ if(phase!=='play'||p<0||p>=NN||G.b[p]!==0)return 'occ';
+ var c=G.toMove;
+ G.b[p]=c;mvs.push({x:p%N,y:(p/N)|0,c:c});G.last=p;G.toMove=3-c;
+ hintTok++;hintPt=null;hintMsg='';flash='';
+ if(hintBusy){hintBusy=false;jobId++;try{if(engine&&engine.cancel)engine.cancel();}catch(e){}}     // a hint still being searched is dropped (the search would delay the next engine move)
+ var w=winCells(G.b,p,c,rule);
+ if(w){phase='over';winLine=w;result=(c===BL?'B':'W')+'+5';resultDetail=t(c===BL?'black':'white')+' '+t('wins')+' ('+t('five')+', '+w.length+')';}
+ else if(mvs.length>=NN){phase='over';result='draw';resultDetail=t('drawD');}
+ update();return 'ok';
+}
+function resign(loser){
+ if(phase!=='play')return;
+ cancelJob();
+ if(loser!==BL&&loser!==WH)loser=online?myColor:(engine&&vsAI)?human:G.toMove;
+ result=(loser===BL?'W':'B')+'+R';resultDetail=t(loser===BL?'white':'black')+' '+t('wins')+' ('+t(loser===BL?'black':'white')+' '+t('resigned')+')';
+ phase='over';update();
+}
+function undo(){
+ if(online)return false;
+ cancelJob();
+ if(!mvs.length)return false;
+ mvs.pop();rebuild();
+ if(isAIc(1)||isAIc(2)){while(mvs.length&&isAIc(G.toMove)){mvs.pop();rebuild();}}
+ phase='play';result=null;resultDetail='';winLine=null;hintPt=null;hintMsg='';flash='';
+ update();maybeAI();return true;
+}
+
+/* ---------------- engine adapter ---------------- */
+function isAIc(c){
+ if(online)return false;
+ return !!(engine&&vsAI&&c!==human);
+}
+function getState(){return {size:N,rule:rule,moves:mvs.map(function(m){return {x:m.x,y:m.y};})};}
+var hintBusy=false;
+function cancelJob(){jobId++;hintTok++;thinking=false;hintBusy=false;try{if(engine&&engine.cancel)engine.cancel();}catch(e){}}
+function callEngine(cb){
+ var id=++jobId,st=getState(),done=false;
+ function fin(r){if(done||id!==jobId)return;done=true;cb(r);}
+ try{
+  var pr=engine(st,level);
+  if(pr&&typeof pr.then==='function')pr.then(fin,function(){fin(null);});else fin(pr);
+ }catch(e){fin(null);}
+}
+function validPt(r){return r&&typeof r==='object'&&isFinite(r.x)&&isFinite(r.y)&&r.x>=0&&r.x<N&&r.y>=0&&r.y<N&&G.b[(r.y|0)*N+(r.x|0)]===0;}
+// last resort when the engine failed: an empty point next to the stones (or the centre)
+function anyLegal(){
+ var best=-1,bd=1e9,c=(N-1)/2;
+ for(var p=0;p<NN;p++){if(G.b[p])continue;var x=p%N,y=(p/N)|0,d=Math.abs(x-c)+Math.abs(y-c);
+  if(mvs.length){var nb=false;for(var dy=-1;dy<=1&&!nb;dy++)for(var dx=-1;dx<=1;dx++){var px=x+dx,py=y+dy;if(px>=0&&py>=0&&px<N&&py<N&&G.b[py*N+px]){nb=true;break;}}if(!nb)d+=100;}
+  if(d<bd){bd=d;best=p;}}
+ return best;
+}
+function enginePlay(r){      // plays the engine's answer for the side to move; returns the point or -1
+ var p=validPt(r)?(r.y|0)*N+(r.x|0):anyLegal();
+ if(p<0)return -1;
+ return doMove(p)==='ok'?p:-1;
+}
+function maybeAI(){
+ if(!engine||phase!=='play'||!isAIc(G.toMove)||thinking)return;
+ thinking=true;update();
+ callEngine(function(r){
+  thinking=false;
+  if(phase==='play'&&isAIc(G.toMove))enginePlay(r);
+  update();maybeAI();
+ });
+}
+function userTurn(){
+ if(online)return G.toMove===myColor;
+ if(engine&&vsAI)return G.toMove===human;
+ return true;
+}
+function hint(){
+ if(!engine||phase!=='play'||thinking||!userTurn())return;
+ var mn=mvs.length,tok=++hintTok;
+ hintMsg=t('think');hintPt=null;hintBusy=true;update();
+ callEngine(function(r){
+  hintBusy=false;hintMsg='';
+  if(tok===hintTok&&mn===mvs.length&&phase==='play'&&validPt(r)){hintPt=(r.y|0)*N+(r.x|0);hintMsg=t('hintTxt');}
+  update();
+ });
+}
+function scheduleAuto(){
+ if(autoOn&&phase==='over'&&!newTimer&&!(online&&!online.isHost)){
+  newTimer=setTimeout(function(){
+   newTimer=0;
+   if(!autoOn||phase!=='over'||(online&&!online.isHost))return;
+   startGame();netNew();
+  },3000);
+ }
+ if(!autoOn||autoTimer||!engine||phase!=='play'||thinking||!userTurn())return;
+ autoTimer=setTimeout(function(){
+  autoTimer=0;
+  if(!autoOn||!engine||phase!=='play'||thinking||!userTurn())return;
+  thinking=true;update();
+  callEngine(function(r){
+   thinking=false;
+   if(phase==='play'&&userTurn()){var p=enginePlay(r);if(p>=0&&online)online.send({t:'move',x:p%N,y:(p/N)|0});}
+   update();maybeAI();
+  });
+ },400);
+}
+function toggleAuto(){
+ autoOn=!autoOn;
+ if(!autoOn){clearTimeout(autoTimer);autoTimer=0;clearTimeout(newTimer);newTimer=0;}
+ update();return autoOn;
+}
+function attachEngine(fn){
+ engine=(typeof fn==='function')?fn:null;
+ if(!engine){vsAI=false;cancelJob();}
+ else if(pairing)startOnline();
+ update();
+}
+function startVsAI(){
+ if(!engine)return false;
+ online=null;vsAI=true;human=BL;pairing=false;discMsg='';startGame();return true;
+}
+function toggleVsAI(){
+ if(online||!engine)return false;
+ if(vsAI){vsAI=false;cancelJob();update();return false;}
+ startVsAI();return true;
+}
+function setLevel(l){l=+l;if(l>=1&&l<=3){level=l;$('selLevel').value=l;}}
+function swapSides(){if(online||!engine)return;human=3-human;startGame();}
+function setRule(r){
+ if(online&&!online.isHost)return;
+ if(r!=='free'&&r!=='std')return;
+ rule=r;$('selRule').value=r;startGame();netNew();
+}
+
+/* ---------------- drawing ---------------- */
+var cv=$('cv'),ctx=cv.getContext('2d'),S=0,dpr=1,cell=0,bg=null,bgKey='',hover=-1;
+var LET='ABCDEFGHIJKLMNO';
+function layout(){
+ var box=$('boardbox'),w=box.clientWidth-8,h=box.clientHeight-8;
+ var s=Math.max(120,Math.floor(Math.min(w,h)));
+ dpr=window.devicePixelRatio||1;
+ if(s!==S||cv.width!==Math.round(s*dpr)){S=s;cv.style.width=s+'px';cv.style.height=s+'px';cv.width=Math.round(s*dpr);cv.height=Math.round(s*dpr);bgKey='';}
+ cell=S/(N+1);draw();
+}
+function buildBg(){
+ bg=document.createElement('canvas');bg.width=cv.width;bg.height=cv.height;
+ var c=bg.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);
+ var g=c.createLinearGradient(0,0,S,S);g.addColorStop(0,'#e6bd75');g.addColorStop(.5,'#dcaa5e');g.addColorStop(1,'#d19c50');
+ c.fillStyle=g;c.fillRect(0,0,S,S);
+ var seed=7;function rn(){seed=(seed*16807)%2147483647;return seed/2147483647;}
+ c.lineWidth=1;
+ for(var i=0;i<70;i++){
+  var y=rn()*S;c.strokeStyle='rgba('+(110+rn()*40|0)+',70,20,'+(0.04+rn()*0.07)+')';
+  c.beginPath();c.moveTo(0,y);c.bezierCurveTo(S*.3,y+(rn()-.5)*14,S*.6,y+(rn()-.5)*14,S,y+(rn()-.5)*10);c.stroke();
+ }
+ c.strokeStyle='#3a2a12';c.lineWidth=Math.max(1,cell*0.045);
+ c.beginPath();
+ for(i=0;i<N;i++){var p=cell*(i+1);c.moveTo(cell,p);c.lineTo(cell*N,p);c.moveTo(p,cell);c.lineTo(p,cell*N);}
+ c.stroke();
+ c.lineWidth=Math.max(1.5,cell*0.08);c.strokeRect(cell,cell,cell*(N-1),cell*(N-1));
+ c.fillStyle='#2a1c08';
+ [[3,3],[11,3],[3,11],[11,11],[7,7]].forEach(function(q){c.beginPath();c.arc(cell*(q[0]+1),cell*(q[1]+1),Math.max(2,cell*0.1),0,7);c.fill();});
+ c.fillStyle='rgba(50,30,5,.75)';c.font=Math.max(8,Math.floor(cell*0.34))+'px sans-serif';c.textAlign='center';c.textBaseline='middle';
+ for(i=0;i<N;i++){
+  var q=cell*(i+1);
+  c.fillText(LET[i],q,cell*0.38);c.fillText(LET[i],q,S-cell*0.38);
+  c.fillText(String(i+1),cell*0.38,q);c.fillText(String(i+1),S-cell*0.38,q);
+ }
+ bgKey=S+'/'+dpr;
+}
+function stone(c,x,y,col,alpha,shadow){
+ var r=cell*0.47;
+ c.save();c.globalAlpha=alpha;
+ if(shadow){c.shadowColor='rgba(0,0,0,.5)';c.shadowBlur=r*0.4*dpr;c.shadowOffsetX=r*0.08*dpr;c.shadowOffsetY=r*0.16*dpr;}
+ var g=c.createRadialGradient(x-r*.35,y-r*.38,r*.08,x,y,r);
+ if(col===BL){g.addColorStop(0,'#777');g.addColorStop(.3,'#2c2c2c');g.addColorStop(1,'#000');}
+ else{g.addColorStop(0,'#fff');g.addColorStop(.55,'#ececec');g.addColorStop(1,'#b0b0b0');}
+ c.fillStyle=g;c.beginPath();c.arc(x,y,r,0,7);c.fill();
+ c.shadowColor='transparent';c.lineWidth=1;c.strokeStyle=col===BL?'rgba(0,0,0,.6)':'rgba(0,0,0,.28)';c.stroke();
+ c.restore();
+}
+function mode(){return online?'online':(engine&&vsAI)?'ai':local?'local':'none';}
+function canHumanMove(){var m=mode();return phase==='play'&&!isAIc(G.toMove)&&!thinking&&m!=='none'&&(m!=='online'||G.toMove===myColor);}
+function px(p){return cell*((p%N)+1);}
+function py(p){return cell*(((p/N)|0)+1);}
+function draw(){
+ if(!S)return;cell=S/(N+1);
+ if(bgKey!==S+'/'+dpr)buildBg();
+ ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(bg,0,0);
+ ctx.setTransform(dpr,0,0,dpr,0,0);
+ var p,x,y,b=G.b;
+ for(p=0;p<NN;p++){
+  if(!b[p])continue;
+  stone(ctx,px(p),py(p),b[p],1,true);
+ }
+ if(winLine&&winLine.length>1){        // band over the winning stones
+  ctx.save();ctx.lineCap='round';ctx.strokeStyle='rgba(255,60,30,.55)';ctx.lineWidth=Math.max(3,cell*0.16);
+  var a=winLine[0],z=winLine[winLine.length-1];
+  if(winLine.length>=5&&sameLine(winLine)){ctx.beginPath();ctx.moveTo(px(a),py(a));ctx.lineTo(px(z),py(z));ctx.stroke();}
+  ctx.restore();
+ }
+ if(showNum){
+  ctx.font='bold '+Math.max(8,Math.floor(cell*0.4))+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  for(var i=0;i<mvs.length;i++){
+   var m=mvs[i],q=m.y*N+m.x;
+   ctx.fillStyle=(i===mvs.length-1)?'#ff5a3c':(m.c===BL?'#fff':'#000');
+   ctx.fillText(String(i+1),px(q),py(q)+1);
+  }
+ }
+ if(G.last>=0&&!showNum){
+  x=px(G.last);y=py(G.last);
+  ctx.fillStyle='#ff4a2e';ctx.beginPath();ctx.arc(x,y,Math.max(2.5,cell*0.13),0,7);ctx.fill();
+ }else if(G.last>=0){
+  x=px(G.last);y=py(G.last);ctx.strokeStyle='#ff4a2e';ctx.lineWidth=Math.max(1.5,cell*0.07);ctx.beginPath();ctx.arc(x,y,cell*0.47,0,7);ctx.stroke();
+ }
+ if(winLine){
+  ctx.strokeStyle='#ffd23c';ctx.lineWidth=Math.max(2,cell*0.1);
+  winLine.forEach(function(q){ctx.beginPath();ctx.arc(px(q),py(q),cell*0.5,0,7);ctx.stroke();});
+ }
+ if(hover>=0&&b[hover]===0&&canHumanMove()){
+  stone(ctx,px(hover),py(hover),G.toMove,0.5,false);
+ }
+ if(hintPt!==null&&hintPt>=0){
+  x=px(hintPt);y=py(hintPt);
+  ctx.strokeStyle='#1e9e3a';ctx.lineWidth=Math.max(2,cell*0.12);ctx.shadowColor='#3f6';ctx.shadowBlur=8*dpr;
+  ctx.beginPath();ctx.arc(x,y,cell*0.42,0,7);ctx.stroke();ctx.shadowColor='transparent';
+ }
+}
+function sameLine(cells){          // all cells on one straight line (winning cells of two crossing lines are not drawn as a band)
+ var a=cells[0],z=cells[cells.length-1],dx=(z%N)-(a%N),dy=((z/N)|0)-((a/N)|0),n=Math.max(Math.abs(dx),Math.abs(dy));
+ return n===cells.length-1&&(dx===0||dy===0||Math.abs(dx)===Math.abs(dy));
+}
+function update(){
+ setTimeout(scheduleAuto,0);
+ var dot=$('dot');
+ dot.style.background=G.toMove===BL?'radial-gradient(circle at 35% 35%,#777,#000)':'radial-gradient(circle at 35% 35%,#fff,#aaa)';
+ var tt;
+ if(phase==='over')tt=t('over')+(result==='draw'?': '+t('drawT'):'');
+ else tt=(thinking&&isAIc(G.toMove))?t('think'):t(G.toMove===BL?'bTurn':'wTurn');
+ if(autoOn&&phase==='play')tt+=' ['+t('autoOn')+']';
+ if(online&&phase==='play')tt+=' ('+t(myColor===BL?'youB':'youW')+(G.toMove!==myColor?', '+t('oppTurn'):'')+')';
+ $('turnTxt').textContent=tt;
+ var nb=0,nw=0;for(var i=0;i<mvs.length;i++){if(mvs[i].c===BL)nb++;else nw++;}
+ $('sMove').innerHTML=t('move')+': <b>'+mvs.length+'</b>';
+ $('sRule').innerHTML=t('ruleS')+': <b>'+t(rule==='std'?'ruleStdS':'ruleFreeS')+'</b>';
+ $('sB').innerHTML=t('stB')+': <b>'+nb+'</b>';
+ $('sW').innerHTML=t('stW')+': <b>'+nw+'</b>';
+ var m=flash||hintMsg||discMsg||engMsg;
+ if(!m&&engine&&engine.mode==='fallback')m=t('fallback');
+ if(!m&&mode()==='none'&&phase==='play')m=t('noOpp');
+ $('msg').textContent=m;
+ $('detail').textContent=phase==='over'?resultDetail:'';
+ $('bResign').disabled=phase!=='play'||mode()==='none';
+ $('bHint').disabled=!(engine&&phase==='play'&&!thinking&&userTurn());$('bAutoPlay').classList.toggle('pri',autoOn);$('bAutoPlay').disabled=!engine;
+ var md=mode();
+ $('bUndo').disabled=md==='online'||md==='none';
+ Array.prototype.forEach.call(document.querySelectorAll('.eng'),function(e){e.classList.toggle('hidden',md!=='ai');});
+ $('selRule').disabled=md==='none'||(!!online&&!online.isHost);
+ $('selRule').value=rule;
+ $('bOnline').textContent=t('online');
+ $('bSide').textContent=t(human===BL?'asW':'asB');
+ draw();
+}
+
+/* ---------------- input ---------------- */
+var pending=-1;
+function ptFromEvent(e){
+ var r=cv.getBoundingClientRect(),X=(e.clientX-r.left)*(S/r.width),Y=(e.clientY-r.top)*(S/r.height);
+ var x=Math.round(X/cell-1),y=Math.round(Y/cell-1);
+ if(x<0||y<0||x>=N||y>=N)return -1;
+ return y*N+x;
+}
+function clickPoint(p){
+ if(p<0||!canHumanMove())return;
+ var r=doMove(p);
+ if(r!=='ok'){flash=t(r);update();}
+ else{if(online)online.send({t:'move',x:p%N,y:(p/N)|0});maybeAI();}
+}
+cv.addEventListener('pointermove',function(e){
+ if(e.pointerType==='touch')return;
+ var p=ptFromEvent(e);if(p!==hover){hover=p;draw();}
+});
+cv.addEventListener('pointerleave',function(){hover=-1;draw();});
+cv.addEventListener('pointerdown',function(e){
+ e.preventDefault();
+ var p=ptFromEvent(e);
+ if(e.pointerType==='touch'||e.pointerType==='pen'){
+  if(phase==='play'&&canHumanMove()){
+   if(p>=0&&pending===p){pending=-1;hover=-1;clickPoint(p);}
+   else{pending=p;hover=p;draw();}
+   return;
+  }
+ }
+ pending=-1;clickPoint(p);
+});
+$('bNew').onclick=function(){if(online&&!online.isHost){online.send({t:'newreq'});return;}if(mode()==='none'){startOnline();return;}startGame();netNew();};
+$('bUndo').onclick=undo;
+$('bResign').onclick=function(){if(online&&phase==='play')online.send({t:'resign'});resign();};
+$('bHint').onclick=hint;$('bAutoPlay').onclick=toggleAuto;
+$('bOnline').onclick=function(){startOnline();};
+$('selRule').onchange=function(){setRule(this.value);};
+$('selLevel').onchange=function(){setLevel(this.value);};
+$('chkNum').onchange=function(){showNum=this.checked;draw();};
+$('bSide').onclick=swapSides;
+
+/* ---------------- online play ---------------- */
+function netNew(){if(online&&online.isHost)online.send({t:'new',rule:rule});}
+function desync(){flash=t('desync');update();}
+function disconnected(){
+ online=null;discMsg=t('disc');update();
+ setTimeout(startOnline,0);
+}
+function onNetMsg(m){
+ if(!online||!m)return;
+ var opp=3-myColor;
+ switch(m.t){
+ case 'new':if(!online.isHost){discMsg='';rule=m.rule==='std'?'std':'free';startGame();}break;
+ case 'newreq':if(online.isHost){startGame();netNew();}break;
+ case 'move':
+  if(phase!=='play'||G.toMove!==opp||!(m.x>=0&&m.x<N&&m.y>=0&&m.y<N))return desync();
+  if(doMove((m.y|0)*N+(m.x|0))!=='ok')return desync();
+  break;
+ case 'resign':if(phase!=='play')return desync();resign(opp);break;
+ }
+}
+function startOnline(){
+ if(!window.BoardLink)return false;
+ if(online){var l=online;online=null;try{l.close();}catch(e){}}
+ pairing=true;cancelJob();
+ BoardLink.pair({
+  onOpen:function(l){
+   online=l;pairing=false;myColor=l.isHost?BL:WH;cancelJob();vsAI=false;discMsg='';
+   if(l.isHost){startGame();netNew();}else{flash='';update();}
+   flash=t('connected')+': '+t(myColor===BL?'youB':'youW');update();
+  },
+  onMessage:onNetMsg,
+  onClose:function(){disconnected();},
+  onCancel:function(){pairing=false;update();},
+  onAI:engine?function(){startVsAI();}:undefined
+ });
+ return true;
+}
+window.startOnline=startOnline;
+window.isOnline=function(){return !!online;};
+
+/* ---------------- exports ---------------- */
+window.newGame=function(){startGame();};
+window.undo=undo;
+window.toggleVsAI=toggleVsAI;
+window.isVsAI=function(){return !!(engine&&vsAI&&!online);};
+window.hint=hint;
+window.onEngineStatus=function(s){engMsg=(s==='loading')?t('loading'):(s||'');try{update();}catch(e){}};
+window.setLevel=setLevel;
+window.swapSides=swapSides;
+window.setRule=setRule;
+window.attachEngine=attachEngine;
+window.toggleAuto=toggleAuto;
+window.getState=getState;
+window.__errs=[];
+window.addEventListener('error',function(e){window.__errs.push(String(e.message));});
+window.__omok={
+ reset:function(r){autoOn=false;vsAI=false;human=BL;rule=(r==='std')?'std':'free';$('selRule').value=rule;startGame();return true;},
+ setup:function(rows,toMove){
+  cancelJob();resetBoard();
+  // rows of 15 chars: X black, O white, . empty; stones are stored as a move list in an order that alternates only if counts allow, so the colour is kept explicitly
+  mvs=[];for(var y=0;y<N;y++)for(var x=0;x<N;x++){var ch=rows[y][x];if(ch==='X'||ch==='O')mvs.push({x:x,y:y,c:ch==='X'?BL:WH});}
+  G.b=new Uint8Array(NN);mvs.forEach(function(m){G.b[m.y*N+m.x]=m.c;});G.last=-1;G.toMove=toMove||BL;
+  update();return true;
+ },
+ play:function(x,y){if(online&&(phase!=='play'||G.toMove!==myColor))return 'notyours';var r=doMove(y*N+x);if(r==='ok'){if(online)online.send({t:'move',x:x,y:y});maybeAI();}return r;},
+ board:function(){var o=[];for(var y=0;y<N;y++){var s='';for(var x=0;x<N;x++)s+='.XO'[G.b[y*N+x]];o.push(s);}return o;},
+ info:function(){return {phase:phase,toMove:G.toMove,moveNo:mvs.length,result:result,rule:rule,last:G.last,thinking:thinking,autoOn:autoOn,hintPt:hintPt,vsAI:vsAI,online:!!online,human:human,level:level,mode:mode(),myColor:myColor,msg:(flash||hintMsg||discMsg)};},
+ winLine:function(){return winLine?winLine.slice():null;},
+ legal:function(){var o=[];for(var p=0;p<NN;p++)if(!G.b[p])o.push(p);return o;},
+ undo:undo,
+ nMoves:function(){return mvs.length;},
+ canMove:canHumanMove,
+ setNum:function(v){showNum=!!v;$('chkNum').checked=!!v;draw();}
+};
+window.addEventListener('resize',layout);
+if(window.ResizeObserver)new ResizeObserver(layout).observe($('boardbox'));
+
+/* init labels */
+(function(){
+ var m={bNew:'new',bUndo:'undo',bResign:'resign',bHint:'hint',bAutoPlay:'autoPlay',lRule:'rule',lNum:'numbers',lLevel:'level'};
+ for(var k in m)$(k).textContent=t(m[k]);
+ var o=$('selRule').options;o[0].textContent=t('free');o[1].textContent=t('std');
+ $('selLevel').innerHTML='<option value="1">'+t('lv1')+'</option><option value="2" selected>'+t('lv2')+'</option><option value="3">'+t('lv3')+'</option>';
+ if(ko_)document.documentElement.lang='ko';
+})();
+startGame();layout();
+if(!local)window.addEventListener('load',function(){setTimeout(startOnline,0);});
+})();
+</script>
+<script src="link.js"></script>
+<script src="omok-engine.js"></script>
+</body>
+</html>

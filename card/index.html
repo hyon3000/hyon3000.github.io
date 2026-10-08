@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Card Games</title>
+<meta name="description" content="Go-Stop (Matgo) online or against the computer, and Spider Solitaire, in a Windows 98 frame.">
+<link href="win98.css" media="screen" rel="stylesheet" type="text/css">
+<style>
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #fff; }
+.windows { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.a-window { position: relative; display: flex; flex-direction: column; }
+.a-window .title-bar .title-icon { background-size: 16px 16px; image-rendering: pixelated !important; }
+.a-window .window-content { flex: 1; overflow: hidden; box-sizing: border-box; width: auto; padding: 0; border-left: 3px solid #808080; border-top: 3px solid #808080; border-right: 3px solid #fff; border-bottom: 3px solid #fff; background: #000; }
+.a-window .window-content iframe { width: 100%; height: 100%; border: none; display: block; }
+.windows-98 .window.gdialog { position: fixed; left: 50%; top: 100px; transform: translateX(-50%); z-index: 100; display: none; width: 300px; }
+.gdialog .window-content { padding: 10px; box-sizing: border-box; width: auto; background: silver; }
+.gdialog .row { margin: 8px 0 0; text-align: center; }
+/* menu items with a shortcut: the label on the left, the shortcut (F2 ...) pushed to the right edge (same as the Minesweeper page) */
+.menu .ui-menu-item > a { display: flex; align-items: center; gap: 16px; }
+.menu .ui-menu-item > a .mi-label { flex: 1 1 auto; text-align: left; }
+.menu .ui-menu-item > a .mi-key { margin-left: auto; flex: 0 0 auto; min-width: 3ch; text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; opacity: .9; }
+.menu, .menu .ui-menu-item > a, .menu .mi-label, .menu .mi-key { white-space: nowrap !important; }
+ul.menu { min-width: 150px; width: max-content; }
+/* the submenu arrow must not take room in the item (it sits at the right edge, like on the Minesweeper page) */
+.menu .ui-menu-item > a { position: relative; }
+.menu .ui-menu-icon.ui-icon { position: absolute !important; right: 4px; top: 50%; transform: translateY(-50%); margin: 0 !important; flex: 0 0 auto !important; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="windows windows-98">
+  <div class="window has-menu a-window" id="mainwin">
+    <div class="title-bar">
+      <div class="title-icon" id="ticon" style="background-image:url(icongostop.png)"></div>
+      <div class="title" id="ttitle">Go-Stop</div>
+      <div class="title-button-group">
+        <div class="title-button minimize"></div>
+        <div class="title-button maximize disabled" onclick="event.preventDefault();event.stopPropagation();return false;"></div>
+        <div class="title-button close"></div>
+      </div>
+    </div>
+    <ul class="menu-bar">
+      <li>
+        <a href="#" data-access-key="g" data-t="game">게임</a>
+        <ul class="menu">
+          <li onclick="return runMenu(function(){ call('newGame'); });"><a href="#"><span class="mi-label" data-t="new">　새 게임(N)</span><span class="mi-key">F2</span></a></li>
+          <li class="onlyGS" onclick="return runMenu(function(){ call('startOnline'); });"><a href="#"><span class="mi-label" data-t="online">　상대 선택...</span><span class="mi-key">F5</span></a></li>
+          <li onclick="return runMenu(function(){ call('undo'); });"><a href="#"><span class="mi-label" data-t="undo">　무르기(U)</span></a></li>
+          <li class="separator"></li>
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="theme">　테마...</a>
+            <ul class="menu">
+              <li class="th thgostop" onclick="return runMenu(function(){ setTheme('gostop'); });"><a href="#">✓ 고스톱</a></li>
+              <li class="th thspider" onclick="return runMenu(function(){ setTheme('spider'); });"><a href="#">　스파이더</a></li>
+            </ul>
+          </li>
+          <li onclick="return runMenu(function(){ goFullscreen(); });"><a href="#" data-t="full">　전체화면</a></li>
+          <li class="separator"></li>
+          <li onclick="return runMenu(function(){ document.getElementById('mainwin').style.visibility='hidden'; });"><a href="#" data-t="exit">　끝내기(X)</a></li>
+        </ul>
+      </li>
+      <li>
+        <a href="#" data-access-key="h" data-t="help">도움말</a>
+        <ul class="menu">
+          <li onclick="return runMenu(function(){ openDlg('helpWin'); });"><a href="#" data-t="how">　게임 방법(H)</a></li>
+          <li class="separator"></li>
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="cheat">　치트...</a>
+            <ul class="menu">
+              <li class="menu-autosolve" onclick="return runMenu(function(){ toggleAuto(); });"><a href="#"><span class="mi-label" data-t="auto">　자동으로 풀기</span><span class="mi-key">F3</span></a></li>
+              <li onclick="return runMenu(function(){ call('giveHint'); });"><a href="#"><span class="mi-label" data-t="hint">　컴퓨터 힌트</span><span class="mi-key">F4</span></a></li>
+            </ul>
+          </li>
+          <li class="separator"></li>
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="other">　다른 게임</a>
+            <ul class="menu">
+              <li onclick="return runMenu(function(){ window.location.href='../index.html'; });"><a href="#" data-t="mine">　지뢰찾기</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../2048/index.html'; });"><a href="#">　2048</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#">　T-Rex</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../pinball/index.html'; });"><a href="#">　3D 핀볼</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../sudoku/index.html'; });"><a href="#" data-t="sudoku">　스도쿠</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });"><a href="#">　아타리 브레이크아웃</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../board/index.html'; });"><a href="#">　보드게임</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../bubble/index.html'; });"><a href="#">　버블 슈터</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../swap/index.html'; });"><a href="#">　스왑 퍼즐</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　폴리큐브</a></li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+    <div class="window-content"><iframe id="game" src="gostop.html"></iframe></div>
+  </div>
+
+  <div class="window gdialog" id="helpWin">
+    <div class="title-bar"><div class="title-icon" style="background-image:url(icongostop.png);background-size:16px 16px"></div><div class="title" data-t="howT">게임 방법</div>
+      <div class="title-button-group"><div class="title-button close" onclick="closeDlg('helpWin')"></div></div></div>
+    <div class="window-content"><div id="helpTxt" style="font-size:12px;line-height:1.55"></div>
+      <div class="row"><button type="button" class="title-button" style="padding:2px 10px;" onclick="closeDlg('helpWin')" data-t="ok">확인</button></div></div>
+  </div>
+</div>
+<script src="vendor/jquery.min.js"></script>
+<script src="vendor/jquery-ui.min.js"></script>
+<script src="jquery.mswin.js"></script>
+<script src="jquery.mswin.menu.js"></script>
+<script>
+(function () {
+  var KO = /^ko/i.test(navigator.language || 'ko');
+  var T = KO ? { game: '게임', new: '　새 게임(N)', online: '　상대 선택...', undo: '　무르기(U)', cheat: '　치트...', auto: '　자동으로 풀기', hint: '　힌트 제공', theme: '　테마...', full: '　전체화면', exit: '　끝내기(X)', help: '도움말', how: '　게임 방법(H)', other: '　다른 게임', mine: '　지뢰찾기', sudoku: '　스도쿠', poly: '　폴리큐브', howT: '게임 방법', ok: '확인' }
+  : { game: 'Game', online: '　Choose Opponent...', new: '　New Game(N)', undo: '　Undo(U)', cheat: '　Cheat...', auto: '　Solve Automatically', hint: '　Give a Hint', theme: '　Theme...', full: '　Fullscreen', exit: '　Exit(X)', help: 'Help', how: '　How to Play(H)', other: '　Other Games', mine: '　Minesweeper', sudoku: '　Sudoku', poly: '　Polycube', howT: 'How to play', ok: 'OK' };
+  var HELP = KO ? {
+    gostop: '<b>고스톱 (2인 맞고)</b>: 화투 48장, 각자 10장 · 바닥 8장 · 더미 20장. 시작하면 대전 상대 창이 뜹니다(같은 와이파이에서 코드를 주고받아 연결, 같은 브라우저의 두 창은 자동 연결, 또는 「컴퓨터와 플레이」). 상대 변경: 게임 &gt; 상대 선택(F5). 온라인에서는 패가 화면에서만 가려지므로 정직한 플레이를 전제로 합니다.<br>' +
+      '<b>진행</b>: 내 패 한 장을 내면 같은 달 바닥 패와 짝이 맞아 가져옵니다(2장이면 하나 선택, 3장이면 4장 모두). 짝이 없으면 바닥에 놓입니다. 이어서 더미 맨 위 패를 뒤집어 같은 방식으로 처리합니다. 패는 두 번 누르거나 끌어서 냅니다.<br>' +
+      '<b>특수</b>: 뻑(낸 패·뒤집은 패·바닥 패가 같은 달 3장 → 못 먹고 쌓임. 나중에 4번째를 먹은 사람이 상대 피 1장, 자기가 만든 뻑이면 2장, 3번 뻑하면 즉시 패배) · 쪽(방금 낸 패와 뒤집은 패가 짝, 피 1장) · 따닥(바닥에 같은 달 2장, 손패와 뒤집은 패로 모두 먹음, 피 1장) · 싹쓸이(바닥이 비면 피 1장) · 폭탄(같은 달 3장을 손에 들고 바닥에 1장: 3장을 한꺼번에 내고 4장 획득, 피 1장, x2, 이후 2번 뒤집기만 하는 폭탄패) · 흔들기(같은 달 3장이 손에 있고 바닥에 없을 때 선언, x2).<br>' +
+      '<b>점수</b>: 광 3장 3점(비광 포함 2점), 4장 4점, 5장 15점 · 열끗 5장 이상 1점(+1씩), 고도리(2·4·8월 새) +5 · 띠 5장 이상 1점(+1씩), 홍단·청단·초단 각 +3 · 피 10장 이상 1점(+1씩, 쌍피는 2장). 9월 열끗은 일반 열끗입니다.<br>' +
+      '<b>고/스톱</b>: 7점 이상이면 고 또는 스톱(고 뒤에는 점수가 더 오를 때마다 다시 선택). 스톱하면 승리. 1고 +1점, 2고 +2점, 3고부터는 고마다 x2. 흔들기·폭탄은 x2(양쪽 합산). 박(각 x2): 광박(승자 광 3점 이상, 패자 광 0) · 피박(승자 피 점수, 패자 피 5장 이하) · 멍박(승자 열끗 7장 이상) · 고박(패자가 고를 외침). 아무도 7점에 못 미치면 나가리(무승부), 고를 부른 뒤 패가 끝나면 고를 부른 사람이 승리.<br>' +
+      '<b>간단화</b>: 같은 달 4장이 한 사람 손이나 바닥에 있으면 다시 섞습니다(총통 없음).<br>도움말 &gt; 치트: 힌트(F4)는 낼 패와 가져올 바닥 패를 표시하고, 자동으로 풀기(F3)는 내 차례를 컴퓨터가 대신 두며(고/스톱 포함) 게임이 끝나면 새 게임을 시작합니다. 어느 모드에서나 쓸 수 있습니다.',
+    spider: '<b>스파이더 솔리테어</b>: 카드 104장, 10열. 처음 54장(6,6,6,6,5,5,5,5,5,5장)을 깔고 각 열 맨 위만 앞면. 오른쪽 위의 더미(50장)를 누르면 각 열에 한 장씩 10장을 나눠 줍니다(빈 열이 있으면 불가).<br>' +
+      '<b>이동</b>: 카드를 숫자가 하나 더 큰 카드 위(무늬 무관)나 빈 열로 옮깁니다. 여러 장은 같은 무늬로 연속 내림차순인 묶음만 한꺼번에 이동. K부터 A까지 같은 무늬 13장이 완성되면 자동으로 치워지고, 8벌을 모두 치우면 승리. 끌어 놓기, 카드를 누른 뒤 목적 열 누르기, 카드 더블클릭/더블탭(가장 좋은 열로 이동) 모두 됩니다.<br>' +
+      '<b>점수</b>: 500점에서 시작, 이동/배분마다 -1, 한 벌 완성마다 +100. 무르기는 제한 없이 직전 상태로 되돌립니다. 난이도: 1무늬(쉬움), 2무늬, 4무늬.<br>도움말 &gt; 치트: 힌트(F4)는 좋은 수 하나를 표시하고(다시 누르면 다음 후보, 마지막은 배분), 자동으로 풀기(F3)는 컴퓨터가 계속 대신 둡니다.'
+  } : {
+    gostop: '<b>Go-Stop (2-player Matgo)</b>: 48 hwatu cards: 10 each, 8 on the table, 20 in the stock. When it opens, an opponent window appears (two players on the same Wi-Fi swap codes, two windows of one browser connect by themselves, or "Play vs Computer"). Change opponent with Game &gt; Choose Opponent (F5). Online, hidden hands are only hidden by the screen, so honest play is assumed.<br>' +
+      '<b>Turn</b>: play one hand card: a table card of the same month is captured as a pair (two match: pick one; three: take all four), otherwise the card stays on the table. Then the top stock card is flipped and handled the same way. Tap a card twice or drag it to play.<br>' +
+      '<b>Specials</b>: Ppeok (played card, flipped card and a table card are the same month: nothing is captured and the 3 stay stuck; whoever captures the 4th gets 1 junk card from the opponent, 2 if it was their own ppeok; three ppeok in one game lose the game) · Jjok (the flipped card matches the card you just put down: take both + 1 junk) · Ttadak (two same-month cards on the table, you take both pairs with the hand card and the flipped card: + 1 junk) · Sweep (table empty: + 1 junk) · Bomb (3 cards of a month in hand + 1 on the table: play all 3, take 4, + 1 junk, x2, and you get 2 flip-only bomb cards) · Shake (3 cards of a month in hand, none on the table: declare it, x2).<br>' +
+      '<b>Scoring</b>: Bright 3 = 3 pts (2 with the Rain bright), 4 = 4, 5 = 15 · Animal 5+ = 1 (+1 each more), Godori (the 3 birds of Feb/Apr/Aug) +5 · Ribbon 5+ = 1 (+1 each more), Hongdan / Cheongdan / Chodan +3 each · Junk 10+ = 1 (+1 each more, double junk counts 2). The September animal is a normal animal.<br>' +
+      '<b>Go / Stop</b>: with 7+ points you choose Go or Stop (after a Go, again whenever your score rises). Stop wins. 1 Go +1, 2 Go +2, from the 3rd Go each Go doubles. Shake / bomb = x2 each (both players counted). Bak (each x2): Gwang-bak (winner has 3+ points of Brights, loser none) · Pi-bak (winner scores Junk, loser has 5 or fewer) · Meong-bak (winner has 7+ Animals) · Go-bak (loser had called Go). Nobody reaches 7: Nagari (draw); if the cards run out after a Go, the Go caller wins.<br>' +
+      '<b>Simplified</b>: a deal with 4 cards of one month in a hand or on the table is reshuffled (no Chongtong).<br>Help &gt; Cheat: Give a Hint (F4) marks the card to play and the table card to take; Solve Automatically (F3) plays your side (including Go / Stop) and starts a new game after each one. Works in every mode.',
+    spider: '<b>Spider Solitaire</b>: 104 cards, 10 columns. 54 cards are dealt first (6,6,6,6,5,5,5,5,5,5), only the top card of each column face up. Click the stock (50 cards) to deal one card on every column (not allowed while a column is empty).<br>' +
+      '<b>Moves</b>: put a card on a card one rank higher (any suit) or on an empty column. Several cards move together only if they are a same-suit descending run. A complete K..A run of one suit is removed automatically; remove all 8 to win. Drag and drop, tap a card then the target column, or double-click / double-tap a card (moves it to the best column).<br>' +
+      '<b>Score</b>: starts at 500, -1 per move or deal, +100 per completed run. Undo is unlimited and restores the earlier state. Difficulty: 1 suit (easy), 2 suits, 4 suits.<br>Help &gt; Cheat: Give a Hint (F4) shows one good move (press again for the next candidate, finally the deal); Solve Automatically (F3) keeps playing for you.'
+  };
+document.documentElement.lang = KO ? 'ko' : 'en';
+  [].forEach.call(document.querySelectorAll('[data-t]'), function (e) { var k = e.getAttribute('data-t'); if (T[k] !== undefined) e.textContent = T[k]; });
+  
+  var theme = 'gostop', NAMES = { gostop: KO ? '고스톱' : 'Go-Stop', spider: KO ? '스파이더' : 'Spider' }, TH = ['gostop', 'spider'];
+  function setHelp() { document.getElementById('helpTxt').innerHTML = HELP[theme]; }
+  function resize() {
+    var vw = window.innerWidth, vh = window.innerHeight, win = document.getElementById('mainwin'), chrome = 46;
+    win.style.width = Math.min(vw - 8, Math.max(320, Math.floor((vh - chrome - 8) * 1.45 + 14))) + 'px'; win.style.height = Math.max(300, vh - 8) + 'px';
+  }
+  resize(); window.addEventListener('resize', resize);
+  function gw() { try { return document.getElementById('game').contentWindow; } catch (e) { return null; } }
+  window.call = function (f) { var w = gw(); try { if (w && w[f]) return w[f](); } catch (e) {} };
+  window.setTheme = function (t) {
+    theme = t; markAuto(false); document.getElementById('game').src = t + '.html' + (/[?&]ai=1/.test(location.search) ? '?ai=1' : '');
+    document.getElementById('ttitle').textContent = NAMES[t]; document.title = NAMES[t];
+    document.getElementById('ticon').style.backgroundImage = 'url(icon' + t + '.png)';
+    TH.forEach(function (k) { var a = document.querySelector('.th' + k + ' a'); a.textContent = (k === t ? '✓ ' : '\u3000') + NAMES[k]; });
+    [].forEach.call(document.querySelectorAll('.onlyGS'), function (e) { e.style.display = t === 'gostop' ? '' : 'none'; });
+    setHelp();
+  };
+  function closeMenus() {
+    var mb = $('.menu-bar'); try { mb.menubar('collapseAll'); } catch (e) {}
+    mb.find('.ui-state-open').removeClass('ui-state-open'); mb.find('> li').removeClass('ui-state-active ui-state-hover ui-state-focus');
+    mb.find('.menu').hide().attr('aria-hidden', 'true').attr('aria-expanded', 'false');
+  }
+  window.runMenu = function (fn) { closeMenus(); setTimeout(fn, 0); return false; };
+  window.closeDlg = function (id) { document.getElementById(id).style.display = 'none'; };
+  window.openDlg = function (id) { document.getElementById(id).style.display = 'block'; };
+  window.toggleAuto = function () { var on = call('toggleAuto'); markAuto(!!on); };
+  window.setAutoMark = function (on) { markAuto(!!on); };      // the pages report their own auto state (their buttons / F3 inside the iframe)
+  function markAuto(on) { var a = document.querySelector('.menu-autosolve .mi-label'); if (a) a.textContent = (on ? '✓ ' : '\u3000') + a.textContent.replace(/^[✓\u2713]\s*/, '').replace(/^\u3000/, ''); }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'F2') { e.preventDefault(); call('newGame'); } else if (e.key === 'F3') { e.preventDefault(); window.toggleAuto(); } else if (e.key === 'F4') { e.preventDefault(); call('giveHint'); } else if (e.key === 'F5') { e.preventDefault(); call('startOnline'); }
+  });
+  /* the page inside the iframe: closes menus on pointerdown and forwards F2..F5 (the key events of a focused iframe never reach this document). Hooked on every load of the iframe and once now (the first load may already be over). */
+  function hookFrame() {
+    var f = document.getElementById('game');
+    try {
+      var doc = f.contentWindow.document;
+      if (!doc || doc.__hooked || doc.readyState === 'loading' || !/\.html/.test(f.contentWindow.location.pathname)) return;
+      doc.__hooked = true;
+      doc.addEventListener('pointerdown', closeMenus);
+      doc.addEventListener('keydown', function (e) { if (/^F[2345]$/.test(e.key)) { e.preventDefault(); document.dispatchEvent(new KeyboardEvent('keydown', { key: e.key })); } });
+    } catch (x) {}
+  }
+  document.getElementById('game').addEventListener('load', hookFrame);
+  window.goFullscreen = function () { var el = document.getElementById('mainwin'); if (el.requestFullscreen) el.requestFullscreen(); };
+  $(function () {
+    if ($('.menu-bar').length) $('.menu-bar').menubar();
+    $('.window').draggable({ handle: '.title' });
+    $('#mainwin .title-button.minimize').on('click', function () { $('#mainwin').hide(); });
+    $('#mainwin .title-button.close').on('click', function () { $('#mainwin').css('visibility', 'hidden'); });
+    hookFrame();
+    TH.forEach(function (k) { var a = document.querySelector('.th' + k + ' a'); a.textContent = (k === theme ? '✓ ' : '\u3000') + NAMES[k]; });
+    document.getElementById('ttitle').textContent = NAMES.gostop; document.title = NAMES.gostop; setHelp();
+    var g = new URLSearchParams(location.search).get('theme'); if (g === 'spider') setTheme('spider');
+  });
+})();
+</script>
+<script>
+/* "Other games" entries that are not translated by the page itself: English names for non-Korean browsers */
+(function () {
+  if (/^ko/i.test(navigator.language || 'ko')) return;
+  var EN = { '스왑 퍼즐': 'Swap Puzzle', '카드게임': 'Card Games', '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '스왑 퍼즐': 'Swap Puzzle', '지뢰찾기': 'Minesweeper', '폴리큐브': 'Polycube' };
+  function run() { [].forEach.call(document.querySelectorAll('.menu a'), function (a) { if (a.children.length) return; var s = a.textContent.replace(/^[\u3000\s]+/, ''); if (EN[s]) a.textContent = '\u3000' + EN[s]; }); }
+  if (document.readyState === 'complete') run(); else window.addEventListener('load', run);
+})();
+</script>
+</body>
+</html>

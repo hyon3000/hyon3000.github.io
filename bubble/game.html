@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Bubble Shooter 2D</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
+#viewport{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);overflow:hidden}
+canvas{display:block;width:100%;height:100%;touch-action:none;background:#000}
+</style>
+</head>
+<body>
+<div id="viewport"><canvas id="app"></canvas></div>
+<script>
+var RATIO=0.62;
+function fitViewport(){
+  var vw=window.innerWidth,vh=window.innerHeight,w,h;
+  if(vw/vh<RATIO){w=vw;h=vw/RATIO}else{h=vh;w=vh*RATIO}
+  var el=document.getElementById('viewport');
+  el.style.width=Math.floor(w)+'px';el.style.height=Math.floor(h)+'px';
+}
+window.addEventListener('resize',fitViewport);
+fitViewport();
+</script>
+<script src="./texture.js"></script>
+<script src="./common.js"></script>
+<script src="./bubble2d.js"></script>
+</body></html>

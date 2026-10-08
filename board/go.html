@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>Go / Baduk</title>
+<title>Go</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;overflow:hidden;font:14px/1.35 system-ui,-apple-system,"Segoe UI","Malgun Gothic",sans-serif;color:#2b2620;background:#ece6d8;-webkit-user-select:none;user-select:none}
@@ -44,12 +44,11 @@ label{display:flex;align-items:center;gap:5px;font-size:13px}
   </div>
   <div class="btns">
    <button id="bNew"></button><button id="bUndo"></button><button id="bPass"></button><button id="bResign"></button>
-   <button id="bHint" class="eng hidden"></button>
+   <button id="bHint"></button><button id="bAutoPlay"></button><button id="bOnline"></button>
   </div>
   <div class="opts">
    <label><span id="lSize"></span><select id="selSize"><option>9</option><option>13</option><option selected>19</option></select></label>
    <label><span id="lHcp"></span><select id="selHcp"></select></label>
-   <label class="eng hidden"><input type="checkbox" id="chkAI"><span id="lAI"></span></label>
    <label class="eng hidden"><span id="lLevel"></span><select id="selLevel"></select></label>
    <button id="bSide" class="eng hidden"></button>
   </div>
@@ -62,7 +61,7 @@ var ko_=(navigator.language||'').toLowerCase().indexOf('ko')===0;
 var TX={
  new:['New','새 게임'],undo:['Undo','무르기'],pass:['Pass','패스'],resign:['Resign','기권'],hint:['Hint','힌트'],
  size:['Board','판'],hcp:['Handicap','접바둑'],ai:['vs Computer','컴퓨터 대국'],level:['Level','난이도'],
- lv1:['Easy','쉬움'],lv2:['Normal','보통'],lv3:['Hard','어려움'],
+ lv1:['Easy (GNU Go)','쉬움 (GNU Go)'],lv2:['Normal (KataGo)','보통 (KataGo)'],lv3:['Hard (KataGo, big net)','어려움 (KataGo 대형 신경망)'],
  asW:['Play as White','백으로 두기'],asB:['Play as Black','흑으로 두기'],
  bTurn:['Black to move','흑 차례'],wTurn:['White to move','백 차례'],think:['Computer is thinking...','컴퓨터가 생각 중...'],
  move:['Move','수'],komi:['Komi','덤'],capB:['Black captured','흑이 따낸 돌'],capW:['White captured','백이 따낸 돌'],
@@ -71,8 +70,13 @@ var TX={
  markHelp:['Mark dead stones: click a group to toggle, then Confirm.','사석을 클릭해 표시한 뒤 계산을 누르세요.'],
  confirm:['Confirm score','계산'],auto:['Auto-mark','자동 표시'],resume:['Resume play','대국 계속'],
  passed:['passed','패스'],black:['Black','흑'],white:['White','백'],none:['None','없음'],
- engBad:['Engine move was invalid; passing.','엔진 수가 잘못되어 패스합니다.'],hintTxt:['Hint shown','힌트 표시'],hintPass:['Hint: pass','힌트: 패스'],
- over:['Game over','대국 종료'],resigned:['resigned','기권']
+ engBad:['Engine move was invalid; passing.','엔진 수가 잘못되어 패스합니다.'],hintTxt:['Hint shown','힌트 표시'],hintPass:['Engine suggests pass','엔진이 패스를 제안합니다'],autoPlay:['Auto','자동'],autoOn:['auto play','자동 대국'],
+ over:['Game over','대국 종료'],resigned:['resigned','기권'],
+ online:['Opponent','상대'],noOpp:['No opponent - press Opponent to connect or play the computer.','상대가 없습니다. 상대 버튼으로 연결하거나 컴퓨터와 대국하세요.'],youB:['You are Black','당신은 흑'],youW:['You are White','당신은 백'],
+ oppTurn:["Opponent's turn",'상대 차례'],disc:['Opponent disconnected','상대가 연결을 끊었습니다'],
+ desync:['Out of sync with opponent - start a new game.','상대와 화면이 맞지 않습니다. 새 게임을 시작하세요.'],
+ waitOpp:['Waiting for opponent to confirm...','상대의 확인을 기다리는 중...'],notYours:["It is not your turn.",'당신의 차례가 아닙니다.'],
+ connected:['Connected','연결되었습니다']
 };
 function t(k){return TX[k][ko_?1:0];}
 var $=function(id){return document.getElementById(id);};
@@ -141,8 +145,10 @@ var states=[],seen=new Set(),mvs=[];
 var phase='play',dead=null,owner=null,result=null,resultDetail='';
 var komiBase=6.5,komi=6.5,handicap=0;
 var human=BL,vsAI=false,level=2;
-var engine=null,thinking=false,jobId=0,hintPt=null,flash='',hintMsg='';
+var engine=null,thinking=false,jobId=0,hintPt=null,flash='',hintMsg='',engMsg='';
 var testAI=null;
+var local=/[?&]local=1/.test(location.search),pairing=false;
+var online=null,myColor=BL,myConf=false,oppConf=false,discMsg='';
 
 function bstr(b){return Array.prototype.join.call(b,'');}
 function snapshot(){
@@ -164,7 +170,7 @@ function handicapPoints(n){
  return P;
 }
 function startGame(){
- cancelJob();
+ cancelJob();myConf=oppConf=false;discMsg='';
  resetBoard();
  komi=handicap>0?0.5:komiBase;
  if(handicap>=2){handicapPoints(handicap).forEach(function(p){G.b[p]=BL;});G.toMove=WH;}
@@ -197,10 +203,11 @@ function doPass(){
  if(G.passes>=2)enterMark();
  update();return true;
 }
-function enterMark(){phase='mark';dead=new Uint8Array(N*N);recalcOwner();}
+function enterMark(){myConf=oppConf=false;phase='mark';dead=new Uint8Array(N*N);recalcOwner();}
 function recalcOwner(){owner=R.score(G.b,dead).owner;}
 function toggleDead(p){
  if(phase!=='mark'||G.b[p]===0)return false;
+ myConf=oppConf=false;
  var g=R.group(G.b,p),v=dead[p]?0:1;
  g.forEach(function(q){dead[q]=v;});
  recalcOwner();update();return true;
@@ -213,14 +220,15 @@ function confirmScore(){
  owner=s.owner;phase='over';update();
  return {text:result,b:s.b,w:s.w,komi:komi,diff:d};
 }
-function resign(){
+function resign(loser){
  if(phase!=='play')return;
  cancelJob();
- var loser=vsAI?human:G.toMove;
+ if(loser!==BL&&loser!==WH)loser=online?myColor:(engine&&vsAI)?human:G.toMove;
  result=(loser===BL?'W':'B')+'+R';resultDetail=t(loser===BL?'black':'white')+' '+t('resigned');
  phase='over';owner=null;update();
 }
 function undo(){
+ if(online)return false;
  cancelJob();
  if(states.length<=1)return false;
  states.pop();
@@ -233,6 +241,7 @@ function undo(){
 
 /* ---------------- engine adapter ---------------- */
 function isAIc(c){
+ if(online)return false;
  if(testAI)return testAI.indexOf(c)>=0;
  return !!(engine&&vsAI&&c!==human);
 }
@@ -241,7 +250,7 @@ function getState(){
   moves:mvs.map(function(m){return m.pass?{c:m.c,pass:true}:{c:m.c,x:m.x,y:m.y};}),
   toPlay:G.toMove===BL?'b':'w'};
 }
-function cancelJob(){jobId++;thinking=false;}
+function cancelJob(){jobId++;thinking=false;engMsg='';}
 function callEngine(cb){
  var id=++jobId,st=getState(),done=false;
  function fin(r){if(done||id!==jobId)return;done=true;cb(r);}
@@ -265,39 +274,101 @@ function maybeAI(){
   update();maybeAI();
  });
 }
+function userTurn(){
+ if(online)return G.toMove===myColor;
+ if(engine&&vsAI)return G.toMove===human;
+ return true;
+}
 function hint(){
- if(!engine||phase!=='play'||thinking)return;
+ if(!engine||phase!=='play'||thinking||!userTurn())return;
+ var mn=G.moveNo;
  thinking=true;update();
  callEngine(function(r){
   thinking=false;hintPt=null;hintMsg='';
-  if(r&&typeof r==='object'&&isFinite(r.x)&&isFinite(r.y)&&checkLegal(r.y*N+r.x).ok){hintPt=r.y*N+r.x;hintMsg=t('hintTxt');}
-  else if(r==='pass')hintMsg=t('hintPass');
+  if(mn===G.moveNo&&phase==='play'){
+   if(r&&typeof r==='object'&&isFinite(r.x)&&isFinite(r.y)&&checkLegal(r.y*N+r.x).ok){hintPt=r.y*N+r.x;hintMsg=t('hintTxt');}
+   else if(r==='pass')hintMsg=t('hintPass');
+  }
   update();
  });
 }
+var autoOn=false,autoTimer=0;
+var markTimer=0,markDone=false,newTimer=0;
+function deadList(){var o=[];for(var p=0;p<N*N;p++)if(dead[p])o.push(p);return o;}
+function applyDeadSet(list){
+ var nd=new Uint8Array(N*N);list.forEach(function(p){if(p>=0&&p<N*N&&G.b[p])nd[p]=1;});
+ var same=true;for(var p=0;p<N*N;p++)if(nd[p]!==dead[p]){same=false;break;}
+ if(same)return;
+ dead=nd;myConf=oppConf=false;recalcOwner();update();
+}
+function scheduleAuto(){
+
+ if(phase!=='mark')markDone=false;
+ if(autoOn&&phase==='mark'&&!markDone&&!markTimer){
+  markTimer=setTimeout(function(){
+   markTimer=0;
+   if(!autoOn||phase!=='mark'||markDone)return;
+   markDone=true;
+   autoDead();
+   if(online)online.send({t:'deadset',list:deadList()});
+   if(online){myConf=true;online.send({t:'confirm'});if(oppConf)confirmScore();else update();}
+   else confirmScore();
+  },800);
+ }
+ if(autoOn&&phase==='over'&&!newTimer&&!(online&&!online.isHost)){
+  newTimer=setTimeout(function(){
+   newTimer=0;
+   if(!autoOn||phase!=='over'||(online&&!online.isHost))return;
+   startGame();netNew();
+  },4000);
+ }
+ if(!autoOn||autoTimer||!engine||phase!=='play'||thinking||!userTurn())return;
+ autoTimer=setTimeout(function(){
+  autoTimer=0;
+  if(!autoOn||!engine||phase!=='play'||thinking||!userTurn())return;
+  thinking=true;update();
+  callEngine(function(r){
+   thinking=false;
+   var ok=false;
+   if(r&&typeof r==='object'&&isFinite(r.x)&&isFinite(r.y)&&r.x>=0&&r.x<N&&r.y>=0&&r.y<N){
+    ok=doMove(r.y*N+r.x)==='ok';if(ok&&online)online.send({t:'move',x:r.x|0,y:r.y|0});
+   }
+   if(!ok){if(doPass()&&online)online.send({t:'pass'});}
+   update();maybeAI();
+  });
+ },500);
+}
+function toggleAuto(){
+ autoOn=!autoOn;
+ if(!autoOn){clearTimeout(autoTimer);autoTimer=0;}
+ update();return autoOn;
+}
 function attachEngine(fn){
  engine=(typeof fn==='function')?fn:null;
- var show=!!engine;
- Array.prototype.forEach.call(document.querySelectorAll('.eng'),function(e){e.classList.toggle('hidden',!show);});
- if(engine){vsAI=true;human=BL;$('chkAI').checked=true;maybeAI();}
- else{vsAI=false;cancelJob();}
+ if(!engine){vsAI=false;cancelJob();}
+ else if(local){vsAI=true;human=BL;maybeAI();}
+ else if(pairing)startOnline();
  update();
 }
+function startVsAI(){
+ if(!engine)return false;
+ online=null;vsAI=true;human=BL;pairing=false;discMsg='';startGame();return true;
+}
 function toggleVsAI(){
- if(!engine){vsAI=false;return false;}
- vsAI=!vsAI;$('chkAI').checked=vsAI;
- if(vsAI)maybeAI();else cancelJob();
- update();return vsAI;
+ if(online||!engine){return false;}
+ if(vsAI){vsAI=false;cancelJob();update();return false;}
+ startVsAI();return true;
 }
 function setLevel(l){l=+l;if(l>=1&&l<=3){level=l;$('selLevel').value=l;}}
-function swapSides(){if(!engine)return;human=3-human;startGame();}
+function swapSides(){if(online||!engine)return;human=3-human;startGame();}
 function setSize(n){
+ if(online&&!online.isHost)return;
  n=+n;if(n!==9&&n!==13&&n!==19)return;
  N=n;R=Rules(n);$('selSize').value=n;
  if(n===9&&handicap>5)handicap=0;
- bgKey='';startGame();
+ bgKey='';startGame();netNew();
 }
-function setHandicap(h){handicap=(+h>=2)?+h:0;startGame();}
+function setHandicap(h){if(online&&!online.isHost)return;handicap=(+h>=2)?+h:0;startGame();netNew();}
 function refreshHcpOptions(){
  var s=$('selHcp'),max=N===9?4:9,html='<option value="0">'+t('none')+'</option>';
  for(var i=2;i<=max;i++)html+='<option value="'+i+'">'+i+'</option>';
@@ -356,9 +427,10 @@ function stone(c,x,y,col,alpha,shadow){
  c.shadowColor='transparent';c.lineWidth=1;c.strokeStyle=col===BL?'rgba(0,0,0,.6)':'rgba(0,0,0,.28)';c.stroke();
  c.restore();
 }
-function canHumanMove(){return phase==='play'&&!isAIc(G.toMove)&&!thinking;}
+function mode(){return online?'online':(engine&&vsAI)?'ai':local?'local':'none';}
+function canHumanMove(){var m=mode();return phase==='play'&&!isAIc(G.toMove)&&!thinking&&m!=='none'&&(m!=='online'||G.toMove===myColor);}
 function draw(){
- if(!S)return;
+ if(!S)return;cell=S/(N+1);
  if(bgKey!==S+'/'+N+'/'+dpr)buildBg();
  ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(bg,0,0);
  ctx.setTransform(dpr,0,0,dpr,0,0);
@@ -397,26 +469,37 @@ function draw(){
   ctx.beginPath();ctx.arc(x,y,cell*0.42,0,7);ctx.stroke();ctx.shadowColor='transparent';
  }
 }
+function showAI0(){return mode()==='ai';}
 function update(){
+ setTimeout(scheduleAuto,0);
  var dot=$('dot');
  dot.style.background=G.toMove===BL?'radial-gradient(circle at 35% 35%,#777,#000)':'radial-gradient(circle at 35% 35%,#fff,#aaa)';
  var tt;
  if(phase==='over')tt=t('over')+(result?': '+result:'');
  else if(phase==='mark')tt=t('markHelp');
- else tt=thinking?t('think'):t(G.toMove===BL?'bTurn':'wTurn');
+ else tt=(thinking&&isAIc(G.toMove))?t('think'):t(G.toMove===BL?'bTurn':'wTurn');
+ if(autoOn&&phase==='play')tt+=' ['+t('autoOn')+']';
+ if(online&&phase==='play')tt+=' ('+t(myColor===BL?'youB':'youW')+(G.toMove!==myColor?', '+t('oppTurn'):'')+')';
  $('turnTxt').textContent=tt;
  $('sMove').innerHTML=t('move')+': <b>'+G.moveNo+'</b>';
  $('sKomi').innerHTML=t('komi')+': <b>'+komi+'</b>';
  $('sCapB').innerHTML=t('capB')+': <b>'+G.capB+'</b>';
  $('sCapW').innerHTML=t('capW')+': <b>'+G.capW+'</b>';
- var m=flash||hintMsg;
+ var m=flash||hintMsg||discMsg||engMsg;
+ if(!m&&mode()==='none'&&phase==='play')m=t('noOpp');
+ if(online&&phase==='mark'&&myConf&&!oppConf)m=t('waitOpp');
  if(!m&&G.last===-2&&phase==='play')m=t(G.toMove===BL?'white':'black')+' '+t('passed');
  $('msg').textContent=m;
  $('detail').textContent=phase==='over'?resultDetail:'';
  $('markbtns').classList.toggle('hidden',phase!=='mark');
  $('bPass').disabled=!canHumanMove();
- $('bResign').disabled=phase!=='play';
- $('bHint').disabled=!(phase==='play'&&!thinking);
+ $('bResign').disabled=phase!=='play'||mode()==='none';
+ $('bHint').disabled=!(engine&&phase==='play'&&!thinking&&userTurn());$('bAutoPlay').classList.toggle('pri',autoOn);$('bAutoPlay').disabled=!engine;
+ var md=mode(),showAI=md==='ai';
+ $('bUndo').disabled=md==='online'||md==='none';$('bAuto').disabled=md==='online'||md==='none';
+ Array.prototype.forEach.call(document.querySelectorAll('.eng'),function(e){e.classList.toggle('hidden',!showAI);});
+ var gst=md==='none'||(!!online&&!online.isHost);$('selSize').disabled=gst;$('selHcp').disabled=gst;
+ $('bOnline').textContent=t('online');
  $('bSide').textContent=t(human===BL?'asW':'asB');
  draw();
 }
@@ -431,11 +514,11 @@ function ptFromEvent(e){
 }
 function clickPoint(p){
  if(p<0)return;
- if(phase==='mark'){toggleDead(p);return;}
+ if(phase==='mark'){if(toggleDead(p)&&online)online.send({t:'dead',x:p%N,y:(p/N)|0});return;}
  if(!canHumanMove())return;
  var r=doMove(p);
  if(r!=='ok'){flash=t(r);update();}
- else maybeAI();
+ else{if(online)online.send({t:'move',x:p%N,y:(p/N)|0});maybeAI();}
 }
 cv.addEventListener('pointermove',function(e){
  if(e.pointerType==='touch')return;
@@ -454,17 +537,18 @@ cv.addEventListener('pointerdown',function(e){
  }
  pending=-1;clickPoint(p);
 });
-$('bNew').onclick=function(){startGame();};
+$('bNew').onclick=function(){if(online&&!online.isHost){online.send({t:'newreq'});return;}if(mode()==='none'){startOnline();return;}startGame();netNew();};
 $('bUndo').onclick=undo;
-$('bPass').onclick=function(){if(canHumanMove()){doPass();maybeAI();}};
-$('bResign').onclick=resign;
-$('bHint').onclick=hint;
-$('bConfirm').onclick=confirmScore;
+$('bPass').onclick=function(){if(canHumanMove()){doPass();if(online)online.send({t:'pass'});maybeAI();}};
+$('bResign').onclick=function(){if(online&&phase==='play')online.send({t:'resign'});resign();};
+$('bHint').onclick=hint;$('bAutoPlay').onclick=toggleAuto;
+$('bConfirm').onclick=function(){if(!online){confirmScore();return;}if(phase!=='mark')return;myConf=true;online.send({t:'confirm'});if(oppConf)confirmScore();else update();};
 $('bAuto').onclick=autoDead;
-$('bResume').onclick=function(){if(phase==='mark'){phase='play';G.passes=0;dead=new Uint8Array(N*N);owner=null;update();maybeAI();}};
+function resumePlay(){if(phase==='mark'){phase='play';G.passes=0;myConf=oppConf=false;dead=new Uint8Array(N*N);owner=null;update();maybeAI();}}
+$('bResume').onclick=function(){if(online&&phase==='mark')online.send({t:'resume'});resumePlay();};
+$('bOnline').onclick=function(){startOnline();};
 $('selSize').onchange=function(){setSize(this.value);};
 $('selHcp').onchange=function(){setHandicap(this.value);};
-$('chkAI').onchange=function(){if(engine&&vsAI!==this.checked)toggleVsAI();else this.checked=vsAI;};
 $('selLevel').onchange=function(){setLevel(this.value);};
 $('bSide').onclick=swapSides;
 
@@ -501,17 +585,70 @@ function autoDead(){
  recalcOwner();update();
 }
 
+/* ---------------- online play ---------------- */
+function netNew(){if(online&&online.isHost)online.send({t:'new',size:N,handicap:handicap});}
+function desync(){flash=t('desync');update();}
+function applyNew(size,h){
+ if(size!==9&&size!==13&&size!==19)return;
+ N=size;R=Rules(N);$('selSize').value=N;handicap=(h>=2&&h<=(N===9?4:9))?h:0;bgKey='';
+ startGame();layout();
+}
+function disconnected(){
+ online=null;myConf=oppConf=false;discMsg=t('disc');update();
+ setTimeout(startOnline,0);
+}
+function onNetMsg(m){
+ if(!online||!m)return;
+ var opp=3-myColor,p;
+ switch(m.t){
+ case 'new':if(!online.isHost){discMsg='';applyNew(m.size|0,m.handicap|0);}break;
+ case 'newreq':if(online.isHost){startGame();netNew();}break;
+ case 'move':
+  if(phase!=='play'||G.toMove!==opp||!(m.x>=0&&m.x<N&&m.y>=0&&m.y<N))return desync();
+  if(doMove((m.y|0)*N+(m.x|0))!=='ok')return desync();
+  break;
+ case 'pass':if(phase!=='play'||G.toMove!==opp)return desync();doPass();break;
+ case 'resign':if(phase!=='play')return desync();resign(opp);break;
+ case 'dead':
+  if(phase!=='mark'||!toggleDead((m.y|0)*N+(m.x|0)))return desync();break;
+ case 'confirm':if(phase!=='mark')return;oppConf=true;if(myConf)confirmScore();else update();break;
+ case 'resume':resumePlay();break;
+ case 'deadset':if(phase==='mark'&&Array.isArray(m.list))applyDeadSet(m.list);break;
+ }
+}
+function startOnline(){
+ if(!window.BoardLink)return false;
+ if(online){var l=online;online=null;try{l.close();}catch(e){}}
+ pairing=true;cancelJob();
+ BoardLink.pair({
+  onOpen:function(l){
+   online=l;pairing=false;myColor=l.isHost?BL:WH;cancelJob();vsAI=false;discMsg='';
+   if(l.isHost){startGame();netNew();}else{flash='';update();}
+   flash=t('connected')+': '+t(myColor===BL?'youB':'youW');update();
+  },
+  onMessage:onNetMsg,
+  onClose:function(){disconnected();},
+  onCancel:function(){pairing=false;update();},
+  onAI:engine?function(){startVsAI();}:undefined
+ });
+ return true;
+}
+window.startOnline=startOnline;
+window.isOnline=function(){return !!online;};
+
 /* ---------------- exports ---------------- */
 window.newGame=function(){startGame();};
 window.undo=undo;
 window.toggleVsAI=toggleVsAI;
-window.isVsAI=function(){return !!(engine&&vsAI);};
+window.isVsAI=function(){return !!(engine&&vsAI&&!online);};
 window.hint=hint;
+window.onEngineStatus=function(s){engMsg=s||'';try{update();}catch(e){}};
 window.setLevel=setLevel;
 window.swapSides=swapSides;
 window.setSize=setSize;
 window.setHandicap=setHandicap;
 window.attachEngine=attachEngine;
+window.toggleAuto=toggleAuto;
 window.getState=getState;
 window.__errs=[];
 window.addEventListener('error',function(e){window.__errs.push(String(e.message));});
@@ -522,7 +659,7 @@ window.__go={
   for(var y=0;y<N;y++)for(var x=0;x<N;x++){var ch=rows[y][x];G.b[y*N+x]=ch==='X'?1:ch==='O'?2:0;}
   G.toMove=toMove||BL;komi=komiBase;bgKey='';snapshot();layout();update();return true;
  },
- play:function(x,y){var r=doMove(y*N+x);if(r==="ok")maybeAI();return r;},
+ play:function(x,y){if(online&&(phase!=="play"||G.toMove!==myColor))return "notyours";var r=doMove(y*N+x);if(r==="ok")maybeAI();return r;},
  pass:function(){return doPass();},
  board:function(){var o=[];for(var y=0;y<N;y++){var s='';for(var x=0;x<N;x++)s+='.XO'[G.b[y*N+x]];o.push(s);}return o;},
  info:function(){return {phase:phase,toMove:G.toMove,capB:G.capB,capW:G.capW,ko:G.ko,moveNo:G.moveNo,passes:G.passes,result:result,N:N,komi:komi};},
@@ -540,14 +677,16 @@ if(window.ResizeObserver)new ResizeObserver(layout).observe($('boardbox'));
 
 /* init labels */
 (function(){
- var m={bNew:'new',bUndo:'undo',bPass:'pass',bResign:'resign',bHint:'hint',lSize:'size',lHcp:'hcp',lAI:'ai',lLevel:'level',bConfirm:'confirm',bAuto:'auto',bResume:'resume'};
+ var m={bNew:'new',bUndo:'undo',bPass:'pass',bResign:'resign',bHint:'hint',bAutoPlay:'autoPlay',lSize:'size',lHcp:'hcp',lLevel:'level',bConfirm:'confirm',bAuto:'auto',bResume:'resume'};
  for(var k in m)$(k).textContent=t(m[k]);
  $('selLevel').innerHTML='<option value="1">'+t('lv1')+'</option><option value="2" selected>'+t('lv2')+'</option><option value="3">'+t('lv3')+'</option>';
  if(ko_)document.documentElement.lang='ko';
 })();
 startGame();layout();
+if(!local)window.addEventListener('load',function(){setTimeout(startOnline,0);});
 })();
 </script>
+<script src="link.js"></script>
 <script src="engines.js"></script>
 </body>
 </html>
