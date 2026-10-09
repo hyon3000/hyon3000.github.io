@@ -15,6 +15,9 @@ html,body{margin:0;height:100%;overflow:hidden;font:14px/1.35 system-ui,-apple-s
 #dot{width:20px;height:20px;border-radius:50%;flex:none;border:1px solid #0006}
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:13px;color:#555}
 .stats b{color:#222}
+#totalbox{display:flex;align-items:center;gap:6px;font-size:12.5px;background:#ece4cf;border:1px solid #d3c7a6;border-radius:6px;padding:3px 6px}
+#total{flex:1}
+#bTotalReset{padding:0 6px;font-size:13px;line-height:1.4}
 #msg{min-height:2.7em;font-size:13px;color:#7a3b12}
 #detail{font-size:12px;color:#555}
 .btns,.opts,.markbtns{display:flex;flex-wrap:wrap;gap:6px}
@@ -37,6 +40,7 @@ label{display:flex;align-items:center;gap:5px;font-size:13px}
  <div id="panel">
   <div class="turn"><span id="dot"></span><span id="turnTxt"></span></div>
   <div class="stats"><span id="sMove"></span><span id="sKomi"></span><span id="sCapB"></span><span id="sCapW"></span></div>
+  <div id="totalbox"><span id="total"></span><button id="bTotalReset" title="reset">&#8635;</button></div>
   <div id="msg"></div>
   <div id="detail"></div>
   <div class="markbtns hidden" id="markbtns">
@@ -72,6 +76,7 @@ var TX={
  passed:['passed','패스'],black:['Black','흑'],white:['White','백'],none:['None','없음'],
  engBad:['Engine move was invalid; passing.','엔진 수가 잘못되어 패스합니다.'],hintTxt:['Hint shown','힌트 표시'],hintPass:['Engine suggests pass','엔진이 패스를 제안합니다'],autoPlay:['Auto','자동'],autoOn:['auto play','자동 대국'],
  over:['Game over','대국 종료'],resigned:['resigned','기권'],
+ totalL:['TOTAL','TOTAL'],mAI:['vs Computer','컴퓨터전'],mOn:['Online','온라인'],wl:['W{w} L{l}','{w}승 {l}패'],dr:[' D{d}',' {d}무'],resetQ:['Reset this TOTAL tally?','이 누적 기록을 초기화할까요?'],
  online:['Opponent','상대'],noOpp:['No opponent - press Opponent to connect or play the computer.','상대가 없습니다. 상대 버튼으로 연결하거나 컴퓨터와 대국하세요.'],youB:['You are Black','당신은 흑'],youW:['You are White','당신은 백'],
  oppTurn:["Opponent's turn",'상대 차례'],disc:['Opponent disconnected','상대가 연결을 끊었습니다'],
  desync:['Out of sync with opponent - start a new game.','상대와 화면이 맞지 않습니다. 새 게임을 시작하세요.'],
@@ -169,8 +174,38 @@ function handicapPoints(n){
  (tbl[n]||[]).forEach(function(q){P.push(q[1]*N+q[0]);});
  return P;
 }
+/* ---- cumulative TOTAL ---- */
+var TKEY='board_go_total_v1',tally=loadTally(),counted=false;
+function emptyT(){return {points:0,wins:0,losses:0,draws:0,games:0};}
+function loadTally(){
+ var o={ai:emptyT(),online:emptyT()};
+ try{var v=JSON.parse(localStorage.getItem(TKEY)||'null');if(v){['ai','online'].forEach(function(k){if(v[k])for(var f in o[k])o[k][f]=+v[k][f]||0;});}}catch(e){}
+ return o;
+}
+function saveTally(){try{localStorage.setItem(TKEY,JSON.stringify(tally));}catch(e){}}
+function tmode(){return online?'online':(engine&&vsAI)?'ai':null;}
+function myTColor(m){return m==='online'?myColor:human;}
+// pts: points of each colour {b,w}; winner: BL/WH/0
+function recordGame(m,winner,pts){
+ if(counted||!m)return;counted=true;
+ var me=myTColor(m),T=tally[m];
+ T.games++;T.points+=(me===BL?pts.b:pts.w);
+ if(!winner)T.draws++;else if(winner===me)T.wins++;else T.losses++;
+ saveTally();
+}
+function plainArea(){var q=R.score(G.b,null);return {b:q.b,w:q.w+komi};}
+function recordResign(m,loser){
+ var a=plainArea();
+ recordGame(m,3-loser,loser===BL?{b:0,w:a.w}:{b:a.b,w:0});
+}
+function fmt(x){return String(Math.round(x*10)/10);}
+function renderTotal(){
+ var m=tmode()||'ai',T=tally[m];
+ var wl=t('wl').replace('{w}',T.wins).replace('{l}',T.losses)+(T.draws?t('dr').replace('{d}',T.draws):'');
+ $('total').textContent='['+t(m==='ai'?'mAI':'mOn')+'] '+t('totalL')+' '+fmt(T.points)+' \u00b7 '+wl;
+}
 function startGame(){
- cancelJob();myConf=oppConf=false;discMsg='';
+ cancelJob();myConf=oppConf=false;discMsg='';counted=false;
  resetBoard();
  komi=handicap>0?0.5:komiBase;
  if(handicap>=2){handicapPoints(handicap).forEach(function(p){G.b[p]=BL;});G.toMove=WH;}
@@ -217,7 +252,8 @@ function confirmScore(){
  var s=R.score(G.b,dead),wt=s.w+komi,d=s.b-wt;
  result=(d>0?'B+':'W+')+Math.abs(d);
  resultDetail=t('black')+' '+s.b+' ('+s.terrB+')  '+t('white')+' '+s.w+' + '+t('komi')+' '+komi+' = '+wt;
- owner=s.owner;phase='over';update();
+ owner=s.owner;phase='over';
+ recordGame(tmode(),d>0?BL:d<0?WH:0,{b:s.b,w:wt});update();
  return {text:result,b:s.b,w:s.w,komi:komi,diff:d};
 }
 function resign(loser){
@@ -225,7 +261,8 @@ function resign(loser){
  cancelJob();
  if(loser!==BL&&loser!==WH)loser=online?myColor:(engine&&vsAI)?human:G.toMove;
  result=(loser===BL?'W':'B')+'+R';resultDetail=t(loser===BL?'black':'white')+' '+t('resigned');
- phase='over';owner=null;update();
+ phase='over';owner=null;
+ if(tmode())recordResign(tmode(),loser);update();
 }
 function undo(){
  if(online)return false;
@@ -265,7 +302,7 @@ function maybeAI(){
  callEngine(function(r){
   thinking=false;
   if(r==='resign'){
-   result=(G.toMove===BL?'W':'B')+'+R';resultDetail=t(G.toMove===BL?'black':'white')+' '+t('resigned');phase='over';update();return;
+   result=(G.toMove===BL?'W':'B')+'+R';resultDetail=t(G.toMove===BL?'black':'white')+' '+t('resigned');phase='over';if(tmode())recordResign(tmode(),G.toMove);update();return;
   }
   var ok=false;
   if(r&&typeof r==='object'&&isFinite(r.x)&&isFinite(r.y)&&r.x>=0&&r.x<N&&r.y>=0&&r.y<N){ok=doMove(r.y*N+r.x)==='ok';}
@@ -439,7 +476,7 @@ function draw(){
   for(p=0;p<N*N;p++){
    if(!owner[p])continue;
    if(b[p]===0||dead[p]){
-    x=cell*((p%N)+1);y=cell*(((p/N)|0)+1);var sz=cell*0.3;
+    x=cell*((p%N)+1);y=cell*(((p/N)|0)+1);var sz=cell*0.22;
     ctx.fillStyle=owner[p]===1?'#111':'#fff';ctx.strokeStyle='rgba(0,0,0,.6)';ctx.lineWidth=1;
     ctx.fillRect(x-sz/2,y-sz/2,sz,sz);ctx.strokeRect(x-sz/2,y-sz/2,sz,sz);
    }
@@ -470,7 +507,9 @@ function draw(){
  }
 }
 function showAI0(){return mode()==='ai';}
+$('bTotalReset').onclick=function(){var m=tmode()||'ai',ok=true;try{ok=window.confirm(t('resetQ'));}catch(e){}if(ok){tally[m]=emptyT();saveTally();renderTotal();}};
 function update(){
+ renderTotal();
  setTimeout(scheduleAuto,0);
  var dot=$('dot');
  dot.style.background=G.toMove===BL?'radial-gradient(circle at 35% 35%,#777,#000)':'radial-gradient(circle at 35% 35%,#fff,#aaa)';
@@ -537,7 +576,7 @@ cv.addEventListener('pointerdown',function(e){
  }
  pending=-1;clickPoint(p);
 });
-$('bNew').onclick=function(){if(online&&!online.isHost){online.send({t:'newreq'});return;}if(mode()==='none'){startOnline();return;}startGame();netNew();};
+$('bNew').onclick=function(){window.newGame();};
 $('bUndo').onclick=undo;
 $('bPass').onclick=function(){if(canHumanMove()){doPass();if(online)online.send({t:'pass'});maybeAI();}};
 $('bResign').onclick=function(){if(online&&phase==='play')online.send({t:'resign'});resign();};
@@ -594,6 +633,7 @@ function applyNew(size,h){
  startGame();layout();
 }
 function disconnected(){
+ if(phase!=='over'&&!counted&&G.moveNo>=4){var a=plainArea();recordGame('online',myColor,myColor===BL?{b:a.b,w:0}:{b:0,w:a.w});}
  online=null;myConf=oppConf=false;discMsg=t('disc');update();
  setTimeout(startOnline,0);
 }
@@ -637,7 +677,7 @@ window.startOnline=startOnline;
 window.isOnline=function(){return !!online;};
 
 /* ---------------- exports ---------------- */
-window.newGame=function(){startGame();};
+window.newGame=function(){if(online&&!online.isHost){online.send({t:'newreq'});return;}if(mode()==='none'&&!local){startOnline();return;}startGame();netNew();};
 window.undo=undo;
 window.toggleVsAI=toggleVsAI;
 window.isVsAI=function(){return !!(engine&&vsAI&&!online);};
@@ -670,7 +710,9 @@ window.__go={
  autoDead:autoDead,
  legal:function(){var o=[];for(var p=0;p<N*N;p++)if(checkLegal(p).ok)o.push(p);return o;},
  undo:undo,
- nMoves:function(){return mvs.length;}
+ nMoves:function(){return mvs.length;},
+ total:function(){return JSON.parse(JSON.stringify(tally));},
+ setMode:function(m){if(m==='ai'){engine=engine||function(){return Promise.resolve('pass');};vsAI=true;human=BL;online=null;}update();}
 };
 window.addEventListener('resize',layout);
 if(window.ResizeObserver)new ResizeObserver(layout).observe($('boardbox'));

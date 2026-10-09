@@ -30,29 +30,24 @@
   function present(s) { return !(s.x === 0 && s.y === 0); }
   function inLane(s) { return s.x < -6.9 && s.y > 9.5; }                               // the plunger lane at the bottom right
   // ---- features: ball x, y, the last two velocity steps, previous action (one-hot of 4), score gained during the last decision ----
-  var NOBS = 17, VS = 1 / 2.5;
-  // ---- rule layer ("do not pump while the ball is cradled"): in the flipper zone with the ball nearly at rest the flippers are released and nudges are off until it rolls (or, after 2.5 s,
-  // ONE kick flip knocks it loose); outside the hit range keys keep a minimum hold (press 3 decisions, release 2).  The same mask is applied in training and in the page. ----
-  var ZONE_Y = 8, REST = 0.12, KICK_MS = 2500;
-  function inZone(x, y) { return y > ZONE_Y && x > -6.5; }
-  function atRest(hp) { if (hp.length < 4) return false; var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; for (var i = 0; i < 4; i++) { x0 = Math.min(x0, hp[i][0]); x1 = Math.max(x1, hp[i][0]); y0 = Math.min(y0, hp[i][1]); y1 = Math.max(y1, hp[i][1]); } return Math.max(x1 - x0, y1 - y0) < REST; }
+  var NOBS = 15, VS = 1 / 2.5;
   function Driver(M, keyfn, addr) {
     this.M = M; this.key = keyfn; this.A = addr; this.nTotal = 0; this.nTypes = [0, 0, 0, 0]; this.reset();
   }
   var P = Driver.prototype;
   P.reset = function () {
-    this.holdEnd = 0; this.stillT = 0; this.pf = null; this.pt = 0; this.live = false; this.ld = 0; this.h = []; this.act = 0; this.dsc = 0; this.lastScore = 0; this.idleT = 0; this.k = { L: 0, R: 0, S: 0 }; this.nudgeUp = 0; this.nudgeKey = null; this.lastNudge = -1e9; this.nn = 0; this.now = 0; this.tilted = 0; this.hp = []; this.hl = 99; this.hr = 99; this.cradleT = 0; this.kickN = 0; this.kickEnd = 0; this.cradled = 0; this.mask = [1, 1, 1, 1, 1, 1, 1, 1];
+    this.holdEnd = 0; this.stillT = 0; this.pf = null; this.pt = 0; this.live = false; this.ld = 0; this.h = []; this.act = 0; this.dsc = 0; this.lastScore = 0; this.idleT = 0; this.k = { L: 0, R: 0, S: 0 }; this.nudgeUp = 0; this.nudgeKey = null; this.lastNudge = -1e9; this.nn = 0; this.now = 0; this.tilted = 0;
   };
   P.setKey = function (name, down) {
     if (this.k[name] === (down ? 1 : 0)) return; this.k[name] = down ? 1 : 0;
     var t = down ? 'keydown' : 'keyup';
     if (name === 'L') this.key(t, 'KeyZ', 90, 'z'); else if (name === 'R') this.key(t, 'Slash', 191, '/'); else this.key(t, 'Space', 32, ' ');
   };
-  P.apply = function (a) { this.act = a; if (((a & 1) ? 1 : 0) !== this.k.L) this.hl = 0; if (((a & 2) ? 1 : 0) !== this.k.R) this.hr = 0; this.setKey('L', a & 1); this.setKey('R', a & 2); };           // 0 none, 1 left, 2 right, 3 both
+  P.apply = function (a) { this.act = a; this.setKey('L', a & 1); this.setKey('R', a & 2); };           // 0 none, 1 left, 2 right, 3 both
   // nudge n: 1 up (bottom bump, ArrowUp), 2 left (X), 3 right (.): a short key tap (down now, up 2 frames later)
   var NK = [null, ['ArrowUp', 38, 'ArrowUp'], ['KeyX', 88, 'x'], ['Period', 190, '.']];
   P.nudge = function (n) {
-    if (!n || this.nudgeUp || this.cradled) return; var k = NK[n]; this.key('keydown', k[0], k[1], k[2]); this.nudgeKey = k; this.nudgeUp = this.now + 34;
+    if (!n || this.nudgeUp) return; var k = NK[n]; this.key('keydown', k[0], k[1], k[2]); this.nudgeKey = k; this.nudgeUp = this.now + 34;
     this.lastNudge = this.now; this.nn++; this.nTotal++; this.nTypes[n]++;
   };
   P.newGame = function () { this.setKey('L', 0); this.setKey('R', 0); this.setKey('S', 0); this.key('keydown', 'F2', 113, 'F2'); this.key('keyup', 'F2', 113, 'F2'); this.reset(); };
@@ -72,49 +67,29 @@
       if (this.live) {                                         // the ball was lost
         this.live = false; this.setKey('L', 0); this.setKey('R', 0); this.act = 0;
         rec = { obs: null, score: s.score, done: 1, over: s.ctr >= 3 ? 1 : 0, nn: this.nn, tilt: this.tilted }; this.nn = 0; this.tilted = 0;
-        this.h = []; this.hp = []; this.cradled = 0; this.hl = this.hr = 99;
+        this.h = [];
       }
       return rec;
     }
     if (inplay) {
       if (s.tilt) this.tilted = 1;
-      if (!this.live) { this.live = true; this.hp = []; this.cradled = 0; this.nn = 0; this.tilted = 0; this.lastNudge = -1e9; this.ld = 0; this.h = []; this.lastScore = s.score; this.idleT = now; }
+      if (!this.live) { this.live = true; this.nn = 0; this.tilted = 0; this.lastNudge = -1e9; this.ld = 0; this.h = []; this.lastScore = s.score; this.idleT = now; }
       if (s.score !== this.lastScore) this.idleT = now; else if (now - this.idleT > 50000) { this.idleT = now; return { obs: this.obs(s), score: s.score, done: 1, over: 1, stuck: 1 }; }
       if (!this.ld || now - this.ld >= STEP_MS - 0.6) {
         this.ld = now;
         this.h.unshift([s.x, s.y]); if (this.h.length > 3) this.h.pop();
         this.dsc = s.score - this.lastScore; this.lastScore = s.score;
-        this.guard(s, now);
-        rec = { obs: this.obs(s), score: s.score, done: 0, over: 0, mask: this.mask, cradleMs: this.cradled ? now - this.cradleT : 0 };
+        rec = { obs: this.obs(s), score: s.score, done: 0, over: 0 };
       }
     }
     return rec;
-  };
-  // allowed actions for the next decision: mask[0..3] flipper combos (bit0 left, bit1 right), mask[4..7] nudge none/up/left/right
-  P.guard = function (s, now) {
-    this.hp.unshift([s.x, s.y]); if (this.hp.length > 6) this.hp.pop(); this.hl++; this.hr++;
-    var zone = inZone(s.x, s.y), cr = zone && atRest(this.hp);
-    if (cr && !this.cradled) { this.cradleT = now; this.kickN = 0; this.kickEnd = 0; }
-    this.cradled = cr ? 1 : 0;
-    var L = [1, 1], R = [1, 1], nud = 1, free = zone && !cr;                                        // free: the ball is in hit range, no hold limits
-    var cL = this.k.L, cR = this.k.R;
-    if (!free) { if (cL && this.hl < 3) L = [0, 1]; else if (!cL && this.hl < 2) L = [1, 0]; if (cR && this.hr < 3) R = [0, 1]; else if (!cR && this.hr < 2) R = [1, 0]; }
-    if (cr) {
-      L = [1, 0]; R = [1, 0]; nud = 0;                                                              // cradled: let the flippers down, no nudge
-      if (this.kickN > 0 && this.kickN < 4) { var kl = s.x > 0; L = kl ? [0, 1] : [1, 0]; R = kl ? [1, 0] : [0, 1]; this.kickN++; }         // hold the kick flip for 3 decisions
-      else if (this.kickN === 0 && now - this.cradleT > KICK_MS) { this.kickN = 1; var k2 = s.x > 0; L = k2 ? [0, 1] : [1, 0]; R = k2 ? [1, 0] : [0, 1]; this.kickEnd = now; }
-      else if (this.kickN >= 4 && now - this.kickEnd > KICK_MS) { this.kickN = 0; this.cradleT = now - KICK_MS; }             // still balanced: another kick later
-    }
-    var m = [];
-    for (var a = 0; a < 4; a++) m.push(L[a & 1] && R[(a >> 1) & 1] ? 1 : 0);
-    this.mask = m.concat([1, nud, nud, nud]);
   };
   P.obs = function (s) {
     var h = this.h, a = h[0] || [s.x, s.y], b = h[1] || a, c = h[2] || b, o = new Float32Array(NOBS);
     o[0] = a[0] / 8; o[1] = a[1] / 12;
     o[2] = (a[0] - b[0]) * VS; o[3] = (a[1] - b[1]) * VS; o[4] = (b[0] - c[0]) * VS; o[5] = (b[1] - c[1]) * VS;
     o[6 + this.act] = 1; o[10] = Math.min(1, Math.max(0, this.dsc) / 2000); o[11] = Math.min(1, s.score / 300000);
-    o[12] = Math.min(1, (this.now - this.lastNudge) / 10000); o[13] = Math.min(8, this.nn) / 8; o[14] = s.tilt ? 1 : 0; o[15] = this.cradled; o[16] = this.cradled ? Math.min(1, (this.now - this.cradleT) / 3000) : 0;
+    o[12] = Math.min(1, (this.now - this.lastNudge) / 10000); o[13] = Math.min(8, this.nn) / 8; o[14] = s.tilt ? 1 : 0;
     return o;
   };
   // ---- the exported MLP: two tanh layers + policy head (same layout as atari/ai.js) ----
@@ -135,26 +110,13 @@
   }
   function sample(v) { var m = Math.max.apply(null, v), p = [], t = 0, i; for (i = 0; i < v.length; i++) { p[i] = Math.exp(v[i] - m); t += p[i]; } var r = Math.random() * t; for (i = 0; i < v.length; i++) { r -= p[i]; if (r <= 0) return i; } return v.length - 1; }
   function argmax(v) { var b = 0; for (var i = 1; i < v.length; i++) if (v[i] > v[b]) b = i; return b; }
-  // the same rule for the vision bot: it only needs to know "is the ball cradled?"; update(now) returns 0 (free), 1 (cradled: no flipper / no nudge) or 2 (cradled for > 2.5 s: do ONE kick flip now)
-  function Guard(M, addr) { this.M = M; this.A = addr; this.hp = []; this.t = 0; this.cT = 0; this.kT = 0; }
-  Guard.prototype.update = function (now) {
-    if (now - this.t < 60) return this.st || 0; this.t = now;
-    var s = read(this.M, this.A); if (!sane(s) || !present(s)) { this.hp = []; this.cT = 0; return this.st = 0; }
-    this.hp.unshift([s.x, s.y]); if (this.hp.length > 6) this.hp.pop();
-    if (!(inZone(s.x, s.y) && atRest(this.hp))) { this.cT = 0; return this.st = 0; }
-    if (!this.cT) { this.cT = now; this.kT = now; }
-    this.side = s.x > 0 ? 'L' : 'R';
-    if (now - this.kT > KICK_MS) { this.kT = now; return this.st = 2; }
-    return this.st = 1;
-  };
   window.PinballAI = {
-    Guard: Guard,
-    OFF: OFF, inZone: inZone, atRest: atRest, STEP_MS: STEP_MS, NOBS: NOBS, Driver: Driver, read: read, sane: sane, locate: locate,
+    OFF: OFF, STEP_MS: STEP_MS, NOBS: NOBS, Driver: Driver, read: read, sane: sane, locate: locate,
     ready: function () { return !!window.PINBALL_AI; },
     // can the state be read from this build?  returns the addresses (or null) - only if exactly one record passes every invariant
     check: function (M) { try { return M && M.HEAPF32 && M.HEAP32 && M.HEAPU8.length > 1e6 ? locate(M) : null; } catch (e) { return null; } },
     // the policy was trained (and is evaluated) as a stochastic policy: both heads are SAMPLED (the nudge head puts ~90% on 'no nudge', so argmax would never nudge)
-    policy: function (obs, mask) { var d = decode(window.PINBALL_AI), l = logits(d, obs); if (mask) for (var i = 0; i < l.length; i++) if (!mask[i]) l[i] = -1e9; return [sample(l.subarray(0, d.nh)), sample(l.subarray(d.nh))]; },      // [flipper combo 0..3, nudge 0..3]
+    policy: function (obs) { var d = decode(window.PINBALL_AI), l = logits(d, obs); return [sample(l.subarray(0, d.nh)), sample(l.subarray(d.nh))]; },      // [flipper combo 0..3, nudge 0..3]
     logits: function (obs) { return logits(decode(window.PINBALL_AI), obs); }
   };
 })();

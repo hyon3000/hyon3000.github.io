@@ -15,6 +15,9 @@ html,body{margin:0;height:100%;overflow:hidden;font:14px/1.35 system-ui,-apple-s
 #dot{width:20px;height:20px;border-radius:50%;flex:none;border:1px solid #0006}
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:13px;color:#555}
 .stats b{color:#222}
+#totalbox{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#2f5a22;background:#eaf1dc;border:1px solid #c5d5a8;border-radius:6px;padding:3px 6px}
+#totalbox span{flex:1}
+#totalbox button{padding:0 6px;font-size:13px;line-height:20px}
 #msg{min-height:2.7em;font-size:13px;color:#7a3b12}
 #detail{font-size:12px;color:#555}
 .btns,.opts{display:flex;flex-wrap:wrap;gap:6px}
@@ -36,6 +39,7 @@ label{display:flex;align-items:center;gap:5px;font-size:13px}
  <div id="boardbox"><canvas id="cv"></canvas></div>
  <div id="panel">
   <div class="turn"><span id="dot"></span><span id="turnTxt"></span></div>
+  <div id="totalbox"><span id="total"></span><button id="bTotRst" title="reset">&#8635;</button></div>
   <div class="stats"><span id="sMove"></span><span id="sRule"></span><span id="sB"></span><span id="sW"></span></div>
   <div id="msg"></div>
   <div id="detail"></div>
@@ -67,6 +71,7 @@ var TX={
  occ:['That point is occupied.','이미 돌이 있습니다.'],
  black:['Black','흑'],white:['White','백'],
  hintTxt:['Hint shown','힌트 표시'],autoOn:['auto play','자동 대국'],autoPlay:['Auto','자동'],
+ totalL:['TOTAL','합계'],tW:['W','승'],tL:['L','패'],tD:['D','무'],tAI:['vs Computer','컴퓨터'],tON:['Online','온라인'],tReset:['Reset this total?','이 합계를 초기화할까요?'],
  over:['Game over','대국 종료'],resigned:['resigned','기권'],wins:['wins','승리'],drawT:['Draw','무승부'],drawD:['The board is full.','판이 가득 찼습니다.'],
  five:['five in a row','5목 완성'],
  online:['Opponent','상대'],noOpp:['No opponent - press Opponent to connect or play the computer.','상대가 없습니다. 상대 버튼으로 연결하거나 컴퓨터와 대국하세요.'],
@@ -103,6 +108,33 @@ var engine=null,thinking=false,jobId=0,hintTok=0,hintPt=null,flash='',hintMsg=''
 var local=/[?&]local=1/.test(location.search),pairing=false;
 var online=null,myColor=BL,discMsg='';
 var autoOn=false,autoTimer=0,newTimer=0;
+/* cumulative TOTAL: win +1, draw +0.5, loss 0; separate tallies for vs-computer and online, kept in localStorage */
+var TKEY='board_omok_total_v1',tot=null,counted=false;
+function emptyT(){return {points:0,wins:0,losses:0,draws:0,games:0};}
+function loadTot(){
+ var o=null;try{o=JSON.parse(localStorage.getItem(TKEY)||'null');}catch(e){}
+ tot={ai:emptyT(),online:emptyT()};
+ if(o)['ai','online'].forEach(function(k){if(o[k])for(var f in tot[k])tot[k][f]=+o[k][f]||0;});
+}
+function saveTot(){try{localStorage.setItem(TKEY,JSON.stringify(tot));}catch(e){}}
+function tmode(){return online?'online':'ai';}
+function recordGame(res){      // res: 'win'|'loss'|'draw' for the local player; counted once per game
+ if(counted)return;counted=true;
+ var m=tmode(),T=tot[m];
+ T.games++;if(res==='win'){T.wins++;T.points+=1;}else if(res==='draw'){T.draws++;T.points+=0.5;}else T.losses++;
+ T.points=Math.round(T.points*10)/10;saveTot();renderTot();
+}
+function gameEnded(){       // called when phase has just become 'over'
+ if(counted||!(online||(engine&&vsAI)))return;
+ var me=online?myColor:human;
+ if(result==='draw')return recordGame('draw');
+ recordGame((result.charAt(0)==='B'?BL:WH)===me?'win':'loss');
+}
+function renderTot(){
+ var m=tmode(),T=tot[m],el=$('total');if(!el)return;
+ el.textContent=t('totalL')+' '+T.points+' \u00b7 '+(ko_?T.wins+t('tW')+' '+T.losses+t('tL')+' '+T.draws+t('tD'):t('tW')+T.wins+' '+t('tL')+T.losses+' '+t('tD')+T.draws)+'  ('+t(m==='online'?'tON':'tAI')+')';
+}
+loadTot();
 
 function rebuild(){
  G.b=new Uint8Array(NN);
@@ -111,7 +143,7 @@ function rebuild(){
  G.toMove=(mvs.length&1)?WH:BL;
 }
 function resetBoard(){
- mvs=[];rebuild();phase='play';result=null;resultDetail='';winLine=null;hintPt=null;hintMsg='';flash='';
+ counted=false;mvs=[];rebuild();phase='play';result=null;resultDetail='';winLine=null;hintPt=null;hintMsg='';flash='';
 }
 function startGame(){
  cancelJob();discMsg='';
@@ -125,8 +157,8 @@ function doMove(p){
  hintTok++;hintPt=null;hintMsg='';flash='';
  if(hintBusy){hintBusy=false;jobId++;try{if(engine&&engine.cancel)engine.cancel();}catch(e){}}     // a hint still being searched is dropped (the search would delay the next engine move)
  var w=winCells(G.b,p,c,rule);
- if(w){phase='over';winLine=w;result=(c===BL?'B':'W')+'+5';resultDetail=t(c===BL?'black':'white')+' '+t('wins')+' ('+t('five')+', '+w.length+')';}
- else if(mvs.length>=NN){phase='over';result='draw';resultDetail=t('drawD');}
+ if(w){phase='over';winLine=w;result=(c===BL?'B':'W')+'+5';resultDetail=t(c===BL?'black':'white')+' '+t('wins')+' ('+t('five')+', '+w.length+')';gameEnded();}
+ else if(mvs.length>=NN){phase='over';result='draw';resultDetail=t('drawD');gameEnded();}
  update();return 'ok';
 }
 function resign(loser){
@@ -134,7 +166,8 @@ function resign(loser){
  cancelJob();
  if(loser!==BL&&loser!==WH)loser=online?myColor:(engine&&vsAI)?human:G.toMove;
  result=(loser===BL?'W':'B')+'+R';resultDetail=t(loser===BL?'white':'black')+' '+t('wins')+' ('+t(loser===BL?'black':'white')+' '+t('resigned')+')';
- phase='over';update();
+
+ phase='over';gameEnded();update();
 }
 function undo(){
  if(online)return false;
@@ -373,7 +406,7 @@ function update(){
  Array.prototype.forEach.call(document.querySelectorAll('.eng'),function(e){e.classList.toggle('hidden',md!=='ai');});
  $('selRule').disabled=md==='none'||(!!online&&!online.isHost);
  $('selRule').value=rule;
- $('bOnline').textContent=t('online');
+ $('bOnline').textContent=t('online');renderTot();
  $('bSide').textContent=t(human===BL?'asW':'asB');
  draw();
 }
@@ -418,11 +451,13 @@ $('selRule').onchange=function(){setRule(this.value);};
 $('selLevel').onchange=function(){setLevel(this.value);};
 $('chkNum').onchange=function(){showNum=this.checked;draw();};
 $('bSide').onclick=swapSides;
+$('bTotRst').onclick=function(){if(confirm(t('tReset'))){tot[tmode()]=emptyT();saveTot();renderTot();}};
 
 /* ---------------- online play ---------------- */
 function netNew(){if(online&&online.isHost)online.send({t:'new',rule:rule});}
 function desync(){flash=t('desync');update();}
 function disconnected(){
+ if(phase==='play'&&mvs.length>=4&&!counted)recordGame('win');
  online=null;discMsg=t('disc');update();
  setTimeout(startOnline,0);
 }
@@ -460,7 +495,7 @@ window.startOnline=startOnline;
 window.isOnline=function(){return !!online;};
 
 /* ---------------- exports ---------------- */
-window.newGame=function(){startGame();};
+window.newGame=function(){if(online&&!online.isHost){online.send({t:'newreq'});return;}if(mode()==='none'){startOnline();return;}startGame();netNew();};
 window.undo=undo;
 window.toggleVsAI=toggleVsAI;
 window.isVsAI=function(){return !!(engine&&vsAI&&!online);};
@@ -486,6 +521,8 @@ window.__omok={
  play:function(x,y){if(online&&(phase!=='play'||G.toMove!==myColor))return 'notyours';var r=doMove(y*N+x);if(r==='ok'){if(online)online.send({t:'move',x:x,y:y});maybeAI();}return r;},
  board:function(){var o=[];for(var y=0;y<N;y++){var s='';for(var x=0;x<N;x++)s+='.XO'[G.b[y*N+x]];o.push(s);}return o;},
  info:function(){return {phase:phase,toMove:G.toMove,moveNo:mvs.length,result:result,rule:rule,last:G.last,thinking:thinking,autoOn:autoOn,hintPt:hintPt,vsAI:vsAI,online:!!online,human:human,level:level,mode:mode(),myColor:myColor,msg:(flash||hintMsg||discMsg)};},
+ total:function(){return {shown:JSON.parse(JSON.stringify(tot[tmode()])),ai:JSON.parse(JSON.stringify(tot.ai)),online:JSON.parse(JSON.stringify(tot.online)),text:$('total').textContent};},
+ resetTotal:function(){tot={ai:emptyT(),online:emptyT()};saveTot();renderTot();},
  winLine:function(){return winLine?winLine.slice():null;},
  legal:function(){var o=[];for(var p=0;p<NN;p++)if(!G.b[p])o.push(p);return o;},
  undo:undo,

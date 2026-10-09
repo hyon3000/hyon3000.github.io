@@ -7,7 +7,7 @@
     run: function (maxf) {
       var n = 0, bad = 0;
       while (n < maxf) {
-        var r = D.tick(performance.now()); if (r && r.bad) { bad++; if (bad > 400) break; } else if (r) return { obs: r.obs ? Array.from(r.obs) : null, score: r.score, done: r.done, over: r.over, nn: r.nn || 0, tilt: r.tilt || 0, stuck: r.stuck || 0, frames: n };
+        var r = D.tick(performance.now()); if (r && r.bad) { bad++; if (bad > 400) break; } else if (r) return { obs: r.obs ? Array.from(r.obs) : null, score: r.score, done: r.done, over: r.over, mask: r.mask || null, cmS: r.cradleMs || 0, nn: r.nn || 0, tilt: r.tilt || 0, stuck: r.stuck || 0, frames: n };
         PB.step(1); n++;
       }
       return { timeout: 1, frames: n, bad: bad };

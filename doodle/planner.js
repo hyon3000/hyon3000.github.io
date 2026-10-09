@@ -43,7 +43,10 @@ function variants(f, lv) {
       V.push([pts.concat(line(f.x0 + 4, f.top - 5, f.x1 + 6, f.top - 5))]);
     });
     if (!f.end) { var run2 = Math.min(f.h / Math.tan(25 * Math.PI / 180), 60), dn = line(f.x1 - 8, f.top - 5, f.x1 + run2, Y - 5); ups.forEach(function (u) { V.push([u, dn]); }); }
-  } else V = [[]];                            // crates / dominoes: try without help first, random strokes otherwise
+  } else if (f.type === 'spikes') {              // a hump over the spikes: ramp up, deck above the spikes, ramp down
+    [[55, 30], [80, 30], [45, 34], [100, 32]].forEach(function (q) { V.push([line(f.x0 - q[0], Y - 4, f.x0 - 6, Y - q[1]).concat(line(f.x0 - 6, Y - q[1], f.x1 + 6, Y - q[1]), line(f.x1 + 6, Y - q[1], f.x1 + q[0], Y - 4))]); });
+    V.push([]);
+  } else V = [[]];                            // crates / dominoes / boost / rotor: try without help first, random strokes otherwise
   return V;
 }
 

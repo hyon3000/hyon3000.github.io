@@ -6,7 +6,7 @@ from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 
 URL = 'http://127.0.0.1:8765/harness.html'
-NOBS = 15
+NOBS = 17
 NACT = 4      # flipper combos; plus 4 nudge choices (none, up, left, right) in a second head
 NNUD = 4
 
@@ -38,7 +38,7 @@ class Env:
         if r.get('timeout'):
             raise RuntimeError('timeout %s' % r)
         self.obs = np.array(r['obs'], np.float32) if r['obs'] is not None else None
-        self.rscore = r['score']; self.done = r['done']; self.over = r['over']; self.stuck = r['stuck']; self.nn = r.get('nn', 0); self.tilt = r.get('tilt', 0)
+        self.rscore = r['score']; self.done = r['done']; self.over = r['over']; self.stuck = r['stuck']; self.mask = np.array(r['mask'], bool) if r.get('mask') else None; self.cradle_ms = r.get('cmS', 0); self.nn = r.get('nn', 0); self.tilt = r.get('tilt', 0)
         return r
 
     def step(self, a, n=0):

@@ -77,6 +77,8 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d3b2a;color:#f2f2e8;
 #msg .t{--tw:20px}
 #acts button{min-height:40px}
 #acts{flex:none;width:var(--S);display:flex;flex-wrap:wrap;gap:6px;justify-content:center;min-height:44px;align-items:center}
+#total{flex:none;width:var(--S);display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;justify-content:center;font-size:12px;padding:2px 8px;border-radius:8px;background:rgba(0,0,0,.3)}
+#total b{font-size:14px}#total button{min-height:22px;padding:0 7px;font-size:11px}
 #bar{flex:none;width:var(--S);display:flex;flex-wrap:wrap;gap:5px;justify-content:center}
 button{font:inherit;color:#fff;background:#3b5a4a;border:1px solid #6f9a84;border-radius:8px;padding:6px 12px;cursor:pointer;touch-action:manipulation;min-height:32px}
 button:hover{background:#4b7360}
@@ -117,6 +119,7 @@ button:disabled{opacity:.45;cursor:default}
  </div>
  <div id="msg"></div>
  <div id="acts"></div>
+ <div id="total"></div>
  <div id="bar"></div>
 </div>
 <div id="curtain"></div>
@@ -197,7 +200,7 @@ var HAI = MJ.makeAI('full'), AIS = [null, MJ.makeAI('full'), MJ.makeAI('full'), 
 var gen = 0;       // generation counter: invalidates pending timers of an old game
 
 function fit() {
-  var w = window.innerWidth - 8, h = window.innerHeight - 8 - (w < 560 ? 124 : 118);
+  var w = window.innerWidth - 8, h = window.innerHeight - 8 - (w < 560 ? 152 : 146);
   var S = Math.max(280, Math.min(w, h, 1000));
   document.documentElement.style.setProperty('--S', Math.floor(S) + 'px');
 }
@@ -366,6 +369,35 @@ function renderPrompt() {
 }
 function humanPending() { return G.pendingPlayers().indexOf(0) >= 0; }
 
+/* ------------------------------------------------------------ cumulative total (persisted) */
+var TKEY = 'card_mahjong_total_v1';
+function emptyTotal() { return { points: 0, wins: 0, losses: 0, draws: 0, games: 0, place: [0, 0, 0, 0] }; }
+var total = loadTotal();
+function loadTotal() {
+  try { var o = JSON.parse(localStorage.getItem(TKEY) || 'null'); if (o && typeof o.points === 'number' && o.place && o.place.length === 4) return o; } catch (e) {}
+  return emptyTotal();
+}
+function saveTotal() { try { localStorage.setItem(TKEY, JSON.stringify(total)); } catch (e) {} }
+function countGame(g) {      // exactly once per finished game
+  if (!g || !g.over || !g.ranking || g.counted) return false;
+  g.counted = true;
+  var rank = g.ranking.rank[0], sc = g.ranking.scores[0];
+  total.games++; total.points += (sc - 25000) / 1000; total.place[rank - 1]++;
+  if (rank === 1) total.wins++; else if (rank >= 3) total.losses++; else total.draws++;
+  total.points = Math.round(total.points * 10) / 10;
+  saveTotal(); paintTotal(); return true;
+}
+function fmtPts(v) { return (v > 0 ? '+' : '') + v.toFixed(1); }
+function paintTotal() {
+  var t = total, el = $('total'); if (!el) return;
+  var pl = KO ? [1, 2, 3, 4].map(function (i) { return i + '위 ' + t.place[i - 1] + '회'; }) : ['1st', '2nd', '3rd', '4th'].map(function (n, i) { return n + ' x' + t.place[i]; });
+  el.innerHTML = '<span>TOTAL <b class="' + (t.points > 0 ? 'pos' : (t.points < 0 ? 'neg' : '')) + '">' + fmtPts(t.points) + '</b></span><span>' + pl.join(' &middot; ') + '</span><span style="opacity:.7">' + (KO ? t.games + '판' : t.games + (t.games === 1 ? ' game' : ' games')) + '</span>';
+  var b = document.createElement('button'); b.textContent = KO ? '초기화' : 'Reset'; b.onclick = function () { if (confirm(KO ? '누적 기록을 초기화할까요?' : 'Reset the cumulative total?')) resetTotal(); };
+  el.appendChild(b);
+}
+function resetTotal() { total = emptyTotal(); saveTotal(); paintTotal(); }
+paintTotal();
+
 /* ------------------------------------------------------------ flow */
 function act(a) {
   if (!G) return;
@@ -384,7 +416,7 @@ function pump() {
   if (!G) return;
   var myGen = gen;
   render();
-  if (G.phase === 'roundEnd') { showResult(); return; }
+  if (G.phase === 'roundEnd') { if (G.over) countGame(G); showResult(); return; }
   var pend = G.pendingPlayers();
   if (!pend.length) return;
   var hum = pend.indexOf(0) >= 0;
@@ -611,6 +643,7 @@ window.__mj = {
   setGame: function (g) { gen++; clearTimeout(timer); G = g; ui = { sel: null, riichiMode: false, hint: null, resShown: -1, flashN: G.callSeq, furiN: 0 }; $('res').style.display = 'none'; $('curtain').style.display = 'none'; pump(); },
   setAutoPace: function (ms) { autoPace = ms; }, setResDelay: function (ms) { resDelay = ms; },
   setPace: function (ms) { pace = ms; }, setFast: function (f) { fast = !!f; },
+  total: function () { return JSON.parse(JSON.stringify(total)); }, countGame: function (g) { return countGame(g); }, resetTotal: resetTotal, reloadTotal: function () { total = loadTotal(); paintTotal(); return this.total(); },
   state: function () { return G ? { phase: G.phase, turn: G.turn, round: G.roundNum, honba: G.honba, scores: G.players.map(function (p) { return p.score; }), sticks: G.sticks, over: G.over, pending: G.pendingPlayers() } : null; }
 };
 

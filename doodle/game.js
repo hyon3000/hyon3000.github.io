@@ -4,19 +4,19 @@
 'use strict';
 var KO = /^ko/i.test(navigator.language || 'ko');
 var TX = KO ? {
-  title: '2D 피직스', level: '레벨', seed: '시드', best: '최고', eraser: '지우개', cut: '자르기', undo: '되돌리기', restart: '다시', start: '시작', wrong: '순서가 틀렸어요',  pin: '핀', hintBoost: '공을 누르면 속도가 붙습니다.', hintPin: '핀: 그린 물체를 눌러 그 점에 고정합니다(그 점을 중심으로 회전). 핀을 다시 누르거나 지우개로 지우면 빠집니다.', pin: '핀', hintPin: '핀: 그린 물체를 눌러 그 점에 고정합니다(그 점을 중심으로 회전). 핀을 다시 누르거나 지우개로 지우면 빠집니다.',
+  title: '2D 피직스', level: '레벨', seed: '시드', best: '최고', draw: '그리기', erase: '지우기', undo: '되돌리기', restart: '다시', start: '시작', ropeLong: '밧줄이 너무 깁니다(최대 120마디, 약 1000px).',  rope: '밧줄', hintRopeTool: '밧줄: 선을 그리면 그린 선의 길이 그대로, 그린 모양 그대로 밧줄이 놓입니다. 끝이 그린 물체나 땅/벽 위면 거기에 매달리고, 빈 곳이면 늘어집니다. 지우기 모드로 가로질러 끌어 끊습니다.',  ouch: '앗! 가시에 찔렸어요. 잠시 뒤 처음 자리로 돌아갑니다.',  wrong: '순서가 틀렸어요',  pin: '핀', hintBoost: '공을 누르면 속도가 붙습니다.', hintPin: '핀: 그린 물체를 눌러 그 점에 고정합니다(그 점을 중심으로 회전). 핀을 다시 누르거나 지우기 모드로 지우면 빠집니다.', pin: '핀', hintPin: '핀: 그린 물체를 눌러 그 점에 고정합니다(그 점을 중심으로 회전). 핀을 다시 누르거나 지우기 모드로 지우면 빠집니다.',
   hint0: '끌어서 그리면 물체가 됩니다. 공을 모든 별에 닿게 하세요. 다 그렸으면 Space(시작).',
-  hintRope: ' 밧줄은 자르기 모드(또는 오른쪽 버튼 드래그)로 가로질러 쓸어서 끊습니다.',
+  hintRope: ' 밧줄은 지우기 모드(또는 오른쪽 버튼 드래그)로 가로질러 쓸어서 끊습니다.',
   hintRun: '막히면 다시(R)로 같은 레벨을 처음부터. 공이 떨어지면 1초 뒤 제자리로 돌아옵니다.',
-  hintErase: '지우개: 선을 누르거나 끌어서 지웁니다.', hintCut: '자르기: 밧줄을 가로질러 끌어서 끊습니다.', win: '클리어!', copied: '이 레벨의 주소를 복사했어요', nolink: '주소: ',
+  hintErase: '지우기: 선과 핀은 누르거나 끌어서 지우고, 밧줄은 가로질러 끌거나 눌러서 끊습니다.', win: '클리어!', copied: '이 레벨의 주소를 복사했어요', nolink: '주소: ',
   tooMany: '선이 너무 많아 가장 오래된 선을 지웠어요', thinking: '풀이를 찾는 중...', nosol: '해답을 찾지 못했습니다.', autoOn: '자동으로 푸는 중...',
   hintShown: '힌트: 선 하나를 그렸어요. 다시 누르면 다음 단계입니다.', hintRunMsg: '힌트: 시작했어요.', hintCutMsg: '힌트: 밧줄을 잘랐어요.'
 } : {
-  title: '2D Physics', level: 'Level', seed: 'Seed', best: 'Best', eraser: 'Eraser', cut: 'Cut', undo: 'Undo', restart: 'Restart', start: 'Start', wrong: 'Wrong order',  pin: 'Pin', hintBoost: 'Press on the ball to give it a push.', hintPin: 'Pin: click a drawn object to pin it at that point (it rotates around the pin). Click a pin again, or use the eraser, to remove it.', pin: 'Pin', hintPin: 'Pin: click a drawn object to pin it at that point (it rotates around the pin). Click a pin again, or use the eraser, to remove it.',
+  title: '2D Physics', level: 'Level', seed: 'Seed', best: 'Best', draw: 'Draw', erase: 'Erase', undo: 'Undo', restart: 'Restart', start: 'Start', ropeLong: 'That rope is too long (at most 120 segments, about 1000 px).',  rope: 'Rope', hintRopeTool: 'Rope: draw a line - the rope is exactly as long as the line you draw and starts in that shape. An end over a drawn object or the ground/walls is attached there; over empty space it hangs free. Drag across it in Erase mode to cut it.',  ouch: 'Ouch! Spiked. The ball returns to its start in a moment.',  wrong: 'Wrong order',  pin: 'Pin', hintBoost: 'Press on the ball to give it a push.', hintPin: 'Pin: click a drawn object to pin it at that point (it rotates around the pin). Click a pin again, or use Erase mode, to remove it.', pin: 'Pin', hintPin: 'Pin: click a drawn object to pin it at that point (it rotates around the pin). Click a pin again, or use Erase mode, to remove it.',
   hint0: 'Drag to draw - drawings become solid objects. Make the ball touch every star. When ready press Space (start).',
-  hintRope: ' Cut the rope in Cut mode (or right-button drag) by swiping across it.',
+  hintRope: ' Cut the rope in Erase mode (or right-button drag) by swiping across it.',
   hintRun: 'Stuck? Restart (R) replays the same level. A fallen ball returns to its start after 1 s.',
-  hintErase: 'Eraser: click or drag over a stroke to remove it.', hintCut: 'Cut: swipe across a rope to cut it.', win: 'Cleared!', copied: 'Level link copied', nolink: 'Link: ',
+  hintErase: 'Erase: tap or drag over strokes and pins to erase them; drag across a rope (or tap it) to cut it.', win: 'Cleared!', copied: 'Level link copied', nolink: 'Link: ',
   tooMany: 'Too many strokes - the oldest one was removed', thinking: 'Looking for a solution...', nosol: 'No solution found.', autoOn: 'Solving automatically...',
   hintShown: 'Hint: one stroke drawn. Press again for the next step.', hintRunMsg: 'Hint: started.', hintCutMsg: 'Hint: rope cut.'
 };
@@ -68,7 +68,7 @@ function noSolution() {
 function doCut() {
   if (!sim.rope) return;
   var ax = sim.rope.ax, ay = sim.rope.ay, mx = (ax + sim.bx) / 2, my = (ay + sim.by) / 2, dx = sim.bx - ax, dy = sim.by - ay, l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
-  auto.exec = true; cutSwipe([mx - nx * 26, my - ny * 26], [mx + nx * 26, my + ny * 26]); auto.exec = false;
+  auto.exec = true; cutSwipe([mx - nx * 26, my - ny * 26], [mx + nx * 26, my + ny * 26]); auto.exec = false;   // the swipe-cut part of the erase tool (same function the erase drag calls)
 }
 function stepDone() {
   if (auto.hint && !auto.on) {
@@ -160,27 +160,27 @@ function undoStroke() {
   while (history.length) {
     var a = history.pop();
     if (a.t === 'stroke' && sim.strokes.indexOf(a.st) >= 0) { sim.removeStroke(a.st); userChanged(); return true; }
+    if (a.t === 'rope' && sim.ropes.indexOf(a.rope) >= 0) { sim.destroyRope(a.rope); userChanged(); return true; }
     if (a.t === 'pin' && sim.pins.indexOf(a.pin) >= 0) { sim.removePin(a.pin); userChanged(); return true; }
   }
   return false;
 }
 function toWorldPt(st, lx, ly) { var p = st.body.getPosition(), a = st.body.getAngle(), c = Math.cos(a), s = Math.sin(a); return [p.x * S + lx * c - ly * s, p.y * S + lx * s + ly * c]; }
-function nearestPin(x, y, r) { var b = null, bd = r; sim.pins.forEach(function (p) { var d = Math.hypot(p.x - x, p.y - y); if (d <= bd) { bd = d; b = p; } }); return b; }
+function nearestPin(x, y, r) { var b = null, bd = r; sim.pins.forEach(function (p) { var q = sim.pinPos(p), d = Math.hypot(q[0] - x, q[1] - y); if (d <= bd) { bd = d; b = p; } }); return b; }
 function pinAt(x, y) {
   var near = nearestPin(x, y, 13);
   if (near) { sim.removePin(near); userChanged(); return 'removed'; }
-  var st = strokeAt(x, y); if (!st) return null;
-  var pt = [x, y];
-  if (st.kind === 'line') {                       // snap to the nearest point of the rod
+  var pt = [x, y], st = strokeAt(x, y);
+  if (st && st.kind === 'line') {                 // snap to the nearest point of the rod so the pin really lies on it
     var bd = 1e9;
     for (var i = 0; i + 1 < st.loc.length; i++) {
-      var a = st.loc[i], b = st.loc[i + 1], w0 = toWorldPt(st, a[0], a[1]), w1 = toWorldPt(st, b[0], b[1]);
+      var w0 = sim.worldOf(st, st.loc[i][0], st.loc[i][1]), w1 = sim.worldOf(st, st.loc[i + 1][0], st.loc[i + 1][1]);
       var dx = w1[0] - w0[0], dy = w1[1] - w0[1], l2 = dx * dx + dy * dy, t = l2 < 1e-9 ? 0 : Math.max(0, Math.min(1, ((x - w0[0]) * dx + (y - w0[1]) * dy) / l2));
       var q = [w0[0] + dx * t, w0[1] + dy * t], d = Math.hypot(q[0] - x, q[1] - y);
       if (d < bd) { bd = d; pt = q; }
     }
   }
-  var pin = sim.addPin(st, pt[0], pt[1]); if (!pin) return null;
+  var pin = sim.addPinAt(pt[0], pt[1]); if (!pin) return null;
   history.push({ t: 'pin', pin: pin }); userChanged(); return pin;
 }
 function strokeAt(x, y) {
@@ -196,7 +196,36 @@ function strokeAt(x, y) {
   }
   return null;
 }
-function eraseAt(x, y) { var np = nearestPin(x, y, 13); if (np) { sim.removePin(np); userChanged(); return true; } var st = strokeAt(x, y); if (st) { sim.removeStroke(st); userChanged(); return true; } return false; }
+function terrainAt(x, y) {
+  var i;
+  for (i = 0; i < level.boxes.length; i++) { var b = level.boxes[i], dx = x - b.cx, dy = y - b.cy, c = Math.cos(-b.a), s = Math.sin(-b.a), lx = dx * c - dy * s, ly = dx * s + dy * c; if (Math.abs(lx) <= b.hw + 6 && Math.abs(ly) <= b.hh + 6) return true; }
+  for (i = 0; i < level.features.length; i++) { var f = level.features[i]; if (f.type === 'pit' && x > f.x0 - 2 && x < f.x1 + 2) return false; }
+  return x >= 0 && x <= W && y >= level.gy(x) - 6;
+}
+function attachAt(x, y) {                        // lookup order: pin/peg, drawn body, static terrain
+  var pin = nearestPin(x, y, 10);
+  if (pin) {
+    if (pin.type === 'peg' || (pin.type === 'fix' && !pin.sts.length)) return { kind: 'peg', pin: pin, snap: [pin.x, pin.y] };
+    var pp = sim.pinPos(pin), pst = pin.sts[0];
+    if (pst) { var lo = sim.localOf(pst, pp[0], pp[1]); return { kind: 'stroke', st: pst, lx: lo[0], ly: lo[1], snap: pp, also: pin.sts.filter(function (q) { return q !== pst; }) }; }
+  }
+  var st = strokeAt(x, y);
+  if (st) { var p = st.body.getPosition(), a = st.body.getAngle(), dx = x - p.x * S, dy = y - p.y * S, c = Math.cos(-a), s = Math.sin(-a); return { kind: 'stroke', st: st, lx: dx * c - dy * s, ly: dx * s + dy * c }; }
+  if (terrainAt(x, y)) return { kind: 'static' };
+  return null;
+}
+function eraseThingAt(x, y) { var np = nearestPin(x, y, 13); if (np) { sim.removePin(np); userChanged(); return true; } var st = strokeAt(x, y); if (st) { sim.removeStroke(st); userChanged(); return true; } return false; }
+function eraseAt(x, y) {                         // a tap in erase mode: erase a pin / stroke, else cut the rope segment under the pointer
+  if (eraseThingAt(x, y)) return true;
+  var hits = sim.ropeLinksAt(x, y, 9);
+  if (hits.length) { var h = hits[hits.length - 1]; sim.cutLink(h.rec, h.k); swipeFx = { p: [x - 14, y - 6], q: [x + 14, y + 6], life: 1 }; if (h.rec.level) startSim(); userChanged(); return true; }
+  return false;
+}
+function eraseSweep(p, q) {                      // a drag in erase mode: erase everything the path touches and cut every rope it crosses
+  var n = Math.max(1, Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / 6));
+  for (var i = 0; i <= n; i++) eraseThingAt(p[0] + (q[0] - p[0]) * i / n, p[1] + (q[1] - p[1]) * i / n);
+  cutSwipe(p, q);
+}
 function segSegDist(p, q, a, b) {
   var cr = function (o, u, v) { return (u[0] - o[0]) * (v[1] - o[1]) - (u[1] - o[1]) * (v[0] - o[0]); };
   var d1 = cr(a, b, p), d2 = cr(a, b, q), d3 = cr(p, q, a), d4 = cr(p, q, b);
@@ -204,11 +233,10 @@ function segSegDist(p, q, a, b) {
   return Math.min(DP.distSeg(p[0], p[1], a, b), DP.distSeg(q[0], q[1], a, b), DP.distSeg(a[0], a[1], p, q), DP.distSeg(b[0], b[1], p, q));
 }
 function cutSwipe(p, q) {
-  if (!sim.rope) return false;
-  if (segSegDist(p, q, [sim.rope.ax, sim.rope.ay], [sim.bx, sim.by]) > 7) return false;
-  sim.cutRope(); swipeFx = { p: p, q: q, life: 1 };
-  burst((sim.rope ? 0 : (p[0] + q[0]) / 2), (p[1] + q[1]) / 2, 8);
-  startSim(); userChanged();
+  var hit = sim.cutAt(p, q); if (!hit.length) return false;
+  swipeFx = { p: p, q: q, life: 1 }; burst((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, 8);
+  if (hit.some(function (r) { return r.level; })) startSim();
+  userChanged();
   return true;
 }
 var boostT = -999, boostFx = null, failing = false, failT = 0;
@@ -235,7 +263,7 @@ function stepOnce() {
   if (!running || auto.phase === 'planning') return;
   sim.step();
   if (sim.wrong && !won) { failing = true; failT = 60; setStatus(TX.wrong); sim.events = []; return; }
-  if (sim.events.length) { sim.events.forEach(function (e) { if (e === 'star') { burst(sim.bx, sim.by, 16); updateHud(); } }); sim.events = []; }
+  if (sim.events.length) { sim.events.forEach(function (e) { if (e === 'star') { burst(sim.bx, sim.by, 16); updateHud(); } else if (e === 'port') { var lp = sim.lastPort; portFx = { from: lp.from, to: lp.to, ci: lp.ci, life: 1 }; for (var pi = 0; pi < 14; pi++) particles.push({ x: lp.to.x, y: lp.to.y, vx: (Math.random() - 0.5) * 260, vy: (Math.random() - 0.5) * 260, life: 0.7, rot: Math.random() * 6, c: pi % 2 ? '#ffffff' : (lp.ci % 2 ? '#e8861c' : '#2e86ab') }); } else if (e === 'ouch') { for (var oi = 0; oi < 18; oi++) particles.push({ x: sim.bx, y: sim.by, vx: (Math.random() - 0.5) * 360, vy: -Math.random() * 300, life: 0.9, rot: Math.random() * 6, c: oi % 2 ? '#e63946' : '#7a0f1a' }); setStatus(TX.ouch); } }); sim.events = []; }
   if (!won) {
     if (sim.won) { won = true; winT = 90; burst(sim.bx, sim.by, 40); if (levelNo > best) { best = levelNo; try { localStorage.setItem('doodle_best', String(best)); } catch (e) {} } updateHud(); }
     else {
@@ -345,22 +373,79 @@ function drawBall(c, t) {
   c.restore(); c.globalAlpha = 1;
 }
 function drawRope(c) {
-  if (!level.rope) return;
-  var r = level.rope;
-  if (sim.rope) {
-    var pts = [[r.ax, r.ay], [sim.bx, sim.by]], rnd = mulberry32(5), w = wob(pts, rnd, 0.8, 8, false);
-    inkLine(c, w, '#8a6a43', 4.2, 1, false); c.setLineDash([5, 4]); inkLine(c, w, '#e9d3a7', 2, 0.9, false); c.setLineDash([]);
+  sim.ropes.forEach(function (rec) {
+    var lv = rec.level;
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    for (var pass = 0; pass < 2; pass++) {
+      c.beginPath();
+      rec.links.forEach(function (b) { if (!b) return; var e = sim.linkEnds(b); c.moveTo(e[0][0], e[0][1]); c.lineTo(e[1][0], e[1][1]); });
+      if (pass === 0) { c.strokeStyle = lv ? '#8a6a43' : '#a0703c'; c.lineWidth = 4.6; c.globalAlpha = 1; c.stroke(); }
+      else { c.setLineDash([4, 4]); c.strokeStyle = '#ecd9ae'; c.lineWidth = 2; c.stroke(); c.setLineDash([]); }
+    }
+    if (!lv) [['attA', 0], ['attB', rec.spec.P.length - 1]].forEach(function (q) {
+      var att = rec[q[0]]; if (!att) return; var pt = sim.attachWorld(att, rec.spec.P[q[1]]);
+      c.beginPath(); c.arc(pt[0], pt[1], 4.2, 0, 6.3); c.fillStyle = '#f9f5ea'; c.globalAlpha = 1; c.fill(); c.lineWidth = 2.2; c.strokeStyle = INK; c.stroke();
+    });
+  });
+  if (level.rope) { var r = level.rope;
+    c.beginPath(); c.arc(r.ax, r.ay, 7, 0, 6.3); c.fillStyle = '#c9ced8'; c.globalAlpha = 1; c.fill(); c.lineWidth = 2.6; c.strokeStyle = INK; c.stroke();
+    c.beginPath(); c.arc(r.ax - 2, r.ay - 2, 2, 0, 6.3); c.fillStyle = '#fff'; c.fill(); }
+}
+var portFx = null;
+function drawPortals(c, t) {
+  var cols = ['#2e86ab', '#e8861c'];
+  level.portals.forEach(function (pr) {
+    var col = cols[pr.ci % 2];
+    c.save(); c.setLineDash([3, 7]); c.strokeStyle = col; c.globalAlpha = 0.35; c.lineWidth = 2; c.beginPath(); c.moveTo(pr.a.x, pr.a.y - 36); c.quadraticCurveTo((pr.a.x + pr.b.x) / 2, pr.a.y - 120, pr.b.x, pr.b.y - 36); c.stroke(); c.restore();
+    [pr.a, pr.b].forEach(function (e, k) {
+      c.save(); c.translate(e.x, e.y); c.lineCap = 'round';
+      c.beginPath(); c.ellipse(0, 0, 14, 25, 0, 0, 6.3); c.fillStyle = col; c.globalAlpha = 0.18; c.fill(); c.globalAlpha = 0.95; c.lineWidth = 3.2; c.strokeStyle = col; c.stroke();
+      c.beginPath(); for (var q = 0; q < 40; q++) { var th = q * 0.34 + t * 3 * (k ? -1 : 1), rr = 2 + q * 0.5; var px = Math.cos(th) * rr * 0.6, py = Math.sin(th) * rr * 1.1; if (!q) c.moveTo(px, py); else c.lineTo(px, py); }
+      c.lineWidth = 2; c.globalAlpha = 0.8; c.stroke();
+      c.beginPath(); c.moveTo(e.nx * 16, -30); c.lineTo(e.nx * 26, -30); c.lineTo(e.nx * 22, -34); c.moveTo(e.nx * 26, -30); c.lineTo(e.nx * 22, -26); c.lineWidth = 2; c.globalAlpha = 0.9; c.stroke();
+      c.restore();
+    });
+  });
+  if (portFx) {
+    portFx.life -= 0.05; if (portFx.life <= 0) portFx = null;
+    else [portFx.from, portFx.to].forEach(function (e) { c.beginPath(); c.arc(e.x, e.y, 14 + (1 - portFx.life) * 34, 0, 6.3); c.strokeStyle = '#fff'; c.lineWidth = 5 * portFx.life; c.globalAlpha = portFx.life; c.stroke(); c.strokeStyle = cols[portFx.ci % 2]; c.lineWidth = 2.5; c.stroke(); });
   }
-  c.beginPath(); c.arc(r.ax, r.ay, 7, 0, 6.3); c.fillStyle = '#c9ced8'; c.globalAlpha = 1; c.fill(); c.lineWidth = 2.6; c.strokeStyle = INK; c.stroke();
-  c.beginPath(); c.arc(r.ax - 2, r.ay - 2, 2, 0, 6.3); c.fillStyle = '#fff'; c.fill();
+  c.globalAlpha = 1;
 }
 function drawPin(c, p) {
-  c.save(); c.translate(p.x, p.y); c.lineCap = 'round'; c.lineJoin = 'round';
+  var pp = sim.pinPos(p), hinge = p.type === 'hinge';
+  c.save(); c.translate(pp[0], pp[1]);
+  if (p.type === 'peg') { c.beginPath(); c.arc(0, 0, 5.5, 0, 6.3); c.fillStyle = '#c9ced8'; c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke(); } c.lineCap = 'round'; c.lineJoin = 'round';
   c.beginPath(); c.moveTo(0, 0); c.lineTo(-3, -9); c.strokeStyle = INK; c.lineWidth = 2.4; c.stroke();
-  c.beginPath(); c.arc(-4.5, -13, 7, 0, 6.3); c.fillStyle = '#ef476f'; c.globalAlpha = 1; c.fill(); c.lineWidth = 2.4; c.strokeStyle = INK; c.stroke();
+  c.beginPath(); c.arc(-4.5, -13, 7, 0, 6.3); c.fillStyle = hinge ? '#17a398' : '#ef476f'; c.globalAlpha = 1; c.fill(); c.lineWidth = 2.4; c.strokeStyle = INK; c.stroke();
   c.beginPath(); c.arc(-6.5, -15, 2, 0, 6.3); c.fillStyle = '#fff'; c.fill();
   c.beginPath(); c.arc(0, 0, 2.2, 0, 6.3); c.fillStyle = INK; c.fill();
   c.restore();
+}
+function drawBoosts(c, t) {
+  level.boosts.forEach(function (z) {
+    c.save(); c.beginPath(); c.rect(z.x0, z.y0, z.x1 - z.x0, z.y1 - z.y0); c.clip();
+    c.fillStyle = 'rgba(255,209,102,0.28)'; c.fillRect(z.x0, z.y0, z.x1 - z.x0, z.y1 - z.y0);
+    var an = Math.atan2(z.ay, z.ax), cx = (z.x0 + z.x1) / 2, cy = (z.y0 + z.y1) / 2;
+    c.translate(cx, cy); c.rotate(an); c.strokeStyle = '#e08a00'; c.lineWidth = 3; c.lineCap = 'round'; c.lineJoin = 'round'; c.globalAlpha = 0.85;
+    var off = (t * 60) % 32;
+    for (var x = -140 + off; x < 140; x += 32) for (var y = -60; y <= 60; y += 34) { c.beginPath(); c.moveTo(x - 6, y - 8); c.lineTo(x + 3, y); c.lineTo(x - 6, y + 8); c.stroke(); }
+    c.restore();
+    c.save(); c.setLineDash([7, 5]); c.strokeStyle = '#e08a00'; c.globalAlpha = 0.7; c.lineWidth = 1.8; c.strokeRect(z.x0, z.y0, z.x1 - z.x0, z.y1 - z.y0); c.restore();
+  });
+  c.globalAlpha = 1;
+}
+function drawRotors(c) {
+  sim.rotors.forEach(function (ro) {
+    var r = ro.r, a = ro.body.getAngle();
+    c.save(); c.translate(r.cx, r.cy);
+    c.beginPath(); c.arc(0, 0, r + 12, -2.2, 0.6); c.strokeStyle = '#e63946'; c.lineWidth = 2.4; c.globalAlpha = 0.8; c.stroke();     // spin direction arrow
+    var dir = r.omega > 0 ? 1 : -1, ea = dir > 0 ? 0.6 : -2.2, tx = Math.cos(ea) * (r.r + 12), ty = Math.sin(ea) * (r.r + 12), tg = ea + dir * Math.PI / 2;
+    c.beginPath(); c.moveTo(tx, ty); c.lineTo(tx + Math.cos(tg - 2.6 * dir) * 9, ty + Math.sin(tg - 2.6 * dir) * 9); c.moveTo(tx, ty); c.lineTo(tx + Math.cos(tg + 2.6 * dir) * 9, ty + Math.sin(tg + 2.6 * dir) * 9); c.stroke();
+    c.rotate(a); c.globalAlpha = 1; rrect(c, r.r, 5, 4); c.fillStyle = '#ffb4a2'; c.fill(); c.lineWidth = 3; c.strokeStyle = INK; c.stroke();
+    c.beginPath(); c.arc(0, 0, 7, 0, 6.3); c.fillStyle = '#f9f5ea'; c.fill(); c.stroke();
+    c.restore();
+  });
 }
 function drawJets(c, t) {
   level.jets.forEach(function (j) {
@@ -420,6 +505,13 @@ function ensureStatic() {
       c.stroke();
     }
   });
+  level.spikes.forEach(function (sk) {
+    var n = Math.max(3, Math.round((sk.x1 - sk.x0) / 14)), w = (sk.x1 - sk.x0) / n;
+    c.beginPath(); c.moveTo(sk.x0, sk.y + 2);
+    for (var q = 0; q < n; q++) { c.lineTo(sk.x0 + q * w + w / 2 + (rnd() - 0.5) * 3, sk.top - (rnd() * 3)); c.lineTo(sk.x0 + (q + 1) * w, sk.y + 2); }
+    c.closePath(); c.fillStyle = '#e63946'; c.globalAlpha = 0.85; c.fill(); c.globalAlpha = 1; c.lineWidth = 2.6; c.strokeStyle = INK; c.lineJoin = 'round'; c.stroke();
+    c.beginPath(); for (var q2 = 0; q2 < n; q2++) { c.moveTo(sk.x0 + q2 * w + w / 2 - 2, sk.top + 8); c.lineTo(sk.x0 + q2 * w + w / 2 + 3, sk.y - 3); } c.strokeStyle = '#7a0f1a'; c.lineWidth = 1.2; c.stroke();
+  });
   c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = '#f9f5ea';
   var n = Math.round(staticCv.width * staticCv.height / 320);
   c.globalAlpha = 0.5;
@@ -448,17 +540,18 @@ function render(ts) {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(staticCv, 0, 0);
   ctx.setTransform(sc * dpr, 0, 0, sc * dpr, offx * dpr, offy * dpr);
   if (!running && !won && !sim.strokes.length && !autoActive()) drawTitle(ctx);
-  drawJets(ctx, vt);
+  drawJets(ctx, vt); drawBoosts(ctx, vt); drawPortals(ctx, vt);
   sim.props.forEach(function (p) { drawProp(ctx, p); });
   sim.strokes.forEach(function (st) { drawStroke(ctx, st); });
-  drawRope(ctx);
+  drawRotors(ctx); drawRope(ctx);
   sim.pins.forEach(function (p) { drawPin(ctx, p); });
   sim.stars.forEach(function (s, k) { if (!s.got) drawStar(ctx, s, vt, level.order[sim.next] === k, sim.stars.length > 1); });
-  drawBall(ctx, vt);
+  if (!sim.killed) drawBall(ctx, vt);
   if (preview && preview.length > 1) {
-    var cutting = mode === 'cut' && !preview.__auto;
+    var cutting = !!preview.__erase;
     var closeHint = !cutting && preview.length > 6 && Math.hypot(preview[0][0] - preview[preview.length - 1][0], preview[0][1] - preview[preview.length - 1][1]) < Math.max(26, 0.18 * DP.pathLen(preview));
-    if (cutting) { ctx.setLineDash([6, 6]); inkLine(ctx, preview, '#ef476f', 3, 0.9, false); ctx.setLineDash([]); }
+    if (mode === 'rope' && drawing && drawing.rope) { ctx.setLineDash([6, 5]); inkLine(ctx, preview, '#a0703c', 4, 0.9, false); ctx.setLineDash([]); }
+    else if (cutting) { ctx.setLineDash([6, 6]); inkLine(ctx, preview, '#ef476f', 3, 0.9, false); ctx.setLineDash([]); }
     else inkLine(ctx, preview, COLORS[colorIdx % COLORS.length], 5.5, 0.85, false);
     if (closeHint) { ctx.setLineDash([5, 5]); ctx.beginPath(); ctx.moveTo(preview[preview.length - 1][0], preview[preview.length - 1][1]); ctx.lineTo(preview[0][0], preview[0][1]); ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]); }
     ctx.globalAlpha = 1;
@@ -521,12 +614,13 @@ function updateHud() {
   else $('chStars').innerHTML = level.order.map(function (k, r) { var cls = r < sim.next ? 'ns done' : r === sim.next ? 'ns next' : 'ns'; return '<i class="' + cls + '" style="--c:' + COLORS[r % COLORS.length] + '">' + (r + 1) + '</i>'; }).join('');
   $('chBest').textContent = TX.best + ' ' + best;
   $('btnStart').style.display = running || won ? 'none' : '';
-  $('btnErase').classList.toggle('on', mode === 'erase'); $('btnPin').classList.toggle('on', mode === 'pin'); $('btnCut').classList.toggle('on', mode === 'cut');
+  $('btnErase').textContent = mode === 'erase' ? '✐ ' + TX.erase : '✎ ' + TX.draw; $('btnErase').classList.toggle('on', mode === 'erase'); $('btnPin').classList.toggle('on', mode === 'pin'); $('btnRope').classList.toggle('on', mode === 'rope');
 }
-function setMode(m) { mode = m; updateHud(); setStatus(m === 'pin' ? TX.hintPin : m === 'erase' ? TX.hintErase : m === 'cut' ? TX.hintCut : (running ? TX.hintRun : TX.hint0)); }
+function setMode(m) { mode = m; updateHud(); setStatus(m === 'rope' ? TX.hintRopeTool : m === 'pin' ? TX.hintPin : m === 'erase' ? TX.hintErase : (running ? TX.hintRun : TX.hint0)); }
 function toggleEraser() { setMode(mode === 'erase' ? 'draw' : 'erase'); return mode === 'erase'; }
+function modeButton() { setMode(mode === 'draw' ? 'erase' : 'draw'); }          // draw -> erase; erase / rope / pin -> back to draw
+function toggleRope() { setMode(mode === 'rope' ? 'draw' : 'rope'); return mode === 'rope'; }
 function togglePin() { setMode(mode === 'pin' ? 'draw' : 'pin'); return mode === 'pin'; }
-function toggleCut() { setMode(mode === 'cut' ? 'draw' : 'cut'); return mode === 'cut'; }
 function toWorld(e) { var r = canvas.getBoundingClientRect(); return [(e.clientX - r.left - offx) / sc, (e.clientY - r.top - offy) / sc]; }
 var drawing = null, touches = {};
 function initInput() {
@@ -536,27 +630,30 @@ function initInput() {
     var w = toWorld(e);
     if (e.button !== 2 && Object.keys(touches).length === 1 && running && !won && ballHit(w[0], w[1])) { boostBall(); drawing = null; preview = null; return; }
     if (mode === 'pin' && e.button !== 2 && Object.keys(touches).length === 1) { pinAt(w[0], w[1]); return; }
-    if (e.button === 2 || Object.keys(touches).length > 1) { drawing = { erase: true, last: w, id: e.pointerId }; preview = null; eraseAt(w[0], w[1]); return; }
-    if (mode === 'erase') { drawing = { erase: true, last: w, id: e.pointerId, only: true }; eraseAt(w[0], w[1]); return; }
+    if (mode === 'rope' && e.button !== 2 && Object.keys(touches).length === 1) { try { canvas.setPointerCapture(e.pointerId); } catch (err) {} drawing = { rope: true, attA: attachAt(w[0], w[1]), id: e.pointerId, pts: [w] }; preview = drawing.pts; return; }
+    if (e.button === 2 || Object.keys(touches).length > 1 || mode === 'erase') {      // erase mode / right button / two fingers: tap = erase stroke, pin or cut rope; drag = swipe-erase + swipe-cut
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+      drawing = { erase: true, last: w, id: e.pointerId, pts: [w] }; drawing.pts.__erase = true; preview = drawing.pts; eraseAt(w[0], w[1]); return;
+    }
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
-    if (mode === 'cut') { drawing = { cut: true, pts: [w], id: e.pointerId }; preview = drawing.pts; return; }
     drawing = { pts: [w], id: e.pointerId }; preview = drawing.pts;
   });
   canvas.addEventListener('pointermove', function (e) {
     if (!drawing) return;
     var w = toWorld(e);
-    if (drawing.erase) { eraseAt(w[0], w[1]); if (!drawing.only) cutSwipe(drawing.last, w); drawing.last = w; return; }
+    if (drawing.erase) { eraseSweep(drawing.last, w); drawing.last = w; drawing.pts.push(w); if (drawing.pts.length > 30) drawing.pts.shift(); return; }
+    if (drawing.rope) { if (e.pointerId === drawing.id) { var lr = drawing.pts[drawing.pts.length - 1]; if (Math.hypot(w[0] - lr[0], w[1] - lr[1]) >= 3 && drawing.pts.length < 900) drawing.pts.push(w); } return; }
     if (e.pointerId !== drawing.id) return;
     var l = drawing.pts[drawing.pts.length - 1];
-    if (Math.hypot(w[0] - l[0], w[1] - l[1]) >= 3 && drawing.pts.length < 900) { drawing.pts.push(w); if (drawing.cut) cutSwipe(l, w); }
+    if (Math.hypot(w[0] - l[0], w[1] - l[1]) >= 3 && drawing.pts.length < 900) { drawing.pts.push(w); }
   });
   function up(e) {
     delete touches[e.pointerId];
     if (!drawing) return;
-    if (drawing.erase) { drawing = null; return; }
+    if (drawing.erase) { drawing = null; preview = null; return; }
     if (e.pointerId !== drawing.id) return;
     var d = drawing; drawing = null; preview = null;
-    if (d.cut) return;
+    if (d.rope) { var B = toWorld(e), attB = attachAt(B[0], B[1]); if (d.attA && d.attA.snap) d.pts[0] = d.attA.snap.slice(); d.pts.push(attB && attB.snap ? attB.snap.slice() : B); var r = sim.addRopePath(d.pts, d.attA, attB); if (!r && DP.pathLen(d.pts) >= 14) setStatus(TX.ropeLong); if (r) { history.push({ t: 'rope', rope: r }); if (sim.events.indexOf('toomanyropes') >= 0) sim.events = []; userChanged(); } return; }
     addStroke(d.pts);
   }
   canvas.addEventListener('pointerup', up);
@@ -568,12 +665,12 @@ function initInput() {
     if (/^F[234]$/.test(k)) { if (embedded) return; e.preventDefault(); if (k === 'F2') newGame(); else if (k === 'F3') toggleAuto(); else giveHint(); return; }
     if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'Z')) { e.preventDefault(); undoStroke(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (k === 'r' || k === 'R') { restartLevel(); } else if (k === ' ') { e.preventDefault(); startSim(); userChanged(); } else if (k === 'e' || k === 'E') { toggleEraser(); } else if (k === 'c' || k === 'C') { toggleCut(); } else if (k === 'p' || k === 'P') { togglePin(); }
+    if (k === 'r' || k === 'R') { restartLevel(); } else if (k === ' ') { e.preventDefault(); startSim(); userChanged(); } else if (k === 'e' || k === 'E') { toggleEraser(); } else if (k === 'p' || k === 'P') { togglePin(); } else if (k === 't' || k === 'T') { toggleRope(); }
   });
   $('btnStart').onclick = function () { startSim(); userChanged(); };
-  $('btnErase').onclick = function () { toggleEraser(); };
-  $('btnCut').onclick = function () { toggleCut(); };
+  $('btnErase').onclick = function () { modeButton(); };
   $('btnPin').onclick = function () { togglePin(); };
+  $('btnRope').onclick = function () { toggleRope(); };
   $('btnUndo').onclick = function () { undoStroke(); };
   $('btnRestart').onclick = function () { restartLevel(); };
   $('chSeed').onclick = function () {
@@ -585,7 +682,7 @@ function initInput() {
 function init() {
   document.documentElement.lang = KO ? 'ko' : 'en';
   document.title = TX.title;
-  $('btnStart').textContent = '▶ ' + TX.start; $('btnErase').textContent = '✐ ' + TX.eraser; $('btnCut').textContent = '✂ ' + TX.cut; $('btnPin').textContent = '◉ ' + TX.pin; $('btnUndo').textContent = '↶ ' + TX.undo; $('btnRestart').textContent = '⟲ ' + TX.restart;
+  $('btnStart').textContent = '▶ ' + TX.start; $('btnPin').textContent = '◉ ' + TX.pin; $('btnRope').textContent = '〰 ' + TX.rope; $('btnUndo').textContent = '↶ ' + TX.undo; $('btnRestart').textContent = '⟲ ' + TX.restart;
   canvas = $('cv'); ctx = canvas.getContext('2d');
   var q = new URLSearchParams(location.search), sd = parseInt(q.get('seed'), 10), lv = parseInt(q.get('level'), 10);
   loadLevel(isFinite(sd) ? sd : 1 + Math.floor(Math.random() * 99999), isFinite(lv) && lv >= 1 ? lv : 1);
@@ -596,14 +693,14 @@ function init() {
 }
 
 /* ---- API for the shell + tests ---- */
-window.newGame = newGame; window.restartLevel = restartLevel; window.undoStroke = undoStroke; window.toggleEraser = toggleEraser; window.toggleCut = toggleCut; window.togglePin = togglePin;
+window.newGame = newGame; window.restartLevel = restartLevel; window.undoStroke = undoStroke; window.toggleEraser = toggleEraser; window.togglePin = togglePin; window.toggleRope = toggleRope;
 window.toggleAuto = toggleAuto; window.giveHint = giveHint;
 window.getLevelInfo = function () { return { level: levelNo, seed: seed0 }; };
 window.__dp = {
   DP: DP,
   get sim() { return sim; }, get level() { return level; }, get strokes() { return sim.strokes; }, get ball() { return sim.ball; }, get stars() { return sim.stars; }, get auto() { return auto; },
   set manual(v) { manual = !!v; }, get manual() { return manual; },
-  load: loadLevel, restart: restartLevel, newGame: newGame, addStroke: addStroke, undo: undoStroke, erase: eraseAt, strokeAt: strokeAt, start: startSim, cut: cutSwipe, pinAt: pinAt, boost: boostBall, get pins() { return sim.pins; },
+  load: loadLevel, restart: restartLevel, newGame: newGame, addStroke: addStroke, undo: undoStroke, erase: eraseAt, sweep: eraseSweep, strokeAt: strokeAt, start: startSim, cut: cutSwipe, addRope: function (A, B) { var path = Array.isArray(A[0]) ? A : [A, B]; var f = path[0], l = path[path.length - 1], aa = attachAt(f[0], f[1]), ab = attachAt(l[0], l[1]); path = path.map(function (q) { return q.slice(); }); if (aa && aa.snap) path[0] = aa.snap.slice(); if (ab && ab.snap) path[path.length - 1] = ab.snap.slice(); var r = sim.addRopePath(path, aa, ab); if (r) { history.push({ t: 'rope', rope: r }); userChanged(); } return r; }, attachAt: attachAt, terrainAt: terrainAt, pinAt: pinAt, boost: boostBall, get pins() { return sim.pins; },
   step: function (n) { for (var i = 0; i < (n || 1); i++) { stepOnce(); if (running) autoTick(); else autoTick(); } },
   pump: function (budget) { pumpPlan(budget == null ? 1e9 : budget); },
   state: function () { return { running: running, won: won, level: levelNo, seed: seed0, got: sim.stars.filter(function (s) { return s.got; }).length, nstars: sim.stars.length, bx: sim.bx, by: sim.by, fall: fallT, bodies: sim.world.getBodyCount(), next: sim.next, failing: failing, strokes: sim.strokes.length, pins: sim.pins.length, mode: mode, simT: sim.simT, rope: !!sim.rope, auto: auto.on, hint: auto.hint, phase: auto.phase, step: auto.i, nsteps: auto.steps ? auto.steps.length : 0, failures: auto.failures, restarts: auto.restarts }; },

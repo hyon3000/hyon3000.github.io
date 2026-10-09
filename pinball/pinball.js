@@ -100,7 +100,9 @@
       if (prev && g[p] > 150 && mx - mn < 28 && Math.abs(g[p] - prev[p]) > 60) { n++; cx += p % rw; cy += (p / rw) | 0; }      // a moving grey-white (steel) blob; the coloured lights are ignored
     }
     prev = g; var now = performance.now();
-    if (n >= 8 && n <= 160) {
+    var gs = vguard ? vguard.update(now) : 0;                              // rule layer (needs the memory readout): a cradled ball is not pumped; after 2.5 s one kick flip
+    if (gs === 2) press(vguard.side === 'L' ? '.pb.fl' : '.pb.fr', 200);
+    if (gs === 0 && n >= 8 && n <= 160) {
       cx = cx / n / rw; cy = cy / n / rh; lastMotion = now;
       if (cy > 0.35) press(cx < 0.45 ? '.pb.fl' : '.pb.fr', 140);       // ball in front of a flipper: hit it
       if (cy > 0.8 && cy - pcy > 0.01) { if (cx > 0.3 && cx < 0.7) nudge('ArrowUp', 38, 'ArrowUp'); else if (cx <= 0.3) nudge('KeyX', 88, 'x'); else nudge('Period', 190, '.'); }       // the ball sinks towards the drain: shake the table
@@ -132,7 +134,7 @@
     if (r.bad) { if (!rlBad) rlBad = now; if (now - rlBad > (now - rlNewAt < 20000 ? 20000 : 4000)) { rlStop(); startVision(); window.pinballAuto = 'vision'; } return; }          // the memory does not look as expected any more (another build?): fall back to the vision bot
     rlBad = 0;
     if (r.done) { if (r.tilt) window.pinballTilts++; if (r.over) rlOverAt = now + 5000; }
-    else { var act = window.PinballAI.policy(r.obs); rl.apply(act[0]); rl.nudge(act[1]); window.pinballNudges = nudgeSent + rl.nTotal; }       // the model chooses the flippers AND the table nudge
+    else { var act = window.PinballAI.policy(r.obs, r.mask); rl.apply(act[0]); rl.nudge(act[1]); window.pinballNudges = nudgeSent + rl.nTotal; }       // the model chooses the flippers AND the table nudge
   }
   function startRL() {
     var addr = null;
@@ -142,7 +144,8 @@
     rlPrevHook = window.Module.preMainLoop || null; window.Module.preMainLoop = rlHook; document.getElementById('canvas').focus();
     window.pinballAuto = 'rl'; return true;
   }
-  function startVision() { prev = null; lastMotion = performance.now(); lastLaunch = performance.now() - 5500; autoTimer = setInterval(look, 45); }
+  var vguard = null;
+  function startVision() { vguard = null; try { var ad = window.PinballAI && window.Module ? PinballAI.check(window.Module) : null; if (ad) vguard = new PinballAI.Guard(window.Module, ad); } catch (e) {} prev = null; lastMotion = performance.now(); lastLaunch = performance.now() - 5500; autoTimer = setInterval(look, 45); }
   window.toggleAuto = function () {
     autoOn = !autoOn;
     if (autoOn) {

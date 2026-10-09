@@ -53,6 +53,8 @@ body.nolb .card .lb,.mini .lb{display:none}
 #mhand .card{cursor:pointer}
 #mhand .card.sel{transform:translateY(-22%)}
 #status{grid-area:status;display:flex;flex-direction:column;gap:3px;min-height:40px}
+#tot{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;background:rgba(0,0,0,.35);border-radius:8px;padding:2px 8px;white-space:nowrap;overflow:hidden}
+#tot b{color:#ffd54a}#tot .neg{color:#ff9a8a}#tot .pos{color:#8dffa6}#tot button{padding:0 6px;font-size:12px;margin-left:auto}
 #msg{font-weight:600;font-size:13px;padding:3px 8px;border-radius:8px;background:rgba(0,0,0,.35);min-height:24px;display:flex;align-items:center}
 #msg.you{background:rgba(40,120,60,.7)}
 #acts{display:flex;flex-wrap:wrap;gap:5px}
@@ -87,7 +89,7 @@ button:disabled{opacity:.45;cursor:default}
  <div id="ocap" class="cap"></div>
  <div id="mid"><div id="field"></div><div id="stockbox"><div id="pile"></div><div id="last"></div></div></div>
  <div id="mcap" class="cap"></div>
- <div id="status"><div id="msg"></div><div id="acts"></div></div>
+ <div id="status"><div id="tot"></div><div id="msg"></div><div id="acts"></div></div>
  <div id="mhand"></div>
  <div id="ctrl"></div>
 </div>
@@ -120,6 +122,7 @@ var TXT = {
   ev: { ppeok: ['Ppeok!', '뻑!'], jjok: ['Jjok!', '쪽!'], ttadak: ['Ttadak!', '따닥!'], sweep: ['Sweep!', '싹쓸이!'], bomb: ['Bomb!', '폭탄!'], shake: ['Shake! x2', '흔들기! x2'], eat: ['Ppeok eaten', '뻑 먹기'], selfeat: ['Self-ppeok!', '자뻑!'], go: ['Go %1!', '%1고!'] },
   pwho: ['Last: ', '직전: '], played: ['hand', '낸 패'], flipped: ['stock', '뒤집은 패'], stolen: ['took a junk card', '피 한 장 가져옴'],
   labels: ['Labels', '라벨'],
+  totalT: ['TOTAL', '누적'], tw: ['W', '승'], tl: ['L', '패'], td: ['D', '무'], tvc: ['vs Computer', '컴퓨터전'], ton: ['Online', '온라인'], resetQ: ['Reset the TOTAL of this mode?', '이 모드의 누적 기록을 지울까요?'],
   bombc: ['Bomb cards', '폭탄패'],
   noOpp: ['No opponent yet - use Game > Choose Opponent (F5).', '상대가 없습니다 - 게임 > 상대 선택(F5).'],
   disc: ['Opponent disconnected.', '상대가 연결을 끊었습니다.'], desync: ['Out of sync with opponent - start a new game.', '상대와 화면이 맞지 않습니다. 새 게임을 시작하세요.'],
@@ -138,6 +141,24 @@ var gid = 0, nextFirst = -1, carry = 1, firstP = -1, notice = '', stats = { w: 0
 var local = /[?&]ai=1/.test(location.search);
 function D(ms) { return fast ? 0 : ms * speed; }
 
+/* ---------- cumulative TOTAL (signed points + W/L/D), kept per mode in localStorage ---------- */
+var TOT_KEY = 'card_gostop_total_v1';
+function emptyTally() { return { points: 0, wins: 0, losses: 0, draws: 0, games: 0 }; }
+var tot = { ai: emptyTally(), online: emptyTally() };
+try { var sv = JSON.parse(localStorage.getItem(TOT_KEY) || 'null'); if (sv && sv.ai && sv.online) tot = sv; } catch (e) {}
+function saveTot() { try { localStorage.setItem(TOT_KEY, JSON.stringify(tot)); } catch (e) {} }
+function tallyKey() { return mode === 'online' ? 'online' : 'ai'; }
+function addResult(delta, kind) {   /* kind: 'w' | 'l' | 'd' */
+  var k = tot[tallyKey()]; k.points += delta; k.games++;
+  if (kind === 'w') k.wins++; else if (kind === 'l') k.losses++; else k.draws++;
+  saveTot();
+}
+function resetTotal() { if (!window.confirm(T('resetQ'))) return; tot[tallyKey()] = emptyTally(); saveTot(); render(); }
+function totHTML() {
+  var k = tot[tallyKey()], p = k.points;
+  return T('totalT') + ' <b class="' + (p > 0 ? 'pos' : p < 0 ? 'neg' : '') + '">' + (p > 0 ? '+' : '') + p + '</b> \u00b7 ' + (KO ? k.wins + '승 ' + k.losses + '패 ' + k.draws + '무' : 'W' + k.wins + ' L' + k.losses + ' D' + k.draws) +
+    ' <span style="opacity:.7;font-weight:600">(' + T(mode === 'online' ? 'ton' : 'tvc') + ')</span><button data-k="rt" title="reset">\u21ba</button>';
+}
 /* ---------- start / games ---------- */
 function rndSeed() { return (Math.random() * 4294967296) >>> 0; }
 function pickFirst() { return nextFirst >= 0 ? nextFirst : (Math.random() < 0.5 ? 0 : 1); }   /* winner of the last game goes first; after a Nagari the same player again */
@@ -160,7 +181,7 @@ function startOnline() {
   BoardLink.pair({
     onOpen: function (l) { pairing = false; link = l; mode = 'online'; me = l.isHost ? 0 : 1; nextFirst = -1; carry = 1; S = null; notice = T('waitHost'); resShown = false; $('res').style.display = 'none'; render(); if (l.isHost) hostNew(); },
     onMessage: onMsg,
-    onClose: function () { if (mode !== 'online') return; link = null; mode = 'idle'; clearTimeout(timer); gen++; autoOn = autoOn; notice = T('disc'); render(); setTimeout(startOnline, 0); },
+    onClose: function () { if (mode !== 'online') return; if (S && S.phase !== 'over' && !S.counted && S.hands[0].length <= 7 && S.hands[1].length <= 7) { S.counted = true; var pv = GS.settle(S, me); stats.w++; addResult(pv.pts, 'w'); } link = null; mode = 'idle'; clearTimeout(timer); gen++; autoOn = autoOn; notice = T('disc'); render(); setTimeout(startOnline, 0); },
     onCancel: function () { pairing = false; render(); },
     onAI: startAI
   });
@@ -201,7 +222,7 @@ function toast(t) { var e = $('toast'); e.textContent = t; e.classList.remove('s
 function onOver() {
   if (S.counted) return; S.counted = true;
   var r = S.result; if (r.draw) { nextFirst = S.first; carry = (S.carry || 1) * 2; } else { nextFirst = r.winner; carry = 1; }
-  if (r.draw) stats.d++; else if (r.winner === me) { stats.w++; stats.pts += r.pts; } else { stats.l++; stats.pts -= r.pts; }
+  if (r.draw) { stats.d++; addResult(0, 'd'); } else if (r.winner === me) { stats.w++; stats.pts += r.pts; addResult(r.pts, 'w'); } else { stats.l++; stats.pts -= r.pts; addResult(-r.pts, 'l'); }
   if (!fast) showResult();
 }
 function kick() {
@@ -299,6 +320,7 @@ $('acts').addEventListener('click', function (e) {
   var k = b.dataset.k, m = +b.dataset.m;
   if (k === 'cup') act({ type: 'cup', pi: !GS.scoreOf(S, me).cupPi }); else if (k === 'shake') act({ type: 'shake', month: m }); else if (k === 'bomb') act({ type: 'bomb', month: m }); else if (k === 'skip') act({ type: 'skip' });
 });
+$('tot').addEventListener('click', function (e) { if (e.target.closest('button')) resetTotal(); });
 $('ctrl').addEventListener('click', function (e) {
   var b = e.target.closest('button'); if (!b) return;
   ({ lb: toggleLabels, new: function () { newGame(); }, undo: undo, online: startOnline, hint: giveHint, auto: toggleAuto })[b.dataset.k]();
@@ -346,6 +368,7 @@ function render() {
   else cw = Math.min((W - 14) / 10.9, (H - fixed) / 9.3, 74);
   cw = Math.max(22, Math.floor(cw));
   var rs = document.documentElement.style; rs.setProperty('--cw', cw + 'px'); rs.setProperty('--cw0', cw + 'px'); rs.setProperty('--mw', Math.floor(cw * (w ? 0.62 : 0.6)) + 'px');
+  $('tot').innerHTML = totHTML();
   /* ---- content */
   var cl = document.body.classList; cl.toggle('online', mode === 'online');
   if (!S) {
@@ -432,7 +455,7 @@ function showResult() {
     rows += '<tr><td><b>' + T('total') + '</b></td><td>' + (won ? '+' : '-') + r.pts + '</td></tr>';
     h = '<h3 style="color:' + (won ? '#7dff9b' : '#ff9a8a') + '">' + (won ? T('win') : T('lose')) + '</h3><table>' + rows + '</table>';
   }
-  h += '<div style="text-align:center;margin-top:6px;font-size:12px;opacity:.85">' + T('session') + ': ' + stats.w + '-' + stats.l + '-' + stats.d + ' (' + (stats.pts >= 0 ? '+' : '') + stats.pts + ')</div>';
+  h += '<div style="text-align:center;margin-top:6px;font-size:12px">' + totHTML().replace(/<button.*<\/button>/, '') + '</div>';
   h += '<div class="btns"><button class="pri" data-a="new">' + T('newg') + '</button><button data-a="close">' + T('close') + '</button></div>';
   var e = $('res'); e.innerHTML = h; e.style.display = autoOn ? 'none' : 'block';
 }
@@ -471,7 +494,7 @@ window.startOnline = startOnline;
 window.isAuto = isAuto;
 window.__gs = {
   GS: GS, state: function () { return S; }, mode: function () { return mode; }, me: function () { return me; }, act: act, fastRun: fastRun, setSpeed: function (x) { speed = x; },
-  stats: function () { return stats; }, hintObj: function () { return hintObj; }, pairing: function () { return pairing; }, sel: function () { return sel; }, notice: function () { return notice; },
+  stats: function () { return stats; }, total: function () { return JSON.parse(JSON.stringify(tot)); }, resetAll: function () { tot = { ai: emptyTally(), online: emptyTally() }; saveTot(); render(); }, hintObj: function () { return hintObj; }, pairing: function () { return pairing; }, sel: function () { return sel; }, notice: function () { return notice; },
   summary: function () { return S && JSON.parse(JSON.stringify({ n: S.n, turn: S.turn, phase: S.phase, hands: S.hands.map(function (h) { return h.length; }), myHand: S.hands[me], field: S.field, stock: S.stock.length, cap: S.cap, goCount: S.goCount, result: S.result, gid: gid })); },
   gid: function () { return gid; }, startAI: startAI
 };

@@ -33,9 +33,12 @@ html,body{margin:0;height:100%;overflow:hidden;background:#2b2a28;color:#eee;fon
 #promo button{background:#d8c7a6;border:0;border-radius:6px;width:calc(var(--bs)/8*1.05);height:calc(var(--bs)/8*1.05);font-size:calc(var(--bs)/8*.85);line-height:1;cursor:pointer;padding:0}
 #promo button:hover{background:#fff1c9}
 #side{display:flex;flex-direction:column;gap:8px;min-width:220px;max-width:340px;flex:1;min-height:0;width:100%;height:100%;overflow:hidden}
-#app.v #side{max-width:none;height:auto;flex:1}
+#app.v #side{max-width:none;height:auto;flex:1;overflow-y:auto}
+#app.v #moves{flex:1 0 50px}
 #status{font-weight:600;padding:8px 10px;border-radius:6px;background:#3a3835;min-height:34px}
 #status.end{background:#7a3b1e}
+#total{display:flex;align-items:center;justify-content:space-between;gap:6px;background:#33312f;border-radius:6px;padding:3px 8px;font-size:13px;color:#e8d9a8}
+#total button{background:#5b5a56;color:#fff;border:0;border-radius:4px;padding:1px 7px;cursor:pointer;font-size:13px}
 #caps{background:#33312f;border-radius:6px;padding:4px 8px;font-size:18px;line-height:1.15}
 #caps div{min-height:22px;display:flex;flex-wrap:wrap;align-items:center}
 #caps .pc{font-size:19px;margin-right:-3px}
@@ -62,6 +65,7 @@ body:not(.ai):not(.local) #bUndo{display:none}
  <div id="boardWrap"><div id="board"></div><div id="promo"><div class="box"><div id="promoT"></div><div class="row" id="promoRow"></div></div></div></div>
  <div id="side">
   <div id="status"></div>
+  <div id="total"><span id="totTxt"></span><button id="bTotRst" title="reset">↺</button></div>
   <div id="caps"><div id="capW"></div><div id="capB"></div></div>
   <div id="moves"></div>
   <div id="ctrl">
@@ -235,17 +239,17 @@ var TX={
  en:{newg:'New',undo:'Undo',hint:'Hint',flip:'Flip',ai:'vs Computer',easy:'Easy',normal:'Normal',hard:'Hard',asB:'Play as Black',asW:'Play as White',auto:'Auto-flip',
   wt:'White to move',bt:'Black to move',chk:' - check!',think:'Computer is thinking...',
   mateW:'Checkmate - White wins',mateB:'Checkmate - Black wins',stale:'Draw - stalemate',rep:'Draw - threefold repetition',fifty:'Draw - 50-move rule',insuf:'Draw - insufficient material',
-  promo:'Promote to',auto:'Auto',autoT:' [auto play]',pick:'Choose an opponent (Opponent button)',onl:'Opponent',resign:'Resign',disc:'Opponent disconnected',desync:'Out of sync with opponent',youW:' (you: White)',youB:' (you: Black)',resW:'White resigns - Black wins',resB:'Black resigns - White wins',engErr:'Computer failed to move',moves:'Moves'},
+  promo:'Promote to',leftWin:'Opponent left - you win',tot:'TOTAL',tW:'W',tL:'L',tD:'D',mAi:'Computer',mOn:'Online',rst:'Reset the total score?',auto:'Auto',autoT:' [auto play]',pick:'Choose an opponent (Opponent button)',onl:'Opponent',resign:'Resign',disc:'Opponent disconnected',desync:'Out of sync with opponent',youW:' (you: White)',youB:' (you: Black)',resW:'White resigns - Black wins',resB:'Black resigns - White wins',engErr:'Computer failed to move',moves:'Moves'},
  ko:{newg:'새 게임',undo:'무르기',hint:'힌트',flip:'뒤집기',ai:'컴퓨터와 대결',easy:'쉬움',normal:'보통',hard:'어려움',asB:'흑으로 플레이',asW:'백으로 플레이',auto:'자동 뒤집기',
   wt:'백 차례',bt:'흑 차례',chk:' - 체크!',think:'컴퓨터가 생각 중...',
   mateW:'체크메이트 - 백 승리',mateB:'체크메이트 - 흑 승리',stale:'무승부 - 스테일메이트',rep:'무승부 - 3회 동형 반복',fifty:'무승부 - 50수 규칙',insuf:'무승부 - 기물 부족',
-  promo:'승급 선택',auto:'자동',autoT:' [자동 대국]',pick:'상대를 선택하세요 (상대 버튼)',onl:'상대',resign:'기권',disc:'상대방의 연결이 끊어졌습니다',desync:'상대와 동기화 오류',youW:' (나: 백)',youB:' (나: 흑)',resW:'백 기권 - 흑 승리',resB:'흑 기권 - 백 승리',engErr:'컴퓨터가 수를 두지 못했습니다',moves:'기보'}
+  promo:'승급 선택',leftWin:'상대가 나감 - 승리',tot:'TOTAL',tW:'승',tL:'패',tD:'무',mAi:'컴퓨터',mOn:'온라인',rst:'누적 점수를 초기화할까요?',auto:'자동',autoT:' [자동 대국]',pick:'상대를 선택하세요 (상대 버튼)',onl:'상대',resign:'기권',disc:'상대방의 연결이 끊어졌습니다',desync:'상대와 동기화 오류',youW:' (나: 백)',youB:' (나: 흑)',resW:'백 기권 - 흑 승리',resB:'흑 기권 - 백 승리',engErr:'컴퓨터가 수를 두지 못했습니다',moves:'기보'}
 }[KO?'ko':'en'];
 var G=CE(),FILES='abcdefgh',GL=['','♟','♞','♝','♜','♛','♚'];
 function $(id){return document.getElementById(id);}
 function glyph(p){return GL[p&7]+'︎';}
 
-var autoOn=false,autoPending=false,hintId=0,local=/[?&]local=1/.test(location.search),online=null,myCol=0,notice='',engineFn=null,vsAI=false,level=2,human=0,userFlip=false,autoFlip=false;
+var TOT_KEY='board_chess_total_v1',tot={ai:{points:0,wins:0,losses:0,draws:0,games:0},online:{points:0,wins:0,losses:0,draws:0,games:0}},shownMode='ai',gameCounted=false,autoOn=false,autoPending=false,hintId=0,local=/[?&]local=1/.test(location.search),online=null,myCol=0,notice='',engineFn=null,vsAI=false,level=2,human=0,userFlip=false,autoFlip=false;
 var sel=-1,dests=[],hintMv=null,over=null,thinking=false,jobId=0,rec=[],cur=[],drag=null,promoPending=null;
 var cells=[],board=$('board');
 
@@ -318,17 +322,41 @@ function render(){
  }
  var mv=$('moves');mv.innerHTML=html+'</table>';mv.scrollTop=mv.scrollHeight;
  $('bAuto').classList.toggle('on',autoOn);$('bHint').classList.toggle('on',!!hintMv);
+ renderTotal();
  var cl=document.body.classList;cl.toggle('online',!!online);cl.toggle('ai',!online&&vsAI&&!!engineFn);cl.toggle('local',local&&!online&&!vsAI);
  $('bSwap').textContent=human===0?TX.asB:TX.asW;
 }
 
+function loadTot(){
+ try{var o=JSON.parse(localStorage.getItem(TOT_KEY));
+  if(o)['ai','online'].forEach(function(m){if(o[m])['points','wins','losses','draws','games'].forEach(function(k){tot[m][k]=+o[m][k]||0;});});}catch(e){}
+}
+function saveTot(){try{localStorage.setItem(TOT_KEY,JSON.stringify(tot));}catch(e){}}
+function curMode(){return online?'online':(vsAI&&engineFn)?'ai':null;}
+function recordOver(){
+ if(!over||gameCounted)return;
+ var m=curMode();if(!m||rec.length<4)return;
+ gameCounted=true;loadTot();
+ var me=online?myCol:human,t=tot[m];t.games++;
+ if(over.w===-1){t.draws++;t.points+=.5;}else if(over.w===me){t.wins++;t.points+=1;}else t.losses++;
+ saveTot();renderTotal();
+}
+function renderTotal(){
+ var m=curMode();if(m)shownMode=m;
+ var t=tot[shownMode];
+ $('totTxt').textContent=TX.tot+' '+t.points.toFixed(1)+' \u00b7 '+(KO?t.wins+TX.tW+' '+t.losses+TX.tL+' '+t.draws+TX.tD:TX.tW+t.wins+' '+TX.tL+t.losses+' '+TX.tD+t.draws)+' \u00b7 '+(shownMode==='ai'?TX.mAi:TX.mOn);
+}
+function resetTot(){
+ if(!window.confirm(TX.rst))return;
+ loadTot();tot[shownMode]={points:0,wins:0,losses:0,draws:0,games:0};saveTot();renderTotal();
+}
 function afterMove(){
  cur=G.legalMoves();sel=-1;dests=[];hintMv=null;hintId++;over=null;
- if(!cur.length){over=G.inCheck()?{txt:G.side?TX.mateW:TX.mateB}:{txt:TX.stale};}
- else if(G.half>=100)over={txt:TX.fifty};
- else if(G.repCount()>=3)over={txt:TX.rep};
- else if(G.insufficient())over={txt:TX.insuf};
- render();
+ if(!cur.length){over=G.inCheck()?{txt:G.side?TX.mateW:TX.mateB,w:G.side?0:1}:{txt:TX.stale,w:-1};}
+ else if(G.half>=100)over={txt:TX.fifty,w:-1};
+ else if(G.repCount()>=3)over={txt:TX.rep,w:-1};
+ else if(G.insufficient())over={txt:TX.insuf,w:-1};
+ render();recordOver();
  if(!over&&vsAI&&engineFn&&G.side!==human)requestAI();
  scheduleAuto();
 }
@@ -423,7 +451,7 @@ board.addEventListener('pointercancel',function(e){endDrag(e,true);});
 /* ---------- public API ---------- */
 function newGame(){if(online){online.send({t:'new'});resetGame();}else if(vsAI||local)resetGame();else startOnline();}
 function resetGame(){
- notice='';jobId++;thinking=false;G.setFen(G.START);rec=[];hidePromo();drag=null;$('ghost').style.display='none';
+ gameCounted=false; notice='';jobId++;thinking=false;G.setFen(G.START);rec=[];hidePromo();drag=null;$('ghost').style.display='none';
  afterMove();
 }
 function undo(){
@@ -493,14 +521,14 @@ function startOnline(){
   onMessage:function(d){
    if(!online||!d)return;
    if(d.t==='new'){resetGame();}
-   else if(d.t==='resign'){if(!over){over={txt:myCol?TX.resW:TX.resB};hidePromo();sel=-1;dests=[];render();}}
+   else if(d.t==='resign'){if(!over){over={txt:myCol?TX.resW:TX.resB,w:myCol};hidePromo();sel=-1;dests=[];render();recordOver();}}
    else if(d.t==='move'){
     var m=(!over&&G.side!==myCol&&d.n===rec.length+1&&typeof d.uci==='string')?G.fromUci(d.uci):0;
     if(!m){notice=TX.desync;render();return;}
     doMove(m,true);
    }
   },
-  onClose:function(){if(!online)return;goLocal();notice=TX.disc;sel=-1;dests=[];hidePromo();render();setTimeout(startOnline,0);},
+  onClose:function(){if(!online)return;if(!over&&rec.length>=4){over={txt:TX.leftWin,w:myCol};recordOver();}goLocal();notice=TX.disc;sel=-1;dests=[];hidePromo();render();setTimeout(startOnline,0);},
   onCancel:function(){render();}
  };
  if(engineFn)opts.onAI=startAI;
@@ -508,7 +536,7 @@ function startOnline(){
 }
 function resign(){
  if(!online||over)return;
- online.send({t:'resign'});over={txt:myCol?TX.resB:TX.resW};hidePromo();sel=-1;dests=[];render();
+ online.send({t:'resign'});over={txt:myCol?TX.resB:TX.resW,w:myCol^1};hidePromo();sel=-1;dests=[];render();recordOver();
 }
 function getFen(){return G.getFen();}
 
@@ -516,12 +544,14 @@ window.newGame=newGame;window.undo=undo;window.hint=hint;window.toggleAuto=toggl
 window.setLevel=setLevel;window.flipBoard=flipBoard;window.swapSides=swapSides;window.attachEngine=attachEngine;window.getFen=getFen;window.startOnline=startOnline;window.isOnline=isOnline;window.resign=resign;
 window.__chess={
  CE:CE,
+ total:function(){loadTot();return JSON.parse(JSON.stringify(tot));},
  perft:function(fen,d){var e=CE();e.setFen(!fen||fen==='start'?e.START:fen);return e.perft(d);},
  state:function(){return {fen:G.getFen(),over:over&&over.txt,moves:rec.map(function(r){return r.san;}),vsAI:isVsAI()};},
  playUci:function(u){if(online?(over||G.side!==myCol):(!vsAI&&!local))return false;var m=G.fromUci(u);if(!m)return false;doMove(m);return true;}
 };
 
 $('bOnline').textContent=TX.onl;$('bResign').textContent=TX.resign;$('bOnline').onclick=startOnline;$('bResign').onclick=resign;
+$('bTotRst').onclick=resetTot;
 $('bNew').onclick=newGame;$('bUndo').onclick=undo;$('bFlip').onclick=flipBoard;$('bHint').onclick=hint;
 $('sLvl').onchange=function(){setLevel(this.value);};
 $('bSwap').onclick=swapSides;
@@ -536,7 +566,7 @@ function layout(){
  $('boardWrap').style.setProperty('--bs',bs+'px');$('ghost').style.setProperty('--bs',bs+'px');
 }
 window.addEventListener('resize',layout);layout();
-resetGame();
+loadTot();resetGame();
 if(!local)window.addEventListener('load',function(){setTimeout(function(){if(!online&&!vsAI)startOnline();},50);});
 })();
 </script>
