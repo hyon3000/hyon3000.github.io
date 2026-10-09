@@ -30,17 +30,10 @@
   function present(s) { return !(s.x === 0 && s.y === 0); }
   function inLane(s) { return s.x < -6.9 && s.y > 9.5; }                               // the plunger lane at the bottom right
   // ---- features: ball x, y, the last two velocity steps, previous action (one-hot of 4), score gained during the last decision ----
-  var NOBS = 19, VS = 1 / 2.5;
+  var NOBS = 17, VS = 1 / 2.5;
   // ---- rule layer ("do not pump while the ball is cradled"): in the flipper zone with the ball nearly at rest the flippers are released and nudges are off until it rolls (or, after 2.5 s,
   // ONE kick flip knocks it loose); outside the hit range keys keep a minimum hold (press 3 decisions, release 2).  The same mask is applied in training and in the page. ----
   var ZONE_Y = 8, REST = 0.12, KICK_MS = 2500;
-  // flipper geometry in table units (this build; calibrated from ball positions while rolling on the resting flippers: lines of the ball CENTRE from the outer end (pivot side) to the tip end;
-  // verified by projecting them onto a screenshot, see training/flipper_geometry_overlay.png).  x > 0 is the LEFT flipper on screen.
-  function mkG(O, T) { var dx = T[0] - O[0], dy = T[1] - O[1], L = Math.hypot(dx, dy), u = [dx / L, dy / L], n = [u[1], -u[0]]; if (n[1] > 0) n = [-n[0], -n[1]]; return { O: O, L: L, u: u, n: n }; }
-  var GEO = { L: mkG([3.27, 10.72], [0.58, 12.71]), R: mkG([-2.92, 11.01], [-0.23, 12.82]) };
-  var WIN = { s0: 0.5, s1: 1.2, h0: -0.4, h1: 1.5 };                                              // tip window: the outer end of the flipper's length is excluded (s < 0.5), up to 1.5 units above the surface
-  function inWin(g, x, y) { var dx = x - g.O[0], dy = y - g.O[1], s = (dx * g.u[0] + dy * g.u[1]) / g.L, h = dx * g.n[0] + dy * g.n[1]; return s >= WIN.s0 && s <= WIN.s1 && h >= WIN.h0 && h <= WIN.h1; }
-  function bottom(x, y) { return y > 9 && x > -3.9 && x < 3.9; }                                    // the region where the two lower flippers act
   function inZone(x, y) { return y > ZONE_Y && x > -6.5; }
   function atRest(hp) { if (hp.length < 4) return false; var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; for (var i = 0; i < 4; i++) { x0 = Math.min(x0, hp[i][0]); x1 = Math.max(x1, hp[i][0]); y0 = Math.min(y0, hp[i][1]); y1 = Math.max(y1, hp[i][1]); } return Math.max(x1 - x0, y1 - y0) < REST; }
   function Driver(M, keyfn, addr) {
@@ -48,7 +41,7 @@
   }
   var P = Driver.prototype;
   P.reset = function () {
-    this.holdEnd = 0; this.stillT = 0; this.pf = null; this.pt = 0; this.live = false; this.ld = 0; this.h = []; this.act = 0; this.dsc = 0; this.lastScore = 0; this.idleT = 0; this.k = { L: 0, R: 0, S: 0 }; this.nudgeUp = 0; this.nudgeKey = null; this.lastNudge = -1e9; this.nn = 0; this.now = 0; this.tilted = 0; this.hp = []; this.hl = 99; this.hr = 99; this.cradleT = 0; this.kickN = 0; this.kickEnd = 0; this.cradled = 0; this.wL = false; this.wR = false; this.mask = [1, 1, 1, 1, 1, 1, 1, 1];
+    this.holdEnd = 0; this.stillT = 0; this.pf = null; this.pt = 0; this.live = false; this.ld = 0; this.h = []; this.act = 0; this.dsc = 0; this.lastScore = 0; this.idleT = 0; this.k = { L: 0, R: 0, S: 0 }; this.nudgeUp = 0; this.nudgeKey = null; this.lastNudge = -1e9; this.nn = 0; this.now = 0; this.tilted = 0; this.hp = []; this.hl = 99; this.hr = 99; this.cradleT = 0; this.kickN = 0; this.kickEnd = 0; this.cradled = 0; this.mask = [1, 1, 1, 1, 1, 1, 1, 1];
   };
   P.setKey = function (name, down) {
     if (this.k[name] === (down ? 1 : 0)) return; this.k[name] = down ? 1 : 0;
@@ -103,18 +96,14 @@
     var zone = inZone(s.x, s.y), cr = zone && atRest(this.hp);
     if (cr && !this.cradled) { this.cradleT = now; this.kickN = 0; this.kickEnd = 0; }
     this.cradled = cr ? 1 : 0;
-    var bt = bottom(s.x, s.y), vy = this.hp.length > 1 ? this.hp[0][1] - this.hp[1][1] : 0, rising = vy < -0.15;
-    this.wL = bt && inWin(GEO.L, s.x, s.y) && !rising; this.wR = bt && inWin(GEO.R, s.x, s.y) && !rising;
-    var L = [1, 1], R = [1, 1], nud = 1, cL = this.k.L, cR = this.k.R;
-    if (bt) { L = this.wL ? [1, 1] : [1, 0]; R = this.wR ? [1, 1] : [1, 0]; nud = (this.wL || this.wR || s.y > 12.3) ? 1 : 0; }      // in the flipper region a flipper may be pressed ONLY while the ball is in its tip window
-    // minimum hold (press 3 decisions, release 2): a flipper that was just pressed stays up even after the ball left the window
-    if (cL && this.hl < 3) L = [0, 1]; else if (!cL && this.hl < 2 && L[1]) L = [1, 0];
-    if (cR && this.hr < 3) R = [0, 1]; else if (!cR && this.hr < 2 && R[1]) R = [1, 0];
+    var L = [1, 1], R = [1, 1], nud = 1, free = zone && !cr;                                        // free: the ball is in hit range, no hold limits
+    var cL = this.k.L, cR = this.k.R;
+    if (!free) { if (cL && this.hl < 3) L = [0, 1]; else if (!cL && this.hl < 2) L = [1, 0]; if (cR && this.hr < 3) R = [0, 1]; else if (!cR && this.hr < 2) R = [1, 0]; }
     if (cr) {
-      nud = 0;
-      if (this.kickN > 0 && this.kickN < 4) { var kl = s.x > 0; L = kl ? [0, 1] : [1, 0]; R = kl ? [1, 0] : [0, 1]; this.kickN++; }         // one kick flip (held 3 decisions) after 2.5 s of lying still
+      L = [1, 0]; R = [1, 0]; nud = 0;                                                              // cradled: let the flippers down, no nudge
+      if (this.kickN > 0 && this.kickN < 4) { var kl = s.x > 0; L = kl ? [0, 1] : [1, 0]; R = kl ? [1, 0] : [0, 1]; this.kickN++; }         // hold the kick flip for 3 decisions
       else if (this.kickN === 0 && now - this.cradleT > KICK_MS) { this.kickN = 1; var k2 = s.x > 0; L = k2 ? [0, 1] : [1, 0]; R = k2 ? [1, 0] : [0, 1]; this.kickEnd = now; }
-      else if (this.kickN >= 4 && now - this.kickEnd > KICK_MS) { this.kickN = 0; this.cradleT = now - KICK_MS; }
+      else if (this.kickN >= 4 && now - this.kickEnd > KICK_MS) { this.kickN = 0; this.cradleT = now - KICK_MS; }             // still balanced: another kick later
     }
     var m = [];
     for (var a = 0; a < 4; a++) m.push(L[a & 1] && R[(a >> 1) & 1] ? 1 : 0);
@@ -125,7 +114,7 @@
     o[0] = a[0] / 8; o[1] = a[1] / 12;
     o[2] = (a[0] - b[0]) * VS; o[3] = (a[1] - b[1]) * VS; o[4] = (b[0] - c[0]) * VS; o[5] = (b[1] - c[1]) * VS;
     o[6 + this.act] = 1; o[10] = Math.min(1, Math.max(0, this.dsc) / 2000); o[11] = Math.min(1, s.score / 300000);
-    o[12] = Math.min(1, (this.now - this.lastNudge) / 10000); o[13] = Math.min(8, this.nn) / 8; o[14] = s.tilt ? 1 : 0; o[15] = this.cradled; o[16] = this.cradled ? Math.min(1, (this.now - this.cradleT) / 3000) : 0; o[17] = this.wL ? 1 : 0; o[18] = this.wR ? 1 : 0;
+    o[12] = Math.min(1, (this.now - this.lastNudge) / 10000); o[13] = Math.min(8, this.nn) / 8; o[14] = s.tilt ? 1 : 0; o[15] = this.cradled; o[16] = this.cradled ? Math.min(1, (this.now - this.cradleT) / 3000) : 0;
     return o;
   };
   // ---- the exported MLP: two tanh layers + policy head (same layout as atari/ai.js) ----
@@ -147,24 +136,20 @@
   function sample(v) { var m = Math.max.apply(null, v), p = [], t = 0, i; for (i = 0; i < v.length; i++) { p[i] = Math.exp(v[i] - m); t += p[i]; } var r = Math.random() * t; for (i = 0; i < v.length; i++) { r -= p[i]; if (r <= 0) return i; } return v.length - 1; }
   function argmax(v) { var b = 0; for (var i = 1; i < v.length; i++) if (v[i] > v[b]) b = i; return b; }
   // the same rule for the vision bot: it only needs to know "is the ball cradled?"; update(now) returns 0 (free), 1 (cradled: no flipper / no nudge) or 2 (cradled for > 2.5 s: do ONE kick flip now)
-  function Guard(M, addr) { this.M = M; this.A = addr; this.hp = []; this.t = 0; this.cT = 0; this.kT = 0; this.st = 0; this.bottom = false; this.inL = false; this.inR = false; this.nudgeOK = true; }
+  function Guard(M, addr) { this.M = M; this.A = addr; this.hp = []; this.t = 0; this.cT = 0; this.kT = 0; }
   Guard.prototype.update = function (now) {
-    if (now - this.t < 60) return this.st; this.t = now;
-    var s = read(this.M, this.A);
-    if (!sane(s) || !present(s)) { this.hp = []; this.cT = 0; this.bottom = false; this.inL = this.inR = false; this.nudgeOK = true; return this.st = 0; }
+    if (now - this.t < 60) return this.st || 0; this.t = now;
+    var s = read(this.M, this.A); if (!sane(s) || !present(s)) { this.hp = []; this.cT = 0; return this.st = 0; }
     this.hp.unshift([s.x, s.y]); if (this.hp.length > 6) this.hp.pop();
-    var vy = this.hp.length > 1 ? this.hp[0][1] - this.hp[1][1] : 0, rising = vy < -0.15;
-    this.bottom = bottom(s.x, s.y); this.inL = this.bottom && inWin(GEO.L, s.x, s.y) && !rising; this.inR = this.bottom && inWin(GEO.R, s.x, s.y) && !rising;
-    this.nudgeOK = !this.bottom || this.inL || this.inR || s.y > 12.3;
     if (!(inZone(s.x, s.y) && atRest(this.hp))) { this.cT = 0; return this.st = 0; }
     if (!this.cT) { this.cT = now; this.kT = now; }
-    this.side = s.x > 0 ? 'L' : 'R'; this.nudgeOK = false;
+    this.side = s.x > 0 ? 'L' : 'R';
     if (now - this.kT > KICK_MS) { this.kT = now; return this.st = 2; }
     return this.st = 1;
   };
   window.PinballAI = {
     Guard: Guard,
-    OFF: OFF, GEO: GEO, WIN: WIN, inWin: inWin, bottom: bottom, inZone: inZone, atRest: atRest, STEP_MS: STEP_MS, NOBS: NOBS, Driver: Driver, read: read, sane: sane, locate: locate,
+    OFF: OFF, inZone: inZone, atRest: atRest, STEP_MS: STEP_MS, NOBS: NOBS, Driver: Driver, read: read, sane: sane, locate: locate,
     ready: function () { return !!window.PINBALL_AI; },
     // can the state be read from this build?  returns the addresses (or null) - only if exactly one record passes every invariant
     check: function (M) { try { return M && M.HEAPF32 && M.HEAP32 && M.HEAPU8.length > 1e6 ? locate(M) : null; } catch (e) { return null; } },

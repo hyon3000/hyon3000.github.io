@@ -100,13 +100,19 @@
       if (prev && g[p] > 150 && mx - mn < 28 && Math.abs(g[p] - prev[p]) > 60) { n++; cx += p % rw; cy += (p / rw) | 0; }      // a moving grey-white (steel) blob; the coloured lights are ignored
     }
     prev = g; var now = performance.now();
-    var gs = vguard ? vguard.update(now) : 0;                              // rule layer (needs the memory readout): a cradled ball is not pumped; after 2.5 s one kick flip
+    var have = n >= 8 && n <= 160; if (have) { cx = cx / n / rw; cy = cy / n / rh; }
+    var gs = vguard ? vguard.update(now) : 0;                              // rule layer (needs the memory readout): in the flipper region a flipper is pressed ONLY while the ball is in its tip window; a cradled ball is not pumped (one kick flip after 2.5 s)
     if (gs === 2) press(vguard.side === 'L' ? '.pb.fl' : '.pb.fr', 200);
-    if (gs === 0 && n >= 8 && n <= 160) {
-      cx = cx / n / rw; cy = cy / n / rh; lastMotion = now;
-      if (cy > 0.35) press(cx < 0.45 ? '.pb.fl' : '.pb.fr', 140);       // ball in front of a flipper: hit it
-      if (cy > 0.8 && cy - pcy > 0.01) { if (cx > 0.3 && cx < 0.7) nudge('ArrowUp', 38, 'ArrowUp'); else if (cx <= 0.3) nudge('KeyX', 88, 'x'); else nudge('Period', 190, '.'); }       // the ball sinks towards the drain: shake the table
-      pcy = cy;
+    else if (gs === 0) {
+      if (vguard && vguard.bottom) { if (vguard.inL) press('.pb.fl', 160); if (vguard.inR) press('.pb.fr', 160); }
+      else if (have) {
+        lastMotion = now;
+        if (cy > 0.35) press(cx < 0.45 ? '.pb.fl' : '.pb.fr', 140);       // ball somewhere else (upper flippers) or no readout: hit when it moves in front of a flipper
+      }
+      if (have) {
+        if (cy > 0.8 && cy - pcy > 0.01 && (!vguard || vguard.nudgeOK)) { if (cx > 0.3 && cx < 0.7) nudge('ArrowUp', 38, 'ArrowUp'); else if (cx <= 0.3) nudge('KeyX', 88, 'x'); else nudge('Period', 190, '.'); }       // the ball sinks towards the drain: shake the table
+        pcy = cy;
+      }
     }
     if (now - lastLaunch > 6500) {                                        // every few seconds pull the plunger (it does nothing while a ball is in play, but starts the next ball)
       lastLaunch = now; var b = document.querySelector('.pb.ln'); key('keydown', b); b.classList.add('on'); setTimeout(function () { key('keyup', b); b.classList.remove('on'); }, 1000 + Math.random() * 400);
