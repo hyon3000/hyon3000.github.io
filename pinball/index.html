@@ -18,18 +18,13 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: auto; background: #
 #status { position: absolute; left: 0; right: 0; top: 40%; text-align: center; color: #fff; font: 13px sans-serif; pointer-events: none; }
 #frame { position: relative; background: #000; }
 #autoBadge { position: absolute; left: 50%; top: 4px; transform: translateX(-50%); z-index: 5; padding: 2px 12px; border-radius: 10px; background: rgba(20,140,60,.85); color: #fff; font: bold 13px sans-serif; pointer-events: none; text-shadow: 0 1px 2px #000; }
-#pad { position: absolute; inset: 0; pointer-events: none; display: none; }
-#pad.on { display: block; }
-.pb { position: absolute; pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none; border: 2px solid rgba(255,255,255,.55); background: rgba(40,60,140,.38); color: #fff !important; font: bold 13px sans-serif; border-radius: 14px; padding: 0; opacity: .8; text-shadow: 0 1px 2px #000; }
+#pad { display: none; padding: 6px; background: #111; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+#pad.on { display: grid; }
+.pb { touch-action: none; user-select: none; -webkit-user-select: none; border: 2px solid rgba(255,255,255,.55); background: rgba(40,60,140,.55); color: #fff !important; font: bold 14px sans-serif; border-radius: 12px; padding: 0; min-height: 44px; text-shadow: 0 1px 2px #000; }
+.pb.fl { grid-area: 1 / 1; min-height: 56px; } .pb.ln { grid-area: 1 / 2; min-height: 56px; background: rgba(40,140,60,.6); } .pb.fr { grid-area: 1 / 3; min-height: 56px; }
+.pb.nl { grid-area: 2 / 1; } .pb.nu { grid-area: 2 / 2; } .pb.nr { grid-area: 2 / 3; } .pb.ng { grid-area: 3 / 1 / 3 / 4; min-height: 36px; font-size: 12px; }
 .pb span { color: #fff !important; }
 .pb.on { background: rgba(255,200,40,.6); }
-.pb.fl { left: 1%; bottom: 2%; width: 26%; height: 14%; }
-.pb.fr { right: 1%; bottom: 2%; width: 26%; height: 14%; }
-.pb.ln { right: 1%; bottom: 18%; width: 22%; height: 11%; background: rgba(40,140,60,.42); }
-.pb.nl { left: 1%; bottom: 18%; width: 22%; height: 9%; font-size: 11px; }
-.pb.nr { left: 24%; bottom: 18%; width: 22%; height: 9%; font-size: 11px; }
-.pb.nu { left: 37%; bottom: 3%; width: 22%; height: 9%; font-size: 11px; }
-.pb.ng { right: 1%; top: 8%; width: 17%; height: 8%; font-size: 11px; }
 .d-hint { font-size: 11px; color: #333; margin: 3px 6px 4px; }
 .windows-98 .window.gdialog { position: fixed; left: 50%; top: 120px; transform: translateX(-50%); z-index: 100; display: none; width: 300px; }
 .gdialog .window-content { padding: 8px; box-sizing: border-box; width: auto; }
@@ -86,6 +81,7 @@ ul.menu { min-width: 150px; width: max-content; }
               <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　폴리큐브</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });"><a href="#">　아타리 브레이크아웃</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../2048/index.html'; });"><a href="#">　2048</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../doodle/index.html'; });"><a href="#">　2D 피직스</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#">　T-Rex</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../nonogram/index.html'; });"><a href="#">　노노그램</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=mahjong'; });"><a href="#">　마작</a></li>
@@ -107,7 +103,8 @@ ul.menu { min-width: 150px; width: max-content; }
     <div class="window-content">
       <div id="frame"><div id="status">Downloading...</div><canvas id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
         <div id="autoBadge" data-t="autoon" style="display:none">자동 풀이 중</div>
-        <div id="pad">
+        </div>
+      <div id="pad">
           <button class="pb fl" data-key="KeyZ" data-kc="90" data-k="z"><span data-t="bl">◀ 왼쪽</span></button>
           <button class="pb fr" data-key="Slash" data-kc="191" data-k="/"><span data-t="br">오른쪽 ▶</span></button>
           <button class="pb ln" data-key="Space" data-kc="32" data-k=" "><span data-t="bs">발사</span></button>
@@ -115,7 +112,7 @@ ul.menu { min-width: 150px; width: max-content; }
           <button class="pb nr" data-key="Period" data-kc="190" data-k="."><span data-t="bnr">흔들기 ↗</span></button>
           <button class="pb nu" data-key="ArrowUp" data-kc="38" data-k="ArrowUp"><span data-t="bnu">↑ 흔들기</span></button>
           <button class="pb ng" id="padNew"><span data-t="bn">새 게임</span></button>
-        </div></div>
+        </div>
       <div class="d-hint" id="hint"></div>
     </div>
   </div>
@@ -139,7 +136,7 @@ ul.menu { min-width: 150px; width: max-content; }
 /* "Other games" entries that are not translated by the page itself: English names for non-Korean browsers */
 (function () {
   if (/^ko/i.test(navigator.language || 'ko')) return;
-  var EN = { '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '미로 먹보': 'Maze Chomper', '스왑 퍼즐': 'Swap Puzzle', '카드게임': 'Card Games', '바둑&오목': 'Go & Gomoku', '체스': 'Chess', '화투': 'Hwatu', '트럼프': 'Trump Cards', '마작': 'Mahjong', '노노그램': 'Nonogram', '큐브 퍼즐': 'Cube Puzzles', '스네이크': 'Snake', '지뢰찾기': 'Minesweeper', '폴리큐브': 'Polycube' };
+  var EN = { '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '2D 피직스': '2D Physics', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '미로 먹보': 'Maze Chomper', '스왑 퍼즐': 'Swap Puzzle', '카드게임': 'Card Games', '바둑&오목': 'Go & Gomoku', '체스': 'Chess', '화투': 'Hwatu', '트럼프': 'Trump Cards', '마작': 'Mahjong', '노노그램': 'Nonogram', '큐브 퍼즐': 'Cube Puzzles', '스네이크': 'Snake', '지뢰찾기': 'Minesweeper', '폴리큐브': 'Polycube' };
   function run() { [].forEach.call(document.querySelectorAll('.menu a'), function (a) { if (a.children.length) return; var s = a.textContent.replace(/^[\u3000\s]+/, ''); if (EN[s]) a.textContent = '\u3000' + EN[s]; }); }
   if (document.readyState === 'complete') run(); else window.addEventListener('load', run);
 })();

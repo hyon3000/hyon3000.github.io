@@ -33,7 +33,16 @@ function variants(f, lv) {
       [64, 90].forEach(function (s) { V.push([box(cx + w / 3, Y - 7, s)]); });
     }
   } else if (f.type === 'wall') {
-    [36, 44, 28, 52].forEach(function (a) { var run = f.h / Math.tan(a * Math.PI / 180); V.push([line(f.x0 - run - 6, Y - 5, f.x0 + 8, f.top - 5)]); });
+    var ups = [36, 44, 28, 52].map(function (a) { var run = f.h / Math.tan(a * Math.PI / 180); return line(f.x0 - run - 6, Y - 5, f.x0 + 8, f.top - 5); });
+    ups.forEach(function (u) { V.push([u]); });
+    [36, 44, 28].forEach(function (a) {          // one bent stroke: up the ramp, along the top, (down the far side)
+      var run = f.h / Math.tan(a * Math.PI / 180), pts = line(f.x0 - run - 6, Y - 5, f.x0 + 4, f.top - 5);
+      if (f.end) { V.push([pts.concat(line(f.x0 + 4, f.top - 5, 1150, f.top - 5))]); return; }
+      var run2 = Math.min(f.h / Math.tan(25 * Math.PI / 180), 60);
+      V.push([pts.concat(line(f.x0 + 4, f.top - 5, f.x1 - 4, f.top - 5), line(f.x1 - 4, f.top - 5, f.x1 + run2, Y - 5))]);
+      V.push([pts.concat(line(f.x0 + 4, f.top - 5, f.x1 + 6, f.top - 5))]);
+    });
+    if (!f.end) { var run2 = Math.min(f.h / Math.tan(25 * Math.PI / 180), 60), dn = line(f.x1 - 8, f.top - 5, f.x1 + run2, Y - 5); ups.forEach(function (u) { V.push([u, dn]); }); }
   } else V = [[]];                            // crates / dominoes: try without help first, random strokes otherwise
   return V;
 }
@@ -56,21 +65,22 @@ function* rollout(lv, snap, events, maxSteps) {
     sim.step();
     if (sim.bx > maxX) maxX = sim.bx;
     if (sim.bx > anchor + 4) { anchor = sim.bx; lastProg = s; }
-    if (s - lastProg > 210 && !sim.rope && ei >= events.length) return { ok: false, why: 'stalled', steps: s, maxX: maxX, got: sim.stars.filter(function (q) { return q.got; }).length };
+    if (s - lastProg > 210 && !sim.rope && ei >= events.length) return { ok: false, why: 'stalled', steps: s, maxX: maxX, got: sim.next };
+    if (sim.wrong) return { ok: false, why: 'wrong', steps: s, maxX: maxX, got: sim.next };
     if (sim.won) return { ok: true, steps: s + 1, maxX: maxX, got: sim.stars.length };
-    if (sim.dead()) return { ok: false, why: 'fall', steps: s, maxX: maxX, got: sim.stars.filter(function (q) { return q.got; }).length };
+    if (sim.dead()) return { ok: false, why: 'fall', steps: s, maxX: maxX, got: sim.next };
     var v = sim.ball.getLinearVelocity();
-    if (!sim.rope && Math.abs(v.x) + Math.abs(v.y) < 0.2) { if (++still > 90) return { ok: false, why: 'stuck', steps: s, maxX: maxX, got: sim.stars.filter(function (q) { return q.got; }).length }; } else still = 0;
-    if ((s & 127) === 127 && now() > ctl.deadline) yield;
+    if (!sim.rope && Math.abs(v.x) + Math.abs(v.y) < 0.2) { if (++still > 90) return { ok: false, why: 'stuck', steps: s, maxX: maxX, got: sim.next }; } else still = 0;
+    if ((s & 31) === 31 && now() > ctl.deadline) yield;
   }
-  return { ok: false, why: 'timeout', steps: s, maxX: maxX, got: sim.stars.filter(function (q) { return q.got; }).length };
+  return { ok: false, why: 'timeout', steps: s, maxX: maxX, got: sim.next };
 }
 function score(r) { return r.got * 3000 + r.maxX; }
 function clone(c) { return { picks: c.picks.slice(), vars: c.vars, extras: c.extras.slice(), cut: c.cut }; }
 
 function* plan(lv, snap, running, opts) {
   opts = opts || {};
-  var t0 = now(), n = 0, maxRollouts = opts.maxRollouts || 160, feats = lv.features;
+  var t0 = now(), n = 0, maxRollouts = opts.maxRollouts || 160, maxMs = opts.maxMs || 60000, feats = lv.features;
   var vars = feats.map(function (f) { return variants(f, lv); });
   var cons = { picks: feats.map(function () { return 0; }), vars: vars, extras: [], cut: snap.rope ? 0 : null };
   var rng = DP.mulberry32(DP.hash2(lv.seed, lv.L * 31 + snap.simT + snap.strokes.length));
@@ -89,7 +99,7 @@ function* plan(lv, snap, running, opts) {
   cur = yield* ev(cons);
   for (var iter = 0; iter < 12; iter++) {
     if (cur.ok) return done(cons, cur);
-    if (n > maxRollouts) break;
+    if (n > maxRollouts || now() - t0 > maxMs) break;
     var idx = -1;
     for (i = 0; i < feats.length; i++) if (feats[i].x1 > cur.maxX - 20) { idx = i; break; }
     if (idx < 0) idx = feats.length - 1;
@@ -101,7 +111,7 @@ function* plan(lv, snap, running, opts) {
         c2 = clone(cons); c2.picks[fi] = vi; r = yield* ev(c2);
         if (r.ok) return done(c2, r);
         if (r.score > cur.score + 5 && (!best || r.score > best.r.score)) best = { c: c2, r: r };
-        if (n > maxRollouts) break;
+        if (n > maxRollouts || now() - t0 > maxMs) break;
       }
       if (best) break;
     }
@@ -109,7 +119,7 @@ function* plan(lv, snap, running, opts) {
       for (var t2 = 0; t2 <= 150; t2 += 6) { if (t2 === cons.cut) continue; c2 = clone(cons); c2.cut = t2; r = yield* ev(c2); if (r.ok) return done(c2, r); if (r.score > cur.score + 5 && (!best || r.score > best.r.score)) best = { c: c2, r: r }; }
     }
     if (!best) {                              // random shooting near where the ball gave up
-      for (var k = 0; k < 40 && n <= maxRollouts; k++) {
+      for (var k = 0; k < 40 && n <= maxRollouts && now() - t0 <= maxMs; k++) {
         var cx = cur.maxX - 140 + rng() * 360, gy = lv.gy(Math.max(0, Math.min(1200, cx))), raw;
         if (rng() < 0.6) { var len = 70 + rng() * 170, ang = (rng() - 0.5) * 2, cy = gy - 10 - rng() * 110; raw = line(cx - Math.cos(ang) * len / 2, cy - Math.sin(ang) * len / 2, cx + Math.cos(ang) * len / 2, cy + Math.sin(ang) * len / 2); }
         else raw = box(cx, gy - 6 - rng() * 120, 30 + rng() * 60);

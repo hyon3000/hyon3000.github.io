@@ -6,8 +6,9 @@ from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 
 URL = 'http://127.0.0.1:8765/harness.html'
-NOBS = 12
-NACT = 4
+NOBS = 15
+NACT = 4      # flipper combos; plus 4 nudge choices (none, up, left, right) in a second head
+NNUD = 4
 
 
 class Env:
@@ -37,17 +38,18 @@ class Env:
         if r.get('timeout'):
             raise RuntimeError('timeout %s' % r)
         self.obs = np.array(r['obs'], np.float32) if r['obs'] is not None else None
-        self.rscore = r['score']; self.done = r['done']; self.over = r['over']; self.stuck = r['stuck']
+        self.rscore = r['score']; self.done = r['done']; self.over = r['over']; self.stuck = r['stuck']; self.nn = r.get('nn', 0); self.tilt = r.get('tilt', 0)
         return r
 
-    def step(self, a):
+    def step(self, a, n=0):
         """returns obs, score_delta, done(ball lost), over(game over). After done the next live obs is fetched automatically (obs returned is of the NEW ball)."""
         prev = self.score
-        r = self.d.execute_script('return E.step(arguments[0])', int(a))
+        r = self.d.execute_script('return E.step(arguments[0], arguments[1])', int(a), int(n))
         self._take(r)
         self.score = self.rscore
         dsc = self.score - prev
         done, over = self.done, self.over
+        self.last_nn, self.last_tilt = self.nn, self.tilt
         if done:
             if over:
                 self.game_scores.append(self.score)

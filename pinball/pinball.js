@@ -77,9 +77,9 @@
   };
   soundLabel();
   // ---- table nudge for the auto player (X / . / Up): used sparingly (the game tilts when it is shaken too often) ----
-  var nudgeLast = 0;
+  var nudgeLast = 0, nudgeSent = 0; window.pinballNudges = 0; window.pinballTilts = 0;
   function nudge(code, kc, k) {
-    var now = performance.now(); if (now - nudgeLast < 3000) return; nudgeLast = now;
+    var now = performance.now(); if (now - nudgeLast < 3000) return; nudgeLast = now; nudgeSent++; window.pinballNudges = nudgeSent + (rl ? rl.nTotal : 0);
     var c = document.getElementById('canvas'), mk = function (t) { var o = { key: k, code: code, keyCode: kc, which: kc, bubbles: true, cancelable: true }, e = new KeyboardEvent(t, o); try { Object.defineProperty(e, 'keyCode', { get: function () { return kc; } }); Object.defineProperty(e, 'which', { get: function () { return kc; } }); } catch (x) {} c.dispatchEvent(e); };
     mk('keydown'); setTimeout(function () { mk('keyup'); }, 110);
   }
@@ -131,8 +131,8 @@
     if (!r) return;
     if (r.bad) { if (!rlBad) rlBad = now; if (now - rlBad > (now - rlNewAt < 20000 ? 20000 : 4000)) { rlStop(); startVision(); window.pinballAuto = 'vision'; } return; }          // the memory does not look as expected any more (another build?): fall back to the vision bot
     rlBad = 0;
-    if (r.done) { if (r.over) rlOverAt = now + 5000; }
-    else { rl.apply(window.PinballAI.policy(r.obs)); var ny = r.obs[1] * 12, nx = r.obs[0] * 8, nvy = r.obs[3] * 2.5; if (ny > 10 && nvy > 0.15 && nx > -6.5) nudge('ArrowUp', 38, 'ArrowUp'); }       // sinking towards the drain: shake the table
+    if (r.done) { if (r.tilt) window.pinballTilts++; if (r.over) rlOverAt = now + 5000; }
+    else { var act = window.PinballAI.policy(r.obs); rl.apply(act[0]); rl.nudge(act[1]); window.pinballNudges = nudgeSent + rl.nTotal; }       // the model chooses the flippers AND the table nudge
   }
   function startRL() {
     var addr = null;

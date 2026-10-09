@@ -101,6 +101,7 @@ ul.menu { min-width: 150px; width: max-content; }
               <li onclick="return runMenu(function(){ window.location.href='../index.html'; });"><a href="#" data-t="mine">　지뢰찾기</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　폴리큐브</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });"><a href="#">　아타리 브레이크아웃</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../doodle/index.html'; });"><a href="#">　2D 피직스</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../pinball/index.html'; });"><a href="#">　3D 핀볼</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#">　T-Rex</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../nonogram/index.html'; });"><a href="#">　노노그램</a></li>
@@ -178,7 +179,7 @@ ul.menu { min-width: 150px; width: max-content; }
 /* "Other games" entries that are not translated by the page itself: English names for non-Korean browsers */
 (function () {
   if (/^ko/i.test(navigator.language || 'ko')) return;
-  var EN = { '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '미로 먹보': 'Maze Chomper', '스왑 퍼즐': 'Swap Puzzle', '카드게임': 'Card Games', '바둑&오목': 'Go & Gomoku', '체스': 'Chess', '화투': 'Hwatu', '트럼프': 'Trump Cards', '마작': 'Mahjong', '노노그램': 'Nonogram', '큐브 퍼즐': 'Cube Puzzles', '스네이크': 'Snake', '지뢰찾기': 'Minesweeper', '폴리큐브': 'Polycube' };
+  var EN = { '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '2D 피직스': '2D Physics', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '미로 먹보': 'Maze Chomper', '스왑 퍼즐': 'Swap Puzzle', '카드게임': 'Card Games', '바둑&오목': 'Go & Gomoku', '체스': 'Chess', '화투': 'Hwatu', '트럼프': 'Trump Cards', '마작': 'Mahjong', '노노그램': 'Nonogram', '큐브 퍼즐': 'Cube Puzzles', '스네이크': 'Snake', '지뢰찾기': 'Minesweeper', '폴리큐브': 'Polycube' };
   function run() { [].forEach.call(document.querySelectorAll('.menu a'), function (a) { if (a.children.length) return; var s = a.textContent.replace(/^[\u3000\s]+/, ''); if (EN[s]) a.textContent = '\u3000' + EN[s]; }); }
   if (document.readyState === 'complete') run(); else window.addEventListener('load', run);
 })();

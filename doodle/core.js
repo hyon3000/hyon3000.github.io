@@ -124,7 +124,7 @@ function genLevel(seed, L) {
   var hmax = Math.min(150, 40 + L * 7.5);
   var wmax = Math.min(340, 130 + L * 14);
   var nf = Math.min(1 + Math.floor((L - 1) / 3), 4);
-  var D = Math.min(450, Math.round(2.4 * hmax + 90));
+  var D = Math.min(460, Math.round(3.0 * hmax + 110));
   var Y1 = r12(rr(600, 640));
   var Ys = Y1 - D;
   var dl = r12(180 + 0.4 * D);
@@ -243,15 +243,18 @@ function genLevel(seed, L) {
   var last = features.length ? features[features.length - 1] : null;
   if (last && last.end) stars.push({ x: W - 70, y: last.top - 18 }); else stars.push({ x: W - 70, y: Y1 - 18 });
   var extra = 0;
-  if (L >= 4) { extra = rnd() < Math.min(0.85, 0.35 + (L - 4) * 0.1) ? 1 : 0; if (L >= 8 && rnd() < 0.5) extra++; }
+  if (L >= 8) { extra = 1 + (rnd() < 0.6 ? 1 : 0) + (L >= 12 && rnd() < 0.5 ? 1 : 0); }   // ordered levels: 2-4 stars
   var cands = [];
   features.forEach(function (f) {
     if (f.type === 'wall' && !f.end) cands.push({ x: (f.x0 + f.x1) / 2, y: f.top - 18 });
-    else if (f.type === 'pit') cands.push({ x: f.x1 + 40, y: Y1 - 18 });
+    else if (f.type === 'pit') { cands.push({ x: f.x1 + 40, y: Y1 - 18 }); if (f.variant === 'plain' || f.variant === 'bounce') cands.push({ x: (f.x0 + f.x1) / 2, y: Y1 - 34 }); }
   });
   while (cands.length < extra) cands.push({ x: r12(rr(xD + 24, xF - 60)), y: Y1 - 18 });
   for (i = cands.length - 1; i > 0; i--) { var j = Math.floor(rnd() * (i + 1)); var tmp = cands[i]; cands[i] = cands[j]; cands[j] = tmp; }
-  for (i = 0; i < extra && i < cands.length; i++) stars.push({ x: cands[i].x, y: cands[i].y });
+  for (i = 0, j = 0; j < extra && i < cands.length; i++) { var okc = true; stars.forEach(function (st0) { if (Math.hypot(st0.x - cands[i].x, st0.y - cands[i].y) < 80) okc = false; }); if (okc && cands[i].x > xD + 20) { stars.push({ x: cands[i].x, y: cands[i].y }); j++; } }
+  // required collection order (indices into stars): along the route, left to right; the goal star is the right-most so it is last
+  var order = stars.map(function (s, k) { return k; }).sort(function (a, b) { return stars[a].x - stars[b].x; });
+  order.forEach(function (k, rank) { stars[k].n = rank + 1; });
   // ----- rope: the ball hangs from a rope above the start slope and must be cut loose (swipe across it)
   var rope = null, start = { x: 70, y: gy(70) - BALL_R - 1 };
   if (wantRope && Ys >= 190) {
@@ -276,7 +279,7 @@ function genLevel(seed, L) {
     jets.forEach(function (jt) { if (cx + exx > jt.x0 - 20 && cx - exx < jt.x1 + 20 && cy + ext > Y1 - 260) ok = false; });
     if (ok) { boxes.push({ cx: cx, cy: cy, hw: hw, hh: hh, a: ang2, kind: 'slab' }); slabs++; }
   }
-  var lv = { seed: seed, L: L, Ys: Ys, Y1: Y1, D: D, xD: xD, chains: chains, boxes: boxes, dyn: dyn, seesaws: seesaws, jets: jets, rope: rope, stars: stars, features: features,
+  var lv = { seed: seed, L: L, Ys: Ys, Y1: Y1, D: D, xD: xD, chains: chains, boxes: boxes, dyn: dyn, seesaws: seesaws, jets: jets, rope: rope, stars: stars, order: order, features: features,
     start: start, gy: gy, ice: iceOn ? [iceX0, iceX1] : null };
   var hh2 = 0; var acc = function (v) { hh2 = hash2(hh2, Math.round(v * 10)); };
   chains.forEach(function (ch) { ch.pts.forEach(function (p2) { acc(p2[0]); acc(p2[1]); }); acc(ch.mat === 'ice' ? 1 : 0); });
@@ -350,8 +353,8 @@ function Sim(lv, snap) {
   });
   this.ball = world.createBody({ type: 'dynamic', position: V(lv.start.x, lv.start.y), bullet: true, angularDamping: 0.02 });
   this.ball.createFixture({ shape: new planck.Circle(BALL_R / S), density: 1.5, friction: 0.6, restitution: 0.05 });
-  this.stars = lv.stars.map(function (s) { return { x: s.x, y: s.y, got: false }; });
-  this.strokes = []; this.nextId = 1; this.simT = 0; this.won = false; this.rope = null; this.bx = lv.start.x; this.by = lv.start.y; this.onStroke = null; this.events = [];
+  this.stars = lv.stars.map(function (s) { return { x: s.x, y: s.y, got: false, n: s.n || 1 }; }); this.next = 0; this.wrong = false;
+  this.strokes = []; this.pins = []; this.nextId = 1; this.simT = 0; this.won = false; this.rope = null; this.bx = lv.start.x; this.by = lv.start.y; this.onStroke = null; this.events = [];
   if (lv.rope) this.makeRope();
   if (snap) this.restore(snap);
 }
@@ -413,8 +416,22 @@ Sim.prototype.addStroke = function (raw, meta) {
   var geom = makeGeom(raw); if (!geom) return null;
   return this.addGeom(geom, meta);
 };
+Sim.prototype.addPin = function (st, wx, wy) {
+  if (this.strokes.indexOf(st) < 0 || this.pins.length >= 40) return null;
+  var anchor = this.world.createBody({ type: 'static', position: V(wx, wy) });
+  var joint = this.world.createJoint(new planck.RevoluteJoint({}, anchor, st.body, V(wx, wy)));
+  st.body.setAwake(true);
+  var pin = { st: st, x: wx, y: wy, anchor: anchor, joint: joint };
+  this.pins.push(pin); return pin;
+};
+Sim.prototype.removePin = function (pin) {
+  var i = this.pins.indexOf(pin); if (i < 0) return false;
+  this.pins.splice(i, 1); try { this.world.destroyBody(pin.anchor); } catch (e) {}
+  pin.st.body.setAwake(true); return true;
+};
 Sim.prototype.removeStroke = function (st) {
   var i = this.strokes.indexOf(st); if (i < 0) return false;
+  this.pins.filter(function (p) { return p.st === st; }).forEach(this.removePin, this);
   this.strokes.splice(i, 1); try { this.world.destroyBody(st.body); } catch (e) {} return true;
 };
 Sim.prototype.applyJets = function () {
@@ -431,22 +448,25 @@ Sim.prototype.step = function () {
   this.world.step(1 / 60, 8, 3);
   this.simT++;
   var p = this.ball.getPosition(); this.bx = p.x * S; this.by = p.y * S;
-  var left = 0;
+  var order = this.lv.order;
   for (var i = 0; i < this.stars.length; i++) {
     var s = this.stars[i];
-    if (!s.got && Math.hypot(this.bx - s.x, this.by - s.y) < BALL_R + STAR_R) { s.got = true; this.events.push('star'); }
-    if (!s.got) left++;
+    if (!s.got && Math.hypot(this.bx - s.x, this.by - s.y) < BALL_R + STAR_R) {
+      if (order[this.next] === i) { s.got = true; this.next++; this.events.push('star'); }
+      else if (!this.wrong) { this.wrong = true; this.events.push('wrong'); }
+    }
   }
-  if (!left) this.won = true;
+  if (this.next >= order.length) this.won = true;
   for (var k = this.strokes.length - 1; k >= 0; k--) { var sp = this.strokes[k].body.getPosition(); if (sp.y * S > H + 500 || sp.x * S < -400 || sp.x * S > W + 400) this.removeStroke(this.strokes[k]); }
 };
 Sim.prototype.dead = function () { return this.by > H + 60 || this.by < -1500; };
 function bstate(b) { var p = b.getPosition(), v = b.getLinearVelocity(); return { x: p.x * S, y: p.y * S, a: b.getAngle(), vx: v.x * S, vy: v.y * S, w: b.getAngularVelocity() }; }
 function bset(b, s) { b.setPosition(V(s.x, s.y)); b.setAngle(s.a); b.setLinearVelocity(Vec2(s.vx / S, s.vy / S)); b.setAngularVelocity(s.w); b.setAwake(true); }
 Sim.prototype.snapshot = function () {
-  return { simT: this.simT, ball: bstate(this.ball), rope: !!this.rope, won: this.won,
+  return { next: this.next, simT: this.simT, ball: bstate(this.ball), rope: !!this.rope, won: this.won,
     got: this.stars.map(function (s) { return s.got; }),
     props: this.props.map(function (p) { return bstate(p.body); }),
+    pins: this.pins.map(function (p) { return { sid: p.st.id, x: p.x, y: p.y }; }),
     strokes: this.strokes.map(function (st) { var o = bstate(st.body); o.geom = st.geom; o.id = st.id; o.color = st.color; o.seed = st.seed; return o; }) };
 };
 Sim.prototype.restore = function (snap) {
@@ -455,8 +475,9 @@ Sim.prototype.restore = function (snap) {
   if (!snap.rope && this.rope) this.cutRope();
   this.props.forEach(function (p, i) { if (snap.props[i]) bset(p.body, snap.props[i]); });
   snap.strokes.forEach(function (s) { self.addGeom(s.geom, { id: s.id, color: s.color, seed: s.seed }, s); });
+  (snap.pins || []).forEach(function (pp) { var st = self.strokes.filter(function (q) { return q.id === pp.sid; })[0]; if (st) self.addPin(st, pp.x, pp.y); });
   this.stars.forEach(function (s, i) { s.got = !!snap.got[i]; });
-  this.simT = snap.simT; var p = this.ball.getPosition(); this.bx = p.x * S; this.by = p.y * S;
+  this.next = snap.next || 0; this.simT = snap.simT; var p = this.ball.getPosition(); this.bx = p.x * S; this.by = p.y * S;
   this.events = [];
 };
 

@@ -4,7 +4,7 @@
 'use strict';
 var KO = /^ko/i.test(navigator.language || 'ko');
 var TX = KO ? {
-  title: '2D 피직스', level: '레벨', seed: '시드', best: '최고', eraser: '지우개', cut: '자르기', undo: '되돌리기', restart: '다시', start: '시작',
+  title: '2D 피직스', level: '레벨', seed: '시드', best: '최고', eraser: '지우개', cut: '자르기', undo: '되돌리기', restart: '다시', start: '시작', wrong: '순서가 틀렸어요',  pin: '핀', hintBoost: '공을 누르면 속도가 붙습니다.', hintPin: '핀: 그린 물체를 눌러 그 점에 고정합니다(그 점을 중심으로 회전). 핀을 다시 누르거나 지우개로 지우면 빠집니다.', pin: '핀', hintPin: '핀: 그린 물체를 눌러 그 점에 고정합니다(그 점을 중심으로 회전). 핀을 다시 누르거나 지우개로 지우면 빠집니다.',
   hint0: '끌어서 그리면 물체가 됩니다. 공을 모든 별에 닿게 하세요. 다 그렸으면 Space(시작).',
   hintRope: ' 밧줄은 자르기 모드(또는 오른쪽 버튼 드래그)로 가로질러 쓸어서 끊습니다.',
   hintRun: '막히면 다시(R)로 같은 레벨을 처음부터. 공이 떨어지면 1초 뒤 제자리로 돌아옵니다.',
@@ -12,7 +12,7 @@ var TX = KO ? {
   tooMany: '선이 너무 많아 가장 오래된 선을 지웠어요', thinking: '풀이를 찾는 중...', nosol: '해답을 찾지 못했습니다.', autoOn: '자동으로 푸는 중...',
   hintShown: '힌트: 선 하나를 그렸어요. 다시 누르면 다음 단계입니다.', hintRunMsg: '힌트: 시작했어요.', hintCutMsg: '힌트: 밧줄을 잘랐어요.'
 } : {
-  title: '2D Physics', level: 'Level', seed: 'Seed', best: 'Best', eraser: 'Eraser', cut: 'Cut', undo: 'Undo', restart: 'Restart', start: 'Start',
+  title: '2D Physics', level: 'Level', seed: 'Seed', best: 'Best', eraser: 'Eraser', cut: 'Cut', undo: 'Undo', restart: 'Restart', start: 'Start', wrong: 'Wrong order',  pin: 'Pin', hintBoost: 'Press on the ball to give it a push.', hintPin: 'Pin: click a drawn object to pin it at that point (it rotates around the pin). Click a pin again, or use the eraser, to remove it.', pin: 'Pin', hintPin: 'Pin: click a drawn object to pin it at that point (it rotates around the pin). Click a pin again, or use the eraser, to remove it.',
   hint0: 'Drag to draw - drawings become solid objects. Make the ball touch every star. When ready press Space (start).',
   hintRope: ' Cut the rope in Cut mode (or right-button drag) by swiping across it.',
   hintRun: 'Stuck? Restart (R) replays the same level. A fallen ball returns to its start after 1 s.',
@@ -139,8 +139,8 @@ function prepStroke(st) { if (!st.passes) prepRender(st); }
 function loadLevel(sd, L, keepAuto) {
   seed0 = sd >>> 0; levelNo = L;
   level = DP.genLevel(seed0, L);
-  sim = new DP.Sim(level); sim.onStroke = prepStroke;
-  running = false; won = false; winT = 0; fallT = 0; particles = []; preview = null; swipeFx = null;
+  sim = new DP.Sim(level); sim.onStroke = prepStroke; history = [];
+  running = false; won = false; winT = 0; fallT = 0; failing = false; failT = 0; particles = []; preview = null; swipeFx = null;
   var f = auto.failures, r = auto.restarts; resetAutoPlan(); if (keepAuto) { auto.failures = f; auto.restarts = r; } else { auto.failures = 0; auto.restarts = 0; }
   staticDirty = true; updateHud(); setStatus(TX.hint0 + (level.rope ? TX.hintRope : ''));
   try { var u = new URL(location.href); u.searchParams.set('seed', seed0); u.searchParams.set('level', L); history.replaceState(null, '', u.toString()); } catch (e) {}
@@ -152,10 +152,37 @@ function addStroke(raw) {
   var st = sim.addStroke(raw, { color: COLORS[colorIdx++ % COLORS.length], seed: (Math.random() * 1e9) | 0 });
   if (!st) return null;
   if (sim.events.indexOf('toomany') >= 0) { sim.events = []; setStatus(TX.tooMany); }
-  userChanged();
+  history.push({ t: 'stroke', st: st }); userChanged();
   return st;
 }
-function undoStroke() { if (!sim.strokes.length) return false; sim.removeStroke(sim.strokes[sim.strokes.length - 1]); userChanged(); return true; }
+var history = [];
+function undoStroke() {
+  while (history.length) {
+    var a = history.pop();
+    if (a.t === 'stroke' && sim.strokes.indexOf(a.st) >= 0) { sim.removeStroke(a.st); userChanged(); return true; }
+    if (a.t === 'pin' && sim.pins.indexOf(a.pin) >= 0) { sim.removePin(a.pin); userChanged(); return true; }
+  }
+  return false;
+}
+function toWorldPt(st, lx, ly) { var p = st.body.getPosition(), a = st.body.getAngle(), c = Math.cos(a), s = Math.sin(a); return [p.x * S + lx * c - ly * s, p.y * S + lx * s + ly * c]; }
+function nearestPin(x, y, r) { var b = null, bd = r; sim.pins.forEach(function (p) { var d = Math.hypot(p.x - x, p.y - y); if (d <= bd) { bd = d; b = p; } }); return b; }
+function pinAt(x, y) {
+  var near = nearestPin(x, y, 13);
+  if (near) { sim.removePin(near); userChanged(); return 'removed'; }
+  var st = strokeAt(x, y); if (!st) return null;
+  var pt = [x, y];
+  if (st.kind === 'line') {                       // snap to the nearest point of the rod
+    var bd = 1e9;
+    for (var i = 0; i + 1 < st.loc.length; i++) {
+      var a = st.loc[i], b = st.loc[i + 1], w0 = toWorldPt(st, a[0], a[1]), w1 = toWorldPt(st, b[0], b[1]);
+      var dx = w1[0] - w0[0], dy = w1[1] - w0[1], l2 = dx * dx + dy * dy, t = l2 < 1e-9 ? 0 : Math.max(0, Math.min(1, ((x - w0[0]) * dx + (y - w0[1]) * dy) / l2));
+      var q = [w0[0] + dx * t, w0[1] + dy * t], d = Math.hypot(q[0] - x, q[1] - y);
+      if (d < bd) { bd = d; pt = q; }
+    }
+  }
+  var pin = sim.addPin(st, pt[0], pt[1]); if (!pin) return null;
+  history.push({ t: 'pin', pin: pin }); userChanged(); return pin;
+}
 function strokeAt(x, y) {
   for (var i = sim.strokes.length - 1; i >= 0; i--) {
     var st = sim.strokes[i], b = st.body, p = b.getPosition(), a = b.getAngle(), c = Math.cos(-a), s = Math.sin(-a);
@@ -169,7 +196,7 @@ function strokeAt(x, y) {
   }
   return null;
 }
-function eraseAt(x, y) { var st = strokeAt(x, y); if (st) { sim.removeStroke(st); userChanged(); return true; } return false; }
+function eraseAt(x, y) { var np = nearestPin(x, y, 13); if (np) { sim.removePin(np); userChanged(); return true; } var st = strokeAt(x, y); if (st) { sim.removeStroke(st); userChanged(); return true; } return false; }
 function segSegDist(p, q, a, b) {
   var cr = function (o, u, v) { return (u[0] - o[0]) * (v[1] - o[1]) - (u[1] - o[1]) * (v[0] - o[0]); };
   var d1 = cr(a, b, p), d2 = cr(a, b, q), d3 = cr(p, q, a), d4 = cr(p, q, b);
@@ -184,9 +211,30 @@ function cutSwipe(p, q) {
   startSim(); userChanged();
   return true;
 }
+var boostT = -999, boostFx = null, failing = false, failT = 0;
+function ballHit(x, y) { return Math.hypot(x - sim.bx, y - sim.by) <= BALL_R + 6; }
+function boostBall() {                       // press on the ball: +3 m/s along its velocity (toward a star / up-right when almost at rest)
+  if (!running || won) return false;
+  if (sim.simT - boostT < 15) return true;     // cooldown (~0.25 s); the press is still swallowed
+  boostT = sim.simT;
+  var b = sim.ball, v = b.getLinearVelocity(), sp = Math.hypot(v.x, v.y), dx, dy;
+  if (sp > 0.5) { dx = v.x / sp; dy = v.y / sp; }
+  else {
+    var tgt = null, bd = 1e9; sim.stars.forEach(function (s) { if (!s.got && Math.abs(s.x - sim.bx) < bd) { bd = Math.abs(s.x - sim.bx); tgt = s; } });
+    var sx = tgt ? (tgt.x >= sim.bx ? 1 : -1) : 1; dx = sx * 0.86; dy = -0.5;
+  }
+  var nvx = v.x + dx * 3, nvy = v.y + dy * 3, ns = Math.hypot(nvx, nvy);
+  if (ns > 14) { nvx *= 14 / ns; nvy *= 14 / ns; }
+  b.setLinearVelocity(planck.Vec2(nvx, nvy)); b.setAwake(true);
+  boostFx = { life: 1, dx: dx, dy: dy };
+  for (var i = 0; i < 8; i++) { var a = Math.atan2(dy, dx) + Math.PI + (Math.random() - 0.5) * 1.6, sv = 80 + Math.random() * 120; particles.push({ x: sim.bx, y: sim.by, vx: Math.cos(a) * sv, vy: Math.sin(a) * sv, life: 0.6, rot: Math.random() * 6, c: i % 2 ? '#ffd166' : '#ef476f' }); }
+  return true;
+}
 function stepOnce() {
+  if (failing) { if (--failT <= 0) { failing = false; if (auto.on) auto.failures++; restartLevel(autoActive()); } return; }
   if (!running || auto.phase === 'planning') return;
   sim.step();
+  if (sim.wrong && !won) { failing = true; failT = 60; setStatus(TX.wrong); sim.events = []; return; }
   if (sim.events.length) { sim.events.forEach(function (e) { if (e === 'star') { burst(sim.bx, sim.by, 16); updateHud(); } }); sim.events = []; }
   if (!won) {
     if (sim.won) { won = true; winT = 90; burst(sim.bx, sim.by, 40); if (levelNo > best) { best = levelNo; try { localStorage.setItem('doodle_best', String(best)); } catch (e) {} } updateHud(); }
@@ -268,19 +316,25 @@ function sparklePath(c, x, y, r, rot) {
   c.quadraticCurveTo(x + Math.cos(rot - Math.PI / 8) * r * 0.28, y + Math.sin(rot - Math.PI / 8) * r * 0.28, x + Math.cos(rot) * r, y + Math.sin(rot) * r);
   c.closePath();
 }
-function drawStar(c, s, t) {
+function drawStar(c, s, t, isNext, multi) {
   var x = s.x, y = s.y + Math.sin(t * 2.2 + s.x) * 2.5, rot = Math.sin(t * 1.1 + s.y) * 0.25 - Math.PI / 2;
   c.save();
   var pulse = 0.5 + 0.5 * Math.sin(t * 3 + s.x);
   c.strokeStyle = '#ef476f'; c.lineWidth = 2; c.lineCap = 'round'; c.globalAlpha = 0.35 + 0.35 * pulse;
   for (var i = 0; i < 8; i++) { var an = i * Math.PI / 4 + t * 0.4; c.beginPath(); c.moveTo(x + Math.cos(an) * (STAR_R + 6), y + Math.sin(an) * (STAR_R + 6)); c.lineTo(x + Math.cos(an) * (STAR_R + 10 + 3 * pulse), y + Math.sin(an) * (STAR_R + 10 + 3 * pulse)); c.stroke(); }
   sparklePath(c, x, y, STAR_R + 6, rot); c.fillStyle = '#ffd166'; c.globalAlpha = 0.97; c.fill(); c.lineWidth = 2.6; c.strokeStyle = INK; c.lineJoin = 'round'; c.stroke();
-  c.beginPath(); c.arc(x, y, 3.2, 0, 6.3); c.fillStyle = '#ef476f'; c.fill();
+  if (multi) {
+    var col = COLORS[(s.n - 1) % COLORS.length];
+    if (isNext) { c.beginPath(); c.arc(x, y, STAR_R + 12 + 3 * pulse, 0, 6.3); c.strokeStyle = col; c.lineWidth = 3; c.globalAlpha = 0.5 + 0.4 * pulse; c.stroke(); }
+    c.globalAlpha = 1; c.beginPath(); c.arc(x, y, 9, 0, 6.3); c.fillStyle = col; c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke();
+    c.fillStyle = '#fff'; c.font = 'bold 12px "Comic Sans MS","Noto Sans KR",sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(s.n), x, y + 0.5);
+  } else { c.beginPath(); c.arc(x, y, 3.2, 0, 6.3); c.fillStyle = '#ef476f'; c.fill(); }
   c.restore(); c.globalAlpha = 1;
 }
 function drawBall(c, t) {
   var p = sim.ball.getPosition(), a = sim.ball.getAngle(), x = p.x * S, y = p.y * S, v = sim.ball.getLinearVelocity();
   c.save(); c.translate(x, y);
+  if (boostFx) { boostFx.life -= 0.07; if (boostFx.life <= 0) boostFx = null; else { var k = Math.sin(boostFx.life * Math.PI) * 0.3, an = Math.atan2(boostFx.dy, boostFx.dx); c.rotate(an); c.scale(1 + k, 1 - k * 0.8); c.rotate(-an); } }
   c.beginPath(); c.arc(0, 0, BALL_R, 0, 6.3); c.fillStyle = '#8ecae6'; c.globalAlpha = 0.97; c.fill();
   c.save(); c.clip(); c.rotate(a); c.strokeStyle = '#ffffff'; c.globalAlpha = 0.8; c.lineWidth = 3.5; c.beginPath(); c.arc(-BALL_R * 0.5, -BALL_R * 0.45, BALL_R * 0.9, 0.2, 1.7); c.stroke();
   c.strokeStyle = '#2e86ab'; c.globalAlpha = 0.55; c.lineWidth = 2; c.beginPath(); c.moveTo(-BALL_R, 0); c.quadraticCurveTo(0, -5, BALL_R, 0); c.stroke(); c.restore();
@@ -299,6 +353,14 @@ function drawRope(c) {
   }
   c.beginPath(); c.arc(r.ax, r.ay, 7, 0, 6.3); c.fillStyle = '#c9ced8'; c.globalAlpha = 1; c.fill(); c.lineWidth = 2.6; c.strokeStyle = INK; c.stroke();
   c.beginPath(); c.arc(r.ax - 2, r.ay - 2, 2, 0, 6.3); c.fillStyle = '#fff'; c.fill();
+}
+function drawPin(c, p) {
+  c.save(); c.translate(p.x, p.y); c.lineCap = 'round'; c.lineJoin = 'round';
+  c.beginPath(); c.moveTo(0, 0); c.lineTo(-3, -9); c.strokeStyle = INK; c.lineWidth = 2.4; c.stroke();
+  c.beginPath(); c.arc(-4.5, -13, 7, 0, 6.3); c.fillStyle = '#ef476f'; c.globalAlpha = 1; c.fill(); c.lineWidth = 2.4; c.strokeStyle = INK; c.stroke();
+  c.beginPath(); c.arc(-6.5, -15, 2, 0, 6.3); c.fillStyle = '#fff'; c.fill();
+  c.beginPath(); c.arc(0, 0, 2.2, 0, 6.3); c.fillStyle = INK; c.fill();
+  c.restore();
 }
 function drawJets(c, t) {
   level.jets.forEach(function (j) {
@@ -390,7 +452,8 @@ function render(ts) {
   sim.props.forEach(function (p) { drawProp(ctx, p); });
   sim.strokes.forEach(function (st) { drawStroke(ctx, st); });
   drawRope(ctx);
-  sim.stars.forEach(function (s) { if (!s.got) drawStar(ctx, s, vt); });
+  sim.pins.forEach(function (p) { drawPin(ctx, p); });
+  sim.stars.forEach(function (s, k) { if (!s.got) drawStar(ctx, s, vt, level.order[sim.next] === k, sim.stars.length > 1); });
   drawBall(ctx, vt);
   if (preview && preview.length > 1) {
     var cutting = mode === 'cut' && !preview.__auto;
@@ -414,6 +477,11 @@ function render(ts) {
     ctx.globalAlpha = Math.min(1, p.life * 1.5); sparklePath(ctx, p.x, p.y, 6 + 6 * p.life, p.rot); ctx.fillStyle = p.c; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1.2; ctx.stroke();
   }
   ctx.globalAlpha = 1;
+  if (failing) {
+    ctx.save(); ctx.globalAlpha = 0.18 + 0.12 * Math.sin(vt * 25); ctx.fillStyle = '#e63946'; ctx.fillRect(-offx / sc, -offy / sc, cw / sc, ch / sc); ctx.globalAlpha = 1;
+    ctx.translate(W / 2, 170); ctx.rotate(0.03); ctx.font = 'bold 64px "Comic Sans MS","Segoe Print","Noto Sans KR",cursive'; ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+    ctx.lineWidth = 12; ctx.strokeStyle = '#f9f5ea'; ctx.strokeText(TX.wrong, 0, 0); ctx.lineWidth = 3.5; ctx.strokeStyle = INK; ctx.strokeText(TX.wrong, 0, 0); ctx.fillStyle = '#e63946'; ctx.fillText(TX.wrong, 0, 0); ctx.restore();
+  }
   if (won) {
     ctx.save(); ctx.translate(W / 2, 170); ctx.rotate(-0.04); ctx.font = 'bold 76px "Comic Sans MS","Segoe Print","Noto Sans KR",cursive'; ctx.textAlign = 'center';
     ctx.lineWidth = 12; ctx.strokeStyle = '#f9f5ea'; ctx.lineJoin = 'round'; ctx.strokeText(TX.win, 0, 0); ctx.lineWidth = 3.5; ctx.strokeStyle = INK; ctx.strokeText(TX.win, 0, 0); ctx.fillStyle = '#ef476f'; ctx.fillText(TX.win, 0, 0); ctx.restore();
@@ -429,7 +497,7 @@ function frame(ts) {
     while (acc >= 1 / 60 && n < 4) { advance(); acc -= 1 / 60; n++; }
     if (n === 4) acc = 0;
     if (!running) autoTick();
-    pumpPlan(10);
+    pumpPlan(12);
   }
   render(ts);
 }
@@ -449,13 +517,15 @@ function updateHud() {
   var got = sim.stars.filter(function (s) { return s.got; }).length;
   $('chLevel').textContent = TX.level + ' ' + levelNo;
   $('chSeed').textContent = TX.seed + ' ' + seed0;
-  $('chStars').textContent = '★ ' + got + '/' + sim.stars.length;
+  if (sim.stars.length === 1) $('chStars').textContent = '★ ' + got + '/1';
+  else $('chStars').innerHTML = level.order.map(function (k, r) { var cls = r < sim.next ? 'ns done' : r === sim.next ? 'ns next' : 'ns'; return '<i class="' + cls + '" style="--c:' + COLORS[r % COLORS.length] + '">' + (r + 1) + '</i>'; }).join('');
   $('chBest').textContent = TX.best + ' ' + best;
   $('btnStart').style.display = running || won ? 'none' : '';
-  $('btnErase').classList.toggle('on', mode === 'erase'); $('btnCut').classList.toggle('on', mode === 'cut');
+  $('btnErase').classList.toggle('on', mode === 'erase'); $('btnPin').classList.toggle('on', mode === 'pin'); $('btnCut').classList.toggle('on', mode === 'cut');
 }
-function setMode(m) { mode = m; updateHud(); setStatus(m === 'erase' ? TX.hintErase : m === 'cut' ? TX.hintCut : (running ? TX.hintRun : TX.hint0)); }
+function setMode(m) { mode = m; updateHud(); setStatus(m === 'pin' ? TX.hintPin : m === 'erase' ? TX.hintErase : m === 'cut' ? TX.hintCut : (running ? TX.hintRun : TX.hint0)); }
 function toggleEraser() { setMode(mode === 'erase' ? 'draw' : 'erase'); return mode === 'erase'; }
+function togglePin() { setMode(mode === 'pin' ? 'draw' : 'pin'); return mode === 'pin'; }
 function toggleCut() { setMode(mode === 'cut' ? 'draw' : 'cut'); return mode === 'cut'; }
 function toWorld(e) { var r = canvas.getBoundingClientRect(); return [(e.clientX - r.left - offx) / sc, (e.clientY - r.top - offy) / sc]; }
 var drawing = null, touches = {};
@@ -464,6 +534,8 @@ function initInput() {
   canvas.addEventListener('pointerdown', function (e) {
     e.preventDefault(); touches[e.pointerId] = 1;
     var w = toWorld(e);
+    if (e.button !== 2 && Object.keys(touches).length === 1 && running && !won && ballHit(w[0], w[1])) { boostBall(); drawing = null; preview = null; return; }
+    if (mode === 'pin' && e.button !== 2 && Object.keys(touches).length === 1) { pinAt(w[0], w[1]); return; }
     if (e.button === 2 || Object.keys(touches).length > 1) { drawing = { erase: true, last: w, id: e.pointerId }; preview = null; eraseAt(w[0], w[1]); return; }
     if (mode === 'erase') { drawing = { erase: true, last: w, id: e.pointerId, only: true }; eraseAt(w[0], w[1]); return; }
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
@@ -496,15 +568,16 @@ function initInput() {
     if (/^F[234]$/.test(k)) { if (embedded) return; e.preventDefault(); if (k === 'F2') newGame(); else if (k === 'F3') toggleAuto(); else giveHint(); return; }
     if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'Z')) { e.preventDefault(); undoStroke(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (k === 'r' || k === 'R') { restartLevel(); } else if (k === ' ') { e.preventDefault(); startSim(); userChanged(); } else if (k === 'e' || k === 'E') { toggleEraser(); } else if (k === 'c' || k === 'C') { toggleCut(); }
+    if (k === 'r' || k === 'R') { restartLevel(); } else if (k === ' ') { e.preventDefault(); startSim(); userChanged(); } else if (k === 'e' || k === 'E') { toggleEraser(); } else if (k === 'c' || k === 'C') { toggleCut(); } else if (k === 'p' || k === 'P') { togglePin(); }
   });
   $('btnStart').onclick = function () { startSim(); userChanged(); };
   $('btnErase').onclick = function () { toggleEraser(); };
   $('btnCut').onclick = function () { toggleCut(); };
+  $('btnPin').onclick = function () { togglePin(); };
   $('btnUndo').onclick = function () { undoStroke(); };
   $('btnRestart').onclick = function () { restartLevel(); };
   $('chSeed').onclick = function () {
-    var u = location.href; try { navigator.clipboard.writeText(u).then(function () { setStatus(TX.copied); }, function () { setStatus(TX.nolink + u); }); } catch (e) { setStatus(TX.nolink + u); }
+    var u = location.href; try { if (window.parent !== window) { var pu = new URL(window.parent.location.href); pu.searchParams.set('seed', seed0); pu.searchParams.set('level', levelNo); u = pu.toString(); } } catch (e0) {} try { navigator.clipboard.writeText(u).then(function () { setStatus(TX.copied); }, function () { setStatus(TX.nolink + u); }); } catch (e) { setStatus(TX.nolink + u); }
   };
   window.addEventListener('message', function (e) { var m = e.data; if (m && m.ngCmd && typeof window[m.ngCmd] === 'function') { var r = window[m.ngCmd](m.v); if (m.ngCmd === 'toggleAuto') markAuto(!!r); } });
 }
@@ -512,7 +585,7 @@ function initInput() {
 function init() {
   document.documentElement.lang = KO ? 'ko' : 'en';
   document.title = TX.title;
-  $('btnStart').textContent = '▶ ' + TX.start; $('btnErase').textContent = '✐ ' + TX.eraser; $('btnCut').textContent = '✂ ' + TX.cut; $('btnUndo').textContent = '↶ ' + TX.undo; $('btnRestart').textContent = '⟲ ' + TX.restart;
+  $('btnStart').textContent = '▶ ' + TX.start; $('btnErase').textContent = '✐ ' + TX.eraser; $('btnCut').textContent = '✂ ' + TX.cut; $('btnPin').textContent = '◉ ' + TX.pin; $('btnUndo').textContent = '↶ ' + TX.undo; $('btnRestart').textContent = '⟲ ' + TX.restart;
   canvas = $('cv'); ctx = canvas.getContext('2d');
   var q = new URLSearchParams(location.search), sd = parseInt(q.get('seed'), 10), lv = parseInt(q.get('level'), 10);
   loadLevel(isFinite(sd) ? sd : 1 + Math.floor(Math.random() * 99999), isFinite(lv) && lv >= 1 ? lv : 1);
@@ -523,17 +596,17 @@ function init() {
 }
 
 /* ---- API for the shell + tests ---- */
-window.newGame = newGame; window.restartLevel = restartLevel; window.undoStroke = undoStroke; window.toggleEraser = toggleEraser; window.toggleCut = toggleCut;
+window.newGame = newGame; window.restartLevel = restartLevel; window.undoStroke = undoStroke; window.toggleEraser = toggleEraser; window.toggleCut = toggleCut; window.togglePin = togglePin;
 window.toggleAuto = toggleAuto; window.giveHint = giveHint;
 window.getLevelInfo = function () { return { level: levelNo, seed: seed0 }; };
 window.__dp = {
   DP: DP,
   get sim() { return sim; }, get level() { return level; }, get strokes() { return sim.strokes; }, get ball() { return sim.ball; }, get stars() { return sim.stars; }, get auto() { return auto; },
   set manual(v) { manual = !!v; }, get manual() { return manual; },
-  load: loadLevel, restart: restartLevel, newGame: newGame, addStroke: addStroke, undo: undoStroke, erase: eraseAt, strokeAt: strokeAt, start: startSim, cut: cutSwipe,
+  load: loadLevel, restart: restartLevel, newGame: newGame, addStroke: addStroke, undo: undoStroke, erase: eraseAt, strokeAt: strokeAt, start: startSim, cut: cutSwipe, pinAt: pinAt, boost: boostBall, get pins() { return sim.pins; },
   step: function (n) { for (var i = 0; i < (n || 1); i++) { stepOnce(); if (running) autoTick(); else autoTick(); } },
   pump: function (budget) { pumpPlan(budget == null ? 1e9 : budget); },
-  state: function () { return { running: running, won: won, level: levelNo, seed: seed0, got: sim.stars.filter(function (s) { return s.got; }).length, nstars: sim.stars.length, bx: sim.bx, by: sim.by, fall: fallT, bodies: sim.world.getBodyCount(), strokes: sim.strokes.length, mode: mode, simT: sim.simT, rope: !!sim.rope, auto: auto.on, hint: auto.hint, phase: auto.phase, step: auto.i, nsteps: auto.steps ? auto.steps.length : 0, failures: auto.failures, restarts: auto.restarts }; },
+  state: function () { return { running: running, won: won, level: levelNo, seed: seed0, got: sim.stars.filter(function (s) { return s.got; }).length, nstars: sim.stars.length, bx: sim.bx, by: sim.by, fall: fallT, bodies: sim.world.getBodyCount(), next: sim.next, failing: failing, strokes: sim.strokes.length, pins: sim.pins.length, mode: mode, simT: sim.simT, rope: !!sim.rope, auto: auto.on, hint: auto.hint, phase: auto.phase, step: auto.i, nsteps: auto.steps ? auto.steps.length : 0, failures: auto.failures, restarts: auto.restarts }; },
   checksum: function () { return level.checksum; },
   W: W, H: H
 };

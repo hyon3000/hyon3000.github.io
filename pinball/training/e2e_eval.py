@@ -19,7 +19,7 @@ def play(i):
         while time.time() - t < 90:
             if d.execute_script("return !!(window.Module && Module.HEAPF32 && Module.HEAPF32.length>1e6 && window.PinballAI && PinballAI.check(Module))"): break
             time.sleep(1)
-        else: return None, 'no state', 0
+        else: return None, 'no state', 0, [], 0, 0
         time.sleep(2)
         d.execute_script("window.__A = PinballAI.check(Module); toggleAuto()")
         t0 = time.time(); gone = 0; best = 0; mode = ''
@@ -31,9 +31,10 @@ def play(i):
             gone = gone + 1 if (s[3] >= 3 and not present) else 0
             if gone >= 3: break
         errs = d.execute_script("return __errs")
-        return best, mode, time.time() - t0, errs
+        nd, tl = d.execute_script("return [window.pinballNudges, window.pinballTilts]")
+        return best, mode, time.time() - t0, errs, nd, tl
     except Exception as e:
-        return None, 'exc %r' % e, 0, []
+        return None, 'exc %r' % e, 0, [], 0, 0
     finally:
         try: d.quit()
         except Exception: pass
@@ -43,10 +44,11 @@ def worker(k):
     out = []
     while len(res) + len(out) < a.games and len(res) < a.games:
         r = play(k); print(a.mode, r, flush=True)
-        if r[0] is not None: res.append(r)
+        if r[0] is not None and len(res) < a.games: res.append(r)
     return 1
 with ThreadPoolExecutor(a.par) as ex: list(ex.map(worker, range(a.par)))
 sc = [r[0] for r in res][:a.games]
 print('MODE', a.mode, 'games', len(sc), 'mean %.0f median %.0f std %.0f min %d max %d sem %.0f' % (np.mean(sc), np.median(sc), np.std(sc), min(sc), max(sc), np.std(sc) / np.sqrt(len(sc))))
+print('nudges/game mean %.1f  nudges/ball %.2f  tilts/game %.2f  secs/game %.0f' % (np.mean([r[4] for r in res]), np.mean([r[4] for r in res]) / 3, np.mean([r[5] for r in res]), np.mean([r[2] for r in res])))
 print('modes', sorted(set(r[1] for r in res)), 'errors', [r[3] for r in res if r[3]], 'durations', [round(r[2]) for r in res])
 if a.out: json.dump(sc, open(a.out, 'w'))

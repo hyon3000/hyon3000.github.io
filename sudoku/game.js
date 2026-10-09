@@ -279,13 +279,11 @@
     for (i = 0; i < 81; i++) if (vals[i] && vals[i] !== sol[i]) { wrong = i; break; }
     if (sel >= 0 && vals[sel] && vals[sel] !== sol[sel] && !given[sel]) wrong = sel;                   // the selected cell first if it is wrong
     if (wrong >= 0) { sel = wrong; hintCell = wrong; vals[wrong] = sol[wrong]; notes[wrong] = []; msg(T.fixed + sol[wrong]); render(); return; }       // wrong entries are corrected first, one per hint
-    var bestC = -1, bestN = 10;                                                     // the empty cell with the fewest candidates = the easiest deduction
-    for (i = 0; i < 81; i++) if (!vals[i]) {
-      var m = 0; for (var j = 0; j < 81; j++) if (vals[j] && j !== i && peer(i, j)) m |= 1 << (vals[j] - 1);
-      var n = 9 - pop(m); if (n < bestN) { bestN = n; bestC = i; }
-    }
-    if (bestC < 0) { msg(T.full); return; }
-    sel = bestC; hintCell = bestC; vals[bestC] = sol[bestC]; notes[bestC] = []; msg(T.hintMsg + sol[bestC]); render();
+    // the cell that logic opens next (the same deductions as the auto solver: a cell with one candidate left, else a digit that fits only one cell of a row / column / region / diagonal),
+    // with the reason in the status line; only when plain logic is stuck the unique solution is used
+    var s = logicStep();
+    if (!s) { msg(T.full); return; }
+    sel = s.c; hintCell = s.c; vals[s.c] = s.d; notes[s.c] = []; msg(s.why); render();
   };
 
   // ---------- game flow ----------
