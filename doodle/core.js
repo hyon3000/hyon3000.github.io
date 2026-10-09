@@ -118,7 +118,8 @@ function inPoly(px, py, p) {
 }
 
 /* ================= PROCEDURAL LEVEL ================= */
-function genLevel(seed, L) {
+function genLevel(seed, L, opts) {
+  var noRepair = !!(opts && opts.norepair), repairs = 0, invalidBefore = 0;
   var rnd = mulberry32(hash2(seed, L * 7919 + 13));
   var rr = function (a, b) { return a + (b - a) * rnd(); };
   var hmax = Math.min(150, 40 + L * 7.5);
@@ -293,22 +294,53 @@ function genLevel(seed, L) {
   // ----- stars
   var stars = [];
   var last = features.filter(function (f) { return f.end; })[0] || null;
-  if (last && last.end) stars.push({ x: W - 70, y: last.top - 18 }); else stars.push({ x: W - 70, y: Y1 - 18 });
+  if (last && last.end) stars.push({ x: W - 70, y: last.top - 24 }); else stars.push({ x: W - 70, y: Y1 - 24 });
   var extra = 0;
   if (L >= 8) { extra = 1 + (rnd() < 0.6 ? 1 : 0) + (L >= 12 && rnd() < 0.5 ? 1 : 0); }   // ordered levels: 2-4 stars
   var cands = [];
   features.forEach(function (f) {
-    if (f.type === 'wall' && !f.end) cands.push({ x: (f.x0 + f.x1) / 2, y: f.top - 18 });
-    else if (f.type === 'pit') { cands.push({ x: f.x1 + 40, y: Y1 - 18 }); if (f.variant === 'plain' || f.variant === 'bounce') cands.push({ x: (f.x0 + f.x1) / 2, y: Y1 - 34 }); }
+    if (f.type === 'wall' && !f.end) cands.push({ x: (f.x0 + f.x1) / 2, y: f.top - 24 });
+    else if (f.type === 'pit') { cands.push({ x: f.x1 + 40, y: Y1 - 24 }); if (f.variant === 'plain' || f.variant === 'bounce') cands.push({ x: (f.x0 + f.x1) / 2, y: Y1 - 34 }); }
   });
   var inSpecial = function (xx) { return features.some(function (f) { return (f.type === 'boost' || f.type === 'rotor' || f.type === 'spikes') && xx > f.x0 - 40 && xx < f.x1 + 40; }) || portals.some(function (pr) { return xx > pr.a.x - 40 && xx < pr.b.x + 40; }); };
   cands = cands.filter(function (q) { return !inSpecial(q.x); });
-  var tries2 = 0; while (cands.length < extra && tries2++ < 40) { var cxr = r12(rr(xD + 24, xF - 60)); if (!inSpecial(cxr)) cands.push({ x: cxr, y: Y1 - 18 }); }
+  var tries2 = 0; while (cands.length < extra && tries2++ < 40) { var cxr = r12(rr(xD + 24, xF - 60)); if (!inSpecial(cxr)) cands.push({ x: cxr, y: Y1 - 24 }); }
   for (i = cands.length - 1; i > 0; i--) { var j = Math.floor(rnd() * (i + 1)); var tmp = cands[i]; cands[i] = cands[j]; cands[j] = tmp; }
   for (i = 0, j = 0; j < extra && i < cands.length; i++) { var okc = true; stars.forEach(function (st0) { if (Math.hypot(st0.x - cands[i].x, st0.y - cands[i].y) < 80) okc = false; }); if (okc && cands[i].x > xD + 20) { stars.push({ x: cands[i].x, y: cands[i].y }); j++; } }
+  // ----- validation: every object must lie in free space (clearance = radius + 6 px) with respect to the static terrain, static props and killer zones
+  var pointFree = function (x, y, rad, extra) {
+    var m = rad + (extra == null ? 6 : extra), i, f;
+    if (x < m || x > W - m || y < m) return false;
+    var pit = null; features.forEach(function (g) { if (g.type === 'pit' && x > g.x0 && x < g.x1) pit = g; });
+    if (!pit) { if (y > gy(x) - m) return false; }
+    else if (Math.min(x - pit.x0, pit.x1 - x) < m && y > gy(pit.x0) - m) return false;
+    for (i = 0; i < boxes.length; i++) { var b = boxes[i], dx = x - b.cx, dy = y - b.cy, ca = Math.cos(-b.a), sa = Math.sin(-b.a), lx = dx * ca - dy * sa, ly = dx * sa + dy * ca; if (Math.hypot(Math.max(Math.abs(lx) - b.hw, 0), Math.max(Math.abs(ly) - b.hh, 0)) < m) return false; }
+    for (i = 0; i < dyn.length; i++) { var d = dyn[i]; if (Math.hypot(Math.max(Math.abs(x - d.cx) - d.hw, 0), Math.max(Math.abs(y - d.cy) - d.hh, 0)) < m) return false; }
+    for (i = 0; i < seesaws.length; i++) { var s = seesaws[i]; if (Math.hypot(Math.max(Math.abs(x - s.cx) - s.hw, 0), Math.max(Math.abs(y - s.cy) - (s.hh + s.hw * 0.32), 0)) < m) return false; }
+    for (i = 0; i < spikes.length; i++) { var k = spikes[i]; if (Math.hypot(Math.max(k.x0 - x, 0, x - k.x1), Math.max(k.top - 6 - y, 0, y - k.y)) < m) return false; }
+    for (i = 0; i < rotors.length; i++) { var r = rotors[i]; if (Math.hypot(x - r.cx, y - r.cy) < r.r + 5 + m) return false; }     // the whole rotation sweep
+    return true;
+  };
+  var pitAt = function (xx) { return features.some(function (g) { return g.type === 'pit' && xx > g.x0 && xx < g.x1; }); };
+  var topAt = function (xx) { var t = gy(xx); features.forEach(function (g) { if (g.type === 'wall' && xx >= g.x0 && xx <= g.x1) t = Math.min(t, g.top); }); return t; };
+  portals = portals.filter(function (pr) { var ok = pointFree(pr.a.x, pr.a.y, 12) && pointFree(pr.b.x, pr.b.y, 12); if (!ok) { invalidBefore++; if (noRepair) return true; features = features.filter(function (g) { return !(g.type === 'portal' && g.x0 === pr.a.x - 24); }); repairs++; } return ok || noRepair; });
+  boosts = boosts.filter(function (z) { var ok = true; for (var gx = z.x0 + 6; gx < z.x1; gx += 20) for (var gy2 = z.y0 + 6; gy2 < z.y1 - 4; gy2 += 20) if (!pointFree(gx, gy2, 0, 0)) ok = false; if (!ok) { invalidBefore++; if (!noRepair) { features = features.filter(function (g) { return !(g.type === 'boost' && g.x0 === z.x0); }); repairs++; return false; } } return true; });
+  var fixStar = function (s, idx) {
+    if (pointFree(s.x, s.y, STAR_R)) return true;
+    invalidBefore++;
+    if (noRepair) return false;
+    for (var dd = 12; dd <= 480; dd += 12) for (var sg = -1; sg <= 1; sg += 2) {
+      var x = s.x + sg * dd, y = pitAt(x) ? Y1 - 34 : topAt(x) - 24;
+      if (!pointFree(x, y, STAR_R) || inSpecial(x)) continue;
+      var okk2 = true; stars.forEach(function (o, kk) { if (kk !== idx && Math.hypot(o.x - x, o.y - y) < 80) okk2 = false; });
+      if (okk2) { s.x = x; s.y = y; repairs++; return true; }
+    }
+    return false;
+  };
+  for (i = stars.length - 1; i >= 0; i--) { if (!fixStar(stars[i], i) && i > 0 && !noRepair) stars.splice(i, 1); }
   if (L >= 8 && stars.length < 2) {        // make sure ordered levels have 2+ stars: relax by dropping the portals, then place on any free flat
     portals.length = 0; features = features.filter(function (f) { return f.type !== 'portal'; });
-    var t4 = 0; while (stars.length < 2 && t4++ < 80) { var cx4 = r12(rr(xD + 24, xF - 60)); if (inSpecial(cx4)) continue; var okk = true; stars.forEach(function (s4) { if (Math.abs(s4.x - cx4) < 80) okk = false; }); features.forEach(function (f) { if ((f.type === 'pit' || f.type === 'wall') && cx4 > f.x0 - 20 && cx4 < f.x1 + 20) okk = false; }); if (okk) stars.push({ x: cx4, y: Y1 - 18 }); }
+    var t4 = 0; while (stars.length < 2 && t4++ < 120) { var cx4 = r12(rr(xD + 24, xF - 60)), cy4 = pitAt(cx4) ? Y1 - 34 : topAt(cx4) - 24; if (inSpecial(cx4) || !pointFree(cx4, cy4, STAR_R)) continue; var okk = true; stars.forEach(function (s4) { if (Math.hypot(s4.x - cx4, s4.y - cy4) < 80) okk = false; }); if (okk) stars.push({ x: cx4, y: cy4 }); }
   }
   // required collection order (indices into stars): along the route, left to right; the goal star is the right-most so it is last
   var order = stars.map(function (s, k) { return k; }).sort(function (a, b) { return stars[a].x - stars[b].x; });
@@ -321,6 +353,8 @@ function genLevel(seed, L) {
     rope = { ax: ax, ay: ay, len: len, ang: ang };
     start = { x: ax - len * Math.sin(ang), y: ay + len * Math.cos(ang) };
   }
+  if (rope && !pointFree(rope.ax, rope.ay, 7)) { invalidBefore++; if (!noRepair) { rope = null; start = { x: 70, y: gy(70) - BALL_R - 1 }; repairs++; } }
+  if (!pointFree(start.x, start.y, BALL_R, 0)) invalidBefore++;
   // ----- floating decorative slabs (kept clear of every corridor)
   var topY = function (xx) { var t = gy(xx); features.forEach(function (f) { if (f.type === 'wall' && xx >= f.x0 && xx <= f.x1) t = Math.min(t, f.top); }); return t; };
   var nd = L >= 2 ? Math.min(4, 1 + Math.floor(L / 3)) : 0, tries = 0, slabs = 0;
@@ -350,7 +384,7 @@ function genLevel(seed, L) {
   portals.forEach(function (b) { acc(b.a.x); acc(b.b.x); });
   if (rope) { acc(rope.ax); acc(rope.ay); acc(rope.len); }
   stars.forEach(function (s2) { acc(s2.x); acc(s2.y); });
-  lv.checksum = hh2;
+  lv.checksum = hh2; lv.repairs = repairs; lv.invalidBefore = invalidBefore;
   lv.modules = [];
   features.forEach(function (f) { if (f.type === 'boost' || f.type === 'rotor' || f.type === 'spikes' || f.type === 'portal') return; var m = f.type === 'pit' ? 'pit-' + f.variant : f.type; if (lv.modules.indexOf(m) < 0) lv.modules.push(m); });
   if (boosts.length) lv.modules.push('boost'); if (rotors.length) lv.modules.push('rotor'); if (spikes.length) lv.modules.push('spikes'); if (portals.length) lv.modules.push('portal'); if (L >= 8 && stars.length > 1) lv.modules.push('ordered');
@@ -595,7 +629,7 @@ Sim.prototype.addStroke = function (raw, meta) {
 Sim.prototype.localOf = function (st, x, y) { var p = st.body.getPosition(), a = st.body.getAngle(), c = Math.cos(-a), s = Math.sin(-a), dx = x - p.x * S, dy = y - p.y * S; return [dx * c - dy * s, dy * c + dx * s]; };
 Sim.prototype.worldOf = function (st, lx, ly) { var p = st.body.getPosition(), a = st.body.getAngle(), c = Math.cos(a), s = Math.sin(a); return [p.x * S + lx * c - ly * s, p.y * S + lx * s + ly * c]; };
 Sim.prototype.hitStroke = function (st, x, y, tol) {
-  var l = this.localOf(st, x, y), loc = st.loc, k;
+  var l = this.localOf(st, x, y), loc = st.loc, k; if (st.kind !== 'poly') tol = tol || 11;
   if (st.kind === 'poly') { if (inPoly(l[0], l[1], loc)) return true; for (k = 0; k < loc.length; k++) if (distSeg(l[0], l[1], loc[k], loc[(k + 1) % loc.length]) < (tol || 10)) return true; return false; }
   for (k = 0; k + 1 < loc.length; k++) if (distSeg(l[0], l[1], loc[k], loc[k + 1]) < (tol || 10)) return true;
   return false;
@@ -630,7 +664,7 @@ Sim.prototype._mkPin = function (type, x, y, sts, lks) {
 };
 Sim.prototype.addPinAt = function (x, y) {
   if (this.pins.length >= 40) return null;
-  var hits = this.strokesAt(x, y), lks = this.ropeLinksAt(x, y, 8), n = hits.length + lks.length, px = x, py = y;
+  var hits = this.strokesAt(x, y), lks = this.ropeLinksAt(x, y, 10), n = hits.length + lks.length, px = x, py = y;
   if (!hits.length && lks.length === 1) { var e = this.linkEnds(lks[0].rec.links[lks[0].k]), dx = e[1][0] - e[0][0], dy = e[1][1] - e[0][1], l2 = dx * dx + dy * dy, t = l2 < 1e-9 ? 0 : Math.max(0, Math.min(1, ((x - e[0][0]) * dx + (y - e[0][1]) * dy) / l2)); px = e[0][0] + dx * t; py = e[0][1] + dy * t; }
   if (n >= 2) return this._mkPin('hinge', px, py, hits, lks);
   if (n === 1) return this._mkPin('fix', px, py, hits, lks);

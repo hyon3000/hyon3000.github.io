@@ -10,7 +10,7 @@
 <body>
 <div id="app">
   <div class="top">
-    <span class="chip" id="chLevel"></span><span class="chip seed" id="chSeed" title="link"></span><span class="chip" id="chStars"></span><span class="chip" id="chBest"></span>
+    <button type="button" class="btn sm" id="btnPrev" title="[ / PageUp">◀</button><button type="button" class="chip lvpill" id="chLevel"></button><button type="button" class="btn sm" id="btnNext" title="] / PageDown">▶</button><span class="chip seed" id="chSeed" title="link"></span><span class="chip" id="chStars"></span><span class="chip" id="chBest"></span>
     <span class="sp"></span>
     <button type="button" class="btn go" id="btnStart"></button>
     <button type="button" class="btn" id="btnErase"></button>
@@ -19,7 +19,7 @@
     <button type="button" class="btn" id="btnUndo"></button>
     <button type="button" class="btn" id="btnRestart"></button>
   </div>
-  <div class="stage" id="stage"><canvas id="cv"></canvas></div>
+  <div class="stage" id="stage"><canvas id="cv"></canvas><div id="picker"><div id="ptitle"></div><div id="pgrid"></div></div></div>
   <div class="status" id="status"></div>
 </div>
 <script src="vendor/planck/planck.min.js"></script>

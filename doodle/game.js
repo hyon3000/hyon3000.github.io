@@ -4,7 +4,7 @@
 'use strict';
 var KO = /^ko/i.test(navigator.language || 'ko');
 var TX = KO ? {
-  title: '2D 피직스', level: '레벨', seed: '시드', best: '최고', draw: '그리기', erase: '지우기', undo: '되돌리기', restart: '다시', start: '시작', ropeLong: '밧줄이 너무 깁니다(최대 120마디, 약 1000px).',  rope: '밧줄', hintRopeTool: '밧줄: 선을 그리면 그린 선의 길이 그대로, 그린 모양 그대로 밧줄이 놓입니다. 끝이 그린 물체나 땅/벽 위면 거기에 매달리고, 빈 곳이면 늘어집니다. 지우기 모드로 가로질러 끌어 끊습니다.',  ouch: '앗! 가시에 찔렸어요. 잠시 뒤 처음 자리로 돌아갑니다.',  wrong: '순서가 틀렸어요',  pin: '핀', hintBoost: '공을 누르면 속도가 붙습니다.', hintPin: '핀: 그린 물체를 눌러 그 점에 고정합니다(그 점을 중심으로 회전). 핀을 다시 누르거나 지우기 모드로 지우면 빠집니다.', pin: '핀', hintPin: '핀: 그린 물체를 눌러 그 점에 고정합니다(그 점을 중심으로 회전). 핀을 다시 누르거나 지우기 모드로 지우면 빠집니다.',
+  title: '2D 피직스', level: '레벨', seed: '시드', best: '최고', draw: '그리기', erase: '지우기', undo: '되돌리기', restart: '다시', start: '시작', pick: '레벨 선택', prevL: '이전 레벨', nextL: '다음 레벨', locked: '아직 열리지 않은 레벨',  ropeLong: '밧줄이 너무 깁니다(최대 120마디, 약 1000px).',  rope: '밧줄', hintRopeTool: '밧줄: 선을 그리면 그린 선의 길이 그대로, 그린 모양 그대로 밧줄이 놓입니다. 끝이 그린 물체나 땅/벽 위면 거기에 매달리고, 빈 곳이면 늘어집니다. 지우기 모드로 가로질러 끌어 끊습니다.',  ouch: '앗! 가시에 찔렸어요. 잠시 뒤 처음 자리로 돌아갑니다.',  wrong: '순서가 틀렸어요',  pin: '핀', hintBoost: '공을 누르면 속도가 붙습니다.', hintPin: '핀: 그린 물체를 눌러 그 점에 고정합니다(그 점을 중심으로 회전). 핀을 다시 누르거나 지우기 모드로 지우면 빠집니다.', pin: '핀', hintPin: '핀: 그린 물체를 눌러 그 점에 고정합니다(그 점을 중심으로 회전). 핀을 다시 누르거나 지우기 모드로 지우면 빠집니다.',
   hint0: '끌어서 그리면 물체가 됩니다. 공을 모든 별에 닿게 하세요. 다 그렸으면 Space(시작).',
   hintRope: ' 밧줄은 지우기 모드(또는 오른쪽 버튼 드래그)로 가로질러 쓸어서 끊습니다.',
   hintRun: '막히면 다시(R)로 같은 레벨을 처음부터. 공이 떨어지면 1초 뒤 제자리로 돌아옵니다.',
@@ -12,7 +12,7 @@ var TX = KO ? {
   tooMany: '선이 너무 많아 가장 오래된 선을 지웠어요', thinking: '풀이를 찾는 중...', nosol: '해답을 찾지 못했습니다.', autoOn: '자동으로 푸는 중...',
   hintShown: '힌트: 선 하나를 그렸어요. 다시 누르면 다음 단계입니다.', hintRunMsg: '힌트: 시작했어요.', hintCutMsg: '힌트: 밧줄을 잘랐어요.'
 } : {
-  title: '2D Physics', level: 'Level', seed: 'Seed', best: 'Best', draw: 'Draw', erase: 'Erase', undo: 'Undo', restart: 'Restart', start: 'Start', ropeLong: 'That rope is too long (at most 120 segments, about 1000 px).',  rope: 'Rope', hintRopeTool: 'Rope: draw a line - the rope is exactly as long as the line you draw and starts in that shape. An end over a drawn object or the ground/walls is attached there; over empty space it hangs free. Drag across it in Erase mode to cut it.',  ouch: 'Ouch! Spiked. The ball returns to its start in a moment.',  wrong: 'Wrong order',  pin: 'Pin', hintBoost: 'Press on the ball to give it a push.', hintPin: 'Pin: click a drawn object to pin it at that point (it rotates around the pin). Click a pin again, or use Erase mode, to remove it.', pin: 'Pin', hintPin: 'Pin: click a drawn object to pin it at that point (it rotates around the pin). Click a pin again, or use Erase mode, to remove it.',
+  title: '2D Physics', level: 'Level', seed: 'Seed', best: 'Best', draw: 'Draw', erase: 'Erase', undo: 'Undo', restart: 'Restart', start: 'Start', pick: 'Choose a level', prevL: 'Previous level', nextL: 'Next level', locked: 'Not unlocked yet',  ropeLong: 'That rope is too long (at most 120 segments, about 1000 px).',  rope: 'Rope', hintRopeTool: 'Rope: draw a line - the rope is exactly as long as the line you draw and starts in that shape. An end over a drawn object or the ground/walls is attached there; over empty space it hangs free. Drag across it in Erase mode to cut it.',  ouch: 'Ouch! Spiked. The ball returns to its start in a moment.',  wrong: 'Wrong order',  pin: 'Pin', hintBoost: 'Press on the ball to give it a push.', hintPin: 'Pin: click a drawn object to pin it at that point (it rotates around the pin). Click a pin again, or use Erase mode, to remove it.', pin: 'Pin', hintPin: 'Pin: click a drawn object to pin it at that point (it rotates around the pin). Click a pin again, or use Erase mode, to remove it.',
   hint0: 'Drag to draw - drawings become solid objects. Make the ball touch every star. When ready press Space (start).',
   hintRope: ' Cut the rope in Erase mode (or right-button drag) by swiping across it.',
   hintRun: 'Stuck? Restart (R) replays the same level. A fallen ball returns to its start after 1 s.',
@@ -136,8 +136,14 @@ function giveHint() {
 
 /* ---------- level / game flow ---------- */
 function prepStroke(st) { if (!st.passes) prepRender(st); }
+/* ---------- progress (localStorage): seed, furthest level reached, last played level, cleared levels ---------- */
+var prog = { seed: 0, furthest: 1, last: 1, cleared: {} }, persist = true;
+function freshProg(sd) { return { seed: sd >>> 0, furthest: 1, last: 1, cleared: {} }; }
+function readProg() { try { var o = JSON.parse(localStorage.getItem('doodle_progress') || 'null'); if (o && isFinite(o.seed) && o.furthest >= 1 && o.last >= 1) { o.cleared = o.cleared || {}; return o; } } catch (e) {} return null; }
+function saveProg() { if (!persist) return; try { localStorage.setItem('doodle_progress', JSON.stringify(prog)); } catch (e) {} }
 function loadLevel(sd, L, keepAuto) {
-  seed0 = sd >>> 0; levelNo = L;
+  if ((sd >>> 0) !== prog.seed) { prog = freshProg(sd); persist = false; }       // a level of some other seed (shared link): do not touch the saved progress
+  seed0 = sd >>> 0; levelNo = L; prog.last = L; if (L > prog.furthest) prog.furthest = L; saveProg();
   level = DP.genLevel(seed0, L);
   sim = new DP.Sim(level); sim.onStroke = prepStroke; history = [];
   running = false; won = false; winT = 0; fallT = 0; failing = false; failT = 0; particles = []; preview = null; swipeFx = null;
@@ -146,7 +152,21 @@ function loadLevel(sd, L, keepAuto) {
   try { var u = new URL(location.href); u.searchParams.set('seed', seed0); u.searchParams.set('level', L); history.replaceState(null, '', u.toString()); } catch (e) {}
 }
 function restartLevel(fromAuto) { loadLevel(seed0, levelNo, fromAuto === true); return true; }
-function newGame() { loadLevel(1 + Math.floor(Math.random() * 99999), 1); return true; }
+function newGame() { var sd = 1 + Math.floor(Math.random() * 99999); prog = freshProg(sd); persist = true; loadLevel(sd, 1); return true; }
+function stepLevel(dir) { var t = levelNo + dir; if (t < 1 || t > prog.furthest) return false; closePicker(); loadLevel(seed0, t); return true; }
+function gotoLevel(t) { if (t < 1 || t > prog.furthest) return false; closePicker(); loadLevel(seed0, t); return true; }
+function openPicker() {
+  var box = $('picker'), grid = $('pgrid'), top = Math.max(prog.furthest + 3, 12); grid.innerHTML = '';
+  for (var i = 1; i <= top; i++) {
+    var b = document.createElement('button'); b.type = 'button'; b.textContent = i + (prog.cleared[i] ? ' \u2713' : '');
+    b.className = 'lvb' + (prog.cleared[i] ? ' cleared' : '') + (i === levelNo ? ' cur' : '') + (i > prog.furthest ? ' locked' : '');
+    if (i > prog.furthest) { b.disabled = true; b.title = TX.locked; } else (function (n) { b.onclick = function () { gotoLevel(n); }; })(i);
+    grid.appendChild(b);
+  }
+  $('ptitle').textContent = TX.pick + ' (' + TX.seed + ' ' + seed0 + ')'; box.style.display = 'block';
+}
+function closePicker() { var b = $('picker'); if (b) b.style.display = 'none'; }
+function togglePicker() { var b = $('picker'); if (b.style.display === 'block') closePicker(); else openPicker(); }
 function startSim() { if (!running && !won) { running = true; updateHud(); setStatus(TX.hintRun); } }
 function addStroke(raw) {
   var st = sim.addStroke(raw, { color: COLORS[colorIdx++ % COLORS.length], seed: (Math.random() * 1e9) | 0 });
@@ -265,7 +285,7 @@ function stepOnce() {
   if (sim.wrong && !won) { failing = true; failT = 60; setStatus(TX.wrong); sim.events = []; return; }
   if (sim.events.length) { sim.events.forEach(function (e) { if (e === 'star') { burst(sim.bx, sim.by, 16); updateHud(); } else if (e === 'port') { var lp = sim.lastPort; portFx = { from: lp.from, to: lp.to, ci: lp.ci, life: 1 }; for (var pi = 0; pi < 14; pi++) particles.push({ x: lp.to.x, y: lp.to.y, vx: (Math.random() - 0.5) * 260, vy: (Math.random() - 0.5) * 260, life: 0.7, rot: Math.random() * 6, c: pi % 2 ? '#ffffff' : (lp.ci % 2 ? '#e8861c' : '#2e86ab') }); } else if (e === 'ouch') { for (var oi = 0; oi < 18; oi++) particles.push({ x: sim.bx, y: sim.by, vx: (Math.random() - 0.5) * 360, vy: -Math.random() * 300, life: 0.9, rot: Math.random() * 6, c: oi % 2 ? '#e63946' : '#7a0f1a' }); setStatus(TX.ouch); } }); sim.events = []; }
   if (!won) {
-    if (sim.won) { won = true; winT = 90; burst(sim.bx, sim.by, 40); if (levelNo > best) { best = levelNo; try { localStorage.setItem('doodle_best', String(best)); } catch (e) {} } updateHud(); }
+    if (sim.won) { won = true; winT = 90; burst(sim.bx, sim.by, 40); prog.cleared[levelNo] = 1; if (levelNo + 1 > prog.furthest) prog.furthest = levelNo + 1; saveProg(); if (levelNo > best) { best = levelNo; try { localStorage.setItem('doodle_best', String(best)); } catch (e) {} } updateHud(); }
     else {
       if (sim.dead() && !fallT) fallT = 60;
       if (fallT && --fallT === 0) sim.respawn();
@@ -608,7 +628,7 @@ function $(id) { return document.getElementById(id); }
 function setStatus(t) { var s = $('status'); if (s) s.textContent = t; }
 function updateHud() {
   var got = sim.stars.filter(function (s) { return s.got; }).length;
-  $('chLevel').textContent = TX.level + ' ' + levelNo;
+  $('chLevel').textContent = TX.level + ' ' + levelNo + (prog.cleared[levelNo] ? ' \u2713' : '') + ' \u25BE'; $('btnPrev').disabled = levelNo <= 1; $('btnNext').disabled = levelNo >= prog.furthest;
   $('chSeed').textContent = TX.seed + ' ' + seed0;
   if (sim.stars.length === 1) $('chStars').textContent = '★ ' + got + '/1';
   else $('chStars').innerHTML = level.order.map(function (k, r) { var cls = r < sim.next ? 'ns done' : r === sim.next ? 'ns next' : 'ns'; return '<i class="' + cls + '" style="--c:' + COLORS[r % COLORS.length] + '">' + (r + 1) + '</i>'; }).join('');
@@ -665,9 +685,13 @@ function initInput() {
     if (/^F[234]$/.test(k)) { if (embedded) return; e.preventDefault(); if (k === 'F2') newGame(); else if (k === 'F3') toggleAuto(); else giveHint(); return; }
     if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'Z')) { e.preventDefault(); undoStroke(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (k === 'PageUp' || k === '[') { e.preventDefault(); stepLevel(-1); return; } if (k === 'PageDown' || k === ']') { e.preventDefault(); stepLevel(1); return; } if (k === 'Escape') { closePicker(); return; }
     if (k === 'r' || k === 'R') { restartLevel(); } else if (k === ' ') { e.preventDefault(); startSim(); userChanged(); } else if (k === 'e' || k === 'E') { toggleEraser(); } else if (k === 'p' || k === 'P') { togglePin(); } else if (k === 't' || k === 'T') { toggleRope(); }
   });
   $('btnStart').onclick = function () { startSim(); userChanged(); };
+  $('btnPrev').onclick = function () { stepLevel(-1); }; $('btnNext').onclick = function () { stepLevel(1); };
+  $('chLevel').onclick = function (e) { e.stopPropagation(); togglePicker(); };
+  document.addEventListener('pointerdown', function (e) { var pk = $('picker'); if (pk.style.display === 'block' && !pk.contains(e.target)) closePicker(); });
   $('btnErase').onclick = function () { modeButton(); };
   $('btnPin').onclick = function () { togglePin(); };
   $('btnRope').onclick = function () { toggleRope(); };
@@ -685,7 +709,15 @@ function init() {
   $('btnStart').textContent = '▶ ' + TX.start; $('btnPin').textContent = '◉ ' + TX.pin; $('btnRope').textContent = '〰 ' + TX.rope; $('btnUndo').textContent = '↶ ' + TX.undo; $('btnRestart').textContent = '⟲ ' + TX.restart;
   canvas = $('cv'); ctx = canvas.getContext('2d');
   var q = new URLSearchParams(location.search), sd = parseInt(q.get('seed'), 10), lv = parseInt(q.get('level'), 10);
-  loadLevel(isFinite(sd) ? sd : 1 + Math.floor(Math.random() * 99999), isFinite(lv) && lv >= 1 ? lv : 1);
+  var st0 = readProg(), startSeed, startLevel;
+  if (isFinite(sd)) {                                              // explicit link
+    startSeed = sd >>> 0; startLevel = isFinite(lv) && lv >= 1 ? lv : 1;
+    if (st0 && st0.seed === startSeed) { prog = st0; persist = true; if (!(isFinite(lv) && lv >= 1)) startLevel = st0.last; }
+    else if (!st0) { prog = freshProg(startSeed); persist = true; }
+    else { prog = freshProg(startSeed); persist = false; }        // someone else's seed: keep the saved progress untouched
+  } else if (st0) { prog = st0; persist = true; startSeed = st0.seed; startLevel = st0.last; }          // reopening the game: resume
+  else { startSeed = 1 + Math.floor(Math.random() * 99999); startLevel = 1; prog = freshProg(startSeed); persist = true; }
+  loadLevel(startSeed, startLevel);
   resize(); window.addEventListener('resize', resize);
   if (window.ResizeObserver) new ResizeObserver(resize).observe($('stage'));
   initInput();
@@ -693,14 +725,14 @@ function init() {
 }
 
 /* ---- API for the shell + tests ---- */
-window.newGame = newGame; window.restartLevel = restartLevel; window.undoStroke = undoStroke; window.toggleEraser = toggleEraser; window.togglePin = togglePin; window.toggleRope = toggleRope;
+window.newGame = newGame; window.restartLevel = restartLevel; window.undoStroke = undoStroke; window.toggleEraser = toggleEraser; window.togglePin = togglePin; window.stepLevel = stepLevel; window.gotoLevel = gotoLevel; window.toggleRope = toggleRope;
 window.toggleAuto = toggleAuto; window.giveHint = giveHint;
 window.getLevelInfo = function () { return { level: levelNo, seed: seed0 }; };
 window.__dp = {
   DP: DP,
   get sim() { return sim; }, get level() { return level; }, get strokes() { return sim.strokes; }, get ball() { return sim.ball; }, get stars() { return sim.stars; }, get auto() { return auto; },
   set manual(v) { manual = !!v; }, get manual() { return manual; },
-  load: loadLevel, restart: restartLevel, newGame: newGame, addStroke: addStroke, undo: undoStroke, erase: eraseAt, sweep: eraseSweep, strokeAt: strokeAt, start: startSim, cut: cutSwipe, addRope: function (A, B) { var path = Array.isArray(A[0]) ? A : [A, B]; var f = path[0], l = path[path.length - 1], aa = attachAt(f[0], f[1]), ab = attachAt(l[0], l[1]); path = path.map(function (q) { return q.slice(); }); if (aa && aa.snap) path[0] = aa.snap.slice(); if (ab && ab.snap) path[path.length - 1] = ab.snap.slice(); var r = sim.addRopePath(path, aa, ab); if (r) { history.push({ t: 'rope', rope: r }); userChanged(); } return r; }, attachAt: attachAt, terrainAt: terrainAt, pinAt: pinAt, boost: boostBall, get pins() { return sim.pins; },
+  load: loadLevel, restart: restartLevel, newGame: newGame, addStroke: addStroke, undo: undoStroke, erase: eraseAt, sweep: eraseSweep, strokeAt: strokeAt, start: startSim, cut: cutSwipe, get prog() { return prog; }, openPicker: openPicker, stepLevel: stepLevel, gotoLevel: gotoLevel, readProg: readProg, addRope: function (A, B) { var path = Array.isArray(A[0]) ? A : [A, B]; var f = path[0], l = path[path.length - 1], aa = attachAt(f[0], f[1]), ab = attachAt(l[0], l[1]); path = path.map(function (q) { return q.slice(); }); if (aa && aa.snap) path[0] = aa.snap.slice(); if (ab && ab.snap) path[path.length - 1] = ab.snap.slice(); var r = sim.addRopePath(path, aa, ab); if (r) { history.push({ t: 'rope', rope: r }); userChanged(); } return r; }, attachAt: attachAt, terrainAt: terrainAt, pinAt: pinAt, boost: boostBall, get pins() { return sim.pins; },
   step: function (n) { for (var i = 0; i < (n || 1); i++) { stepOnce(); if (running) autoTick(); else autoTick(); } },
   pump: function (budget) { pumpPlan(budget == null ? 1e9 : budget); },
   state: function () { return { running: running, won: won, level: levelNo, seed: seed0, got: sim.stars.filter(function (s) { return s.got; }).length, nstars: sim.stars.length, bx: sim.bx, by: sim.by, fall: fallT, bodies: sim.world.getBodyCount(), next: sim.next, failing: failing, strokes: sim.strokes.length, pins: sim.pins.length, mode: mode, simT: sim.simT, rope: !!sim.rope, auto: auto.on, hint: auto.hint, phase: auto.phase, step: auto.i, nsteps: auto.steps ? auto.steps.length : 0, failures: auto.failures, restarts: auto.restarts }; },

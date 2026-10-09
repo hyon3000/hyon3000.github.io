@@ -18,3 +18,14 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 .ns.next { opacity: 1; box-shadow: 0 0 0 2px var(--c); animation: nspulse 1s infinite; }
 @keyframes nspulse { 50% { transform: scale(1.18); } }
 .chip#chStars { padding: 2px 7px; }
+
+.btn.sm { padding: 3px 7px; min-height: 26px; }
+.btn.sm:disabled { opacity: .35; cursor: default; }
+.lvpill { cursor: pointer; font-family: inherit; color: inherit; }
+#picker { display: none; position: absolute; left: 6px; top: 6px; z-index: 5; max-width: calc(100% - 12px); background: #fffaf0; border: 2px solid #8c6a46; border-radius: 10px; padding: 8px; box-shadow: 0 3px 10px rgba(0,0,0,.25); }
+#ptitle { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+#pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 5px; max-width: 360px; max-height: 240px; overflow: auto; }
+.lvb { font: 700 12px/1 inherit; min-height: 32px; border: 2px solid #b8a27a; border-radius: 8px; background: #fff; cursor: pointer; touch-action: manipulation; }
+.lvb.cleared { background: #d8f0d4; border-color: #3a9a4a; }
+.lvb.cur { background: #ffd8a8; border-color: #e2573a; }
+.lvb.locked { background: #eee; color: #aaa; border-style: dashed; cursor: default; }
