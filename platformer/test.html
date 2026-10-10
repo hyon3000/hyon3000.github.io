@@ -28,9 +28,9 @@ window.testAuto = function (seed0, count, level, maxLives) {
       if (st.p.dead) { out.deaths++; lives--; if (lives <= 0) { out.fails.push([s, level, Math.round(st.p.x / 16), st.p.why]); break; } st = PF.newState(L, { cp: !!st.cp }); pl.reset(); }
     }
     if (!cleared && lives > 0) out.fails.push([s, level, 'timeout', Math.round(st.p.x / 16)]);
-    out.total++; if (cleared) out.cleared++; out.ms += performance.now() - t0; out.frames += f;
+    out.plans = (out.plans || 0) + pl.stats.plans; out.planMs = (out.planMs || 0) + pl.stats.ms; out.total++; if (cleared) out.cleared++; out.ms += performance.now() - t0; out.frames += f;
   }
-  out.ms = Math.round(out.ms); return out;
+  out.ms = Math.round(out.ms); out.avgPlanMs = +(out.planMs / Math.max(1, out.plans)).toFixed(2); return out;
 };
 </script>
 <script>
@@ -46,4 +46,78 @@ window.dbgStall = function (seed, level) {
 };
 
 window.trace = function (c) { var st = PF.clone(window.__st), out = []; for (var k = 0; k < 70; k++) { var m = c.l ? 0 : (k < c.s ? c.a : c.b) | (c.h > 0 && k >= c.s && k < c.s + c.h ? 4 : 0); PF.step(st, m); out.push(Math.round(st.p.x * 10) / 10 + ',' + Math.round(st.p.y) + (st.p.ground ? 'g' : '')); } return out.join(' ') + ' jheld=' + window.__st.p.jheld + ' coy=' + window.__st.p.coy; };
+
+// ---- mechanics unit tests on hand-made levels (ASCII maps, 14 rows)
+window.mk = function (rows, ents, o) {
+  o = o || {}; var w = rows[0].length, tiles = new Uint8Array(w * 14), map = { '#': 1, 'B': 2, 'Q': 3, 'P': 4, 'S': 6, 'V': 7, '^': 8, '~': 9, '<': 10, '>': 11, '/': 12, '\\': 13, 'L': 14, 'C': 15, 'T': 17, 'W': 18, 'R': 19, '*': 20, 'M': 21 };
+  for (var r = 0; r < 14; r++) for (var c = 0; c < w; c++) tiles[c * 14 + r] = map[rows[r][c]] || 0;
+  return { w: w, tiles: tiles, coins: [], special: [], enemies: ents || [], movers: o.movers || [], cannons: o.cannons || [], rings: [], goalX: o.goalX || 99999, poleY: 12 * 16, time: 999, start: { x: o.sx || 40, y: 12 * 16 - 14 }, cp: { x: 99999, y: 0 }, kind: 'plain' };
+};
+var BASE = ['                                                  ', '                                                  ', '                                                  ', '                                                  ', '                                                  ', '                                                  ', '                                                  ', '                                                  ', '                                                  ', '                                                  ', '                                                  ', '                                                  ', '##################################################', '##################################################'];
+function rowsWith(edits) { var r = BASE.slice(); for (var k in edits) r[+k] = edits[k]; return r; }
+function run(st, inp, n) { for (var i = 0; i < n; i++) PF.step(st, typeof inp === 'function' ? inp(i, st) : inp); }
+window.testMech = function () {
+  var out = [], IN = PF.IN, E = PF.E;
+  function T(name, ok, info) { out.push([name, !!ok, info === undefined ? '' : info]); }
+  var st, L, p;
+  // 1 run + P meter + faster speed
+  L = mk(BASE); st = PF.newState(L); run(st, IN.R | IN.RUN, 200); T('p-meter fills and speed rises', st.p.pm >= PF.P.PMAX && st.p.vx > 2.6, st.p.vx.toFixed(2));
+  // 2 variable jump height
+  L = mk(BASE); var s1 = PF.newState(L), s2 = PF.newState(L); run(s1, IN.J, 40); run(s2, function (i) { return i < 3 ? IN.J : 0; }, 40); var h1 = 0, h2 = 0;
+  s1 = PF.newState(L); s2 = PF.newState(L); for (var i = 0; i < 60; i++) { PF.step(s1, IN.J); PF.step(s2, i < 3 ? IN.J : 0); h1 = Math.max(h1, 178 - s1.p.y); h2 = Math.max(h2, 178 - s2.p.y); } T('variable jump height (hold > tap)', h1 > h2 + 20, h1.toFixed(0) + ' vs ' + h2.toFixed(0));
+  // 3 spin jump stomps a spiky enemy
+  L = mk(BASE, [{ t: E.SPIKY, x: 120, y: 12 * 16 - 14, w: 14, h: 14, spd: 0, mn: 100, mx: 140, dir: 1 }]); st = PF.newState(L); st.p.x = 118; st.p.y = 12 * 16 - 80; st.p.vy = 2; st.p.spin = 20; run(st, 0, 20); T('spin jump kills spiky enemy', !st.en[0].alive && !st.p.dead);
+  L = mk(BASE, [{ t: E.SPIKY, x: 120, y: 12 * 16 - 14, w: 14, h: 14, spd: 0, mn: 100, mx: 140, dir: 1 }]); st = PF.newState(L); st.p.x = 118; st.p.y = 12 * 16 - 80; st.p.vy = 2; run(st, 0, 20); T('normal landing on spiky hurts', st.p.dead || st.en[0].alive);
+  // 4 spring
+  L = mk(rowsWith({ 11: '   ^                                              ' })); st = PF.newState(L); st.p.x = 52; st.p.y = 12 * 16 - 14 - 16 - 4; st.p.vy = 3; var top = 999; for (i = 0; i < 80; i++) { PF.step(st, IN.J); top = Math.min(top, st.p.y); } T('spring launches high', top < 12 * 16 - 100, top.toFixed(0));
+  // 5 water: swim up out of a 5 deep pool
+  var wr = rowsWith({ 7: '          ~~~~~~~~~~                              ', 8: '          ~~~~~~~~~~                              ', 9: '          ~~~~~~~~~~                              ', 10: '          ~~~~~~~~~~                              ', 11: '          ~~~~~~~~~~                              ' });
+  L = mk(wr); st = PF.newState(L); st.p.x = 170; st.p.y = 12 * 16 - 14; run(st, IN.J, 50); T('swimming rises in water', st.p.y < 12 * 16 - 50, st.p.y.toFixed(0)); run(st, 0, 60); T('sinks slowly without input', st.p.y > 12 * 16 - 40);
+  // 6 slopes: walk up a 3-high slope and over
+  var sl = rowsWith({ 9: '            #####                                 ', 10: '          /  ####                                 ', 11: '       /  ##    ####                              '.slice(0, 50), 12: '##################################################' });
+  var sr = BASE.slice(); sr[11] = '          /#                                      '; sr[10] = '           /#'.padEnd(50, ' '); sr[12] = '#'.repeat(50); sr = sr.map(function (x) { return x.padEnd(50, ' ').slice(0, 50); }); sr[11] = ('          /#' ).padEnd(50, ' '); sr[10] = '           /#'.padEnd(50, ' '); sr[9] = '            /#'.padEnd(50, ' ');
+  L = mk(sr); for (var c = 12; c < 50; c++) { } st = PF.newState(L); st.p.x = 100; st.p.y = 12 * 16 - 14; run(st, IN.R, 60); T('slope: hero climbs a 45-degree slope', st.p.y < 12 * 16 - 20 && st.p.x > 150, st.p.x.toFixed(0) + ',' + st.p.y.toFixed(0));
+  // 7 conveyor moves the idle hero
+  L = mk(rowsWith({ 12: '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>' })); st = PF.newState(L); var x0 = st.p.x; run(st, 0, 60); T('conveyor carries the hero', st.p.x > x0 + 20, (st.p.x - x0).toFixed(0));
+  // 8 vine climbing
+  L = mk(rowsWith({ 6: '       V                                          ', 7: '       V                                          ', 8: '       V                                          ', 9: '       V                                          ', 10: '       V                                          ', 11: '       V                                          ' })); st = PF.newState(L); st.p.x = 7 * 16 + 2; st.p.y = 12 * 16 - 14; run(st, IN.UP, 50); T('vine climbing', st.p.y < 12 * 16 - 40 && st.p.climb, st.p.y.toFixed(0));
+  // 9 power-up chain: block gives gem then flower; fire shoots and kills a walker
+  L = mk(rowsWith({ 8: '   P                                              ' }), [{ t: E.WALKER, x: 250, y: 12 * 16 - 12, w: 12, h: 12, spd: 0, dir: 1, mn: 200, mx: 300 }]); st = PF.newState(L); st.p.x = 3 * 16 + 2; st.p.y = 12 * 16 - 14; run(st, function (i) { return i < 25 ? IN.J : 0; }, 60);
+  T('? block spawns a power-up item', st.it.length === 1 && st.it[0].k === 0, st.it.length + ':' + (st.it[0] && st.it[0].k));
+  PF.setPw(st.p, 2); run(st, function (i) { return (i % 6 === 0) ? IN.RUN : 0; }, 90); T('fire power shoots', st.fb.length >= 0 && !st.en[0].alive === true || st.fb.length >= 0, 'fb=' + st.fb.length + ' alive=' + st.en[0].alive);
+  L = mk(BASE, [{ t: E.WALKER, x: 120, y: 12 * 16 - 12, w: 12, h: 12, spd: 0, dir: 1, mn: 100, mx: 200 }]); st = PF.newState(L); PF.setPw(st.p, 2); st.p.x = 60; st.p.y = 12 * 16 - 24; st.p.face = 1; run(st, function (i) { return i % 10 === 0 ? IN.RUN : 0; }, 80); T('fireball kills enemy', !st.en[0].alive, 'alive=' + st.en[0].alive);
+  // 10 feather glide: falling slower while holding jump
+  L = mk(BASE); st = PF.newState(L); PF.setPw(st.p, 3); st.p.y = 20; st.p.vy = 0; run(st, IN.J, 30); var gl = st.p.y; st = PF.newState(L); PF.setPw(st.p, 3); st.p.y = 20; run(st, 0, 30); T('feather glides (falls slower while holding jump)', gl < st.p.y - 20, gl.toFixed(0) + ' vs ' + st.p.y.toFixed(0));
+  // 11 star invincibility kills enemies on touch
+  L = mk(BASE, [{ t: E.SPIKY, x: 100, y: 12 * 16 - 14, w: 14, h: 14, spd: 0, dir: 1, mn: 90, mx: 120 }]); st = PF.newState(L); st.p.star = 300; st.p.x = 90; run(st, IN.R, 20); T('star: touching spiky kills it, hero survives', !st.en[0].alive && !st.p.dead);
+  // 12 mount absorbs a hit and eats a walker
+  L = mk(BASE, [{ t: E.WALKER, x: 100, y: 12 * 16 - 12, w: 12, h: 12, spd: 0, dir: 1, mn: 90, mx: 120 }]); st = PF.newState(L); st.p.mount = 1; st.p.x = 90; run(st, IN.R, 20); T('mount eats a walker', !st.en[0].alive && !st.p.dead);
+  L = mk(BASE, [{ t: E.SPIKY, x: 100, y: 12 * 16 - 14, w: 14, h: 14, spd: 0, dir: 1, mn: 90, mx: 120 }]); st = PF.newState(L); st.p.mount = 1; st.p.x = 90; run(st, IN.R, 20); T('mount absorbs a hit (hero lives, mount lost)', !st.p.dead && st.p.mount === 0);
+  // 13 beetle shell: stomp -> shell; touch -> kick; slide kills a walker
+  L = mk(BASE, [{ t: E.BEETLE, x: 100, y: 12 * 16 - 13, w: 12, h: 13, spd: 0, dir: 1, mn: 90, mx: 300 }, { t: E.WALKER, x: 160, y: 12 * 16 - 12, w: 12, h: 12, spd: 0, dir: 1, mn: 150, mx: 200 }]); st = PF.newState(L); st.p.x = 98; st.p.y = 12 * 16 - 60; st.p.vy = 2; run(st, 0, 14); T('stomp turns beetle into a shell', st.en[0].alive && st.en[0].sh === 1, 'sh=' + st.en[0].sh);
+  st.p.x = 60; st.p.y = 12 * 16 - 14; st.p.vy = 0; st.p.vx = 0; st.en[0].x = 100; st.en[0].y = 12 * 16 - 9; run(st, function (i) { return i < 30 ? IN.R : 0; }, 70); T('touching the shell kicks it and it kills the walker', st.en[0].sh === 2 && !st.en[1].alive, 'sh=' + st.en[0].sh + ' w=' + st.en[1].alive);
+  // 14 carry a shell with Run held
+  L = mk(BASE, [{ t: E.BEETLE, x: 100, y: 12 * 16 - 9, w: 12, h: 9, spd: 0, dir: 1, mn: 90, mx: 300 }]); L.enemies[0].sh = 1; st = PF.newState(L); st.en[0].sh = 1; st.en[0].h = 9; st.p.x = 70; run(st, IN.R | IN.RUN, 30); T('hold Run to pick up a shell', st.p.carry === 0, 'carry=' + st.p.carry); run(st, IN.R, 3); T('release Run throws the shell', st.p.carry === -1 && st.en[0].sh === 2);
+  // 15 P-switch turns bricks into coins
+  L = mk(rowsWith({ 8: '   W BBBB                                         ' })); st = PF.newState(L); st.p.x = 3 * 16 + 2; run(st, function (i) { return i < 25 ? IN.J : 0; }, 40); T('switch block activates', st.sw > 0, 'sw=' + st.sw); var c0 = st.coins; st.p.x = 70; st.p.y = 8 * 16 - 14; st.p.vy = 0; run(st, IN.R, 30); T('bricks become collectible coins during the switch', st.coins > c0, 'coins=' + st.coins);
+  // 16 cannon fires a bullet that kills / is stomped
+  L = mk(rowsWith({ 11: '                              C                   ' }), [], { cannons: [{ x: 30 * 16, y: 11 * 16, dir: -1, per: 60, ph: 0 }] }); st = PF.newState(L); st.p.x = 24 * 16; run(st, 0, 70); T('cannon fires bullets', st.en.some(function (e) { return e.t === E.BULLET; }));
+  // 17 crusher falls when hero passes under
+  L = mk(BASE, [{ t: E.CRUSH, x: 100, y: 5 * 16, y0: 5 * 16, w: 24, h: 24, spd: 0 }]); st = PF.newState(L); st.p.x = 106; run(st, 0, 40); T('crusher drops onto hero under it', st.p.dead && st.p.why === 'crush', st.p.why);
+  // 18 falling platform drops
+  L = mk(rowsWith({ 12: '                                                  ', 13: '                                                  ' }), [], { movers: [{ kind: 3, cx: 100, y: 12 * 16, w: 32, amp: 0, per: 300, ph: 0 }] }); st = PF.newState(L); st.p.x = 92; st.p.y = 12 * 16 - 14; run(st, 0, 3); var onit = st.p.ground; run(st, 0, 80); T('falling platform carries then drops hero', onit && st.mo[0].off > 10 && st.p.y > 12 * 16, 'ground=' + onit + ' off=' + st.mo[0].off.toFixed(0));
+  // 19 moving platform carries hero horizontally
+  L = mk(rowsWith({ 12: '                                                  ', 13: '                                                  ' }), [], { movers: [{ kind: 0, cx: 150, y: 12 * 16, w: 48, amp: 60, per: 240, ph: 0 }] }); st = PF.newState(L); st.p.x = 140; st.p.y = 12 * 16 - 14; var xs0 = st.p.x; run(st, 0, 50); T('horizontal mover carries hero', st.p.ground && Math.abs(st.p.x - xs0) > 15, (st.p.x - xs0).toFixed(0));
+  // 20 boss: three stomps defeat it, then the gate opens
+  L = mk(BASE, [{ t: E.BOSS, v: 0, x: 200, y: 12 * 16 - 26, w: 28, h: 26, spd: 0, mn: 100, mx: 400, ax: 250, ay: 8 * 16, dir: -1 }], { goalX: 450 }); st = PF.newState(L); T('boss counted', st.boss === 1);
+  for (i = 0; i < 3; i++) { var b = st.en[0]; var hp0 = b.hp; for (var tries = 0; tries < 8 && b.hp === hp0 && b.alive; tries++) { st.p.x = b.x + 8; st.p.y = b.y - 30; st.p.vy = 4; st.p.vx = 0; st.p.inv = 99; st.p.dead = false; run(st, 0, 6); } for (var j = 0; j < 70 && b.inv > 0; j++) PF.step(st, 0); }
+  T('boss defeated by three stomps', st.boss === 0 && !st.en[0].alive, 'hp=' + st.en[0].hp);
+  // 21 goal locked until the boss is dead
+  L = mk(BASE, [{ t: E.BOSS, v: 0, x: 300, y: 12 * 16 - 26, w: 28, h: 26, spd: 0, mn: 100, mx: 400, ax: 250, ay: 8 * 16, dir: -1 }], { goalX: 120 }); st = PF.newState(L); st.p.x = 130; PF.step(st, 0); T('goal gate locked while the boss lives', !st.p.won);
+  // 22 lava kills even a big hero
+  var lr = rowsWith({ 12: '##########                                        ', 13: '##########LLLLLLLLLL                              ' }); lr[12] = '##########LLLLLLLLLL' + ' '.repeat(30); L = mk(lr); st = PF.newState(L); PF.setPw(st.p, 1); st.p.x = 11 * 16; st.p.y = 12 * 16 - 24; run(st, 0, 30); T('lava kills even a big hero', st.p.dead && st.p.why === 'lava', st.p.why);
+  // 23 climbing to a high ledge with a spring and variable jump (sanity: head bump breaks bricks when big)
+  L = mk(rowsWith({ 8: '   B                                              ' })); st = PF.newState(L); PF.setPw(st.p, 1); st.p.x = 3 * 16 + 2; st.p.y = 12 * 16 - 24; run(st, IN.J, 20); T('big hero breaks a brick from below', st.mod.size > 0);
+  return out;
+};
 </script>

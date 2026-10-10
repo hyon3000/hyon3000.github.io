@@ -125,7 +125,7 @@ function startGame() {
   G.base = 0; G.coinBase = 0; G.lives = 3; G.nextLife = 50; G.prog = { done: {}, secret: {} }; G.main = null; G.st = null; G.L = null; G.hint = null; G.autoWait = 0; G.mapCool = 0;
   setWorld(0); G.mode = 'map'; setAuto(0); G.planner.reset();
   say(TT('월드 1: 레벨을 골라 시작하세요', 'World 1: pick a level to start'), 150);
-  var lv = parseInt(Q.get('level'), 10); if (lv) { var w = Math.floor((lv - 1) / 5); for (var ww = 0; ww < w; ww++) { G.prog.done[ww] = [1, 1, 1, 1, 1]; } setWorld(w); G.sel = (lv - 1) % 5; enterLevel(G.sel); }
+  var lv = parseInt(Q.get('level'), 10); if (lv) window.__pfGo(lv);
 }
 function levelInit(cp) {
   var node = G.curNode; G.st = PF.newState(G.L, { rec: true, cp: !!cp }); G.planner.reset(); setAuto(0); G.parts = []; G.pops = []; G.bumps = []; G.hint = null; G.cam = Math.max(0, Math.min(G.L.w * TS - VW, G.st.p.x - VW * 0.4)); G.mode = 'play'; G.secretExit = false;
@@ -152,7 +152,7 @@ window.giveHint = function () {
 };
 window.toggleSound = function () { G.snd = !G.snd; try { localStorage.setItem(SND_KEY, G.snd ? '1' : '0'); } catch (e) {} reportSound(); if (G.snd) sfx('coin'); return G.snd; };
 window.isSound = function () { return G.snd; };
-window.__pfGo = function (n) { startGame(); var w = Math.floor((n - 1) / 5); for (var ww = 0; ww < w; ww++) G.prog.done[ww] = [1, 1, 1, 1, 1]; setWorld(w); G.sel = (n - 1) % 5; enterLevel(G.sel); };
+window.__pfGo = function (n) { startGame(); var w = Math.floor((n - 1) / 5), si = (n - 1) % 5; for (var ww = 0; ww < w; ww++) G.prog.done[ww] = [1, 1, 1, 1, 1, 0]; G.prog.done[w] = [0, 0, 0, 0, 0, 0]; for (var q = 0; q < si; q++) G.prog.done[w][q] = 1; setWorld(w); G.sel = si; enterLevel(G.sel); };
 reportSound();
 
 function pop(x, y, t, c) { G.pops.push({ x: x, y: y, t: t, c: c, life: 45 }); }

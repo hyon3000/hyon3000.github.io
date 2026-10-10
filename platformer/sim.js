@@ -46,7 +46,7 @@ function newState(L, o) {
 function clone(st) {
   var c = {}, k; for (k in st) c[k] = st[k];
   c.p = {}; for (k in st.p) c.p[k] = st.p[k];
-  var en = new Array(st.en.length), i; for (i = 0; i < en.length; i++) { var s = st.en[i], e = {}; for (k in s) e[k] = s[k]; en[i] = e; } c.en = en;
+  var en = new Array(st.en.length), i, px = st.p.x; for (i = 0; i < en.length; i++) { var s = st.en[i]; if (st.share && Math.abs(s.x - px) > 600) { en[i] = s; continue; } var e = {}; for (k in s) e[k] = s[k]; en[i] = e; } c.en = en;
   c.it = st.it.length ? st.it.map(function (s) { var e = {}; for (var k in s) e[k] = s[k]; return e; }) : [];
   c.fb = st.fb.length ? st.fb.map(function (s) { return { x: s.x, y: s.y, vx: s.vx, vy: s.vy, life: s.life }; }) : [];
   c.ep = st.ep.length ? st.ep.map(function (s) { return { x: s.x, y: s.y, vx: s.vx, vy: s.vy, life: s.life }; }) : [];
@@ -123,6 +123,7 @@ function updEnemy(st, e, f) {
   var p = st.p, i, hw;
   switch (e.t) {
     case 2:   // flyer
+      if (Math.abs(e.ax - p.x) > P.ACTIVE + 60) return;
       e.x = e.ax + e.rg * tri(f * e.sp + e.ph); e.y = e.ay + Math.sin(f * 0.08 + e.ph * 6.283) * e.am; e.dir = tri((f + 1) * e.sp + e.ph) > tri(f * e.sp + e.ph) ? 1 : -1; return;
     case 0: case 1: case 3:
       if (Math.abs(e.x - p.x) > P.ACTIVE) return;
@@ -143,8 +144,8 @@ function updEnemy(st, e, f) {
       e.x += e.vx; if (++e.tm > 420 || boxHit(st, e.x, e.y, e.w, e.h)) { e.alive = false; e.dt = 8; } return;
     case 5: { // crusher
       if (Math.abs(e.x - p.x) > P.ACTIVE) return;
-      if (e.s === 0) { if (Math.abs(p.x + p.w / 2 - e.x - e.w / 2) < 22 && p.y > e.y) { e.s = 1; e.vy = 1; } }
-      else if (e.s === 1) { e.vy = Math.min(9, e.vy + 0.7); var ny = e.y + e.vy; if (boxHit(st, e.x, ny, e.w, e.h)) { e.y = Math.floor((ny + e.h - 1e-4) / TS) * TS - e.h; e.s = 2; e.tm = 34; ev(st, 'thud', e.x + e.w / 2, e.y + e.h); } else e.y = ny; }
+      if (e.s === 0) { if (Math.abs(p.x + p.w / 2 - e.x - e.w / 2) < 10 && p.y > e.y) { e.s = 1; e.vy = 1.5; } }
+      else if (e.s === 1) { e.vy = Math.min(9.5, e.vy + 0.8); var ny = e.y + e.vy; if (boxHit(st, e.x, ny, e.w, e.h)) { e.y = Math.floor((ny + e.h - 1e-4) / TS) * TS - e.h; e.s = 2; e.tm = 34; ev(st, 'thud', e.x + e.w / 2, e.y + e.h); } else e.y = ny; }
       else if (e.s === 2) { if (--e.tm <= 0) e.s = 3; }
       else { e.y -= 1.1; if (e.y <= e.y0) { e.y = e.y0; e.s = 0; } }
       return; }

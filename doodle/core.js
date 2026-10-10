@@ -160,9 +160,10 @@ function genLevel(seed, Lreal, opts) {
     }
     if (t === 'crates') return { type: 'crates', rows: L >= 8 ? Math.min(6, Math.max(3, 2 + Math.floor(L / 12))) : 2, lead: 48, w: 56, need: 48 + 56 + 72 };
     if (t === 'dominoes') { var n = 4 + Math.min(9, Math.floor(L / 4)); return { type: 'dominoes', n: n, lead: 48, w: n * 36, need: 48 + n * 36 + 72 }; }
-    var h = Math.max(40, Math.round(rr(0.55, 1) * hmax * hscale));
-    var lead = r12(1.25 * h + 36), ww = 48;
-    return { type: 'wall', h: h, ww: ww, lead: lead, need: lead + ww + 60 };
+    var mesa = L >= 12 && rnd() < Math.min(0.6, 0.15 + (L - 12) * 0.015);       // a raised plateau: the ball has to go UP onto it (the star is on top) and come down on the far side
+    var h = Math.max(mesa ? 80 : 40, Math.round(rr(mesa ? 0.6 : 0.55, 1) * hmax * (mesa ? 1 : hscale)));
+    var lead = r12(1.25 * h + 36), ww = mesa ? r12(rr(150, 260)) : 48;
+    return { type: 'wall', h: h, ww: ww, lead: lead, need: lead + ww + 60, mesa: mesa };
   };
   var list = order.map(mk);
   if (L >= 10) list.splice(1, 0, { type: 'slot', need: 170, w: 170 });       // room reserved for a hazard (spikes / rotor) between the obstacles
@@ -204,7 +205,7 @@ function genLevel(seed, Lreal, opts) {
       cursor = W;
     } else {
       var xw2 = r12(base + f.lead);
-      features.push({ type: 'wall', x0: xw2, x1: xw2 + f.ww, top: Y1 - f.h, y: Y1, h: f.h });
+      features.push({ type: 'wall', x0: xw2, x1: xw2 + f.ww, top: Y1 - f.h, y: Y1, h: f.h, mesa: !!f.mesa });
       boxes.push({ cx: xw2 + f.ww / 2, cy: Y1 - f.h + (f.h + 10) / 2, hw: f.ww / 2, hh: (f.h + 10) / 2, a: 0, kind: 'wall' });
       cursor = xw2 + f.ww + 60;
     }
@@ -303,6 +304,7 @@ function genLevel(seed, Lreal, opts) {
   var last = features.filter(function (f) { return f.end; })[0] || null;
   if (last && last.end) stars.push({ x: W - 70, y: last.top - 24 }); else stars.push({ x: W - 70, y: Y1 - 24 });
   var extra = 0;
+  var nMesa = 0; features.forEach(function (f) { if (f.mesa) nMesa++; });
   if (L >= 8) { extra = 1 + (rnd() < 0.6 ? 1 : 0) + (L >= 12 && rnd() < 0.5 ? 1 : 0) + (L >= 30 && rnd() < 0.5 ? 1 : 0) + (L >= 50 && rnd() < 0.5 ? 1 : 0); }   // ordered levels: 2-4 stars
   var cands = [];
   features.forEach(function (f) {
@@ -312,7 +314,10 @@ function genLevel(seed, Lreal, opts) {
   var inSpecial = function (xx) { return features.some(function (f) { return (f.type === 'boost' || f.type === 'rotor' || f.type === 'spikes') && xx > f.x0 - 40 && xx < f.x1 + 40; }) || portals.some(function (pr) { return xx > pr.a.x - 40 && xx < pr.b.x + 40; }); };
   cands = cands.filter(function (q) { return !inSpecial(q.x); });
   var tries2 = 0; while (cands.length < extra && tries2++ < 40) { var cxr = r12(rr(xD + 24, xF - 60)); if (!inSpecial(cxr)) cands.push({ x: cxr, y: Y1 - 24 }); }
+  if (L >= 8) extra = Math.max(extra, Math.min(nMesa + 1, 5));
+  cands.forEach(function (q) { features.forEach(function (f) { if (f.mesa && Math.abs((f.x0 + f.x1) / 2 - q.x) < 1) q.mesa = true; }); });
   for (i = cands.length - 1; i > 0; i--) { var j = Math.floor(rnd() * (i + 1)); var tmp = cands[i]; cands[i] = cands[j]; cands[j] = tmp; }
+  cands.sort(function (a, b) { return (b.mesa ? 1 : 0) - (a.mesa ? 1 : 0); });
   for (i = 0, j = 0; j < extra && i < cands.length; i++) { var okc = true; stars.forEach(function (st0) { if (Math.hypot(st0.x - cands[i].x, st0.y - cands[i].y) < 80) okc = false; }); if (okc && cands[i].x > xD + 20) { stars.push({ x: cands[i].x, y: cands[i].y }); j++; } }
   // ----- validation: every object must lie in free space (clearance = radius + 6 px) with respect to the static terrain, static props and killer zones
   var pointFree = function (x, y, rad, extra) {
