@@ -66,7 +66,7 @@ RL.collectBC = function (steps, mixPolicy, beta, noise) {
 RL.eval = function (specs, who, maxFrames) {
   var out = [], buf = new Float32Array(D);
   specs.forEach(function (sp) {
-    var L = PF.generate(sp.seed, sp.n, sp.kind ? { kind: sp.kind } : undefined), st = PF.newState(L), f = 0, won = false, pl = who === 'planner' ? PFPlanner.make() : PFAI.make(), t0 = performance.now(), bestF = 0, lastCr = 0, lastSt = 0;
+    var L = PF.generate(sp.seed, sp.n, sp.kind ? { kind: sp.kind } : undefined), st = PF.newState(L), f = 0, won = false, pl = who === 'planner' ? PFPlanner.make() : (who === 'shield' ? PFAI.makeShielded() : PFAI.make()), t0 = performance.now(), bestF = 0, lastCr = 0, lastSt = 0;
     while (f < (maxFrames || 60 * L.time)) { PF.step(st, pl.decide(st)); f++; if (st.p.won) { won = true; break; } if (st.p.dead) break; if (st.cr > lastCr || st.stage > lastSt) { bestF = f; lastCr = st.cr; lastSt = st.stage; } if (f - bestF > 900) break; }
     out.push({ seed: sp.seed, n: sp.n, kind: L.kind, won: won, dead: st.p.dead ? st.p.why : '', frames: f, stage: st.stage, x: Math.round(st.p.x), ms: Math.round(performance.now() - t0) });
   });

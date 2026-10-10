@@ -83,6 +83,21 @@ function make() {
     }
   };
 }
-root.PFAI = { D: D, build: build, setWeights: setWeights, forward: forward, maskOf: maskOf, make: make, KEYBITS: KEYBITS };
+// RL policy + simulation shield: before a key mask is used, the game's own simulation looks 28 frames ahead with the policy driving; if the hero would die, the look-ahead planner takes the wheel for 14 frames.
+function makeShielded() {
+  var pol = make(), sim = make(), pl = PFPlanner.make(), S = { until: 0, hits: 0, f: 0 };
+  function dies(st, m0) { var c = PF.clone(st); c.share = true; sim.reset(); var m = m0; for (var k = 0; k < 28; k++) { PF.step(c, m); if (c.p.dead) return true; if (c.p.won) return false; m = sim.decide(c); } return false; }
+  return {
+    ready: function () { return !!NET; }, stats: S,
+    reset: function () { pol.reset(); pl.reset(); S.until = 0; },
+    decide: function (st) {
+      if (S.until > st.f) return pl.decide(st);
+      var m = pol.decide(st);
+      if ((st.f & 1) === 0 && dies(st, m)) { S.until = st.f + 14; S.hits++; pl.reset(); return pl.decide(st); }
+      return m;
+    }
+  };
+}
+root.PFAI = { D: D, build: build, setWeights: setWeights, forward: forward, maskOf: maskOf, make: make, makeShielded: makeShielded, KEYBITS: KEYBITS };
 if (root.SHAPE_AI) { try { setWeights(root.SHAPE_AI); } catch (e) { root.PFAI.err = String(e); } }
 })(typeof window !== 'undefined' ? window : globalThis);

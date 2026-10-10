@@ -260,7 +260,7 @@ function step(st, inp) {
   var inW = isW(cell), feetW = isW(tileAt(st, Math.floor(cx0 / TS), Math.floor((p.y + p.h - 1) / TS)));
   var curPush = cell === T.CURL ? -0.05 : cell === T.CURR ? 0.05 : 0, curUp = cell === T.CURU ? -0.4 : 0;
   if (inW !== p.wasW) { ev(st, 'splash', cx0, p.y + p.h / 2, inW ? 1 : 0); p.wasW = inW; }
-  if (inW) { p.air--; if (p.air <= 0) { p.air = 0; if (p.dtick++ % 55 === 0) hurt(st, 'drown'); } } else { p.air = Math.min(AIRMAX, p.air + 8); p.dtick = 0; }
+  if (inW) { if (!st.noEn) p.air--; if (p.air <= 0) { p.air = 0; if (p.dtick++ % 55 === 0) hurt(st, 'drown'); } } else { p.air = Math.min(AIRMAX, p.air + 8); p.dtick = 0; }
   var jEdge = jump && !p.jheld;
   // --- vines
   if (!p.climb && up && cell === T.VINE) { p.climb = true; p.vx = 0; p.vy = 0; p.ground = false; p.mv = -1; }
@@ -292,7 +292,7 @@ function step(st, inp) {
       if (jump) p.vy = Math.max(p.vy - 0.30, -1.9); else p.vy = Math.min(p.vy + 0.10, 1.3);
       if (jEdge && !p.ground) ev(st, 'swim', p.x, p.y);
     } else {
-      if (feetW && jEdge && !p.ground) { p.vy = -4.6; p.jbuf = 0; ev(st, 'jump', p.x, p.y + p.h); }
+      if (feetW && !p.ground && (jEdge || (jump && p.vy < -1.0 && p.vy > -2.2))) { p.vy = -4.6; p.jbuf = 0; ev(st, 'jump', p.x, p.y + p.h); }   // breaching the surface: a hop out of the water
       else if (p.jbuf > 0 && p.coy > 0) {
         p.vy = P.JUMP - P.JRUN * Math.abs(p.vx) / P.RUN - (pfull ? 0.7 : 0); if (p.mount) p.vy *= 1.08;
         if (spinIn) { p.vy *= 0.92; p.spin = 26; }

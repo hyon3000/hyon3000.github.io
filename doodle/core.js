@@ -120,12 +120,17 @@ function inPoly(px, py, p) {
 /* ================= PROCEDURAL LEVEL ================= */
 // difficulty ramps ~3.9x faster than the level number after level 3: level 10 plays like the old level 30 and it keeps rising from there
 var EFF = [0, 1, 2, 3, 4, 6, 9, 13, 18, 24, 30];       // gentle start: levels 1-5 climb slowly, level 10 plays like the old level 30
-function effLevel(n) { return n <= 10 ? EFF[Math.max(0, n)] : Math.round(30 + (n - 10) * 3.86); }
-function genLevel(seed, Lreal, opts) {
+function effLevel(n) {            // n may be fractional
+  if (n <= 10) { var i = Math.floor(n), f = n - i; return Math.max(1, Math.round(EFF[i] + (EFF[Math.min(10, i + 1)] - EFF[i]) * f)); }
+  return Math.round(30 + (n - 10) * 3.86);
+}
+var PACE = 0.35;                   // the whole curve is stretched: the difficulty that used to arrive at level 7 now arrives at level 20
+function genLevel(seed, Lraw, opts) {
+  var Lreal = Lraw * PACE;
   var L = effLevel(Lreal);
   var Ls = Math.round(Lreal * 0.75), Lst = effLevel(Ls);       // the number of stars (and plateaus that carry one) grows at 0.75x the pace of the rest
   var noRepair = !!(opts && opts.norepair), repairs = 0, invalidBefore = 0;
-  var rnd = mulberry32(hash2(seed, Lreal * 7919 + 13));
+  var rnd = mulberry32(hash2(seed, Lraw * 7919 + 13));
   var rr = function (a, b) { return a + (b - a) * rnd(); };
   var hmax = Math.min(L > 30 ? 190 : 150, 40 + L * 7.5);
   var wmax = Math.min(L >= 8 ? 230 : 380, 130 + L * 16), HI = L >= 8;
@@ -552,13 +557,13 @@ function Sim(lv, snap) {
   if (snap) this.restore(snap);
 }
 /* ---- ropes: chains of small boxes joined by revolute joints (own negative filter group, so a rope does not collide with itself) ---- */
-var ROPE_SEG = 12, ROPE_CAP = 120, RSUB = 2, RVEL = 10, RPOS = 4;
+var ROPE_SEG = 12, ROPE_CAP = 120, RSUB = 3, RVEL = 16, RPOS = 6;
 Sim.prototype.buildChain = function (P, level) {
   var world = this.world, links = [], joints = [], gid = this.ropeGid++;
   for (var i = 0; i + 1 < P.length; i++) {
     var a = P[i], b = P[i + 1], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    var body = world.createBody({ type: 'dynamic', position: V((a[0] + b[0]) / 2, (a[1] + b[1]) / 2), angle: Math.atan2(b[1] - a[1], b[0] - a[0]), linearDamping: 0.12, angularDamping: 0.3 });
-    body.createFixture({ shape: new planck.Box((len / 2 + 0.8) / S, 2.5 / S), density: 0.6, friction: 0.4, restitution: 0,
+    var body = world.createBody({ type: 'dynamic', position: V((a[0] + b[0]) / 2, (a[1] + b[1]) / 2), angle: Math.atan2(b[1] - a[1], b[0] - a[0]), linearDamping: 0.12, angularDamping: 0.3, bullet: !level });
+    body.createFixture({ shape: new planck.Box((len / 2 + 0.8) / S, 3.2 / S), density: level ? 0.6 : 5, friction: 0.4, restitution: 0,
       filterGroupIndex: level ? 0 : -gid, filterCategoryBits: level ? 2 : 1, filterMaskBits: level ? 0 : 0xFFFF });
     body.__hl = len / 2;
     links.push(body);
@@ -783,6 +788,41 @@ Sim.prototype.projectRopes = function () {     // rope length is invariant: afte
   }.bind(this);
   // exact pass: walk each rope from an anchored end and snap every link to the end of the previous one (the chain can then never be longer than the drawn rope);
   // a rope held at both ends is swept back and forth (FABRIK style) until both ends sit on their anchors
+  var grp = function (b) { var f = b.getFixtureList(); return f ? f.getFilterGroupIndex() : 0; };
+  var pushOut = function (x, y, g, margin, skip, cn) {          // how far (px) a rope sample at (x, y) has to move to get out of solid drawn objects, or null
+    var res = null, self = this, wp = Vec2(x / S, y / S), r = (margin + 2) / S;
+    this.world.queryAABB(new planck.AABB(Vec2(wp.x - r, wp.y - r), Vec2(wp.x + r, wp.y + r)), function (fx) {
+      var B = fx.getBody(); if (fx.isSensor() || B.__hl !== undefined || B === self.ball || (g < 0 && grp(B) === g) || (skip && skip.indexOf(B) >= 0)) return true;
+      var sh = fx.getShape(), ty = sh.getType(), lp = B.getLocalPoint(wp), nx = 0, ny = 0, dep = 0;
+      if (ty === 'polygon') {
+        var best = -1e9, bi = -1; for (var i = 0; i < sh.m_count; i++) { var vv = sh.m_vertices[i], nn = sh.m_normals[i], sd = nn.x * (lp.x - vv.x) + nn.y * (lp.y - vv.y); if (sd > best) { best = sd; bi = i; } }
+        if (best < margin / S) {
+          nx = sh.m_normals[bi].x; ny = sh.m_normals[bi].y; dep = margin / S - best;
+          var side = cn && cn.filter(function (q) { return q.b === B; })[0];       // the side the link really touched this step (the nearest face can be the wrong, far one when it is buried)
+          if (side) {
+            var dl2 = B.getLocalVector(Vec2(side.x, side.y)), tt = 1e9;
+            for (var i2 = 0; i2 < sh.m_count; i2++) { var dn = sh.m_normals[i2].x * dl2.x + sh.m_normals[i2].y * dl2.y; if (dn > 1e-6) { var vv2 = sh.m_vertices[i2], s2 = sh.m_normals[i2].x * (lp.x - vv2.x) + sh.m_normals[i2].y * (lp.y - vv2.y); tt = Math.min(tt, (margin / S - s2) / dn); } }
+            if (tt < 1e8 && tt > 0) { var wres = { x: side.x, y: side.y, d: Math.min(tt * S, 40) }; if (!res || wres.d > res.d) res = wres; return true; }
+          }
+        } else return true;
+      } else if (ty === 'circle') {
+        var dx = lp.x - sh.m_p.x, dy = lp.y - sh.m_p.y, dl = Math.hypot(dx, dy), rr = sh.m_radius + margin / S;
+        if (dl < rr) { if (dl < 1e-9) { nx = 0; ny = -1; } else { nx = dx / dl; ny = dy / dl; } dep = rr - dl; } else return true;
+      } else return true;
+      var wn = B.getWorldVector(Vec2(nx, ny)); if (!res || dep * S > res.d) res = { x: wn.x, y: wn.y, d: Math.min(dep * S, 40) };
+      return true;
+    });
+    return res;
+  }.bind(this);
+  var contactsOf = function (b) {                     // touching contacts of a rope link, as directions pointing out of the other body
+    var r = null;
+    for (var ce = b.getContactList(); ce; ce = ce.next) {
+      var c = ce.contact; if (!c.isTouching() || ce.other.__hl !== undefined || ce.other === this.ball) continue;
+      var wm = c.getWorldManifold(null); if (!wm) continue; var sg = c.getFixtureA().getBody() === b ? -1 : 1;
+      (r = r || []).push({ b: ce.other, x: wm.normal.x * sg, y: wm.normal.y * sg });
+    }
+    return r;
+  }.bind(this);
   var sweep = function (rec, lead) {                // FABRIK step: every link keeps its length, is pulled onto the previous joint and turns towards where its other end used to be
     var n = rec.links.length, end = lead === 0 ? rec.endA : rec.endB, w = end.b.getWorldPoint(end.lp), tx = w.x * S, ty = w.y * S, k, b, e;
     for (var s = 0; s < n; s++) {
@@ -790,6 +830,11 @@ Sim.prototype.projectRopes = function () {     // rope length is invariant: afte
       e = this.linkEnds(b); var old = lead === 0 ? e[1] : e[0], len = b.__hl * 2, dx = old[0] - tx, dy = old[1] - ty, dl = Math.hypot(dx, dy);
       if (dl < 1e-6) { var ag = b.getAngle(); dx = Math.cos(ag) * (lead === 0 ? 1 : -1); dy = Math.sin(ag) * (lead === 0 ? 1 : -1); dl = 1; }
       var ux = dx / dl, uy = dy / dl, fx = tx + ux * len, fy = ty + uy * len;       // far end of this link
+      var gp = grp(b), cn = contactsOf(b), po = pushOut(fx, fy, gp, 3, rec.hung, cn), pm = pushOut((tx + fx) / 2, (ty + fy) / 2, gp, 3, rec.hung, cn);       // the link must not end up inside an object: bend it around instead
+      if (po || pm) {
+        var px2 = fx + (po ? po.x * po.d : 0) + (pm ? pm.x * pm.d * 2 : 0), py2 = fy + (po ? po.y * po.d : 0) + (pm ? pm.y * pm.d * 2 : 0), pl = Math.hypot(px2 - tx, py2 - ty) || 1;
+        ux = (px2 - tx) / pl; uy = (py2 - ty) / pl; fx = tx + ux * len; fy = ty + uy * len;
+      }
       if (b.isDynamic()) {
         var a0 = lead === 0 ? [tx, ty] : [fx, fy], a1 = lead === 0 ? [fx, fy] : [tx, ty];
         b.setTransform(Vec2((a0[0] + a1[0]) / 2 / S, (a0[1] + a1[1]) / 2 / S), Math.atan2(a1[1] - a0[1], a1[0] - a0[0]));
@@ -799,6 +844,8 @@ Sim.prototype.projectRopes = function () {     // rope length is invariant: afte
   }.bind(this);
   this.ropes.forEach(function (rec) {
     if (rec.level) return;
+    rec.hung = [];                                    // bodies jointed to this rope (hung on it, pinned to it) are not obstacles for it
+    rec.links.forEach(function (lb) { if (!lb) return; for (var je = lb.getJointList(); je; je = je.next) if (je.other.__hl === undefined && rec.hung.indexOf(je.other) < 0) rec.hung.push(je.other); });
     if (rec.endA && rec.endB) { for (var fi = 0; fi < 14; fi++) { sweep(rec, 1); sweep(rec, 0); } }
     else if (rec.endA) sweep(rec, 0);
     else if (rec.endB) sweep(rec, 1);
@@ -811,6 +858,14 @@ Sim.prototype.projectRopes = function () {     // rope length is invariant: afte
       if (dx * dx + dy * dy > 1e-8) snapChain(lo.rec, lo.k, dx, dy);
     });
   }, this);
+  this.pins.forEach(function (p) {                  // a pin fixed to the world (a pulley's axle) must not give way under the rope's pull
+    if (p.type !== 'peg' || !p.anchor) return;
+    p.joints.forEach(function (jt) {
+      var B = jt.getBodyB(); if (B.__hl !== undefined || !B.isDynamic()) return;
+      var pa = jt.getAnchorA(), pb = jt.getAnchorB(), dx = pa.x - pb.x, dy = pa.y - pb.y;
+      if (dx * dx + dy * dy > 1e-10) { var q = B.getPosition(); B.setPosition(Vec2(q.x + dx, q.y + dy)); }
+    });
+  }, this);
   for (var jx = this.world.getJointList(); jx; jx = jx.getNext()) {       // last: whatever is hinged to a rope link (a heavy crate on the rope) follows the rope
     if (jx.getType() !== 'revolute-joint') continue;
     var JA = jx.getBodyA(), JB = jx.getBodyB(), la = JA.__hl !== undefined, lb = JB.__hl !== undefined; if (la === lb) continue;
@@ -820,6 +875,7 @@ Sim.prototype.projectRopes = function () {     // rope length is invariant: afte
   }
 };
 Sim.prototype.capLoad = function (body, rec) {      // a body hung on a rope counts as at most 40 rope links: huge mass ratios make a chain of joints stretch
+  return;      // (disabled: capping the mass of hung bodies destroys mass ratios, which pulley / scale puzzles depend on)
   if (!body || !body.isDynamic() || body.__hl !== undefined || body.__capped) return;
   var lb = rec && rec.links.filter(Boolean)[0]; if (!lb) return;
   var cap = lb.getMass() * 40, m = body.getMass(); if (m <= cap) return;

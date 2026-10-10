@@ -368,7 +368,7 @@ function build(seed, n, a, o) {
   flat(4, g);
   var goalCol, poleCol, bossDef = null, arenaC0 = 0;
   if (castle && !room) {
-    var bv = (n + hash(seed, n, 5)) % 5, bx;
+    var bv = o.boss !== undefined ? o.boss : (n + hash(seed, n, 5)) % 5, bx;
     if (bv === 3) {   // flooded arena: a deep basin whose walls are the ledges, exit steps lead to the gate
       while (g > 9) { g--; flat(2, g); } flat(6, g);
       var ba = basin(g, 4, 22); arenaC0 = ba.c0; flat(5, g); bx = (arenaC0 + 14) * TS;
@@ -561,10 +561,12 @@ function roomLevel(seed, n, secret) {
   L.valid = false; return L;
 }
 function generate(seed, n, o) {
-  var L = null, v = null;
+  var L = null, v = null, t0 = Date.now();
   for (var a = 0; a < 16; a++) {
-    L = build(seed, n, a, o); v = validate(L);
-    if (v.ok) { L.script = v.script; if (replay(L)) { L.valid = true; L.attempt = a; L.vnodes = v.nodes; L.crumbs = makeCrumbs(L); return L; } }
+    var oo = o; if (a >= 6 || Date.now() - t0 > 7000) { oo = {}; for (var k in (o || {})) oo[k] = o[k]; oo.boss = 0; }   // fallback: simpler boss arena
+    L = build(seed, n, a, oo); v = validate(L);
+    if (v.ok) { L.script = v.script; if (replay(L)) { var cc = checkContainment(L); if (!cc.bad) { L.valid = true; L.attempt = a; L.vnodes = v.nodes; L.crumbs = makeCrumbs(L); return L; } } }
+    if (Date.now() - t0 > 20000) break;
   }
   L.valid = false; L.attempt = 16; return L;
 }

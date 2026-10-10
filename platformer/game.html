@@ -12,8 +12,8 @@ canvas{position:absolute;left:0;top:0;touch-action:none;outline:none;background:
 #pad{flex:0 0 auto;display:none;box-sizing:border-box;padding:6px 14px calc(6px + env(safe-area-inset-bottom));background:#120e30;border-top:2px solid #3a2f80;touch-action:none;justify-content:space-between;align-items:center}
 #pad.on{display:flex;height:clamp(96px,26vh,168px)}
 .cross{position:relative;height:100%;aspect-ratio:1/1;max-width:44vw;touch-action:none;display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr 1fr;gap:4px}
-.cross b{display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:10px;font:bold 13px/1.05 system-ui,sans-serif;color:#fff;background:#4a3a9a;border:2px solid #9a8aff;border-bottom-width:4px;pointer-events:none;box-sizing:border-box;min-width:0;overflow:hidden}
-.cross b small{font-size:9px;font-weight:600;opacity:.75;margin-top:1px;letter-spacing:.5px}
+.cross b{display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:10px;font:bold calc(var(--cs,150px)/12) / 1.05 system-ui,sans-serif;color:#fff;background:#4a3a9a;border:2px solid #9a8aff;border-bottom-width:4px;pointer-events:none;box-sizing:border-box;min-width:0;overflow:hidden}
+.cross b small{font-size:calc(var(--cs,150px)/18);font-weight:600;opacity:.75;margin-top:1px;letter-spacing:.5px}
 .cross b.on{filter:brightness(1.7);transform:translateY(2px)}
 .cross .u{grid-area:1/2}.cross .l{grid-area:2/1}.cross .r{grid-area:2/3}.cross .d{grid-area:3/2}
 .cross .hub{grid-area:2/2;border-radius:50%;background:#1c1646;border:2px solid #2b2470;margin:18%}

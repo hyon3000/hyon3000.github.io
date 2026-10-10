@@ -308,13 +308,13 @@ function drawMap() {
     else { hex(nd.x, nd.y, 9, '#10082a', Math.PI / 6); hex(nd.x, nd.y, 7.3, col, Math.PI / 6); }
     if (done) { diamond(nd.x + 8, nd.y - 8, 4, 5, '#fff'); ctx.strokeStyle = '#18a070'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(nd.x + 6, nd.y - 8); ctx.lineTo(nd.x + 7.8, nd.y - 6); ctx.lineTo(nd.x + 10.5, nd.y - 10); ctx.stroke(); }
     if (sel) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(nd.x, nd.y, 13 + Math.sin(F * 0.2) * 1.5, 0, 6.3); ctx.stroke(); }
-    text(nd.kind === 'bonus' ? '★' : String(nd.i + 1), nd.x, nd.y + 0.5, 8, '#fff', 'center'); }
+    text(nd.kind === 'bonus' ? '★' : String(nd.ending ? 5 : nd.i + 1), nd.x, nd.y + 0.5, 8, '#fff', 'center'); }
   var cur = all.filter(function (n) { return n.i === G.sel; })[0] || nodes[0];
   drawHero({ x: cur.x - 6, y: cur.y - 30 + Math.sin(F * 0.1) * 2, w: 12, h: 14, pw: 0, big: false, face: 1, ground: false, anim: 0, vx: 0, inv: 0, star: 0, spin: 0 }, false, 0, false);
   rrect(3, 3, 90, 14, 7, 'rgba(10,8,34,.62)'); text(TT('월드 ', 'WORLD ') + G.worldName(wm.wid), 10, 10.5, 9, '#ffd0a0');
   rrect(100, 3, 110, 14, 7, 'rgba(10,8,34,.62)'); diamond(110, 10, 4, 5, '#2ee6d6'); text(pad6(G.base), 118, 10.5, 8.5, '#fff');
   rrect(VW - 76, 3, 73, 14, 7, 'rgba(10,8,34,.62)'); for (i = 0; i < Math.min(G.lives, 5); i++) heroIcon(VW - 66 + i * 11, 10, 0.9);
-  var sn = all.filter(function (n) { return n.i === G.sel; })[0]; if (sn) { var kn = PF.KIND_NAMES[sn.kind]; rrect(70, VH - 26, 260, 18, 9, 'rgba(10,8,34,.72)'); text((sn.kind === 'bonus' ? '★ ' : G.worldName(wm.wid) + '·' + (sn.i + 1) + '  ') + (KO ? kn[0] : kn[1]), VW / 2, VH - 17, 9, '#fff', 'center', false); }
+  var sn = all.filter(function (n) { return n.i === G.sel; })[0]; if (sn) { var kn = PF.KIND_NAMES[sn.kind]; rrect(70, VH - 26, 260, 18, 9, 'rgba(10,8,34,.72)'); text((sn.kind === 'bonus' ? '★ ' : G.worldName(wm.wid) + '·' + (sn.ending ? 5 : sn.i + 1) + '  ') + (KO ? kn[0] : kn[1]), VW / 2, VH - 17, 9, '#fff', 'center', false); }
   if (G.auto) { var w2 = 128; rrect(VW / 2 - w2 / 2, 20, w2, 14, 4, 'rgba(255,138,61,.95)'); text(TT('자동 플레이 (F3 끄기)', 'AUTO PLAY (F3 to stop)'), VW / 2, 27, 8, '#2a1000', 'center', false); }
   if (G.msgT > 0 && G.msg) { var tw = Math.min(VW - 16, 8 + G.msg.length * (KO ? 7.4 : 4.9)); rrect(VW / 2 - tw / 2, 40, tw, 15, 4, 'rgba(10,8,34,.78)'); text(G.msg, VW / 2, 47.5, 8, '#fff', 'center', false); }
   text(TT('← → ↑ ↓ 선택   점프/Enter 시작', 'Arrows select   Jump/Enter start'), VW / 2, VH - 38, 7.5, '#cfe', 'center');
@@ -359,7 +359,7 @@ function drawSelect() {
   nodes.forEach(function (nd, k) {
     var gi = m.nodes.indexOf(nd), st = G.selStageState(w2.id, m, nd), sel = G.selCol === 1 && G.selSi === gi, kn = PF.KIND_NAMES[nd.kind]; y = 40 + k * 16; G.selRects.push({ x: 148, y: y - 1, w: 240, h: 15, kind: 'stage', idx: gi });
     rrect(148, y - 1, 240, 15, 5, sel ? 'rgba(46,230,214,.35)' : 'rgba(255,255,255,.06)'); var dim = st === 'locked';
-    text((nd.kind === 'bonus' ? '★' : G.worldName(w2.id) + '·' + (nd.i + 1)) + '  ' + (KO ? kn[0] : kn[1]) + (nd.ending ? (nd.ending === 'castle' ? TT('  (성채 끝)', '  (castle ending)') : TT('  (대포 끝)', '  (cannon ending)')) : '') + (nd.main ? '' : TT('  [비밀 길]', '  [secret route]')), 154, y + 6.5, 8.5, dim ? '#6a6a88' : '#fff', 'left', false);
+    text((nd.kind === 'bonus' ? '★' : G.worldName(w2.id) + '·' + (nd.ending ? 5 : nd.i + 1)) + '  ' + (KO ? kn[0] : kn[1]) + (nd.ending ? (nd.ending === 'castle' ? TT('  (성채 끝)', '  (castle ending)') : TT('  (대포 끝)', '  (cannon ending)')) : '') + (nd.main ? '' : TT('  [비밀 길]', '  [secret route]')), 154, y + 6.5, 8.5, dim ? '#6a6a88' : '#fff', 'left', false);
     if (st === 'done') text('✓', 382, y + 6.5, 9, '#7affe0', 'right', false); else if (st === 'locked') text(TT('잠김', 'locked'), 382, y + 6.5, 7, '#6a6a88', 'right', false); else text('▶', 382, y + 6.5, 8, '#ffd0a0', 'right', false);
   });
   if (G.prog.wcl[w2.id]) text(TT('월드 클리어: 모든 스테이지를 고를 수 있어요', 'World cleared: every stage is selectable'), 150, 40 + nodes.length * 16 + 8, 7.5, '#7affe0', 'left', false);

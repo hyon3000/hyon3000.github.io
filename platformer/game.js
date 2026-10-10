@@ -9,7 +9,7 @@ var Q = new URLSearchParams(location.search);
 var BEST_KEY = 'shapeworld.best', SND_KEY = 'shapeworld.sound';
 var G = window.__pf = { mode: 'start', n: 1, seed: 1, lives: 3, base: 0, coinBase: 0, best: 0, L: null, st: null, auto: false, planner: PFPlanner.make(), hint: null, msg: null, msgT: 0, frame: 0,
   cam: 0, parts: [], pops: [], bumps: [], snd: true, dieT: 0, clearT: 0, dy: 0, dvy: 0, bonus: 0, nextLife: 50, autoWait: 0, loading: false,
-  useRL: true, ai: (window.PFAI ? PFAI.make() : null), w: 0, map: null, sel: 0, prog: { done: {}, secret: {} }, main: null, curNode: null, secretExit: false, mapCool: 0 };
+  useRL: true, ai: (window.PFAI ? PFAI.makeShielded() : null), w: 0, map: null, sel: 0, prog: { done: {}, secret: {} }, main: null, curNode: null, secretExit: false, mapCool: 0 };
 try { G.best = parseInt(localStorage.getItem(BEST_KEY), 10) || 0; } catch (e) {}
 try { var sv = localStorage.getItem(SND_KEY); if (sv === '0') G.snd = false; } catch (e) {}
 var embedded = function () { try { return window.parent !== window && !!window.parent.setAutoMark; } catch (e) { return false; } };
@@ -135,6 +135,7 @@ function layout() {
   var s = Math.min(w / VW, h / VH), cw = Math.floor(VW * s), ch = Math.floor(VH * s), dpr = Math.min(window.devicePixelRatio || 1, 3);
   cv.style.width = cw + 'px'; cv.style.height = ch + 'px'; cv.style.left = Math.floor((w - cw) / 2) + 'px'; cv.style.top = Math.floor((h - ch) / 2) + 'px';
   cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); BS = cv.width / VW;
+  var cl = document.getElementById('crossL'); if (cl && cl.clientWidth) document.documentElement.style.setProperty('--cs', cl.clientWidth + 'px');
 }
 window.addEventListener('resize', layout);
 var PAD_KEY = 'shapeworld.pad', padOn = true; try { if (localStorage.getItem(PAD_KEY) === '0') padOn = false; } catch (e) {}
@@ -204,6 +205,7 @@ function selMapOf(wid) { var w = G.sm.worlds[wid]; return wid === G.wid ? G.map 
 function stageState(wid, map, nd) { if (isDoneW(wid, nd.i)) return 'done'; if (isOpenW(wid, map, nd)) return 'open'; return 'locked'; }
 window.openSelect = function () {
   if (G.mode === 'select') { closeSelect(); return false; }
+  if (G.mode === 'start') startGame(false);
   if (G.mode !== 'map' && G.mode !== 'play' && G.mode !== 'pause') return false;
   G.selPrev = G.mode; G.mode = 'select'; var ws = selectableWorlds(); G.selList = ws; G.selWi = Math.max(0, ws.map(function (w) { return w.id; }).indexOf(G.wid)); G.selCol = 1; G.selSi = 0; refreshSel(); return true;
 };
@@ -236,7 +238,7 @@ window.toggleAuto = function () {
   return G.auto;
 };
 window.giveHint = function () {
-  if (G.mode === 'map') { var nd = nextTarget(); say(nd ? TT('다음 레벨: ' + worldName(G.wid) + '·' + (nd.i + 1) + ' (' + PF.KIND_NAMES[nd.kind][0] + ')', 'Next level: ' + worldName(G.wid) + '·' + (nd.i + 1) + ' (' + PF.KIND_NAMES[nd.kind][1] + ')') : TT('이 월드를 모두 깼어요', 'World cleared'), 150); return; }
+  if (G.mode === 'map') { var nd = nextTarget(); say(nd ? TT('다음 레벨: ' + worldName(G.wid) + '·' + (nd.ending ? 5 : nd.i + 1) + ' (' + PF.KIND_NAMES[nd.kind][0] + ')', 'Next level: ' + worldName(G.wid) + '·' + (nd.ending ? 5 : nd.i + 1) + ' (' + PF.KIND_NAMES[nd.kind][1] + ')') : TT('이 월드를 모두 깼어요', 'World cleared'), 150); return; }
   if (G.mode !== 'play') { say(TT('게임 중에만 힌트를 볼 수 있어요', 'Hints are available while playing'), 90); return; }
   var h = PFPlanner.hint(G.st, G.planner); G.hint = h; G.hintT = 220; G.hintF = G.frame; say(TT(h.ko, h.en), 220); sfx('hint');
 };
