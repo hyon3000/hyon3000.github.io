@@ -10,9 +10,10 @@ var CANDS = (function () {
   [0, 8, 20, 40].forEach(function (s) { dirs.forEach(function (a) { dirs.forEach(function (b) { if (s === 0 && a !== b) return; c.push({ a: a, b: b, s: s, h: -1 }); }); }); });
   [0, 3, 6, 10, 15, 22, 30].forEach(function (s) { dirs.forEach(function (a) { dirs.forEach(function (b) { if (s === 0 && a !== RR && a !== R) return; [99, 12, 4].forEach(function (h) { c.push({ a: a, b: b, s: s, h: h }); }); }); }); });
   [8, 16].forEach(function (s) { [R, RR].forEach(function (b) { c.push({ a: Lf, b: b, s: s, h: -1 }); [99, 12].forEach(function (h) { c.push({ a: Lf, b: b, s: s, h: h }); }); }); });
+  [20, 40].forEach(function (l) { [12, 22, 32].forEach(function (s) { [99, 12].forEach(function (h) { c.push({ a: RR, b: RR, s: s, h: h, l: l }); }); }); c.push({ a: RR, b: RR, s: 30, h: -1, l: l }); });
   return c;
 })();
-function inputAt(c, k) { var m = k < c.s ? c.a : c.b; if (c.h > 0 && k >= c.s && k < c.s + c.h) m |= IN.J; return m; }
+function inputAt(c, k) { if (c.l) { if (k < c.l) return Lf; k -= c.l; } var m = k < c.s ? c.a : c.b; if (c.h > 0 && k >= c.s && k < c.s + c.h) m |= IN.J; return m; }
 
 function groundBelow(st) {
   var p = st.p, c0 = Math.floor(p.x / PF.TS), c1 = Math.floor((p.x + p.w - 1e-4) / PF.TS), r0 = Math.floor((p.y + p.h) / PF.TS);
@@ -33,7 +34,7 @@ function evaluate(st0, c, traj) {
   if (big0 && !p.big) sc -= 400;
   if (!p.ground) { sc -= 25; if (!groundBelow(st)) sc -= 3000; }
   if (c.h > 0) sc -= 2;
-  if (c.a === Lf) sc -= 30;
+  if (c.a === Lf || c.l) sc -= 30;
   return { sc: sc, dead: false, land: land, k: k };
 }
 function makePlanner() {
@@ -100,5 +101,5 @@ function makeHint(st, pl) {
   var m = MSG[key];
   return { key: key, ko: m[0] + (key === 'go' ? extra[0] : ''), en: m[1] + (key === 'go' ? extra[1] : ''), traj: traj, land: land, haz: hz, jumpIn: jumpAt, sc: best.sc };
 }
-root.PFPlanner = { make: makePlanner, hint: makeHint, CANDS: CANDS, H: H };
+root.PFPlanner = { make: makePlanner, hint: makeHint, CANDS: CANDS, H: H, evaluate: evaluate };
 })(typeof window !== 'undefined' ? window : globalThis);

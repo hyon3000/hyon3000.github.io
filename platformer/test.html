@@ -23,7 +23,7 @@ window.testAuto = function (seed0, count, level, maxLives) {
   for (var s = seed0; s < seed0 + count; s++) {
     var L = PF.generate(s, level), lives = maxLives || 1, cleared = false, pl = PFPlanner.make(), st = PF.newState(L), t0 = performance.now(), f = 0;
     while (f < 60 * L.time && !cleared) {
-      var inp = pl.decide(st); PF.step(st, inp); f++;
+      var inp = pl.decide(st); hist.push(inp + ':' + Math.round(st.p.x) + ',' + Math.round(st.p.y)); if (hist.length > 70) hist.shift(); PF.step(st, inp); f++;
       if (st.p.won) { cleared = true; break; }
       if (st.p.dead) { out.deaths++; lives--; if (lives <= 0) { out.fails.push([s, level, Math.round(st.p.x / 16), st.p.why]); break; } st = PF.newState(L, { cp: !!st.cp }); pl.reset(); }
     }
@@ -32,4 +32,18 @@ window.testAuto = function (seed0, count, level, maxLives) {
   }
   out.ms = Math.round(out.ms); return out;
 };
+</script>
+<script>
+window.ascii = function (L, c0, c1) { var o = []; for (var r = 0; r < PF.ROWS; r++) { var s = ''; for (var c = c0; c < c1; c++) s += ' #BQPUv'.charAt(L.tiles[c * PF.ROWS + r]) ; o.push(s); }
+  var e = L.enemies.filter(function (e) { return e.x / 16 >= c0 && e.x / 16 < c1; }).map(function (e) { return e.t + '@' + Math.round(e.x / 16) + ',' + Math.round(e.y / 16); });
+  return o.join('\n') + '\nenemies ' + e.join(' ') + '\nmovers ' + L.movers.map(function (m) { return Math.round(m.cx / 16) + '/' + Math.round(m.amp / 16); }).join(' '); };
+
+window.dbgStall = function (seed, level) {
+  var L = PF.generate(seed, level), pl = PFPlanner.make(), st = PF.newState(L), f = 0, hist = []; window.__mx = 0; window.__mf = 0;
+  while (f < 60 * L.time) { var inp = pl.decide(st); hist.push(inp + ':' + Math.round(st.p.x) + ',' + Math.round(st.p.y)); if (hist.length > 70) hist.shift(); PF.step(st, inp); f++; if (st.p.won) return 'won'; if (st.p.dead) return 'dead ' + st.p.why + ' x' + st.p.x;
+    if (st.p.x > (window.__mx || 0) + 4) { window.__mx = st.p.x; window.__mf = f; } if (f - window.__mf > 400) { window.__st = st; var p = st.p; return hist.join(' ') + JSON.stringify({ f: f, x: p.x, y: p.y, vx: p.vx, ground: p.ground, big: p.big, top: PFPlanner.CANDS.map(function (c) { var r = PFPlanner.evaluate(st, c); return [r.sc | 0, r.dead ? 'D' : '', JSON.stringify(c)]; }).sort(function (a, b) { return b[0] - a[0]; }).filter(function (r) { return r[2].indexOf('"s":0,') > 0 && r[2].indexOf('"h":-1') < 0; }).slice(0, 6), cand: pl.last && pl.last.cand, sc: pl.last && pl.last.sc, near: st.en.filter(function (e) { return Math.abs(e.x - p.x) < 120 && e.alive; }).map(function (e) { return [e.t, Math.round(e.x), Math.round(e.y)]; }) }) + '\n' + window.ascii(L, Math.floor(p.x / 16) - 12, Math.floor(p.x / 16) + 14); } }
+  return 'timeout';
+};
+
+window.trace = function (c) { var st = PF.clone(window.__st), out = []; for (var k = 0; k < 70; k++) { var m = c.l ? 0 : (k < c.s ? c.a : c.b) | (c.h > 0 && k >= c.s && k < c.s + c.h ? 4 : 0); PF.step(st, m); out.push(Math.round(st.p.x * 10) / 10 + ',' + Math.round(st.p.y) + (st.p.ground ? 'g' : '')); } return out.join(' ') + ' jheld=' + window.__st.p.jheld + ' coy=' + window.__st.p.coy; };
 </script>
