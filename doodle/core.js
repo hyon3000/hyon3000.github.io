@@ -123,16 +123,16 @@ function genLevel(seed, L, opts) {
   var rnd = mulberry32(hash2(seed, L * 7919 + 13));
   var rr = function (a, b) { return a + (b - a) * rnd(); };
   var hmax = Math.min(150, 40 + L * 7.5);
-  var wmax = Math.min(340, 130 + L * 14);
+  var wmax = Math.min(380, 130 + L * 16);
   var nf = Math.min(1 + Math.floor((L - 1) / 3), 4);
-  var D = Math.min(460, Math.round(3.0 * hmax + 110));
+  var D = Math.min(410, Math.round(3.0 * hmax + 110));
   var Y1 = r12(rr(600, 640));
   var Ys = Y1 - D;
   var dl = r12(180 + 0.4 * D);
   var xD = 216 + dl;                       // end of the descent
   var xF = 1032;                           // final platform starts here
   var finalStep = L >= 3 && rnd() < 0.4;
-  var wantRope = L >= 2 && rnd() < Math.min(0.5, 0.2 + 0.03 * L);
+  var wantRope = L >= 2 && rnd() < (L >= 16 ? 0.97 : L >= 10 ? 0.85 : Math.min(0.5, 0.2 + 0.03 * L));
   var pickType = function () {
     var wts = [['pit', 3], ['wall', 3]]; if (L >= 3) wts.push(['crates', 1.2], ['dominoes', 1.2]);
     var t = 0; wts.forEach(function (w) { t += w[1]; });
@@ -154,7 +154,7 @@ function genLevel(seed, L, opts) {
       return { type: 'pit', variant: variant, w: w, lead: 36, need: 36 + w + 48 };
     }
     if (t === 'crates') return { type: 'crates', rows: L >= 8 ? 3 : 2, lead: 48, w: 56, need: 48 + 56 + 72 };
-    if (t === 'dominoes') { var n = 4 + Math.min(3, Math.floor(L / 5)); return { type: 'dominoes', n: n, lead: 48, w: n * 36, need: 48 + n * 36 + 72 }; }
+    if (t === 'dominoes') { var n = 4 + Math.min(5, Math.floor(L / 4)); return { type: 'dominoes', n: n, lead: 48, w: n * 36, need: 48 + n * 36 + 72 }; }
     var h = Math.max(40, Math.round(rr(0.55, 1) * hmax * hscale));
     var lead = r12(1.25 * h + 36), ww = 48;
     return { type: 'wall', h: h, ww: ww, lead: lead, need: lead + ww + 60 };
@@ -183,7 +183,7 @@ function genLevel(seed, L, opts) {
       cursor = x1 + 48;
     } else if (f.type === 'crates') {
       var cx0 = r12(base + f.lead);
-      for (var cc = 0; cc < 2; cc++) for (var rw = 0; rw < f.rows; rw++) dyn.push({ kind: 'crate', cx: cx0 + 14 + cc * 28, cy: Y1 - 14 - rw * 28 - 0.5, hw: 13.5, hh: 13.5, density: 0.06 });
+      for (var cc = 0; cc < 2; cc++) for (var rw = 0; rw < f.rows; rw++) dyn.push({ kind: 'crate', cx: cx0 + 14 + cc * 28, cy: Y1 - 14 - rw * 28 - 0.5, hw: 13.5, hh: 13.5, density: L >= 12 ? 0.12 : 0.06 });
       features.push({ type: 'crates', x0: cx0, x1: cx0 + 56, y: Y1 });
       cursor = cx0 + 56 + 72;
     } else if (f.type === 'dominoes') {
@@ -242,7 +242,7 @@ function genLevel(seed, L, opts) {
   // ----- special elements (levels 6+): boost zones, rotating bars, spike patches (all seeded)
   var boosts = [], rotors = [], spikes = [];
   if (L >= 6) {
-    var ne = Math.min(3, 1 + Math.floor((L - 6) / 4) + (rnd() < 0.4 ? 1 : 0)), occ = [];
+    var ne = L >= 10 ? Math.min(5, 2 + Math.floor((L - 10) / 4) + (rnd() < 0.5 ? 1 : 0)) : Math.min(3, 1 + Math.floor((L - 6) / 4) + (rnd() < 0.4 ? 1 : 0)), occ = [];
     features.forEach(function (f) {
       if (f.type === 'wall') occ.push([f.x0 - (1.25 * (f.h || 0) + 44), f.x1 + 70]);
       else if (f.type === 'pit') occ.push([f.x0 - 50, f.x1 + 50]);
@@ -257,9 +257,9 @@ function genLevel(seed, L, opts) {
     };
     var need = 0;
     for (var qe = 0; qe < ne; qe++) {
-      var tt = rnd(), typs = tt < 0.35 ? ['boost', 'spikes', 'rotor'] : tt < 0.65 ? ['rotor', 'spikes', 'boost'] : ['spikes', 'boost', 'rotor'], typ = null, ew = 0, spans = null;
+      var tt = rnd(), typs = (L >= 10 && qe === 0) ? ['spikes', 'rotor', 'boost'] : tt < 0.35 ? ['boost', 'spikes', 'rotor'] : tt < 0.65 ? ['rotor', 'spikes', 'boost'] : ['spikes', 'boost', 'rotor'], typ = null, ew = 0, spans = null;
       for (var ti = 0; ti < 3 && !typ; ti++) {
-        var tp = typs[ti], w2 = tp === 'boost' ? 96 : tp === 'rotor' ? 120 : r12(rr(60, 100)), nd2 = tp === 'spikes' ? w2 + 90 : w2 + 30;
+        var tp = typs[ti], w2 = tp === 'boost' ? 96 : tp === 'rotor' ? 120 : r12(rr(60, 100)), nd2 = tp === 'spikes' ? w2 + 70 : w2 + 30;
         var sp2 = freeSpans().filter(function (s) { return s[1] - s[0] >= nd2; });
         if (sp2.length) { typ = tp; ew = w2; spans = sp2; need = nd2; }
       }
