@@ -118,6 +118,48 @@ window.testMech = function () {
   var lr = rowsWith({ 12: '##########                                        ', 13: '##########LLLLLLLLLL                              ' }); lr[12] = '##########LLLLLLLLLL' + ' '.repeat(30); L = mk(lr); st = PF.newState(L); PF.setPw(st.p, 1); st.p.x = 11 * 16; st.p.y = 12 * 16 - 24; run(st, 0, 30); T('lava kills even a big hero', st.p.dead && st.p.why === 'lava', st.p.why);
   // 23 climbing to a high ledge with a spring and variable jump (sanity: head bump breaks bricks when big)
   L = mk(rowsWith({ 8: '   B                                              ' })); st = PF.newState(L); PF.setPw(st.p, 1); st.p.x = 3 * 16 + 2; st.p.y = 12 * 16 - 24; run(st, IN.J, 20); T('big hero breaks a brick from below', st.mod.size > 0);
+  // ---- water / air additions
+  var wdeep = rowsWith({ 6: '          ~~~~~~~~~~~~~~~~~~~~                    ', 7: '          ~~~~~~~~~~~~~~~~~~~~                    ', 8: '          ~~~~~~~~~~~~~~~~~~~~                    ', 9: '          ~~~~~~~~~~~~~~~~~~~~                    ', 10: '          ~~~~~~~~~~~~~~~~~~~~                    ', 11: '          ~~~~~~~~~~~~~~~~~~~~                    ' });
+  L = mk(wdeep); st = PF.newState(L); st.p.x = 200; st.p.y = 12 * 16 - 14; run(st, 0, 100); T('breath drops in water', st.p.air < PF.AIRMAX - 80, st.p.air);
+  st.p.air = 5; run(st, 0, 60); T('running out of air hurts / drowns a small hero', st.p.dead && st.p.why === 'drown', st.p.why);
+  L = mk(wdeep); L.pockets = [{ x: 210, y: 10 * 16 }]; st = PF.newState(L); st.p.x = 205; st.p.y = 10 * 16 - 6; st.p.air = 100; run(st, 0, 3); T('air pocket refills breath and boosts', st.p.air >= PF.AIRMAX - 6 && st.pk[0] === 1 && st.p.vy < 0);
+  var cr = wdeep.map(function (r2) { return r2.replace(/~/g, '>'.replace('>', 'R')); }); cr = rowsWith({ 6: '          RRRRRRRRRRRRRRRRRRRR                    ', 7: '          RRRRRRRRRRRRRRRRRRRR                    ', 8: '          RRRRRRRRRRRRRRRRRRRR                    ', 9: '          RRRRRRRRRRRRRRRRRRRR                    ', 10: '          RRRRRRRRRRRRRRRRRRRR                    ', 11: '          RRRRRRRRRRRRRRRRRRRR                    ' });
+  var map2 = { 'R': 23 }; L = mk(cr); for (var cc = 10; cc < 30; cc++) for (var rr = 6; rr < 12; rr++) L.tiles[cc * 14 + rr] = 23; st = PF.newState(L); st.p.x = 180; st.p.y = 12 * 16 - 14; var xc0 = st.p.x; run(st, 0, 30); T('current tile pushes the hero', st.p.x > xc0 + 1, (st.p.x - xc0).toFixed(1));
+  L = mk(wdeep); for (cc = 10; cc < 30; cc++) for (rr = 6; rr < 12; rr++) L.tiles[cc * 14 + rr] = 24; st = PF.newState(L); st.p.x = 200; st.p.y = 12 * 16 - 14; run(st, 0, 40); T('upward current lifts the hero', st.p.y < 12 * 16 - 40, st.p.y.toFixed(0));
+  L = mk(BASE); L.winds = [{ x0: 100, x1: 400, y0: 0, y1: 200, dx: 0.08, dy: 0 }]; st = PF.newState(L); st.p.x = 200; st.p.y = 80; run(st, 0, 20); T('wind pushes in the air', st.p.vx > 0.8, st.p.vx.toFixed(2));
+  L = mk(BASE); L.winds = [{ x0: 100, x1: 400, y0: 0, y1: 200, dx: 0, dy: -0.85, up: 1 }]; st = PF.newState(L); st.p.x = 200; st.p.y = 120; run(st, 0, 30); T('updraft lifts the hero', st.p.y < 90 && st.p.vy < 0, st.p.y.toFixed(0));
+  L = mk(rowsWith({ 12: '                                                  ', 13: '                                                  ' }), [], { movers: [{ kind: 4, cx: 100, y: 12 * 16, w: 30, amp: 0, per: 300, ph: 0 }] }); st = PF.newState(L); st.p.x = 90; st.p.y = 12 * 16 - 14; run(st, 0, 5); var onc = st.p.ground; run(st, 0, 250); T('cloud platform carries then vanishes', onc && !st.p.ground && st.p.y > 12 * 16 - 10, 'on=' + onc);
+  L = mk(wdeep, [{ t: E.SWIM, sz: 0, x: 220, y: 8 * 16, w: 12, h: 8, ax: 220, ay: 8 * 16, rg: 30, sp: 1 / 200, ph: 0, am: 4, spd: 0 }]); st = PF.newState(L); st.p.x = 210; st.p.y = 12 * 16 - 14; var sx0 = st.en[0].x; run(st, 0, 40); T('swimmer patrols horizontally', Math.abs(st.en[0].x - sx0) > 5, (st.en[0].x - sx0).toFixed(1));
+  L = mk(wdeep, [{ t: E.CHASER, x: 260, y: 10 * 16, w: 12, h: 10, ax: 260, ay: 10 * 16, spd: 0, dir: 1 }]); st = PF.newState(L); st.p.x = 205; st.p.y = 11 * 16; var dd0 = Math.abs(st.en[0].x - st.p.x); st.p.vy = 0; run(st, 0, 40); T('chaser closes in on a nearby hero in water', Math.abs(st.en[0].x - st.p.x) < dd0 - 8 || st.p.dead, dd0.toFixed(0) + '->' + Math.abs(st.en[0].x - st.p.x).toFixed(0));
+  L = mk(wdeep, [{ t: E.FMINE, x: 210, y: 10 * 16, w: 14, h: 14, ax: 210, ay: 10 * 16, am: 0, ph: 0, spd: 0 }]); st = PF.newState(L); st.p.x = 208; st.p.y = 10 * 16; run(st, 0, 3); T('floating mine hurts and cannot be stomped', st.p.dead && st.en[0].alive);
+  L = mk(wdeep, [{ t: E.WHALE, x: 200, y: 9 * 16, w: 44, h: 20, ax: 200, ay: 9 * 16, rg: 0, sp: 0.001, ph: 0, spd: 0, dir: 1 }]); st = PF.newState(L); st.p.x = 205; st.p.y = 9 * 16 + 3; st.en[0].dir = 1; run(st, 0, 3); T('whale body is harmless', !st.p.dead);
+  L = mk(wdeep, [{ t: E.WHALE, x: 200, y: 9 * 16, w: 44, h: 20, ax: 200, ay: 9 * 16, rg: 0, sp: 0.001, ph: 0, spd: 0, dir: 1 }]); st = PF.newState(L); st.p.x = 236; st.p.y = 9 * 16 + 3; st.en[0].dir = 1; run(st, 0, 3); T('whale mouth hurts', st.p.dead);
+  L = mk(wdeep, [{ t: E.JELLY, x: 220, y: 8 * 16, w: 16, h: 18, ax: 220, ay: 8 * 16, ph: 0, spd: 0 }]); st = PF.newState(L); st.p.x = 222; st.p.y = 8 * 16 + 4; run(st, 0, 3); T('jelly hurts', st.p.dead && st.p.why === 'jelly', st.p.why);
+  L = mk(BASE, [{ t: E.CLAM, x: 100, y: 12 * 16 - 12, w: 16, h: 12, ax: 100, pho: 0, spd: 0 }]); st = PF.newState(L); st.p.x = 102; st.p.y = 12 * 16 - 20; st.p.vy = 1; var sc0 = st.score; run(st, 0, 4); T('open clam gives a pearl', st.score >= sc0 + 300 && !st.p.dead, 'score+' + (st.score - sc0));
+  L = mk(BASE, [{ t: E.CLAM, x: 100, y: 12 * 16 - 12, w: 16, h: 12, ax: 100, pho: 120, spd: 0 }]); st = PF.newState(L); st.p.x = 102; st.p.y = 12 * 16 - 14; run(st, 0, 3); T('closed clam bites', st.p.dead && st.p.why === 'clam', st.p.why);
+  L = mk(BASE, [{ t: E.SWOOP, x: 200, y: 6 * 16, w: 14, h: 10, ax: 200, ay: 6 * 16, ph: 0, spd: 0, dir: 1 }]); st = PF.newState(L); st.p.x = 190; st.p.y = 12 * 16 - 14; var sy0 = st.en[0].y; run(st, 0, 30); T('swooper dives at the hero', st.en[0].s >= 1 && st.en[0].y > sy0 + 15, 's=' + st.en[0].s + ' dy=' + (st.en[0].y - sy0).toFixed(0));
+  L = mk(BASE, [{ t: E.SHOOTER, x: 200, y: 6 * 16, w: 16, h: 14, ax: 200, ay: 6 * 16, ph: 0, pho: 0, spd: 0, dir: -1 }]); st = PF.newState(L); st.p.x = 160; st.p.y = 12 * 16 - 14; var shot = false; for (i = 0; i < 140; i++) { PF.step(st, 0); if (st.ep.length) shot = true; } T('floating turret fires aimed shots', shot);
+  L = mk(BASE, [{ t: E.BIRD, x: 100, y: 12 * 16 - 12, w: 14, h: 10, ax: 100, ay: 12 * 16 - 12, rg: 0, sp: 0.001, ph: 0, am: 0, carry: 1, spd: 0 }]); st = PF.newState(L); st.p.x = 98; st.p.y = 12 * 16 - 60; st.p.vy = 3; run(st, 0, 10); T('stomping the bird drops a treasure', !st.en[0].alive && st.it.length === 1 && st.it[0].k === 5); st.p.x = st.it[0].x - 2; st.p.y = st.it[0].y - 6; var cn0 = st.coins; run(st, 0, 20); T('treasure pickup gives gems', st.coins >= cn0 + 5, 'coins+' + (st.coins - cn0));
+  L = mk(BASE, [{ t: E.SPARK, x: 100, y: 11 * 16, w: 10, h: 10, ax: 100, x0: 100, x1: 200, y0: 11 * 16, y1: 11 * 16, sp: 1 / 200, ph: 0, spd: 0 }]); st = PF.newState(L); st.p.x = 300; var spx = []; for (i = 0; i < 100; i++) { PF.step(st, 0); spx.push(st.en[0].x); } T('spark orb travels along its rail', Math.max.apply(null, spx) - Math.min.apply(null, spx) > 40);
+  L = mk(BASE, [{ t: E.FLOCK, x: 200, y: 7 * 16, w: 10, h: 8, ax: 200, by: 7 * 16, ox: 0, oy: 0, idx: 0, rg: 60, sp: 1 / 300, ph: 0, spd: 0, dir: 1 }]); st = PF.newState(L); st.p.x = 190; var fx0 = null, fx1 = null; for (i = 0; i < 80; i++) { PF.step(st, 0); if (i === 0) fx0 = st.en[0].x; fx1 = st.en[0].x; } T('flock members sweep across', Math.abs(fx1 - fx0) > 15);
+  L = mk(BASE, [{ t: E.BALLOON, x: 100, y: 12 * 16 - 20, w: 16, h: 18, ax: 100, ay: 12 * 16 - 20, ph: 0, spd: 0 }]); st = PF.newState(L); st.p.x = 96; st.p.y = 12 * 16 - 60; st.p.vy = 3; run(st, 0, 20); T('spiky balloon cannot be stomped', st.en[0].alive && (st.p.dead || st.p.pw === 0));
+  var wl = mk(wdeep, [{ t: E.BOSS, v: 3, x: 220, y: 9 * 16, w: 30, h: 18, spd: 0, mn: 160, mx: 460, ax: 220, ay: 9 * 16, dir: -1 }], { goalX: 480 }); st = PF.newState(wl); T('water boss counted', st.boss === 1);
+  for (i = 0; i < 3; i++) { var bb = st.en[0], hp1 = bb.hp; for (var tr = 0; tr < 10 && bb.hp === hp1 && bb.alive; tr++) { st.p.x = bb.x + 8; st.p.y = bb.y - 15; st.p.vy = 1.3; st.p.vx = 0; st.p.inv = 99; st.p.dead = false; st.p.air = PF.AIRMAX; PF.step(st, 0); PF.step(st, 0); PF.step(st, 0); } for (var jj = 0; jj < 70 && bb.inv > 0; jj++) { st.p.inv = 99; st.p.air = PF.AIRMAX; PF.step(st, 0); } }
+  T('water boss can be stomped down', st.boss === 0 && !st.en[0].alive, 'hp=' + st.en[0].hp);
+  var sb = mk(BASE, [{ t: E.BOSS, v: 4, x: 200, y: 7 * 16, w: 28, h: 22, spd: 0, mn: 100, mx: 400, ax: 200, ay: 7 * 16, dir: -1 }], { goalX: 480 }); st = PF.newState(sb); st.p.x = 180; var dived = false; for (i = 0; i < 400; i++) { PF.step(st, 0); st.p.dead = false; st.p.inv = 99; if (st.en[0].s === 1) dived = true; } T('air boss hovers, shoots and dives', dived && st.ep.length >= 0);
+  // ---- keys, doors, switches, teleports, launch barrels, routes
+  var pz = mk(BASE); pz.keys = [{ x: 80, y: 12 * 16 - 8, c: 0 }]; pz.doors = [{ c: 12, r0: 9, r1: 11, g: 0 }]; pz.grp = new Uint8Array(pz.w * 14); for (var q = 9; q <= 11; q++) { pz.tiles[12 * 14 + q] = 30; pz.grp[12 * 14 + q] = 0; }
+  st = PF.newState(pz); st.p.x = 150; run(st, IN.R, 40); var blocked = st.p.x < 12 * 16; T('locked door blocks without a key', blocked, st.p.x.toFixed(0));
+  st.p.x = 76; run(st, 0, 3); T('key pickup sets the key bit', st.kb === 1 && st.kg[0] === 1);
+  st.p.x = 150; st.p.y = 12 * 16 - 14; run(st, IN.R, 60); T('key opens the matching door', st.dg[0] === 1 && st.p.x > 12 * 16 + 20, 'x=' + st.p.x.toFixed(0));
+  var sg = mk(BASE); sg.switches = [{ c: 6, r: 11, g: 0 }]; sg.grp = new Uint8Array(sg.w * 14); sg.tiles[6 * 14 + 11] = 27; for (q = 9; q <= 11; q++) { sg.tiles[12 * 14 + q] = 25; sg.grp[12 * 14 + q] = 0; }
+  st = PF.newState(sg); st.p.x = 150; run(st, IN.R, 40); T('closed gate blocks', st.p.x < 12 * 16, st.p.x.toFixed(0)); st.p.x = 100; run(st, IN.L, 20); T('switch pad opens the gate', st.sb === 1 && st.sg2[0] === 1);
+  st.p.x = 150; st.p.y = 12 * 16 - 14; run(st, IN.R, 60); T('gate is passable after the switch', st.p.x > 12 * 16 + 20, st.p.x.toFixed(0));
+  var tp = mk(BASE); tp.tele = [{ c: 5, r: 11, tx: 400, ty: 12 * 16 - 14, col: 0 }]; st = PF.newState(tp); st.p.x = 60; run(st, IN.R, 30); T('teleport pad moves the hero', st.p.x > 380 && st.tc === 1, st.p.x.toFixed(0));
+  var lp = mk(rowsWith({ 12: '########                                          ', 13: '########                                          ' })); lp.launch = [{ c: 6, r: 11, vx: 3.2, vy: -9 }]; lp.tiles[6 * 14 + 11] = 32; for (q = 13; q < 50; q++) { lp.tiles[q * 14 + 12] = 1; lp.tiles[q * 14 + 13] = 1; } st = PF.newState(lp); st.p.x = 70; run(st, IN.R, 90); T('launch barrel shoots the hero across a pit', st.p.x > 13 * 16 && !st.p.dead, st.p.x.toFixed(0) + ' dead=' + st.p.dead);
+  var rt = mk(BASE); rt.route = [{ k: 'xge', x: 200 }, { k: 'goal', x: 99999, y: null }]; rt.crumbs = [[40, 170, 0], [100, 170, 0], [190, 170, 0], [260, 170, 1]]; st = PF.newState(rt); run(st, IN.R, 150); T('route stage and crumb tracking advance', st.stage === 1 && st.cr >= 2, 'stage=' + st.stage + ' cr=' + st.cr);
+  var wl = mk(rowsWith({ 12: '##################################################' })); wl.grp = new Uint8Array(wl.w * 14); wl.switches = [{ c: 4, r: 11, g: 0 }]; wl.tiles[4 * 14 + 11] = 27; for (cc = 20; cc < 30; cc++) for (rr = 4; rr < 12; rr++) { wl.tiles[cc * 14 + rr] = 29; wl.grp[cc * 14 + rr] = 0; }
+  st = PF.newState(wl); st.p.x = 24 * 16; st.p.y = 11 * 16; var w0 = PF.isW(PF.tileAt(st, 24, 8)); st.sb = 1; T('water-level tiles are dry until the switch', !w0 && PF.isW(PF.tileAt(st, 24, 8)));
   return out;
 };
 
@@ -132,5 +174,34 @@ window.testBoss = function (v, seeds) {
     res.n++; if (st.p.won) res.won++; else res.fails.push([s, f, st.p.dead ? st.p.why : 'timeout', st.en[0].hp]);
   }
   return res;
+};
+
+// auto-play on levels of a given kind: for each seed use the first level number in [lo,hi] whose kind matches
+window.testKind = function (kind, seed0, count, lo, hi, lives) {
+  var out = { kind: kind, total: 0, cleared: 0, deaths: 0, fails: [], levels: [] };
+  for (var s = seed0; s < seed0 + count; s++) {
+    var n = -1; for (var k = lo; k <= hi; k++) if (PF.kindOf(s, k) === kind) { n = k; break; } if (n < 0) continue;
+    var L = PF.generate(s, n), pl = PFPlanner.make(), st = PF.newState(L), f = 0, lv = lives || 1, ok = false;
+    while (f < 60 * L.time) { PF.step(st, pl.decide(st)); f++; if (st.p.won) { ok = true; break; } if (st.p.dead) { out.deaths++; lv--; if (lv <= 0) { out.fails.push([s, n, Math.round(st.p.x / 16), st.p.why]); break; } st = PF.newState(L, { cp: !!st.cp }); pl.reset(); } }
+    if (!ok && lv > 0) out.fails.push([s, n, 'timeout', Math.round(st.p.x / 16)]);
+    out.total++; if (ok) out.cleared++; out.levels.push(n);
+  }
+  return out;
+};
+
+window.testChunk = function (name, seeds, n) { var ok = 0, tot = 0, ms = 0, fl = []; for (var s = 1; s <= seeds; s++) { var t0 = performance.now(), L = PF.build(s, n, 0, { only: name, kind: name === 'flood' ? 'flood' : 'plain' }), v = PF.validate(L); ms += performance.now() - t0; tot++; if (v.ok) ok++; else fl.push([s, v.why, v.nodes]); } return { name: name, ok: ok, tot: tot, ms: Math.round(ms), fails: fl.slice(0, 4) }; };
+
+window.testMaze = function (seed0, count, n0, n1) { var res = { total: 0, valid: 0, replayOk: 0, attempts: {}, ms: 0, maxMs: 0, fails: [], types: {} }; for (var s = seed0; s < seed0 + count; s++) for (var n = n0; n <= n1; n++) { var t0 = performance.now(), L = PF.generate(s, n, { kind: 'maze' }), dt = performance.now() - t0; res.total++; res.ms += dt; res.maxMs = Math.max(res.maxMs, dt); res.attempts[L.attempt] = (res.attempts[L.attempt] || 0) + 1; if (L.valid) res.valid++; if (L.valid && PF.replay(L)) res.replayOk++; else res.fails.push([s, n, L.attempt]); (L.route || []).forEach(function (g) { res.types[g.k] = (res.types[g.k] || 0) + 1; }); } res.ms = Math.round(res.ms); res.maxMs = Math.round(res.maxMs); return res; };
+
+// auto-play on forced-kind levels at given level numbers
+window.testForced = function (kind, seed0, count, n, lives) {
+  var out = { kind: kind, n: n, total: 0, cleared: 0, deaths: 0, fails: [] };
+  for (var s = seed0; s < seed0 + count; s++) {
+    var L = PF.generate(s, n, { kind: kind }), pl = PFPlanner.make(), st = PF.newState(L), f = 0, lv = lives || 1, ok = false;
+    while (f < 60 * L.time) { PF.step(st, pl.decide(st)); f++; if (st.p.won) { ok = true; break; } if (st.p.dead) { out.deaths++; lv--; if (lv <= 0) { out.fails.push([s, Math.round(st.p.x / 16), st.p.why, st.stage + '/' + L.route.length]); break; } st = PF.newState(L, { cp: !!st.cp }); pl.reset(); } }
+    if (!ok && lv > 0) out.fails.push([s, 'timeout', Math.round(st.p.x / 16), st.stage + '/' + (L.route ? L.route.length : 1)]);
+    out.total++; if (ok) out.cleared++;
+  }
+  return out;
 };
 </script>

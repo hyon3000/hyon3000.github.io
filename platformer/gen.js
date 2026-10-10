@@ -27,34 +27,47 @@ function macroJump(st, hold, air, pre, preInp) {
   jumpPhase(st, seq, hold, air); return seq;
 }
 
-function validate(L, maxNodes) {
-  maxNodes = maxNodes || 4000;
-  var st0 = newState(L, { noEn: true }), seq0 = [0, 0, 0]; runSeq(st0, seq0);
-  if (!st0.p.ground) return { ok: false, why: 'start' };
-  var seen = new Set(), stack = [{ st: st0, par: null, seq: seq0 }], nodes = 0;
-  function key(st) { var p = st.p, a = Math.abs(p.vx), sc = (p.vx < -0.3 ? -1 : 1) * (a < 0.3 ? 0 : a < 1.8 ? 1 : 2) + 2, ph = (p.mv >= 0 || st.sw) ? Math.floor((st.f % MV_PERIOD) / 20) + 1 : 0; return ((Math.round(p.x / 3) * 256 + Math.round(p.y)) * 5 + sc) * 80 + ph; }
-  seen.add(key(st0));
-  function script(nd, extra) { var parts = [extra]; while (nd) { parts.push(nd.seq); nd = nd.par; } var out = []; for (var i = parts.length - 1; i >= 0; i--) for (var j = 0; j < parts[i].length; j++) out.push(parts[i][j]); return out; }
-  var AIRS = [0, IN.R, IN.R | IN.RUN, IN.L], HOLDS = [3, 10, 99];
-  while (stack.length && nodes < maxNodes) {
-    var nd = stack.pop(), kids = []; nodes++;
-    var tryMacro = function (fn) {
-      var s = clone(nd.st), seq = fn(s); if (!seq) return null;
-      if (s.p.won) return { win: true, seq: seq };
-      if (s.p.dead || !s.p.ground) return null;
-      var k = key(s); if (seen.has(k)) return null; seen.add(k); kids.push({ st: s, par: nd, seq: seq }); return null;
+function heapPush(h, it) { h.push(it); var i = h.length - 1; while (i > 0) { var p = (i - 1) >> 1; if (h[p].h <= h[i].h) break; var t = h[p]; h[p] = h[i]; h[i] = t; i = p; } }
+function heapPop(h) { var top = h[0], last = h.pop(); if (h.length) { h[0] = last; var i = 0, n = h.length; for (;;) { var l = 2 * i + 1, r = l + 1, m = i; if (l < n && h[l].h < h[m].h) m = l; if (r < n && h[r].h < h[m].h) m = r; if (m === i) break; var t = h[m]; h[m] = h[i]; h[i] = t; i = m; } } return top; }
+var AIRS = [0, IN.R, IN.R | IN.RUN, IN.L], HOLDS = [3, 10, 99];
+// best-first macro search on the real simulation from state st0 until pred(state) holds; returns { st, seq } or null
+function searchStage(st0, pred, tx, ty, maxNodes) {
+  if (pred(st0)) return { st: st0, seq: [], nodes: 0 };
+  var seen = new Set(), heap = [], nodes = 0;
+  function key(st) { var p = st.p, a = Math.abs(p.vx), sc = (p.vx < -0.3 ? -1 : 1) * (a < 0.3 ? 0 : a < 1.8 ? 1 : 2) + 2, ph = (p.mv >= 0 || st.sw) ? Math.floor((st.f % MV_PERIOD) / 20) + 1 : 0; return ((((Math.round(p.x / 3) * 256 + Math.round(p.y)) * 5 + sc) * 80 + ph) * 64 + (st.kb & 7) * 8 + (st.sb & 7)) * 40 + Math.min(39, st.mod.size); }
+  function hval(st) { var p = st.p; return Math.abs(p.x + 6 - tx) + (ty === null ? 0 : 1.5 * Math.abs(p.y + 7 - ty)); }
+  var root = { st: st0, par: null, seq: [], h: hval(st0) }; seen.add(key(st0)); heapPush(heap, root);
+  function path(nd, extra) { var parts = [extra]; while (nd) { parts.push(nd.seq); nd = nd.par; } var out = []; for (var i = parts.length - 1; i >= 0; i--) for (var j = 0; j < parts[i].length; j++) out.push(parts[i][j]); return out; }
+  while (heap.length && nodes < maxNodes) {
+    var nd = heapPop(heap); nodes++;
+    var found = null, tryMacro = function (fn) {
+      if (found) return; var s = clone(nd.st), seq = fn(s); if (!seq || s.p.dead) return;
+      if (pred(s)) { found = { st: s, seq: path(nd, seq), nodes: nodes }; return; }
+      if (!s.p.ground) return;
+      var k = key(s); if (seen.has(k)) return; seen.add(k); heapPush(heap, { st: s, par: nd, seq: seq, h: hval(s) });
     };
-    var res, mi;
-    var walks = [[IN.R, 8], [IN.R | IN.RUN, 8], [IN.L, 8], [0, 20], [IN.R | IN.RUN, 3]];
-    for (mi = 0; mi < walks.length; mi++) { res = tryMacro(function (s) { return macroWalk(s, walks[mi][0], walks[mi][1]); }); if (res) return { ok: true, script: script(nd, res.seq), nodes: nodes }; }
+    var mi, walks = [[IN.R, 8], [IN.R | IN.RUN, 8], [IN.L, 8], [IN.L | IN.RUN, 8], [0, 20], [IN.R | IN.RUN, 3]];
+    for (mi = 0; mi < walks.length; mi++) tryMacro(function (s) { return macroWalk(s, walks[mi][0], walks[mi][1]); });
     for (var hi = 0; hi < 3; hi++) for (var ai = 0; ai < 4; ai++) {
-      res = tryMacro(function (s) { return macroJump(s, HOLDS[hi], AIRS[ai], 0, 0); }); if (res) return { ok: true, script: script(nd, res.seq), nodes: nodes };
-      if (ai === 1 || ai === 2) { res = tryMacro(function (s) { return macroEdge(s, ai === 2, HOLDS[hi], AIRS[ai]); }); if (res) return { ok: true, script: script(nd, res.seq), nodes: nodes }; }
+      tryMacro(function (s) { return macroJump(s, HOLDS[hi], AIRS[ai], 0, 0); });
+      if (ai === 1 || ai === 2) tryMacro(function (s) { return macroEdge(s, ai === 2, HOLDS[hi], AIRS[ai]); });
     }
-    kids.sort(function (a, b) { return a.st.p.x - b.st.p.x; });
-    for (var q = 0; q < kids.length; q++) stack.push(kids[q]);
+    if (found) return found;
   }
-  return { ok: false, why: stack.length ? 'budget' : 'unreachable', nodes: nodes };
+  return null;
+}
+function validate(L, maxNodes) {
+  var multi = L.route && L.route.length > 1; maxNodes = maxNodes || (multi ? 9000 : 4000);
+  var st = newState(L, { noEn: true }), seq0 = [0, 0, 0]; runSeq(st, seq0);
+  if (!st.p.ground) return { ok: false, why: 'start' };
+  var route = L.route || [{ k: 'goal', x: L.goalX, y: null }], script = seq0.slice(), total = 0;
+  for (var i = 0; i < route.length; i++) {
+    var g = route[i], ty = g.y === undefined ? null : g.y, tx = g.x === undefined ? L.goalX : g.x;
+    var res = searchStage(st, function (s) { return PF.stageDone(s, g); }, tx, ty, maxNodes);
+    if (!res) return { ok: false, why: 'stage' + i + ':' + g.k, nodes: total };
+    total += res.nodes; st = res.st; for (var j = 0; j < res.seq.length; j++) script.push(res.seq[j]);
+  }
+  return { ok: !!st.p.won, script: script, nodes: total, why: st.p.won ? '' : 'nowin' };
 }
 
 // ------------------------------------------------------------------ physics probe
@@ -82,13 +95,14 @@ function probe() {
 }
 
 // ------------------------------------------------------------------ worlds
-var KIND_NAMES = { plain: ['초원', 'Meadow'], hills: ['언덕', 'Hills'], flood: ['물가', 'Lagoon'], ghost: ['유령의 숲', 'Haunted Grove'], sky: ['하늘길', 'Sky Path'], cave: ['동굴', 'Cavern'], castle: ['성채', 'Fortress'], room: ['비밀방', 'Bonus Room'], bonus: ['별길', 'Star Road'] };
+var KIND_NAMES = { plain: ['초원', 'Meadow'], hills: ['언덕', 'Hills'], flood: ['물가', 'Lagoon'], ghost: ['유령의 숲', 'Haunted Grove'], sky: ['하늘길', 'Sky Path'], cave: ['동굴', 'Cavern'], castle: ['성채', 'Fortress'], maze: ['미궁', 'Labyrinth'], room: ['비밀방', 'Bonus Room'], bonus: ['별길', 'Star Road'] };
 function worldKinds(seed, w) {
   var r = rng(hash(seed, w, 4242)), pool = ['hills', 'flood', 'ghost', 'sky', 'cave'], out = [w === 0 ? 'plain' : (r() < 0.5 ? 'plain' : 'hills')];
   if (w === 0) pool = ['hills', 'flood', 'ghost', 'sky', 'cave'];
   else pool = pool.filter(function (k) { return k !== out[0]; }).concat(out[0] === 'plain' ? [] : ['plain']);
   for (var i = pool.length - 1; i > 0; i--) { var j = Math.floor(r() * (i + 1)), t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
   for (i = 0; i < 3; i++) out.push(pool[i]);
+  var mp = w === 0 ? 3 : 1 + Math.floor(r() * 3); out[mp] = 'maze';
   out.push('castle'); return out;
 }
 function kindOf(seed, n) { if (n >= 1000) return 'bonus'; var w = Math.floor((n - 1) / 5); return worldKinds(seed, w)[(n - 1) % 5]; }
@@ -103,32 +117,57 @@ function worldMap(seed, w) {
 // ------------------------------------------------------------------ level builder
 function build(seed, n, a, o) {
   o = o || {};
+  if ((o.kind || kindOf(seed, n)) === 'maze' && !o.room) return buildMaze(seed, n, a);
   var lim = probe(), r = rng(hash(seed, n, a * 7919 + 1)), kind = o.kind || kindOf(seed, n), room = !!o.room;
   var diff = Math.min(1, (n >= 1000 ? 8 : n - 1) / 18); if (kind === 'bonus') diff = Math.min(1, 0.4 + 0.5 * diff); if (a >= 3) diff *= 0.6; if (a >= 6) diff *= 0.3; if (a >= 8) diff = 0;
   var castle = kind === 'castle';
   var W = room ? 46 : castle ? Math.min(220, 90 + 6 * Math.min(n, 30)) : Math.min(300, 110 + 5 * Math.min(n, 38));
-  var gt = [], flats = [], tl = [], movers = [], arcs = [], coinsX = [], specials = [], cannons = [], rings = [], enemiesX = [], g = castle ? 11 : 12, cpCol = -1, needPow = true, spots = [], ringCount = 0;
+  var gt = [], flats = [], tl = [], movers = [], arcs = [], coinsX = [], specials = [], cannons = [], rings = [], enemiesX = [], winds = [], pockets = [], keysL = [], doorsL = [], switchesL = [], routeL = [], gl = [], gcount = 0, g = castle ? 11 : 12, cpCol = -1, needPow = true, spots = [], ringCount = 0;
   var rnd = function (lo, hi) { return lo + Math.floor(r() * (hi - lo + 1)); };
   function flat(len, gg) { var c0 = gt.length; for (var i = 0; i < len; i++) gt.push(gg); return c0; }
   function pit(len) { var c0 = gt.length; for (var i = 0; i < len; i++) { gt.push(ROWS); if (castle) { tl.push([c0 + i, ROWS - 2, T.LAVA]); tl.push([c0 + i, ROWS - 1, T.LAVA]); } } return c0; }
   function runway() { var k = 0, i = gt.length - 1; while (i >= 0 && gt[i] === gt[gt.length - 1] && gt[i] < ROWS) { k++; i--; } return k; }
   var gapMax = Math.max(2, Math.min(lim.gapRun - 1, Math.round(2 + diff * (lim.gapRun - 2.5))));
   var upMax = Math.max(1, Math.min(2, lim.up - 2));
+  function ph1() { return r(); }
+  function waterLife(c0, len, gg, wd) {
+    var ns = 1 + Math.floor(diff * 2.5 + r()), i;
+    for (i = 0; i < ns; i++) { var big = r() < 0.35, cxs = (c0 + 4 + r() * (len - 8)) * TS, yy = (gg - 2 - r() * (wd - 2.5)) * TS;
+      enemiesX.push({ t: E.SWIM, sz: big ? 1 : 0, x: cxs, y: yy, w: big ? 22 : 12, h: big ? 12 : 8, ax: cxs, ay: yy, rg: 20 + r() * 34, sp: 1 / (170 + r() * 120), ph: r(), am: 5 + r() * 5, spd: 0 }); }
+    if (diff > 0.25 && r() < 0.7) { var cx2 = (c0 + len * (0.3 + 0.4 * r())) * TS, cy2 = (gg - 3) * TS; enemiesX.push({ t: E.CHASER, x: cx2, y: cy2, w: 12, h: 10, ax: cx2, ay: cy2, spd: 0, dir: 1 }); }
+    if (diff > 0.2 && r() < 0.6) { var cx3 = (c0 + 5 + r() * (len - 10)) * TS, cy3 = (gg - 2.5 - r()) * TS; enemiesX.push({ t: E.FMINE, x: cx3, y: cy3, w: 14, h: 14, ax: cx3, ay: cy3, am: 12, ph: r(), spd: 0 }); }
+    if (diff > 0.3 && r() < 0.55) { var cx4 = (c0 + 5 + r() * (len - 10)) * TS, cy4 = (gg - 4) * TS; enemiesX.push({ t: E.JELLY, x: cx4, y: cy4, w: 16, h: 18, ax: cx4, ay: cy4, ph: r(), spd: 0 }); }
+    if (diff > 0.35 && r() < 0.45 && len >= 16) { var cx5 = (c0 + len / 2) * TS, cy5 = (gg - 3.4) * TS; enemiesX.push({ t: E.WHALE, x: cx5, y: cy5, w: 44, h: 20, ax: cx5, ay: cy5, rg: Math.min(80, (len / 2 - 4) * TS), sp: 1 / 420, ph: r(), spd: 0, dir: 1 }); }
+    if (r() < 0.6) { var cc = c0 + 3 + Math.floor(r() * (len - 6)); enemiesX.push({ t: E.CLAM, x: cc * TS, y: gg * TS - 12, w: 16, h: 12, ax: cc * TS, pho: Math.floor(r() * 180), spd: 0 }); }
+  }
+  function airFeature(cc, ln, gg, over) {
+    var opts = [], mid = (cc + ln / 2) * TS;
+    if (diff > 0.05 || kind === 'sky') opts.push('swoop'); opts.push('bird'); if (ln >= 8) opts.push('flock'); if (diff > 0.2 || kind === 'sky') opts.push('balloon'); if (diff > 0.25) opts.push('shooter'); if (diff > 0.3 && !over) opts.push('spark');
+    var k = opts[Math.floor(r() * opts.length)];
+    if (k === 'swoop') enemiesX.push({ t: E.SWOOP, x: mid, y: (gg - 6) * TS, w: 14, h: 10, ax: mid, ay: (gg - 6) * TS, ph: r(), spd: 0, dir: 1 });
+    else if (k === 'bird') enemiesX.push({ t: E.BIRD, x: mid, y: (gg - 5) * TS, w: 14, h: 10, ax: mid, ay: (gg - 5) * TS, rg: 40 + r() * 20, sp: 1 / (240 + r() * 100), ph: r(), am: 10, carry: 1, spd: 0 });
+    else if (k === 'flock') { var offs = [[0, 0], [-9, 6], [9, 6], [-18, 12], [18, 12]], rg2 = Math.max(30, ln * TS / 2 - 24), fph = r(); for (var m = 0; m < 5; m++) enemiesX.push({ t: E.FLOCK, x: mid + offs[m][0], y: (gg - 5) * TS + offs[m][1], w: 10, h: 8, ax: mid, by: (gg - 5) * TS, ox: offs[m][0], oy: offs[m][1], idx: m, rg: rg2, sp: 1 / 340, ph: fph, spd: 0, dir: 1 }); }
+    else if (k === 'balloon') enemiesX.push({ t: E.BALLOON, x: mid, y: (gg - 5) * TS, w: 16, h: 18, ax: mid, ay: (gg - 5.5) * TS, ph: r(), spd: 0 });
+    else if (k === 'shooter') enemiesX.push({ t: E.SHOOTER, x: mid, y: (gg - 6.5) * TS, w: 16, h: 14, ax: mid, ay: (gg - 6.5) * TS, ph: r(), pho: Math.floor(r() * 130), spd: 0, dir: -1 });
+    else { var vert = r() < 0.4, x0 = (cc + 2) * TS, x1 = (cc + ln - 2) * TS; if (vert) { x0 = x1 = mid; } enemiesX.push({ t: E.SPARK, x: x0, y: (gg - 3) * TS, w: 10, h: 10, ax: x0, x0: x0, x1: x1, y0: vert ? (gg - 8) * TS : (gg - 3) * TS, y1: vert ? (gg - 1.5) * TS : (gg - 3) * TS, sp: 1 / 230, ph: r(), spd: 0 }); }
+  }
   flat(10, g);
   // chunk weights per level kind
   function weights() {
-    var d = diff, w = { flat: 3, gap: 1.5 + 2 * d, stairs: 1.2, hurdle: 1.5 + d, spikes: n >= 2 ? 0.5 + 1.5 * d : 0, islands: n >= 2 ? 0.5 + d : 0, mover: n >= 3 ? 0.4 + 1.2 * d : 0, vmover: 0, orbit: 0, falling: 0, hills: n >= 2 ? 1.4 : 0, flood: 0, conv: 0, cannon: n >= 4 ? 0.3 + 0.6 * d : 0, plant: n >= 3 ? 0.3 + 0.6 * d : 0, crush: 0, ghost: 0, spring: 0.25, vine: 0.25, psw: 0.3, ring: 0.3 };
+    var d = diff, w = { flat: 3, gap: 1.5 + 2 * d, stairs: 1.2, hurdle: 1.5 + d, spikes: n >= 2 ? 0.5 + 1.5 * d : 0, islands: n >= 2 ? 0.5 + d : 0, mover: n >= 3 ? 0.4 + 1.2 * d : 0, vmover: 0, orbit: 0, falling: 0, hills: n >= 2 ? 1.4 : 0, flood: 0, conv: 0, cannon: n >= 4 ? 0.3 + 0.6 * d : 0, plant: n >= 3 ? 0.3 + 0.6 * d : 0, crush: 0, ghost: 0, spring: 0.25, vine: 0.25, psw: 0.3, ring: 0.3, wind: n >= 4 ? 0.25 : 0, updraft: n >= 4 ? 0.2 : 0, cloud: n >= 4 ? 0.25 : 0, keydoor: n >= 5 ? 0.2 : 0, sgate: n >= 5 ? 0.15 : 0 };
+    if (n >= 3 && kind !== 'flood') w.flood = 0.3;
     if (kind === 'hills') { w.hills = 4; w.flat = 2; }
-    if (kind === 'flood') { w.flood = 4; w.hills = 0.6; w.gap = 1; }
+    if (kind === 'flood') { w.flood = 4; w.hills = 0.6; w.gap = 1; w.wind = 0; w.updraft = 0; w.cloud = 0; }
     if (kind === 'ghost') { w.ghost = 2.2; w.islands += 0.7; w.spikes += 0.6; w.cannon = 0; w.ring = 0.5; }
-    if (kind === 'sky') { w.flat = 1; w.gap = 3; w.islands = 2.5; w.mover = 1.2; w.vmover = 1.2; w.orbit = 1.5; w.falling = 1.5; w.stairs = 0.5; w.hurdle = 0.3; w.spring = 0.6; w.cannon = 0.4; }
+    if (kind === 'sky') { w.flat = 1; w.gap = 3; w.islands = 2.5; w.mover = 1.2; w.vmover = 1.2; w.orbit = 1.5; w.falling = 1.5; w.stairs = 0.5; w.hurdle = 0.3; w.spring = 0.6; w.cannon = 0.4; w.wind = 1.3; w.updraft = 1.0; w.cloud = 1.6; w.flood = 0; }
     if (kind === 'cave') { w.conv = 3; w.cannon = 0.8; w.plant = 0.5; w.hills = 0.8; }
-    if (castle) { w.gap = 2.5; w.crush = 2 + d; w.cannon = 1.2; w.conv = 1; w.orbit = 0.8; w.falling = 0.6; w.mover = 0.6; w.islands = 0.6; w.plant = 0.6; w.spring = 0; w.vine = 0; w.psw = 0; w.ring = 0; }
+    if (castle) { w.keydoor = 1.0; w.sgate = 0.8; w.cloud = 0.3; w.wind = 0; w.updraft = 0; w.flood = 0; w.gap = 2.5; w.crush = 2 + d; w.cannon = 1.2; w.conv = 1; w.orbit = 0.8; w.falling = 0.6; w.mover = 0.6; w.islands = 0.6; w.plant = 0.6; w.spring = 0; w.vine = 0; w.psw = 0; w.ring = 0; }
     if (kind === 'bonus') { w.spring = 0.8; w.ring = 0; }
+    if (o.only) { for (var kk in w) w[kk] = (kk === 'flat' ? 2 : kk === o.only ? 4 : 0); }
     if (room) { for (var k in w) w[k] = 0; w.flat = 3; w.gap = 1; w.hurdle = 1; w.islands = 0.6; w.stairs = 0.5; }
     return w;
   }
-  var names = ['flat', 'gap', 'stairs', 'hurdle', 'spikes', 'islands', 'mover', 'vmover', 'orbit', 'falling', 'hills', 'flood', 'conv', 'cannon', 'plant', 'crush', 'ghost', 'spring', 'vine', 'psw', 'ring'];
+  var names = ['flat', 'gap', 'stairs', 'hurdle', 'spikes', 'islands', 'mover', 'vmover', 'orbit', 'falling', 'hills', 'flood', 'conv', 'cannon', 'plant', 'crush', 'ghost', 'spring', 'vine', 'psw', 'ring', 'wind', 'updraft', 'cloud', 'keydoor', 'sgate'];
   var guard = 0, endReserve = castle ? 40 : 26;
   while (gt.length < W - endReserve && guard++ < 500) {
     if (cpCol < 0 && gt.length >= W / 2) { var cb = flat(7, g); cpCol = cb + 3; continue; }
@@ -184,6 +223,10 @@ function build(seed, n, a, o) {
       for (i2 = 0; i2 < len; i2++) for (q = 1; q <= wd; q++) tl.push([c0 + i2, g - q, T.WATER]);
       var px = c0 + 3; while (px < c0 + len - 3) { var ph2 = rnd(2, 3); if (r() < 0.7) { for (q = 1; q <= ph2; q++) tl.push([px, g - q, T.SOLID]); } else { tl.push([px, g - 1, T.SPIKE]); } px += rnd(4, 6); }
       for (i2 = 0; i2 < 4; i2++) coinsX.push({ x: (c0 + 3 + i2 * (len - 6) / 3) * TS + 8, y: (g - 3) * TS + 8 });
+      if (r() < 0.55 && len >= 14) { var cs0 = c0 + rnd(3, len - 9), csl = rnd(4, 6), ct = r() < 0.5 ? T.CURL : T.CURR; for (i2 = 0; i2 < csl; i2++) for (q = 1; q <= wd; q++) tl.push([cs0 + i2, g - q, ct]); }
+      if (r() < 0.35 && len >= 12) { var cu0 = c0 + rnd(4, len - 6); for (i2 = 0; i2 < 2; i2++) for (q = 1; q <= wd; q++) tl.push([cu0 + i2, g - q, T.CURU]); }
+      for (var pc = c0 + 4; pc < c0 + len - 2; pc += 7) pockets.push({ x: pc * TS + 8, y: (g - 3) * TS + 8 });
+      if (!room) waterLife(c0, len, g, wd);
       flat(3, g);
     }
     else if (ck === 'conv') {
@@ -228,14 +271,38 @@ function build(seed, n, a, o) {
       tl.push([rc, g - 1, T.RING]); tl.push([rc, g - 2, T.RING]); rings.push({ c: rc, secret: secret, room: secret ? 1 : 0, y: g * TS });
       flats.push({ c: c0, len: len, g: g, noEn: true });
     }
+    else if (ck === 'keydoor' || ck === 'sgate') {
+      len = 12; c0 = flat(len, g); var wcn = gt.length; for (q = 0; q < 3; q++) tl.push([c0 + 2 + q, g - 3, T.SOLID]); for (q = 3; q < 6; q++) tl.push([c0 + 2 + q, g - 6, T.SOLID]);
+      var kx = (c0 + 6) * TS + 8, ky = (g - 7) * TS + 8; gt.push(0); gt.push(0);
+      if (ck === 'keydoor') { var kc = gcount++ % 3, di2 = doorsL.length; keysL.push({ x: kx, y: ky, c: kc }); doorsL.push({ c: wcn, r0: g - 3, r1: g - 1, g: kc }); for (q = 1; q <= 3; q++) { tl.push([wcn, g - q, T.DOOR]); gl.push([wcn, g - q, kc]); tl.push([wcn + 1, g - q, 0]); }
+        routeL.push({ k: 'key', g: kc, x: kx, y: ky }); routeL.push({ k: 'door', i: di2, x: wcn * TS + 8, y: g * TS - 7 }); }
+      else { var sb2 = gcount++ % 8, sc3 = Math.floor((kx) / TS), sr3 = g - 7; switchesL.push({ c: sc3, r: sr3, g: sb2 }); tl.push([sc3, sr3, T.SWITCH]); gl.push([sc3, sr3, sb2]); for (q = 1; q <= 3; q++) { tl.push([wcn, g - q, T.GATE]); gl.push([wcn, g - q, sb2]); tl.push([wcn + 1, g - q, 0]); }
+        routeL.push({ k: 'sw', g: sb2, x: kx, y: ky }); }
+      routeL.push({ k: 'xge', x: (wcn + 2) * TS, y: g * TS - 7 });
+    }
+    else if (ck === 'wind') {
+      gw = rnd(2, gapMax); c0 = pit(gw); var wdx = (r() < 0.5 ? 1 : -1) * (0.05 + 0.04 * diff); winds.push({ x0: (c0 - 3) * TS, x1: (c0 + gw + 3) * TS, y0: (g - 9) * TS, y1: (g + 1) * TS, dx: wdx, dy: 0 });
+      arcs.push({ c: c0, w: gw, g: g, ng: g }); len = rnd(5, 8); var c7 = flat(len, g); flats.push({ c: c7, len: len, g: g });
+    }
+    else if (ck === 'updraft') {
+      gw = rnd(3, gapMax); c0 = pit(gw); winds.push({ x0: (c0 + gw / 2 - 1) * TS, x1: (c0 + gw / 2 + 1.2) * TS, y0: (g - 11) * TS, y1: (g + 1) * TS, dx: 0, dy: -0.85, up: 1 });
+      for (q = 0; q < 4; q++) coinsX.push({ x: (c0 + gw / 2 + 0.1) * TS, y: (g - 3 - q * 1.7) * TS + 8 });
+      arcs.push({ c: c0, w: gw, g: g, ng: g }); len = rnd(5, 8); var c8 = flat(len, g); flats.push({ c: c8, len: len, g: g });
+    }
+    else if (ck === 'cloud') {
+      var cw = 9; c0 = pit(cw); var nc = 4; for (i2 = 0; i2 < nc; i2++) movers.push({ kind: 4, cx: (c0 + cw * (i2 + 0.5) / nc) * TS, y: g * TS - (i2 % 2) * 8, w: 30, amp: 0, per: 300 + (i2 % 2) * 60, ph: i2 * 1.7 });
+      len = rnd(4, 7); var c9 = flat(len, g); flats.push({ c: c9, len: len, g: g });
+    }
   }
   if (cpCol < 0) { cpCol = flat(7, g) + 3; }
   flat(4, g);
   var goalCol, poleCol, bossDef = null, arenaC0 = 0;
   if (castle && !room) {
     flat(6, g); arenaC0 = flat(26, g); flat(3, g);
-    var bv = (n + hash(seed, n, 5)) % 3, bx = (arenaC0 + 16) * TS;
+    var bv = (n + hash(seed, n, 5)) % 5, bx = (arenaC0 + 16) * TS;
     bossDef = { t: E.BOSS, v: bv, x: bx, y: g * TS - 26, w: 28, h: 26, spd: 0, mn: (arenaC0 + 1) * TS, mx: (arenaC0 + 25) * TS, ax: (arenaC0 + 14) * TS, ay: (g - 4) * TS - 6, dir: -1 };
+    if (bv === 3) { bossDef.y = (g - 3) * TS; bossDef.w = 30; bossDef.h = 18; bossDef.ay = (g - 3) * TS; for (i2 = 0; i2 < 26; i2++) for (q = 1; q <= 6; q++) tl.push([arenaC0 + i2, g - q, T.WATER]); pockets.push({ x: (arenaC0 + 6) * TS, y: (g - 3) * TS }); pockets.push({ x: (arenaC0 + 16) * TS, y: (g - 3) * TS }); }
+    if (bv === 4) { bossDef.w = 28; bossDef.h = 22; bossDef.ay = (g - 5) * TS; bossDef.y = bossDef.ay; }
     poleCol = arenaC0 + 24; goalCol = poleCol;
   } else {
     for (var s2 = 0; s2 < 4; s2++) { g -= 1; flat(2, g); }
@@ -243,8 +310,9 @@ function build(seed, n, a, o) {
   }
   W = gt.length;
   // ---- tiles
-  var tiles = new Uint8Array(W * ROWS), c, rr;
+  var tiles = new Uint8Array(W * ROWS), c, rr, grpA = new Uint8Array(W * ROWS);
   for (c = 0; c < W; c++) for (rr = gt[c]; rr < ROWS; rr++) tiles[c * ROWS + rr] = T.SOLID;
+  gl.forEach(function (e2) { if (e2[0] < W) grpA[e2[0] * ROWS + e2[1]] = e2[2]; });
   var put = function (cc, r2, t) { if (cc >= 0 && cc < W && r2 >= 0 && r2 < ROWS) tiles[cc * ROWS + r2] = t; };
   tl.forEach(function (e) { put(e[0], e[1], e[2]); });
   var coins = [], enemies = enemiesX.slice(), pushCoin = function (x, y, b) { coins.push({ x: x, y: y, b: b ? 1 : 0 }); };
@@ -271,6 +339,13 @@ function build(seed, n, a, o) {
       else enemies.push({ t: E.WALKER, x: ex, y: f.g * TS - 12, w: 12, h: 12, spd: 0.45 + 0.35 * diff * r(), dir: r() < 0.6 ? -1 : 1, mn: (f.c + 1) * TS, mx: (f.c + f.len - 1) * TS });
     }
   });
+  var ex0 = enemiesX.length;
+  if (!room) {
+    var pa = kind === 'sky' ? 0.5 : (castle ? 0.1 : 0.06 + 0.3 * diff);
+    flats.forEach(function (f, fi) { if (f.len >= 8 && !f.noEn && fi > 0 && r() < pa) airFeature(f.c, f.len, f.g, false); });
+    arcs.forEach(function (a2) { if (a2.w >= 3 && r() < pa * 0.8) airFeature(a2.c - 1, a2.w + 2, a2.g, true); });
+  }
+  enemies = enemies.concat(enemiesX.slice(ex0));
   arcs.forEach(function (a2) {
     if (r() < 0.8) for (var j = 0; j < 5; j++) { var t = (j + 0.5) / 5; pushCoin((a2.c - 0.5 + (a2.w + 1) * t) * TS + 8, (a2.g - 1.5) * TS - Math.sin(Math.PI * t) * 28 + 6); } });
   spots.forEach(function (s) { if (r() < 0.6) pushCoin(s.x, s.y); });
@@ -280,12 +355,111 @@ function build(seed, n, a, o) {
   cand.sort(function (u, v) { return u.x - v.x; });
   if (!room) { for (var si = 0; si < 5 && cand.length; si++) { var pick = cand[Math.min(cand.length - 1, Math.floor((si + 0.5) * cand.length / 5))]; specials.push({ x: pick.x, y: pick.y }); } }
   var gy = function (col) { return gt[col] * TS; };
-  var L = { seed: seed, n: n, kind: kind, attempt: a, diff: diff, w: W, tiles: tiles, gt: gt, coins: coins, special: specials, enemies: enemies, movers: movers, cannons: cannons, rings: rings, goalX: poleCol * TS + 6, poleCol: poleCol, poleY: gy(poleCol),
+  var L = { seed: seed, n: n, kind: kind, attempt: a, diff: diff, w: W, tiles: tiles, gt: gt, coins: coins, special: specials, enemies: enemies, movers: movers, cannons: cannons, rings: rings, winds: winds, pockets: pockets, keys: keysL, doors: doorsL, switches: switchesL, tele: [], launch: [], grp: grpA, route: routeL.concat([{ k: 'goal', x: poleCol * TS + 6, y: null }]), puzzle: routeL.length > 0, goalX: poleCol * TS + 6, poleCol: poleCol, poleY: gy(poleCol),
     start: { x: 3 * TS + 2, y: gy(3) - P.SH }, cp: { x: cpCol * TS + 2, y: gy(cpCol) - P.SH }, time: (castle ? 150 : 90) + Math.floor(W * 0.6), theme: castle ? 4 : { plain: 0, hills: 0, flood: 3, ghost: 2, sky: 1, cave: 5, bonus: 1 }[kind] | 0, room: room, hasBoss: !!bossDef };
   L.rings.forEach(function (rg) { rg.out = { x: rg.c * TS + 2, y: rg.y - P.SH }; });
   if (castle && bossDef) L.arena = { c0: arenaC0, c1: arenaC0 + 26 };
   return L;
 }
+// ------------------------------------------------------------------ maze / puzzle levels: rooms joined by locked doors, switch gates, teleport pads, launch barrels and water-rise walls
+function buildMaze(seed, n, a) {
+  var r = rng(hash(seed, n, a * 7919 + 3)), diff = Math.min(1, (n - 1) / 18); if (a >= 3) diff *= 0.6; if (a >= 6) diff *= 0.3; if (a >= 9) diff = 0;
+  var g = 12, rnd = function (lo, hi) { return lo + Math.floor(r() * (hi - lo + 1)); };
+  var gt = [], tl = [], gl = [], coins = [], enemies = [], keys = [], doors = [], switches = [], tele = [], launch = [], movers = [], pockets = [], route = [], cannons = [];
+  var nRooms = Math.min(6, 3 + Math.floor(diff * 2.4 + r() * 1.3)), nConn = nRooms - 1, types = [], i, bit = 0, teleN = 0, doorColor = 0;
+  function flat(len, gg) { var c0 = gt.length; for (var k = 0; k < len; k++) gt.push(gg); return c0; }
+  // ---- choose the connector types; a "fork" (hub with teleport pads into a key side-room and a dead end) forces a door next
+  for (i = 0; i < nConn; i++) { var opts = ['door', 'gate']; if (n >= 2) opts.push('tele'); if (diff > 0.15 || n >= 3) opts.push('launch'); if (diff > 0.3 && i >= 1) opts.push('rise'); types.push(opts[Math.floor(r() * opts.length)]); }
+  var fork = -1; if (nConn >= 3 && (diff > 0.25 || r() < 0.3)) { fork = rnd(0, nConn - 2); types[fork] = 'fork'; types[fork + 1] = 'door'; }
+  // ---- side rooms to the LEFT of the start (their x is below the start, so the goal gate is never triggered inside them)
+  var s1c0 = -1, s2c0 = -1, s1c1 = 0;
+  if (fork >= 0) { flat(2, 0); s2c0 = flat(11, g); flat(2, 0); s1c0 = flat(13, g); s1c1 = gt.length; flat(2, 0); }
+  var roomS = [], roomE = [], alc = [], wallC = [];
+  function floorKey(j, c, kind, grp, color) {   // alcove: two stepping platforms, the pickup on the upper one
+    var rs = roomS[j], re = roomE[j], k = alc[j] || 0, a0 = rs + 3 + k * 8;
+    if (a0 + 7 > re - 3) { return { x: (rs + 4) * TS + 8, y: (g - 1) * TS + 8, c: rs + 4 }; }
+    alc[j] = k + 1; for (var q = 0; q < 3; q++) tl.push([a0 + q, g - 3, T.SOLID]); for (q = 3; q < 6; q++) tl.push([a0 + q, g - 6, T.SOLID]);
+    return { x: (a0 + 4) * TS + 8, y: (g - 7) * TS + 8, c: a0 + 4 };
+  }
+  var sideKeyColor = -1;
+  for (i = 0; i < nRooms; i++) {
+    var w = i === 0 ? 16 : rnd(15, 19); roomS[i] = flat(w, g); roomE[i] = gt.length;
+    if (i >= nConn) break;
+    var ty = types[i], rs = roomS[i], re = roomE[i], wc = gt.length;
+    if (ty === 'door' || ty === 'gate' || ty === 'rise') {
+      var needBack = i > 0 && r() < 0.35 + 0.4 * diff, j = needBack ? rnd(0, i - 1) : i, pos;
+      var isSide = (ty === 'door' && i === fork + 1 && fork >= 0);
+      if (ty === 'door') {
+        var color = doorColor++ % 3;
+        if (isSide) { pos = { x: (s1c0 + 7) * TS + 8, y: (g - 1) * TS + 8 }; }
+        else pos = floorKey(j);
+        keys.push({ x: pos.x, y: pos.y, c: color }); var prep = { k: 'key', g: color, x: pos.x, y: pos.y };
+        if (!isSide) { route.push(prep); } else { /* fetched through the fork's side room: stages were added by the fork */ }
+        gt.push(0); gt.push(0); var di = doors.length; doors.push({ c: wc, r0: g - 3, r1: g - 1, g: color });
+        for (var q = 1; q <= 3; q++) { tl.push([wc, g - q, T.DOOR]); gl.push([wc, g - q, color]); tl.push([wc + 1, g - q, 0]); }
+        route.push({ k: 'door', i: di, x: wc * TS + 8, y: g * TS - 7 }); route.push({ k: 'xge', x: (wc + 2) * TS, y: g * TS - 7 });
+      } else if (ty === 'gate') {
+        pos = floorKey(j); var sbit = bit++, sc2 = pos.c;
+        // the switch is a floor-level pad placed under/next to the alcove: use the pickup spot but at floor level when the alcove is the fallback
+        switches.push({ c: Math.floor(pos.x / TS), r: Math.floor((pos.y - 8) / TS), g: sbit }); tl.push([Math.floor(pos.x / TS), Math.floor((pos.y - 8) / TS), T.SWITCH]); gl.push([Math.floor(pos.x / TS), Math.floor((pos.y - 8) / TS), sbit]);
+        route.push({ k: 'sw', g: sbit, x: pos.x, y: pos.y });
+        gt.push(0); gt.push(0); for (var q2 = 1; q2 <= 3; q2++) { tl.push([wc, g - q2, T.GATE]); gl.push([wc, g - q2, sbit]); tl.push([wc + 1, g - q2, 0]); }
+        route.push({ k: 'xge', x: (wc + 2) * TS, y: g * TS - 7 });
+      } else {   // rise: a wall with an opening high above the floor; the water-level switch floods both basins so the hero can swim over it
+        pos = floorKey(j); var rbit = bit++;
+        switches.push({ c: Math.floor(pos.x / TS), r: Math.floor((pos.y - 8) / TS), g: rbit }); tl.push([Math.floor(pos.x / TS), Math.floor((pos.y - 8) / TS), T.SWITCH]); gl.push([Math.floor(pos.x / TS), Math.floor((pos.y - 8) / TS), rbit]);
+        route.push({ k: 'sw', g: rbit, x: pos.x, y: pos.y });
+        // the last 4 floor columns of this room, the wall and 4 columns of the next room form the basin
+        gt.push(4); gt.push(4); var b0 = wc - 4, b1 = wc + 2 + 4;
+        for (var cc = b0; cc < b1; cc++) for (var rq = 1; rq <= g - 1; rq++) { if ((cc === wc || cc === wc + 1) && rq >= 4) continue; tl.push([cc, rq, T.WLEVEL]); gl.push([cc, rq, rbit]); }
+        route.push({ k: 'xge', x: (wc + 2 + 5) * TS, y: g * TS - 7 });
+        var nx = flat(0, g);
+      }
+    } else if (ty === 'tele') {
+      gt.push(0); gt.push(0);
+      var pc = re - 4, tc = wc + 2 + 3; tl.push([pc, g - 1, T.TELE]); tl.push([tc, g - 1, T.TELE]);
+      tele.push({ c: pc, r: g - 1, tx: tc * TS + 1, ty: g * TS - 14, col: teleN % 3 }); route.push({ k: 'tele', n: ++teleN, x: pc * TS + 8, y: g * TS - 7 }); route.push({ k: 'xge', x: (wc + 2 + 5) * TS, y: g * TS - 7 });
+    } else if (ty === 'launch') {
+      var pw = 6; tl.push([re - 2, g - 1, T.LAUNCH]); launch.push({ c: re - 2, r: g - 1, vx: 3.2, vy: -9 });
+      for (var q3 = 0; q3 < pw; q3++) gt.push(ROWS); route.push({ k: 'xge', x: (wc + pw + 1) * TS, y: g * TS - 7 });
+    } else if (ty === 'fork') {
+      gt.push(0); gt.push(0);
+      var pa = re - 12, pb = re - 8, pcc = re - 4, tcn = wc + 2 + 3;   // three pads: to the key room (S1), to a dead end (S2), onwards
+      tl.push([pa, g - 1, T.TELE]); tl.push([pb, g - 1, T.TELE]); tl.push([pcc, g - 1, T.TELE]); tl.push([tcn, g - 1, T.TELE]);
+      var s1Exit = s1c1 - 4, s2Exit = s2c0 + 9;
+      tele.push({ c: pa, r: g - 1, tx: (s1c0 + 2) * TS, ty: g * TS - 14, col: 0 }); tele.push({ c: pb, r: g - 1, tx: (s2c0 + 2) * TS, ty: g * TS - 14, col: 1 }); tele.push({ c: pcc, r: g - 1, tx: tcn * TS + 1, ty: g * TS - 14, col: 2 });
+      tl.push([s1c0 + 11, g - 1, T.TELE]); tele.push({ c: s1c0 + 11, r: g - 1, tx: (pa + 3) * TS, ty: g * TS - 14, col: 0 });   // return loop from the key room (lands a bit to the right of the pad)
+      tl.push([s2c0 + 9, g - 1, T.TELE]); tele.push({ c: s2c0 + 9, r: g - 1, tx: (pb + 3) * TS, ty: g * TS - 14, col: 1 });
+      route.push({ k: 'tele', n: ++teleN, x: pa * TS + 8, y: g * TS - 7 });    // into the key room
+      // the key (for the next door) lies in the key room; its stages follow, then the return pad, then the onward pad
+      var kcol = doorColor % 3, kx = (s1c0 + 7) * TS + 8, ky2 = (g - 1) * TS + 8; route.push({ k: 'key', g: kcol, x: kx, y: ky2 });
+      route.push({ k: 'tele', n: ++teleN, x: (s1c0 + 11) * TS + 8, y: g * TS - 7 });
+      route.push({ k: 'tele', n: ++teleN, x: pcc * TS + 8, y: g * TS - 7 }); route.push({ k: 'xge', x: (wc + 2 + 5) * TS, y: g * TS - 7 });
+      for (var q4 = 0; q4 < 6; q4++) coins.push({ x: (s2c0 + 3 + q4) * TS + 8, y: (g - 2) * TS + 8, b: 0 });
+    }
+    // after a connector the next room starts after its columns
+  }
+  flat(4, g); var poleCol = flat(4, g) + 1; flat(6, g);
+  var W = gt.length, tiles = new Uint8Array(W * ROWS), grp = new Uint8Array(W * ROWS), c, rr;
+  for (c = 0; c < W; c++) for (rr = gt[c]; rr < ROWS; rr++) tiles[c * ROWS + rr] = T.SOLID;
+  tl.forEach(function (e) { if (e[0] >= 0 && e[0] < W && e[1] >= 0 && e[1] < ROWS) tiles[e[0] * ROWS + e[1]] = e[2]; });
+  gl.forEach(function (e) { grp[e[0] * ROWS + e[1]] = e[2]; });
+  // ---- decor: coins on the floor, a few walkers and spikes inside rooms (away from connectors)
+  var keep = []; tele.forEach(function (t) { keep.push(t.c, Math.floor(t.tx / TS)); }); keys.forEach(function (k) { keep.push(Math.floor(k.x / TS)); }); switches.forEach(function (s2) { keep.push(s2.c); }); launch.forEach(function (l2) { keep.push(l2.c); }); doors.forEach(function (d2) { keep.push(d2.c); });
+  function nearKeep(col) { for (var q = 0; q < keep.length; q++) if (Math.abs(col - keep[q]) < 6) return true; return false; }
+  for (i = 0; i < nRooms; i++) {
+    var rs2 = roomS[i], re2 = roomE[i]; for (var q5 = 0; q5 < 4; q5++) if (r() < 0.6) coins.push({ x: (rs2 + 5 + q5 * 2) * TS + 8, y: (g - 2) * TS + 8, b: 0 });
+    if (i > 0 && r() < 0.35 + 0.5 * diff) { var ex = (rs2 + 6 + r() * (re2 - rs2 - 14)) * TS; if (!nearKeep(Math.floor(ex / TS))) enemies.push({ t: E.WALKER, x: ex, y: g * TS - 12, w: 12, h: 12, spd: 0.4 + 0.3 * r(), dir: r() < 0.5 ? -1 : 1, mn: (rs2 + 5) * TS, mx: (re2 - 5) * TS }); }
+    if (i > 0 && diff > 0.3 && r() < 0.5) { var sx = rs2 + rnd(7, Math.max(7, re2 - rs2 - 9)); if (!nearKeep(sx) && tiles[sx * ROWS + g - 1] === 0 && tiles[(sx + 1) * ROWS + g - 1] === 0) { tiles[sx * ROWS + g - 1] = T.SPIKE; } }
+  }
+  var specials = []; for (i = 0; i < 5; i++) { var rc = roomS[Math.min(nRooms - 1, Math.floor(i * nRooms / 5))]; specials.push({ x: (rc + 8 + (i % 3) * 2) * TS, y: (g - 3) * TS }); }
+  route.push({ k: 'goal', x: poleCol * TS + 6, y: null });
+  var sx0 = roomS[0] + 3, L = { seed: seed, n: n, kind: 'maze', attempt: a, diff: diff, w: W, tiles: tiles, grp: grp, gt: gt, coins: coins, special: specials, enemies: enemies, movers: movers, cannons: cannons, rings: [], winds: [], pockets: pockets,
+    keys: keys, doors: doors, switches: switches, tele: tele, launch: launch, route: route, goalX: poleCol * TS + 6, poleCol: poleCol, poleY: g * TS, start: { x: sx0 * TS + 2, y: g * TS - 14 },
+    cp: { x: (roomS[Math.floor(nRooms / 2)] + 2) * TS + 2, y: g * TS - 14 }, time: 260 + Math.floor(W * 0.9), theme: 5, room: false, hasBoss: false, puzzle: true };
+  return L;
+}
+
 function roomLevel(seed, n, secret) {
   var L = null;
   for (var a = 0; a < 10; a++) { L = build(seed, n + 500 + a, a, { room: true, kind: 'plain' }); L.theme = 1; L.enemies = []; L.rings = []; L.special = []; L.cannons = []; L.exitKind = secret ? 'secret' : 'ret'; var v = validate(L); if (v.ok) { L.valid = true; L.script = v.script; return L; } }
@@ -295,12 +469,13 @@ function generate(seed, n, o) {
   var L = null, v = null;
   for (var a = 0; a < 16; a++) {
     L = build(seed, n, a, o); v = validate(L);
-    if (v.ok) { L.script = v.script; if (replay(L)) { L.valid = true; L.attempt = a; L.vnodes = v.nodes; return L; } }
+    if (v.ok) { L.script = v.script; if (replay(L)) { L.valid = true; L.attempt = a; L.vnodes = v.nodes; L.crumbs = makeCrumbs(L); return L; } }
   }
   L.valid = false; L.attempt = 16; return L;
 }
 // replay the validator's input script on a fresh enemy-free state: proves the flag is reachable with the real physics
+function makeCrumbs(L) { var st = newState(L, { noEn: true }), out = [], last = -99; for (var i = 0; i < L.script.length; i++) { var px0 = st.p.x + 6, py0 = st.p.y + 7, sg0 = st.stage, tc0 = st.tc, kb0 = st.kb, sb0 = st.sb; step(st, L.script[i]); if (st.stage !== sg0 || st.tc !== tc0 || st.kb !== kb0 || st.sb !== sb0) { out.push([Math.round(px0), Math.round(py0), sg0]); last = i; } if (st.p.dead || st.p.won) break; if (i - last >= 36 && st.p.ground) { out.push([Math.round(st.p.x + 6), Math.round(st.p.y + 7), st.stage]); last = i; } } out.push([Math.round(L.goalX), Math.round(L.poleY - 8), (L.route ? L.route.length - 1 : 0)]); return out; }
 function replay(L) { var st = newState(L, { noEn: true }); if (!L.script) return false; for (var i = 0; i < L.script.length; i++) { step(st, L.script[i]); if (st.p.dead) return false; if (st.p.won) return true; } return st.p.won; }
 
-root.PF.probe = probe; root.PF.build = build; root.PF.generate = generate; root.PF.validate = validate; root.PF.replay = replay; root.PF.roomLevel = roomLevel; root.PF.worldMap = worldMap; root.PF.kindOf = kindOf; root.PF.worldKinds = worldKinds; root.PF.KIND_NAMES = KIND_NAMES;
+root.PF.probe = probe; root.PF.build = build; root.PF.generate = generate; root.PF.validate = validate; root.PF.replay = replay; root.PF.makeCrumbs = makeCrumbs; root.PF.searchStage = searchStage; root.PF.roomLevel = roomLevel; root.PF.worldMap = worldMap; root.PF.kindOf = kindOf; root.PF.worldKinds = worldKinds; root.PF.KIND_NAMES = KIND_NAMES;
 })(typeof window !== 'undefined' ? window : globalThis);
