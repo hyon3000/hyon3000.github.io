@@ -382,7 +382,7 @@ function render(g, c2d, bs) {
 }
 function startScreen(g, c2d, bs) {
   G = g; ctx = c2d; F = g.frame; ctx.setTransform(bs, 0, 0, bs, 0, 0); drawMap();
-  overlay(TT('도형 월드', 'SHAPE WORLD'), [TT('다이아몬드 영웅의 모험: 월드를 돌며 관문과 요새를 정복하세요', 'A diamond hero\'s adventure: clear every gate and fortress'), TT('←→ 이동  Z/스페이스 점프  X/Shift 달리기  C 스핀점프', 'Arrows move  Z/Space jump  X/Shift run  C spin jump'), TT('↑ 덩굴/문   P-게이지가 차면 더 빠르고 높이!', 'Up: vines/doors   fill the P meter for speed and height'), TT('최고 점수: ', 'Best score: ') + g.best, TT('스페이스 또는 화면 터치로 시작', 'Press Space or tap to start')]);
+  overlay(TT('도형 월드', 'SHAPE WORLD'), [TT('다이아몬드 영웅의 모험: 월드를 돌며 관문과 요새를 정복하세요', 'A diamond hero\'s adventure: clear every gate and fortress'), TT('←→ 이동  Z/스페이스 점프  X/Shift 달리기  C 스핀점프', 'Arrows move  Z/Space jump  X/Shift run  C spin jump'), TT('↑ 덩굴/문   P-게이지가 차면 더 빠르고 높이!', 'Up: vines/doors   fill the P meter for speed and height'), TT('최고 점수: ', 'Best score: ') + g.best, g.hasSave ? TT('스페이스/터치: 이어하기 (월드 ' + g.worldName(g.wid) + ') · F2: 새 게임', 'Space/tap: continue (world ' + g.worldName(g.wid) + ') \u00b7 F2: new game') : TT('스페이스 또는 화면 터치로 시작', 'Press Space or tap to start')]);
 }
 root.PFR = { render: render, startScreen: startScreen, levelLabel: function (g) { return levelLabel(g); } };
 })(window);

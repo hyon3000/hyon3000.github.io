@@ -160,7 +160,16 @@ function say(t, frames) { G.msg = t; G.msgT = frames || 150; }
 function nodeById(id) { for (var k = 0; k < G.map.nodes.length; k++) if (G.map.nodes[k].i === id) return G.map.nodes[k]; return null; }
 // ---- progress (persisted per seed in localStorage, always inside try/catch)
 function saveKey(seed) { return 'shapeworld.save.' + seed; }
-function saveProg() { try { localStorage.setItem(saveKey(G.seed), JSON.stringify(G.prog)); localStorage.setItem('shapeworld.last', String(G.seed)); } catch (e) {} }
+function saveProg() {   // the whole resumable state: cleared stages / worlds, secret routes, current world, map position, lives, score, coins
+  if (!G.sm || !G.prog) return;
+  try {
+    G.prog.lives = G.lives; G.prog.base = G.base; G.prog.coinBase = G.coinBase; G.prog.nextLife = G.nextLife; G.prog.sel = G.sel; G.prog.cur = G.wid;
+    G.prog.inLevel = (G.curNode && (G.mode === 'play' || G.mode === 'pause' || G.mode === 'dying' || G.mode === 'loading' || G.mode === 'clear')) ? G.curNode.i : -1; G.prog.t = Date.now();
+    localStorage.setItem(saveKey(G.seed), JSON.stringify(G.prog)); localStorage.setItem('shapeworld.last', String(G.seed));
+  } catch (e) {}
+}
+function clearSave() { try { localStorage.removeItem(saveKey(G.seed)); localStorage.removeItem('shapeworld.last'); } catch (e) {} }
+function hasProgress(p) { if (!p) return false; var any = false; for (var w in p.done) for (var k in p.done[w]) any = true; for (var w2 in p.wcl) any = true; return any || (p.base || 0) > 0 || (p.cur || 0) > 0; }
 function loadProg(seed) { try { var s = localStorage.getItem(saveKey(seed)); if (s) { var o = JSON.parse(s); if (o && o.done && o.wcl) return o; } } catch (e) {} return null; }
 function lastSeed() { try { var s = parseInt(localStorage.getItem('shapeworld.last'), 10); return s > 0 ? s : 0; } catch (e) { return 0; } }
 function worldCleared(wid) { return !!G.prog.wcl[wid]; }
@@ -187,9 +196,11 @@ function setWorld(wid) { var w = G.sm.worlds[wid]; G.wid = wid; G.depth = w.dept
 function startGame(fresh) {
   if (Q.get('seed')) G.seed = parseInt(Q.get('seed'), 10) || 1; else if (!fresh && lastSeed()) G.seed = lastSeed(); else G.seed = 1 + Math.floor(Math.random() * 999999);
   G.sm = PF.superMap(G.seed); G.prog = (!fresh && loadProg(G.seed)) || { done: {}, secret: {}, wcl: {}, cur: 0, front: 0 };
-  G.base = 0; G.coinBase = 0; G.lives = 3; G.nextLife = 50; G.main = null; G.st = null; G.L = null; G.hint = null; G.autoWait = 0; G.mapCool = 0;
-  setWorld(G.sm.worlds[G.prog.cur] ? G.prog.cur : 0); G.mode = 'map'; setAuto(0); aiReset(); saveProg();
-  say(TT('월드 ' + worldName(G.wid) + ': 레벨을 골라 시작하세요', 'World ' + worldName(G.wid) + ': pick a level to start'), 150);
+  var p0 = G.prog, resumed = !fresh && hasProgress(p0);
+  G.base = resumed ? (p0.base || 0) : 0; G.coinBase = resumed ? (p0.coinBase || 0) : 0; G.lives = resumed && p0.lives > 0 ? p0.lives : 3; G.nextLife = resumed && p0.nextLife ? p0.nextLife : 50; G.main = null; G.st = null; G.L = null; G.hint = null; G.autoWait = 0; G.mapCool = 0;
+  setWorld(G.sm.worlds[G.prog.cur] ? G.prog.cur : 0); if (resumed) { var rs = p0.inLevel >= 0 ? p0.inLevel : p0.sel, nd = nodeById(rs); if (nd && isOpen(nd)) G.sel = nd.i; }
+  G.mode = 'map'; setAuto(0); aiReset(); saveProg();
+  say(resumed ? TT('이어하기: 월드 ' + worldName(G.wid) + ' (목숨 ' + G.lives + ')', 'Resumed: world ' + worldName(G.wid) + ' (lives ' + G.lives + ')') : TT('월드 ' + worldName(G.wid) + ': 레벨을 골라 시작하세요', 'World ' + worldName(G.wid) + ': pick a level to start'), 150);
   var lv = parseInt(Q.get('level'), 10); if (lv && !G.lvDone) { G.lvDone = true; window.__pfGo(lv); }
 }
 // ---- world endings (castle / cannon) lead to different next worlds on the super map
@@ -225,7 +236,7 @@ function levelInit(cp) {
 }
 function enterLevel(i, force) {
   var node = nodeById(i); if (!node || G.mode === 'loading') return; if (!force && !isOpen(node)) return;
-  G.curNode = node; G.mode = 'loading'; G.st = null; G.hint = null;
+  G.curNode = node; G.mode = 'loading'; G.st = null; G.hint = null; saveProg();
   setTimeout(function () { G.n = node.n; var sd = PF.hash(G.seed, G.wid, 31); G.L = PF.generate(sd, node.n, { kind: node.kind, secret: !!node.secret }); G.main = null; levelInit(false); var kn = PF.KIND_NAMES[G.L.kind]; say(PFR.levelLabel({ n: node.n }) + ' ' + (KO ? kn[0] : kn[1]), 150); G.msgIsLevel = true; }, 30);
 }
 function totalCoins() { return G.coinBase + (G.st ? G.st.coins : 0); }
@@ -245,6 +256,7 @@ window.giveHint = function () {
 window.toggleSound = function () { G.snd = !G.snd; try { localStorage.setItem(SND_KEY, G.snd ? '1' : '0'); } catch (e) {} reportSound(); if (G.snd) sfx('coin'); return G.snd; };
 window.isSound = function () { return G.snd; };
 window.__pfGo = function (n) { startGame(true); var si = (n - 1) % 5; G.prog.done[G.wid] = {}; for (var q = 0; q < Math.min(si, 4); q++) G.prog.done[G.wid][q] = 1; setWorld(G.wid); G.sel = Math.min(si, 4); enterLevel(G.sel, true); };
+window.addEventListener('pagehide', saveProg); window.addEventListener('beforeunload', saveProg); document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') saveProg(); });
 reportSound(); try { if (window.parent !== window && window.parent.setPadMark) window.parent.setPadMark(padOn); } catch (e) {}
 
 function pop(x, y, t, c) { G.pops.push({ x: x, y: y, t: t, c: c, life: 45 }); }
@@ -332,8 +344,8 @@ function fixedStep() {
     if (G.dieT > 100) {
       if (G.main) { G.L = G.main.L; G.st = G.main.st; G.main = null; st = G.st; }
       G.base += st.score; G.coinBase += st.coins; G.lives--;
-      if (G.lives <= 0) { G.mode = 'over'; G.autoWait = 0; finishRun(); }
-      else { levelInit(st.cp); say(TT('다시 도전! 남은 목숨 ' + G.lives, 'Try again! Lives left: ' + G.lives), 120); }
+      if (G.lives <= 0) { G.mode = 'over'; G.autoWait = 0; finishRun(); clearSave(); }
+      else { saveProg(); levelInit(st.cp); say(TT('다시 도전! 남은 목숨 ' + G.lives, 'Try again! Lives left: ' + G.lives), 120); }
     }
   } else if (G.mode === 'clear') {
     G.clearT++; var pw = st.p; pw.y = Math.min(pw.y + 1.2, G.L.poleY - pw.h);
@@ -358,7 +370,7 @@ function frame(t) {
   if (n === 6) acc = 0;
   try { if (G.mode === 'start') PFR.startScreen(G, ctx, BS); else PFR.render(G, ctx, BS); } catch (e) { window.__errs.push('render ' + e.message + ' ' + (e.stack || '').split('\n')[0]); }
 }
-G.seed = parseInt(Q.get('seed'), 10) || lastSeed() || 1; G.sm = PF.superMap(G.seed); G.prog = loadProg(G.seed) || { done: {}, secret: {}, wcl: {}, cur: 0, front: 0 }; setWorld(G.sm.worlds[G.prog.cur] ? G.prog.cur : 0);
+G.seed = parseInt(Q.get('seed'), 10) || lastSeed() || 1; G.sm = PF.superMap(G.seed); G.prog = loadProg(G.seed) || { done: {}, secret: {}, wcl: {}, cur: 0, front: 0 }; setWorld(G.sm.worlds[G.prog.cur] ? G.prog.cur : 0); G.hasSave = hasProgress(G.prog);
 if (Q.get('autostart') === '1') startGame();
 if (Q.get('auto') === '1') window.toggleAuto();
 requestAnimationFrame(frame);
