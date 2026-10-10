@@ -290,9 +290,9 @@ function overlay(title, lines) {
   for (var i = 0; i < lines.length; i++) text(lines[i], VW / 2, 84 + i * 14, 8.5, i === lines.length - 1 ? '#7affe0' : '#fff', 'center');
 }
 // ---------------------------------------------------------------- overworld map: low-poly islands, glowing route, hex / diamond nodes
-var NODE_COL = { maze: '#ffb04a', plain: '#7a6ae0', hills: '#4ac8a0', flood: '#38b8f0', ghost: '#a07aff', sky: '#ff9ac0', cave: '#d09050', castle: '#ff4a6a', bonus: '#ffe08a' };
+var NODE_COL = { cannon: '#ff8a3a', maze: '#ffb04a', plain: '#7a6ae0', hills: '#4ac8a0', flood: '#38b8f0', ghost: '#a07aff', sky: '#ff9ac0', cave: '#d09050', castle: '#ff4a6a', bonus: '#ffe08a' };
 function drawMap() {
-  var wm = G.map, pal = [['#14103a', '#3a2a7a'], ['#0a2a3a', '#1a6a7a'], ['#2a1030', '#7a2a6a'], ['#102a20', '#2a7a5a']][wm.w % 4];
+  var wm = G.map, pal = [['#14103a', '#3a2a7a'], ['#0a2a3a', '#1a6a7a'], ['#2a1030', '#7a2a6a'], ['#102a20', '#2a7a5a']][wm.wid % 4];
   var g = ctx.createLinearGradient(0, 0, 0, VH); g.addColorStop(0, pal[0]); g.addColorStop(1, pal[1]); ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
   var r = PF.rng(wm.w * 31 + 7), i; for (i = 0; i < 40; i++) spark4(r() * VW, r() * VH, 0.8 + r() * 1.6, 'rgba(255,255,255,.35)');
   for (i = 0; i < 9; i++) { var ix = 20 + r() * 360, iy = 40 + r() * 150, rr = 14 + r() * 30; hex(ix, iy, rr, 'rgba(255,255,255,.07)', r() * 1.5); hex(ix, iy, rr * 0.7, 'rgba(255,255,255,.07)', r() * 1.5); }
@@ -303,6 +303,7 @@ function drawMap() {
   for (i = 0; i < all.length; i++) { var nd = all[i], done = fn.isDone(nd.i), open = fn.isOpen(nd), sel = G.sel === nd.i;
     var col = open ? NODE_COL[nd.kind] : '#5a5a7a';
     if (nd.kind === 'castle') { poly([nd.x - 9, nd.y + 8, nd.x - 9, nd.y - 3, nd.x - 4, nd.y - 9, nd.x, nd.y - 3, nd.x + 4, nd.y - 9, nd.x + 9, nd.y - 3, nd.x + 9, nd.y + 8], col, '#1a0a20'); }
+    else if (nd.kind === 'cannon') { circ(nd.x - 3, nd.y + 5, 5, '#1a1030'); circ(nd.x - 3, nd.y + 5, 3.4, col); ctx.save(); ctx.translate(nd.x, nd.y); ctx.rotate(-0.6); rrect(-4, -5, 16, 9, 3, '#1a1030'); rrect(-3, -4, 14, 7, 2.5, col); ctx.restore(); }
     else if (nd.kind === 'bonus') spark8(nd.x, nd.y, 9, col, F * 0.03);
     else { hex(nd.x, nd.y, 9, '#10082a', Math.PI / 6); hex(nd.x, nd.y, 7.3, col, Math.PI / 6); }
     if (done) { diamond(nd.x + 8, nd.y - 8, 4, 5, '#fff'); ctx.strokeStyle = '#18a070'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(nd.x + 6, nd.y - 8); ctx.lineTo(nd.x + 7.8, nd.y - 6); ctx.lineTo(nd.x + 10.5, nd.y - 10); ctx.stroke(); }
@@ -310,17 +311,66 @@ function drawMap() {
     text(nd.kind === 'bonus' ? '★' : String(nd.i + 1), nd.x, nd.y + 0.5, 8, '#fff', 'center'); }
   var cur = all.filter(function (n) { return n.i === G.sel; })[0] || nodes[0];
   drawHero({ x: cur.x - 6, y: cur.y - 30 + Math.sin(F * 0.1) * 2, w: 12, h: 14, pw: 0, big: false, face: 1, ground: false, anim: 0, vx: 0, inv: 0, star: 0, spin: 0 }, false, 0, false);
-  rrect(3, 3, 90, 14, 7, 'rgba(10,8,34,.62)'); text(TT('월드 ', 'WORLD ') + (wm.w + 1), 10, 10.5, 9, '#ffd0a0');
+  rrect(3, 3, 90, 14, 7, 'rgba(10,8,34,.62)'); text(TT('월드 ', 'WORLD ') + G.worldName(wm.wid), 10, 10.5, 9, '#ffd0a0');
   rrect(100, 3, 110, 14, 7, 'rgba(10,8,34,.62)'); diamond(110, 10, 4, 5, '#2ee6d6'); text(pad6(G.base), 118, 10.5, 8.5, '#fff');
   rrect(VW - 76, 3, 73, 14, 7, 'rgba(10,8,34,.62)'); for (i = 0; i < Math.min(G.lives, 5); i++) heroIcon(VW - 66 + i * 11, 10, 0.9);
-  var sn = all.filter(function (n) { return n.i === G.sel; })[0]; if (sn) { var kn = PF.KIND_NAMES[sn.kind]; rrect(70, VH - 26, 260, 18, 9, 'rgba(10,8,34,.72)'); text((sn.i === 5 ? '★ ' : (wm.w + 1) + '·' + (sn.i + 1) + '  ') + (KO ? kn[0] : kn[1]), VW / 2, VH - 17, 9, '#fff', 'center', false); }
+  var sn = all.filter(function (n) { return n.i === G.sel; })[0]; if (sn) { var kn = PF.KIND_NAMES[sn.kind]; rrect(70, VH - 26, 260, 18, 9, 'rgba(10,8,34,.72)'); text((sn.kind === 'bonus' ? '★ ' : G.worldName(wm.wid) + '·' + (sn.i + 1) + '  ') + (KO ? kn[0] : kn[1]), VW / 2, VH - 17, 9, '#fff', 'center', false); }
   if (G.auto) { var w2 = 128; rrect(VW / 2 - w2 / 2, 20, w2, 14, 4, 'rgba(255,138,61,.95)'); text(TT('자동 플레이 (F3 끄기)', 'AUTO PLAY (F3 to stop)'), VW / 2, 27, 8, '#2a1000', 'center', false); }
   if (G.msgT > 0 && G.msg) { var tw = Math.min(VW - 16, 8 + G.msg.length * (KO ? 7.4 : 4.9)); rrect(VW / 2 - tw / 2, 40, tw, 15, 4, 'rgba(10,8,34,.78)'); text(G.msg, VW / 2, 47.5, 8, '#fff', 'center', false); }
   text(TT('← → ↑ ↓ 선택   점프/Enter 시작', 'Arrows select   Jump/Enter start'), VW / 2, VH - 38, 7.5, '#cfe', 'center');
 }
+
+// ---------------------------------------------------------------- super map: the graph of worlds (castle exit solid, cannon exit dashed)
+function drawSuper() {
+  var sm = G.sm, g = ctx.createLinearGradient(0, 0, 0, VH); g.addColorStop(0, '#0a0624'); g.addColorStop(1, '#26125a'); ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
+  var rs = PF.rng(21), i; for (i = 0; i < 50; i++) spark4(rs() * VW, rs() * VH, 0.8 + rs() * 1.4, 'rgba(255,255,255,.3)');
+  ctx.lineCap = 'round';
+  sm.worlds.forEach(function (w) { if (!w.next) return; ['castle', 'cannon'].forEach(function (k) { var t = sm.worlds[w.next[k]]; if (!t) return; var taken = G.prog.wcl[w.id] === k, seen = G.prog.wcl[w.id] !== undefined || w.id === G.wid; ctx.setLineDash(k === 'castle' ? [] : [4, 4]); line(w.x, w.y, t.x, t.y, taken ? (k === 'castle' ? '#ff8a9a' : '#ffc060') : (seen ? 'rgba(255,255,255,.28)' : 'rgba(255,255,255,.12)'), taken ? 3 : 1.6); ctx.setLineDash([]); }); });
+  sm.worlds.forEach(function (w) { var cl = G.prog.wcl[w.id] !== undefined, cur = w.id === G.wid, tgt = G.mode === 'super' && w.id === G.superTo, col = cl ? '#7affe0' : (cur ? '#ffd0a0' : (w.end ? '#ff9ad8' : '#8a7ae0'));
+    hex(w.x, w.y, 14, '#0c0820', Math.PI / 6); hex(w.x, w.y, 11.6, col, Math.PI / 6); if (w.end) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(w.x, w.y, 16.5, 0, 6.2832); ctx.stroke(); }
+    text(G.worldName(w.id), w.x, w.y + 0.5, 9, '#10082a', 'center', false);
+    if (cur || tgt) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(w.x, w.y, 19 + Math.sin(F * 0.2) * 1.5, 0, 6.3); ctx.stroke(); }
+    if (cl) { circ(w.x + 11, w.y - 11, 4.5, '#fff'); text(G.prog.wcl[w.id] === 'castle' ? 'C' : 'K', w.x + 11, w.y - 10.5, 6, '#2a1060', 'center', false); } });
+  rect(0, 0, VW, 16, 'rgba(10,8,34,.7)'); text(TT('월드 지도', 'SUPER MAP'), 8, 8.5, 9, '#ffd0a0');
+  rect(250, 7, 14, 2, '#ff8a9a'); text(TT('성채 출구', 'castle exit'), 268, 8, 7, '#fff', 'left', false); ctx.setLineDash([3, 3]); line(318, 8, 332, 8, '#ffc060', 2); ctx.setLineDash([]); text(TT('대포 출구', 'cannon exit'), 336, 8, 7, '#fff', 'left', false);
+  if (G.mode === 'super') {
+    var w0 = sm.worlds[G.superFrom], w1 = sm.worlds[G.superTo], t = Math.max(0, Math.min(1, (G.superT - 20) / 80)), hx = w0.x + (w1.x - w0.x) * t, hy = w0.y + (w1.y - w0.y) * t - 14 - Math.abs(Math.sin(F * 0.2)) * 4;
+    drawHero({ x: hx - 6, y: hy, w: 12, h: 14, pw: 0, big: false, face: 1, ground: false, anim: 0, vx: 0, inv: 0, star: 0, spin: 0 }, false, 0, false);
+    var via = G.endingTaken === 'castle' ? TT('성채', 'the castle') : TT('대포', 'the cannon');
+    rrect(40, VH - 30, 320, 20, 8, 'rgba(10,8,34,.8)'); text(TT('월드 ' + G.worldName(G.superFrom) + ' 클리어 (' + via + ') → 월드 ' + G.worldName(G.superTo), 'World ' + G.worldName(G.superFrom) + ' cleared via ' + via + ' → world ' + G.worldName(G.superTo)), VW / 2, VH - 20, 8.5, '#fff', 'center', false);
+  }
+}
+function drawEnd() {
+  drawSuper(); panel(70, 60, VW - 140, 100); text(TT('끝!', 'THE END'), VW / 2, 84, 20, '#ff8a3d', 'center');
+  text(G.endingTaken === 'castle' ? TT('성채 엔딩 · 월드 ' + G.worldName(G.wid), 'Castle ending · world ' + G.worldName(G.wid)) : TT('대포 엔딩 · 월드 ' + G.worldName(G.wid), 'Cannon ending · world ' + G.worldName(G.wid)), VW / 2, 108, 9, '#fff', 'center');
+  text(TT('점수: ', 'Score: ') + G.base, VW / 2, 124, 9, '#7affe0', 'center'); text(TT('스페이스 또는 터치: 새 모험', 'Space or tap: new adventure'), VW / 2, 144, 8.5, '#7affe0', 'center');
+}
+function drawSelect() {
+  G.selRects = []; rect(0, 0, VW, VH, 'rgba(6,4,24,.92)'); ctx.strokeStyle = '#2ee6d6'; ctx.lineWidth = 1; ctx.strokeRect(6.5, 6.5, VW - 13, VH - 13);
+  text(TT('월드 / 스테이지 선택', 'SELECT WORLD / STAGE'), 16, 18, 10, '#ffd0a0'); text(TT('방향키 이동 · 점프/Enter 시작 · Esc/T 닫기', 'Arrows move · Jump/Enter start · Esc/T close'), VW - 34, 18, 7, '#cfe', 'right', false);
+  text('X', VW - 20, 18, 10, '#ff8aa8', 'center', false); G.selRects.push({ x: VW - 30, y: 8, w: 22, h: 14, kind: 'close' });
+  var ws = G.selList, i, y;
+  text(TT('월드', 'WORLDS'), 16, 34, 8, '#9ab', 'left', false);
+  for (i = 0; i < ws.length; i++) { var w = ws[i], sel = i === G.selWi; y = 40 + i * 16; G.selRects.push({ x: 14, y: y - 1, w: 120, h: 15, kind: 'world', idx: i });
+    rrect(14, y - 1, 120, 15, 5, sel ? (G.selCol === 0 ? 'rgba(46,230,214,.35)' : 'rgba(255,255,255,.14)') : 'rgba(255,255,255,.06)'); var cl = G.prog.wcl[w.id];
+    text(TT('월드 ', 'World ') + G.worldName(w.id), 20, y + 6.5, 8.5, w.id === G.wid ? '#ffd0a0' : '#fff', 'left', false); if (cl) text((cl === 'castle' ? 'C' : 'K') + ' ✓', 128, y + 6.5, 8, '#7affe0', 'right', false); else if (w.id === G.wid) text(TT('현재', 'now'), 128, y + 6.5, 7, '#ffd0a0', 'right', false); }
+  var w2 = ws[G.selWi], m = G.selMapObj; text(TT('스테이지 · 월드 ', 'STAGES · world ') + G.worldName(w2.id), 150, 34, 8, '#9ab', 'left', false);
+  var nodes = m.nodes.slice().sort(function (a, b) { return (a.main ? 0 : 1) - (b.main ? 0 : 1) || a.i - b.i; });
+  nodes.forEach(function (nd, k) {
+    var gi = m.nodes.indexOf(nd), st = G.selStageState(w2.id, m, nd), sel = G.selCol === 1 && G.selSi === gi, kn = PF.KIND_NAMES[nd.kind]; y = 40 + k * 16; G.selRects.push({ x: 148, y: y - 1, w: 240, h: 15, kind: 'stage', idx: gi });
+    rrect(148, y - 1, 240, 15, 5, sel ? 'rgba(46,230,214,.35)' : 'rgba(255,255,255,.06)'); var dim = st === 'locked';
+    text((nd.kind === 'bonus' ? '★' : G.worldName(w2.id) + '·' + (nd.i + 1)) + '  ' + (KO ? kn[0] : kn[1]) + (nd.ending ? (nd.ending === 'castle' ? TT('  (성채 끝)', '  (castle ending)') : TT('  (대포 끝)', '  (cannon ending)')) : '') + (nd.main ? '' : TT('  [비밀 길]', '  [secret route]')), 154, y + 6.5, 8.5, dim ? '#6a6a88' : '#fff', 'left', false);
+    if (st === 'done') text('✓', 382, y + 6.5, 9, '#7affe0', 'right', false); else if (st === 'locked') text(TT('잠김', 'locked'), 382, y + 6.5, 7, '#6a6a88', 'right', false); else text('▶', 382, y + 6.5, 8, '#ffd0a0', 'right', false);
+  });
+  if (G.prog.wcl[w2.id]) text(TT('월드 클리어: 모든 스테이지를 고를 수 있어요', 'World cleared: every stage is selectable'), 150, 40 + nodes.length * 16 + 8, 7.5, '#7affe0', 'left', false);
+}
+
 function render(g, c2d, bs) {
   G = g; ctx = c2d; F = g.frame;
   ctx.setTransform(bs, 0, 0, bs, 0, 0); ctx.clearRect(0, 0, VW, VH);
+  if (G.mode === 'super') { drawSuper(); return; }
+  if (G.mode === 'end') { drawEnd(); return; }
+  if (G.mode === 'select') { if (G.selPrev === 'map' || !G.st) drawMap(); else { var th0 = THEMES[G.L.theme] || THEMES[0]; drawBackground(th0, G.cam); drawLevel(G.st, th0); } drawSelect(); return; }
   if (G.mode === 'map' || (G.mode === 'start' && !G.st)) { drawMap(); return; }
   var st = G.st; if (!st) return;
   var th = THEMES[G.L.theme] || THEMES[0];

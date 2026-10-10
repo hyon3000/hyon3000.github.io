@@ -616,6 +616,7 @@ Sim.prototype.addRope = function (A, B, attA, attB, P0) {
   }, this);
   if (ba) this.world.createJoint(new planck.RevoluteJoint({}, ba, ch.links[0], V(P[0][0], P[0][1])));
   if (bb) this.world.createJoint(new planck.RevoluteJoint({}, bb, ch.links[N2 - 1], V(P[N2][0], P[N2][1])));
+  this.capLoad(ba, rec); this.capLoad(bb, rec);
   if (ba && bb && ba !== bb) {                             // both ends hung: the rope can never be longer than its drawn length, however heavy the load (a plain chain of joints stretches)
     var tl = 0; for (var ri = 0; ri < N2; ri++) tl += Math.hypot(P[ri + 1][0] - P[ri][0], P[ri + 1][1] - P[ri][1]);
     this.world.createJoint(new planck.RopeJoint({ maxLength: tl / S, collideConnected: true, localAnchorA: ba.getLocalPoint(V(P[0][0], P[0][1])), localAnchorB: bb.getLocalPoint(V(P[N2][0], P[N2][1])) }, ba, bb));
@@ -773,21 +774,59 @@ Sim.prototype.projectRopes = function () {     // rope length is invariant: afte
     if (wa) { var qa = A.getPosition(); A.setPosition(Vec2(qa.x + dx * wa / ws, qa.y + dy * wa / ws)); }
     if (wb) { var qb = B.getPosition(); B.setPosition(Vec2(qb.x - dx * wb / ws, qb.y - dy * wb / ws)); }
   }
-  // exact pass: walk each rope from its anchored end and snap every link to the end of the previous one (the chain can then never be longer than the drawn rope)
-  this.ropes.forEach(function (rec) {
-    if (rec.level) return;
-    var n = rec.links.length, lead = rec.endA ? 0 : (rec.endB ? 1 : -1); if (lead < 0) return;
-    var end = lead === 0 ? rec.endA : rec.endB, w = end.b.getWorldPoint(end.lp), tx = w.x * S, ty = w.y * S, k, b, e, dx, dy, q;
+  var linkOf = function (body) { for (var q = 0; q < this.ropes.length; q++) { var k = this.ropes[q].links.indexOf(body); if (k >= 0) return { rec: this.ropes[q], k: k }; } return null; }.bind(this);
+  var snapChain = function (rec, k0, dx, dy) {       // move link k0 by (dx, dy), then re-attach every link on both sides of it, one after the other
+    var b = rec.links[k0], q = b.getPosition(), e, d, n = rec.links.length, j;
+    b.setPosition(Vec2(q.x + dx / S, q.y + dy / S));
+    for (j = k0 + 1; j < n; j++) { var bj = rec.links[j], bp = rec.links[j - 1]; if (!bj || !bp) break; e = this.linkEnds(bp); var e2 = this.linkEnds(bj); d = [e[1][0] - e2[0][0], e[1][1] - e2[0][1]]; var pj = bj.getPosition(); bj.setPosition(Vec2(pj.x + d[0] / S, pj.y + d[1] / S)); }
+    for (j = k0 - 1; j >= 0; j--) { var bk = rec.links[j], bn = rec.links[j + 1]; if (!bk || !bn) break; e = this.linkEnds(bn); var e3 = this.linkEnds(bk); d = [e[0][0] - e3[1][0], e[0][1] - e3[1][1]]; var pk = bk.getPosition(); bk.setPosition(Vec2(pk.x + d[0] / S, pk.y + d[1] / S)); }
+  }.bind(this);
+  // exact pass: walk each rope from an anchored end and snap every link to the end of the previous one (the chain can then never be longer than the drawn rope);
+  // a rope held at both ends is swept back and forth (FABRIK style) until both ends sit on their anchors
+  var sweep = function (rec, lead) {                // FABRIK step: every link keeps its length, is pulled onto the previous joint and turns towards where its other end used to be
+    var n = rec.links.length, end = lead === 0 ? rec.endA : rec.endB, w = end.b.getWorldPoint(end.lp), tx = w.x * S, ty = w.y * S, k, b, e;
     for (var s = 0; s < n; s++) {
       k = lead === 0 ? s : n - 1 - s; b = rec.links[k]; if (!b) break;
-      e = this.linkEnds(b); var near = lead === 0 ? e[0] : e[1], far = lead === 0 ? e[1] : e[0];
-      dx = tx - near[0]; dy = ty - near[1];
-      if (b.isDynamic() && dx * dx + dy * dy > 1e-8) { q = b.getPosition(); b.setPosition(Vec2(q.x + dx / S, q.y + dy / S)); }
-      tx = far[0] + dx; ty = far[1] + dy;
+      e = this.linkEnds(b); var old = lead === 0 ? e[1] : e[0], len = b.__hl * 2, dx = old[0] - tx, dy = old[1] - ty, dl = Math.hypot(dx, dy);
+      if (dl < 1e-6) { var ag = b.getAngle(); dx = Math.cos(ag) * (lead === 0 ? 1 : -1); dy = Math.sin(ag) * (lead === 0 ? 1 : -1); dl = 1; }
+      var ux = dx / dl, uy = dy / dl, fx = tx + ux * len, fy = ty + uy * len;       // far end of this link
+      if (b.isDynamic()) {
+        var a0 = lead === 0 ? [tx, ty] : [fx, fy], a1 = lead === 0 ? [fx, fy] : [tx, ty];
+        b.setTransform(Vec2((a0[0] + a1[0]) / 2 / S, (a0[1] + a1[1]) / 2 / S), Math.atan2(a1[1] - a0[1], a1[0] - a0[0]));
+      }
+      tx = fx; ty = fy;
     }
+  }.bind(this);
+  this.ropes.forEach(function (rec) {
+    if (rec.level) return;
+    if (rec.endA && rec.endB) { for (var fi = 0; fi < 14; fi++) { sweep(rec, 1); sweep(rec, 0); } }
+    else if (rec.endA) sweep(rec, 0);
+    else if (rec.endB) sweep(rec, 1);
   }, this);
+  this.pins.forEach(function (p) {                  // pegs (fixed to the world) that hold a rope link, e.g. a rope laid over a peg: the pegged link stays put and the chain follows
+    if (p.type !== 'peg' || !p.anchor) return;
+    p.joints.forEach(function (jt) {
+      var B = jt.getBodyB(); if (B.__hl === undefined) return; var lo = linkOf(B); if (!lo) return;
+      var pa = jt.getAnchorA(), pb = jt.getAnchorB(), dx = (pa.x - pb.x) * S, dy = (pa.y - pb.y) * S;
+      if (dx * dx + dy * dy > 1e-8) snapChain(lo.rec, lo.k, dx, dy);
+    });
+  }, this);
+  for (var jx = this.world.getJointList(); jx; jx = jx.getNext()) {       // last: whatever is hinged to a rope link (a heavy crate on the rope) follows the rope
+    if (jx.getType() !== 'revolute-joint') continue;
+    var JA = jx.getBodyA(), JB = jx.getBodyB(), la = JA.__hl !== undefined, lb = JB.__hl !== undefined; if (la === lb) continue;
+    var ob = la ? JB : JA; if (!ob.isDynamic()) continue;
+    var ja = jx.getAnchorA(), jb = jx.getAnchorB(), sx = la ? ja.x - jb.x : jb.x - ja.x, sy = la ? ja.y - jb.y : jb.y - ja.y;
+    if (sx * sx + sy * sy > 1e-10) { var op = ob.getPosition(); ob.setPosition(Vec2(op.x + sx, op.y + sy)); }
+  }
 };
-Sim.prototype.limitRope = function (rec, k, body, pt, pin) {   // a body hinged to link k of a rope that is hung at an end: it can never be farther from that end than the rope up to link k is long
+Sim.prototype.capLoad = function (body, rec) {      // a body hung on a rope counts as at most 40 rope links: huge mass ratios make a chain of joints stretch
+  if (!body || !body.isDynamic() || body.__hl !== undefined || body.__capped) return;
+  var lb = rec && rec.links.filter(Boolean)[0]; if (!lb) return;
+  var cap = lb.getMass() * 40, m = body.getMass(); if (m <= cap) return;
+  var md = { mass: cap, center: body.getLocalCenter(), I: body.getInertia() * cap / m }; body.setMassData(md); body.__capped = true;
+};
+Sim.prototype.limitRope = function (rec, k, body, pt, pin) {
+  this.capLoad(body, rec);   // a body hinged to link k of a rope that is hung at an end: it can never be farther from that end than the rope up to link k is long
   if (!rec || !rec.links || !body || rec.links.indexOf(body) >= 0) return;
   [['endA', 0], ['endB', 1]].forEach(function (e) {
     var end = rec[e[0]]; if (!end || !end.b || end.b === body) return;

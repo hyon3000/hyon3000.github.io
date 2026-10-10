@@ -163,6 +163,8 @@ function saveProg() { try { localStorage.setItem(saveKey(G.seed), JSON.stringify
 function loadProg(seed) { try { var s = localStorage.getItem(saveKey(seed)); if (s) { var o = JSON.parse(s); if (o && o.done && o.wcl) return o; } } catch (e) {} return null; }
 function lastSeed() { try { var s = parseInt(localStorage.getItem('shapeworld.last'), 10); return s > 0 ? s : 0; } catch (e) { return 0; } }
 function worldCleared(wid) { return !!G.prog.wcl[wid]; }
+G.selStageState = function (wid, map, nd) { return stageState(wid, map, nd); };
+G.worldName = function (wid) { return worldName(wid); };
 function worldName(wid) { var w = G.sm.worlds[wid], idx = G.sm.layers[w.depth].indexOf(wid); return (w.depth + 1) + 'ABC'.charAt(idx); }
 // ---- map logic, written for any world so the stage-select dialog can reuse it
 function isDoneW(wid, id) { var d = G.prog.done[wid]; return !!(d && d[id]); }
@@ -241,7 +243,7 @@ window.giveHint = function () {
 window.toggleSound = function () { G.snd = !G.snd; try { localStorage.setItem(SND_KEY, G.snd ? '1' : '0'); } catch (e) {} reportSound(); if (G.snd) sfx('coin'); return G.snd; };
 window.isSound = function () { return G.snd; };
 window.__pfGo = function (n) { startGame(true); var si = (n - 1) % 5; G.prog.done[G.wid] = {}; for (var q = 0; q < Math.min(si, 4); q++) G.prog.done[G.wid][q] = 1; setWorld(G.wid); G.sel = Math.min(si, 4); enterLevel(G.sel, true); };
-reportSound();
+reportSound(); try { if (window.parent !== window && window.parent.setPadMark) window.parent.setPadMark(padOn); } catch (e) {}
 
 function pop(x, y, t, c) { G.pops.push({ x: x, y: y, t: t, c: c, life: 45 }); }
 function spark(x, y, c, n) { for (var i = 0; i < n; i++) G.parts.push({ x: x, y: y, vx: (Math.random() - 0.5) * 3, vy: -Math.random() * 2.5, life: 24 + Math.random() * 12, col: c, s: 2, g: 0.12 }); }
@@ -358,5 +360,7 @@ G.seed = parseInt(Q.get('seed'), 10) || lastSeed() || 1; G.sm = PF.superMap(G.se
 if (Q.get('autostart') === '1') startGame();
 if (Q.get('auto') === '1') window.toggleAuto();
 requestAnimationFrame(frame);
+// test hook: with auto play on, force-clear every level (the map / super-map flow is what is being tested)
+window.__pfFastRun = function () { window.__ffIv = setInterval(function () { for (var k = 0; k < 6; k++) { if (G.mode === 'play' && G.st) { G.st.p.won = true; } else if (G.mode === 'map' || G.mode === 'super' || G.mode === 'clear' || G.mode === 'start' || G.mode === 'over' || G.mode === 'end' || G.mode === 'dying') fixedStep(); } }, 4); };
 window.__pfDebug = function () { var p = G.st ? G.st.p : null; return { mode: G.mode, n: G.n, node: G.curNode && G.curNode.n, x: p && Math.round(p.x), y: p && Math.round(p.y), lives: G.lives, score: G.base + (G.st ? G.st.score : 0), coins: totalCoins(), auto: G.auto, pw: p && p.pw, vx: p && p.vx, vy: p && p.vy, ground: p && p.ground, hint: !!G.hint, msg: G.msg, best: G.best, errs: window.__errs.length, w: G.w, sel: G.sel, kind: G.L && G.L.kind, room: !!G.main }; };
 })();
