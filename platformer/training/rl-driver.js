@@ -42,7 +42,7 @@ RL.rollout = function (steps) {
 };
 // behaviour cloning data: the look-ahead planner plays (teacher); every decision is recorded
 function episodeEnd(ep) { var st = ep.st; if (st.cr > ep.lastCr || st.stage > ep.lastStage) { ep.bestF = ep.frames; ep.lastCr = st.cr; ep.lastStage = st.stage; } return st.p.won || st.p.dead || ep.frames - ep.bestF > 700 || ep.frames > 60 * ep.L.time; }
-RL.collectBC = function (steps, mixPolicy, beta) {
+RL.collectBC = function (steps, mixPolicy, beta, noise) {
   var obsA = new Int8Array(steps * D), actA = new Uint8Array(steps), buf = new Float32Array(D), ep = newEpisode(), pl = PFPlanner.make(), n = 0, wins = 0, eps = 0, k = 0, KB = PFAI.KEYBITS;
   function bitsOf(m) { var b = 0; for (var i = 0; i < 4; i++) if (m & KB[i]) b |= 1 << i; return b; }
   function rec(bits) { for (var q = 0; q < D; q++) obsA[n * D + q] = Math.round(buf[q] * 100); actA[n] = bits; n++; }
@@ -50,7 +50,7 @@ RL.collectBC = function (steps, mixPolicy, beta) {
     var st = ep.st, done = false;
     if (mixPolicy) {   // DAgger: the (partly) learned policy drives, the planner labels every 3rd state
       PFAI.build(st, buf); var res = PFAI.forward(buf), mp = PFAI.maskOf(res), mask = mp;
-      if (RL.rnd() < 0.12) mp ^= KB[Math.floor(RL.rnd() * 4)]; mask = mp;
+      if (RL.rnd() < (noise === undefined ? 0.06 : noise)) mp ^= KB[Math.floor(RL.rnd() * 4)]; mask = mp;
       if (k++ % 3 === 0) { var best = pl.search(st, 0), tm = PFPlanner.inputAt(best.cand, 0); rec(bitsOf(tm)); if (RL.rnd() < beta) mask = tm; }
       for (var f = 0; f < SKIP && !done; f++) { PF.step(st, mask); ep.frames++; if (st.p.dead || st.p.won) done = true; }
       done = episodeEnd(ep) || done;

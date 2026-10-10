@@ -119,9 +119,11 @@ function inPoly(px, py, p) {
 
 /* ================= PROCEDURAL LEVEL ================= */
 // difficulty ramps ~3.9x faster than the level number after level 3: level 10 plays like the old level 30 and it keeps rising from there
-function effLevel(n) { return n <= 3 ? n : Math.round(3 + (n - 3) * 3.86); }
+var EFF = [0, 1, 2, 3, 4, 6, 9, 13, 18, 24, 30];       // gentle start: levels 1-5 climb slowly, level 10 plays like the old level 30
+function effLevel(n) { return n <= 10 ? EFF[Math.max(0, n)] : Math.round(30 + (n - 10) * 3.86); }
 function genLevel(seed, Lreal, opts) {
   var L = effLevel(Lreal);
+  var Ls = Math.round(Lreal * 0.75), Lst = effLevel(Ls);       // the number of stars (and plateaus that carry one) grows at 0.75x the pace of the rest
   var noRepair = !!(opts && opts.norepair), repairs = 0, invalidBefore = 0;
   var rnd = mulberry32(hash2(seed, Lreal * 7919 + 13));
   var rr = function (a, b) { return a + (b - a) * rnd(); };
@@ -160,12 +162,14 @@ function genLevel(seed, Lreal, opts) {
     }
     if (t === 'crates') return { type: 'crates', rows: L >= 8 ? Math.min(6, Math.max(3, 2 + Math.floor(L / 12))) : 2, lead: 48, w: 56, need: 48 + 56 + 72 };
     if (t === 'dominoes') { var n = 4 + Math.min(9, Math.floor(L / 4)); return { type: 'dominoes', n: n, lead: 48, w: n * 36, need: 48 + n * 36 + 72 }; }
-    var mesa = L >= 12 && rnd() < Math.min(0.6, 0.15 + (L - 12) * 0.015);       // a raised plateau: the ball has to go UP onto it (the star is on top) and come down on the far side
+    var mesa = Lst >= 12 && rnd() < Math.min(0.6, 0.15 + (Lst - 12) * 0.015);       // a raised plateau: the ball has to go UP onto it (the star is on top) and come down on the far side
     var h = Math.max(mesa ? 80 : 40, Math.round(rr(mesa ? 0.6 : 0.55, 1) * hmax * (mesa ? 1 : hscale)));
     var lead = r12(1.25 * h + 36), ww = mesa ? r12(rr(150, 260)) : 48;
     return { type: 'wall', h: h, ww: ww, lead: lead, need: lead + ww + 60, mesa: mesa };
   };
-  var list = order.map(mk);
+  var list = order.map(mk), pre = { patrols: [] };
+  if (Lreal >= 6 && rnd() < Math.min(0.9, 0.55 + (Lreal - 6) * 0.03)) list.splice(1 + Math.floor(rnd() * Math.max(1, list.length - 1)), 0, { type: 'scale', need: 250, w: 210, lead: 20 });
+  if (Lreal >= 7 && rnd() < Math.min(0.9, 0.6 + (Lreal - 7) * 0.03)) list.splice(1 + Math.floor(rnd() * Math.max(1, list.length - 1)), 0, { type: 'patrol', need: 215, w: 170, lead: 20 });
   if (L >= 10) list.splice(1, 0, { type: 'slot', need: 170, w: 170 });       // room reserved for a hazard (spikes / rotor) between the obstacles
   var step = null;
   if (finalStep) { var hs = Math.max(40, Math.round(rr(0.4, 0.75) * hmax * hscale)); step = { type: 'wall', h: hs, ww: 0, lead: r12(1.25 * hs + 36), need: r12(1.25 * hs + 36), end: true }; }
@@ -182,6 +186,8 @@ function genLevel(seed, Lreal, opts) {
     var sp = r12(spare * rr(0.0, 0.6)); if (sp > spare) sp = r12(spare); spare -= sp;
     var base = cursor + sp;
     if (f.type === 'slot') { cursor = base + f.need; return; }
+    if (f.type === 'scale') { var sx0 = r12(base + f.lead); seesaws.push({ cx: sx0 + 105, cy: Y1 - 18, hw: 90, hh: 5, scale: true }); features.push({ type: 'scale', x0: sx0, x1: sx0 + 210, y: Y1 }); cursor = sx0 + 250; return; }
+    if (f.type === 'patrol') { var px0 = r12(base + f.lead); pre.patrols.push({ cx: px0 + 85, amp: 70 }); features.push({ type: 'patrol', x0: px0, x1: px0 + 170, y: Y1 }); cursor = px0 + 195; return; }
     if (f.type === 'pit') {
       var x0 = r12(base + f.lead), x1 = x0 + f.w;
       features.push({ type: 'pit', variant: f.variant, x0: x0, x1: x1, y: Y1 });
@@ -283,16 +289,13 @@ function genLevel(seed, Lreal, opts) {
   // ----- portal pairs (levels 8+): the ball entering one doorway re-appears at the other, moving along its normal
   var portals = [];
   if (L >= 8 && typeof occ !== 'undefined') {
-    var np = (rnd() < 0.55 ? 1 : 0) + (L >= 12 && rnd() < 0.3 ? 1 : 0);
-    for (var pq = 0; pq < np; pq++) {
-      var sp3 = freeSpans().filter(function (s) { return s[1] - s[0] >= 70; }), pa = null, pb = null, tries3 = 0;
-      while (tries3++ < 20 && !pb && sp3.length >= 2) {
-        var ia = Math.floor(rnd() * (sp3.length - 1)), ib = ia + 1 + Math.floor(rnd() * (sp3.length - ia - 1));
-        var xa = sp3[ia][1] - 32, xb = sp3[ib][0] + 32;
-        if (xb - xa < 160 || xa < xD + 40 || xb > W - 180) continue;
-        pa = xa; pb = xb;
-      }
-      if (pb == null) break;
+    var np = (rnd() < 0.8 ? 1 : 0) + (L >= 12 && rnd() < 0.5 ? 1 : 0) + (L >= 24 && rnd() < 0.4 ? 1 : 0);
+    var pcand = features.filter(function (f) { return (f.type === 'pit' || (f.type === 'wall' && !f.end)); });
+    for (var pq = 0; pq < np && pcand.length; pq++) {          // a doorway pair that hops an obstacle: in just before a pit / wall, out just behind it
+      var pf = pcand.splice(Math.floor(rnd() * pcand.length), 1)[0];
+      var pa = r12(pf.x0 - (pf.type === 'wall' ? 70 : 52)), pb = r12(pf.x1 + 52), clash = pa < xD + 40 || pb > W - 180;
+      features.forEach(function (g) { if ((g.type === 'boost' || g.type === 'rotor' || g.type === 'spikes' || g.type === 'portal') && ((pa > g.x0 - 50 && pa < g.x1 + 50) || (pb > g.x0 - 50 && pb < g.x1 + 50))) clash = true; });
+      if (clash) { pq--; continue; }
       portals.push({ a: { x: pa, y: Y1 - 24, nx: 1, ny: 0 }, b: { x: pb, y: Y1 - 24, nx: 1, ny: 0 }, ci: pq });
       occ.push([pa - 40, pa + 40]); occ.push([pb - 40, pb + 40]);
       features.push({ type: 'portal', x0: pa - 24, x1: pb + 24, y: Y1 });
@@ -305,13 +308,13 @@ function genLevel(seed, Lreal, opts) {
   if (last && last.end) stars.push({ x: W - 70, y: last.top - 24 }); else stars.push({ x: W - 70, y: Y1 - 24 });
   var extra = 0;
   var nMesa = 0; features.forEach(function (f) { if (f.mesa) nMesa++; });
-  if (L >= 8) { extra = 1 + (rnd() < 0.6 ? 1 : 0) + (L >= 12 && rnd() < 0.5 ? 1 : 0) + (L >= 30 && rnd() < 0.5 ? 1 : 0) + (L >= 50 && rnd() < 0.5 ? 1 : 0); }   // ordered levels: 2-4 stars
+  if (L >= 8) { extra = 1 + (rnd() < 0.6 ? 1 : 0) + (Lst >= 12 && rnd() < 0.5 ? 1 : 0) + (Lst >= 30 && rnd() < 0.5 ? 1 : 0) + (Lst >= 50 && rnd() < 0.5 ? 1 : 0); }   // ordered levels: 2-4 stars
   var cands = [];
   features.forEach(function (f) {
     if (f.type === 'wall' && !f.end) cands.push({ x: (f.x0 + f.x1) / 2, y: f.top - 24 });
     else if (f.type === 'pit') { cands.push({ x: f.x1 + 40, y: Y1 - 24 }); if (f.variant === 'plain' || f.variant === 'bounce') cands.push({ x: (f.x0 + f.x1) / 2, y: Y1 - 34 }); }
   });
-  var inSpecial = function (xx) { return features.some(function (f) { return (f.type === 'boost' || f.type === 'rotor' || f.type === 'spikes') && xx > f.x0 - 40 && xx < f.x1 + 40; }) || portals.some(function (pr) { return xx > pr.a.x - 40 && xx < pr.b.x + 40; }); };
+  var inSpecial = function (xx) { return features.some(function (f) { return (f.type === 'boost' || f.type === 'rotor' || f.type === 'spikes' || f.type === 'patrol' || f.type === 'scale') && xx > f.x0 - 40 && xx < f.x1 + 40; }) || portals.some(function (pr) { return Math.abs(xx - pr.a.x) < 40 || Math.abs(xx - pr.b.x) < 40; }); };
   cands = cands.filter(function (q) { return !inSpecial(q.x); });
   var tries2 = 0; while (cands.length < extra && tries2++ < 40) { var cxr = r12(rr(xD + 24, xF - 60)); if (!inSpecial(cxr)) cands.push({ x: cxr, y: Y1 - 24 }); }
   if (L >= 8) extra = Math.max(extra, Math.min(nMesa + 1, 5));
@@ -320,7 +323,7 @@ function genLevel(seed, Lreal, opts) {
   cands.sort(function (a, b) { return (b.mesa ? 1 : 0) - (a.mesa ? 1 : 0); });
   for (i = 0, j = 0; j < extra && i < cands.length; i++) { var okc = true; stars.forEach(function (st0) { if (Math.hypot(st0.x - cands[i].x, st0.y - cands[i].y) < 80) okc = false; }); if (okc && cands[i].x > xD + 20) { stars.push({ x: cands[i].x, y: cands[i].y }); j++; } }
   // ----- high stars: floating well above the start height. Nothing rolls up there on its own - the player has to lift the ball (balance scale / lever / catapult, bounce, boost ...)
-  var nHigh = L >= 8 ? Math.min(3, 1 + Math.floor((Lreal - 5) / 5)) : 0;
+  var nHigh = L >= 8 ? Math.min(3, 1 + Math.floor((Ls - 5) / 5)) : 0;
   for (var hi2 = 0, htry = 0; hi2 < nHigh && htry++ < 80;) {
     var hx = r12(rr(xD + 80, xF - 40)), hy = Math.max(80, Y1 - rr(250, 470)), okH = !inSpecial(hx);
     stars.forEach(function (st1) { if (Math.hypot(st1.x - hx, st1.y - hy) < 110) okH = false; });
@@ -399,6 +402,16 @@ function genLevel(seed, Lreal, opts) {
     jets.forEach(function (jt) { if (cx + exx > jt.x0 - 20 && cx - exx < jt.x1 + 20 && cy + ext > Y1 - 260) ok = false; });
     if (ok) { boxes.push({ cx: cx, cy: cy, hw: hw, hh: hh, a: ang2, kind: 'slab' }); slabs++; }
   }
+  // ----- balance scale map: a ready-made scale (beam on a fulcrum) stands on the ground and a star hangs high above it - the player uses the scale (drop a weight on one end) to fling the ball up
+  features.forEach(function (f) {
+    if (f.type !== 'scale') return;
+    for (var dy3 = 0; dy3 <= 200; dy3 += 20) for (var dx3 = 0; dx3 <= 90; dx3 += 15) for (var sg3 = -1; sg3 <= 1; sg3 += 2) {
+      var sx3 = f.x0 + 35 + sg3 * dx3, sy3 = Math.max(90, Y1 - 330) + dy3, ok3 = pointFree(sx3, sy3, STAR_R + 4) && sy3 < Y1 - 120;
+      stars.forEach(function (o3) { if (Math.hypot(o3.x - sx3, o3.y - sy3) < 90) ok3 = false; });
+      if (ok3) { stars.push({ x: sx3, y: sy3 }); return; }
+    }
+  });
+  order = stars.map(function (s, k) { return k; }).sort(function (a, b) { return stars[a].x - stars[b].x; }); order.forEach(function (k, rank) { stars[k].n = rank + 1; });
   // ----- airborne spinners: their number keeps growing with the level number (more things to build around)
   var nAir = Math.min(8, Math.floor((Lreal - 5) / 2.5));
   for (var ai = 0, atry = 0; ai < nAir && atry++ < 80;) {
@@ -407,9 +420,40 @@ function genLevel(seed, Lreal, opts) {
     rotors.forEach(function (r0) { if (Math.hypot(r0.cx - ax, r0.cy - ay) < r0.r + ar + 40) okA = false; });
     portals.forEach(function (p0) { if (Math.hypot(p0.a.x - ax, p0.a.y - ay) < ar + 60 || Math.hypot(p0.b.x - ax, p0.b.y - ay) < ar + 60) okA = false; });
     if (!okA) continue;
-    rotors.push({ cx: ax, cy: ay, r: ar, omega: (rnd() < 0.5 ? -1 : 1) * rr(1.4, 2.8), air: true }); ai++;
+    rotors.push({ cx: ax, cy: ay, r: ar, omega: (rnd() < 0.5 ? -1 : 1) * rr(1.4, 2.8), air: true, deadly: rnd() < Math.min(0.55, Math.max(0, (Lreal - 6) * 0.05)) }); ai++;
   }
-  var lv = { seed: seed, L: L, Ys: Ys, Y1: Y1, D: D, xD: xD, chains: chains, boxes: boxes, dyn: dyn, seesaws: seesaws, jets: jets, boosts: boosts, rotors: rotors, spikes: spikes, portals: portals, rope: rope, stars: stars, order: order, features: features,
+  // ----- movers: platforms gliding sideways / up and down on a timer (carry the ball and collide with drawings), and spiked blocks patrolling the ground (deadly on touch)
+  var movers = [], nMov = Lreal >= 4 ? Math.min(4, 1 + Math.floor((Lreal - 4) / 3)) : 0;
+  var mClear = function (cx, cy, ex, ey, pad) {
+    var ok = true;
+    stars.forEach(function (s0) { if (Math.abs(s0.x - cx) < ex + pad && Math.abs(s0.y - cy) < ey + pad) ok = false; });
+    rotors.forEach(function (r0) { if (Math.abs(r0.cx - cx) < r0.r + ex + 20 && Math.abs(r0.cy - cy) < r0.r + ey + 20) ok = false; });
+    boxes.forEach(function (b0) { if (Math.abs(b0.cx - cx) < b0.hw + ex + 20 && Math.abs(b0.cy - cy) < b0.hh + ey + 20) ok = false; });
+    (typeof springs !== 'undefined' ? springs : []).forEach(function (q0) { if (Math.abs(q0.cx - cx) < q0.hw + ex + 20 && Math.abs(q0.cy - cy) < q0.hh + ey + 20) ok = false; });
+    movers.forEach(function (m0) { if (Math.abs(m0.cx - cx) < m0.hw + m0.ax + ex + 20 && Math.abs(m0.cy - cy) < m0.hh + m0.ay + ey + 20) ok = false; });
+    return ok;
+  };
+  for (var mi = 0, mtry = 0; mi < nMov && mtry++ < 80;) {
+    var horiz = rnd() < 0.55, mhw = rr(42, 68), mhh = 7, amx = horiz ? rr(50, 110) : 0, amy = horiz ? 0 : rr(35, 70);
+    var mcx = Math.max(xD + 60 + amx, Math.min(W - 200 - amx, poiX())), mcy = rr(Y1 - 250, Y1 - 170 - amy);
+    if (!mClear(mcx, mcy, mhw + amx, mhh + amy, 40)) continue;
+    movers.push({ cx: r12(mcx), cy: r12(mcy), hw: r12(mhw), hh: mhh, ax: r12(amx), ay: r12(amy), w: r12(rr(0.9, 1.7) * 100) / 100, ph: r12(rr(0, 6.28) * 100) / 100, deadly: false }); mi++;
+  }
+  // ----- spring blocks: touching the top launches the ball upward (on the ground and floating above the obstacles)
+  var springs = [], nSpr = Lreal >= 3 ? Math.min(4, 1 + Math.floor((Lreal - 3) / 4)) : 0;
+  for (var gi = 0, gtry = 0; gi < nSpr && gtry++ < 80;) {
+    var air = rnd() < 0.5, shw = air ? 34 : 30, shh = 8, sx, sy;
+    if (air) { sx = Math.max(xD + 60, Math.min(W - 200, poiX())); sy = rr(Y1 - 250, Y1 - 175); }
+    else {
+      var gs = (typeof freeSpans === 'function' ? freeSpans() : []).filter(function (s) { return s[1] - s[0] >= 130 && s[1] > xD + 80; });
+      if (!gs.length) continue; var g0 = gs[Math.floor(rnd() * gs.length)]; sx = rr(Math.max(g0[0], xD + 60) + 40, g0[1] - 40); sy = Y1 - shh;
+    }
+    if (!mClear(sx, sy, shw, shh + (air ? 0 : 6), 40)) continue;
+    var tooNear = false; springs.forEach(function (q) { if (Math.abs(q.cx - sx) < 120 && Math.abs(q.cy - sy) < 120) tooNear = true; }); if (tooNear) continue;
+    springs.push({ cx: r12(sx), cy: r12(sy), hw: shw, hh: shh, v: 13 }); gi++;
+  }
+  pre.patrols.forEach(function (q) { movers.push({ cx: q.cx, cy: Y1 - 18, hw: 24, hh: 18, ax: q.amp, ay: 0, w: r12(rr(1.0, 1.9) * 100) / 100, ph: r12(rr(0, 6.28) * 100) / 100, deadly: true }); });
+  var lv = { seed: seed, L: L, Ys: Ys, Y1: Y1, D: D, xD: xD, chains: chains, boxes: boxes, dyn: dyn, seesaws: seesaws, jets: jets, boosts: boosts, rotors: rotors, movers: movers, springs: springs, spikes: spikes, portals: portals, rope: rope, stars: stars, order: order, features: features,
     start: start, gy: gy, ice: iceOn ? [iceX0, iceX1] : null };
   var hh2 = 0; var acc = function (v) { hh2 = hash2(hh2, Math.round(v * 10)); };
   chains.forEach(function (ch) { ch.pts.forEach(function (p2) { acc(p2[0]); acc(p2[1]); }); acc(ch.mat === 'ice' ? 1 : 0); });
@@ -417,7 +461,7 @@ function genLevel(seed, Lreal, opts) {
   dyn.forEach(function (b) { acc(b.cx); acc(b.cy); });
   seesaws.forEach(function (b) { acc(b.cx); acc(b.hw); });
   jets.forEach(function (b) { acc(b.x0); acc(b.x1); });
-  boosts.forEach(function (b) { acc(b.x0); acc(b.ax); acc(b.ay); }); rotors.forEach(function (b) { acc(b.cx); acc(b.omega * 100); }); spikes.forEach(function (b) { acc(b.x0); acc(b.x1); });
+  boosts.forEach(function (b) { acc(b.x0); acc(b.ax); acc(b.ay); }); rotors.forEach(function (b) { acc(b.cx); acc(b.omega * 100); }); movers.forEach(function (m) { acc(m.cx); acc(m.cy); acc(m.w * 100); }); spikes.forEach(function (b) { acc(b.x0); acc(b.x1); });
   portals.forEach(function (b) { acc(b.a.x); acc(b.b.x); });
   if (rope) { acc(rope.ax); acc(rope.ay); acc(rope.len); }
   stars.forEach(function (s2) { acc(s2.x); acc(s2.y); });
@@ -489,6 +533,16 @@ function Sim(lv, snap) {
     b.createFixture({ shape: new planck.Box(r.r / S, 5 / S), friction: 0.6, restitution: 0.1 });
     b.setAngularVelocity(r.omega); return { body: b, r: r };
   });
+  this.movers = (lv.movers || []).map(function (m) {
+    var b = world.createBody({ type: 'kinematic', position: V(m.cx, m.cy) });
+    b.createFixture({ shape: new planck.Box(m.hw / S, m.hh / S), friction: 0.9, restitution: 0 });
+    return { body: b, m: m };
+  });
+  this.springs = (lv.springs || []).map(function (s) {
+    var b = world.createBody({ type: 'static', position: V(s.cx, s.cy) });
+    b.createFixture({ shape: new planck.Box(s.hw / S, s.hh / S), friction: 0.3, restitution: 0.2 });
+    return { body: b, s: s, cd: 0 };
+  });
   this.killed = false;
   this.ball = world.createBody({ type: 'dynamic', position: V(lv.start.x, lv.start.y), bullet: true, angularDamping: 0.02 });
   this.ball.createFixture({ shape: new planck.Circle(BALL_R / S), density: 1.5, friction: 0.6, restitution: 0.05 });
@@ -498,7 +552,7 @@ function Sim(lv, snap) {
   if (snap) this.restore(snap);
 }
 /* ---- ropes: chains of small boxes joined by revolute joints (own negative filter group, so a rope does not collide with itself) ---- */
-var ROPE_SEG = 12, ROPE_CAP = 120;
+var ROPE_SEG = 12, ROPE_CAP = 120, RSUB = 2, RVEL = 10, RPOS = 4;
 Sim.prototype.buildChain = function (P, level) {
   var world = this.world, links = [], joints = [], gid = this.ropeGid++;
   for (var i = 0; i + 1 < P.length; i++) {
@@ -555,7 +609,7 @@ Sim.prototype.addRope = function (A, B, attA, attB, P0) {
   while (this.ropeSegCount() + N2 > ROPE_CAP) { var old = this.ropes.filter(function (r) { return !r.level; })[0]; if (!old) return null; this.destroyRope(old); this.events.push('toomanyropes'); }
   var ch = this.buildChain(P, false), rec = { level: false, links: ch.links, spec: { P: P, attA: attA || null, attB: attB || null }, attA: attA || null, attB: attB || null, cut: false };
   var ba = this.attachBody(attA), bb = this.attachBody(attB);
-  rec.endA = ba ? { b: ba, p: [P[0][0], P[0][1]] } : null; rec.endB = bb ? { b: bb, p: [P[P.length - 1][0], P[P.length - 1][1]] } : null;
+  rec.endA = ba ? { b: ba, p: [P[0][0], P[0][1]], lp: ba.getLocalPoint(V(P[0][0], P[0][1])) } : null; rec.endB = bb ? { b: bb, p: [P[P.length - 1][0], P[P.length - 1][1]], lp: bb.getLocalPoint(V(P[P.length - 1][0], P[P.length - 1][1])) } : null;
   [attA, attB].forEach(function (att) {                    // bodies a rope end is hung on (and the bodies pinned together with it) do not collide with that rope
     if (!att || att.kind !== 'stroke') return;
     [att.st].concat(att.also || []).forEach(function (st) { if (!st || this.strokes.indexOf(st) < 0) return; for (var f = st.body.getFixtureList(); f; f = f.getNext()) f.setFilterData({ groupIndex: -ch.gid, categoryBits: 1, maskBits: 0xFFFF }); }, this);
@@ -702,6 +756,37 @@ Sim.prototype.ropeLinksAt = function (x, y, tol) {      // the nearest segment o
   });
   return res;
 };
+Sim.prototype.projectRopes = function () {     // rope length is invariant: after each step every joint touching a rope link is pulled shut again (mass-weighted position projection)
+  var js = [], j, it, i, MCAP = 1e9;
+  for (var l0 = this.ropes.length - 1; l0 >= 0 && MCAP === 1e9; l0--) { var lb = this.ropes[l0].links.filter(Boolean)[0]; if (lb) MCAP = lb.getMass() * 30; }       // heavy loads count as at most 30 rope links so the projection can actually pull them
+  for (j = this.world.getJointList(); j; j = j.getNext()) {
+    if (j.getType() !== 'revolute-joint') continue;
+    var ba = j.getBodyA(), bb = j.getBodyB();
+    if (ba.__hl === undefined && bb.__hl === undefined) continue;
+    js.push(j);
+  }
+  for (it = 0; it < 12; it++) for (var ii = 0; ii < js.length; ii++) {
+    i = (it & 1) ? js.length - 1 - ii : ii;
+    var jt = js[i], A = jt.getBodyA(), B = jt.getBodyB(), pa = jt.getAnchorA(), pb = jt.getAnchorB();
+    var dx = pb.x - pa.x, dy = pb.y - pa.y; if (dx * dx + dy * dy < 1e-10) continue;
+    var wa = A.isDynamic() ? 1 / Math.min(A.getMass(), MCAP) : 0, wb = B.isDynamic() ? 1 / Math.min(B.getMass(), MCAP) : 0, ws = wa + wb; if (ws === 0) continue;
+    if (wa) { var qa = A.getPosition(); A.setPosition(Vec2(qa.x + dx * wa / ws, qa.y + dy * wa / ws)); }
+    if (wb) { var qb = B.getPosition(); B.setPosition(Vec2(qb.x - dx * wb / ws, qb.y - dy * wb / ws)); }
+  }
+  // exact pass: walk each rope from its anchored end and snap every link to the end of the previous one (the chain can then never be longer than the drawn rope)
+  this.ropes.forEach(function (rec) {
+    if (rec.level) return;
+    var n = rec.links.length, lead = rec.endA ? 0 : (rec.endB ? 1 : -1); if (lead < 0) return;
+    var end = lead === 0 ? rec.endA : rec.endB, w = end.b.getWorldPoint(end.lp), tx = w.x * S, ty = w.y * S, k, b, e, dx, dy, q;
+    for (var s = 0; s < n; s++) {
+      k = lead === 0 ? s : n - 1 - s; b = rec.links[k]; if (!b) break;
+      e = this.linkEnds(b); var near = lead === 0 ? e[0] : e[1], far = lead === 0 ? e[1] : e[0];
+      dx = tx - near[0]; dy = ty - near[1];
+      if (b.isDynamic() && dx * dx + dy * dy > 1e-8) { q = b.getPosition(); b.setPosition(Vec2(q.x + dx / S, q.y + dy / S)); }
+      tx = far[0] + dx; ty = far[1] + dy;
+    }
+  }, this);
+};
 Sim.prototype.limitRope = function (rec, k, body, pt, pin) {   // a body hinged to link k of a rope that is hung at an end: it can never be farther from that end than the rope up to link k is long
   if (!rec || !rec.links || !body || rec.links.indexOf(body) >= 0) return;
   [['endA', 0], ['endB', 1]].forEach(function (e) {
@@ -774,18 +859,47 @@ Sim.prototype.applyJets = function () {
   push(this.ball, 1.1);
   for (var i = 0; i < this.strokes.length; i++) push(this.strokes[i].body, 1.5);
 };
+Sim.prototype.placeMovers = function () {         // movers follow a closed-form path of the sim clock, so snapshots / replays stay exact
+  var t = this.simT / 60;
+  this.movers.forEach(function (o) {
+    var m = o.m, s = Math.sin(m.w * t + m.ph), c = Math.cos(m.w * t + m.ph);
+    o.body.setPosition(V(m.cx + m.ax * s, m.cy + m.ay * s)); o.body.setLinearVelocity(Vec2(m.ax * m.w * c / S, m.ay * m.w * c / S));
+  });
+};
+Sim.prototype.kill = function () { if (this.killed) return; this.killed = true; this.events.push('ouch'); this.ball.setLinearVelocity(Vec2(0, 0)); this.ball.setActive(false); };
 Sim.prototype.step = function () {
+  if (this.movers.length) this.placeMovers();
   if (this.lv.jets.length) this.applyJets();
   if (this.lv.boosts.length && !this.killed) {
     var bp0 = this.ball.getPosition(), m0 = this.ball.getMass();
     for (var bi = 0; bi < this.lv.boosts.length; bi++) { var bz = this.lv.boosts[bi], px = bp0.x * S, py = bp0.y * S; if (px > bz.x0 && px < bz.x1 && py > bz.y0 && py < bz.y1) this.ball.applyForceToCenter(Vec2(m0 * bz.ax, m0 * bz.ay), true); }
   }
-  this.world.step(1 / 60, 8, 3);
+  if (this.ropeSegCount() > 0) { var nsub = RSUB; for (var si = 0; si < nsub; si++) this.world.step(1 / 60 / nsub, RVEL, RPOS); }       // drawn ropes: sub-steps + more solver iterations keep the chain from stretching under a heavy load
+  else this.world.step(1 / 60, 8, 3);
+  if (this.ropeSegCount() > 0) this.projectRopes();
   this.simT++;
   var p = this.ball.getPosition(); this.bx = p.x * S; this.by = p.y * S;
   var bv = this.ball.getLinearVelocity(), bsp = Math.hypot(bv.x, bv.y);
   if (bsp > 14) this.ball.setLinearVelocity(Vec2(bv.x * 14 / bsp, bv.y * 14 / bsp));
   if (!this.killed) for (var si = 0; si < this.lv.spikes.length; si++) { var sk = this.lv.spikes[si]; if (this.bx > sk.x0 - 4 && this.bx < sk.x1 + 4 && this.by + BALL_R > sk.top + 2) { this.killed = true; this.events.push('ouch'); this.ball.setLinearVelocity(Vec2(0, 0)); this.ball.setActive(false); } }
+  if (!this.killed) {                                    // deadly: spinning blades and patrolling spike blocks
+    for (var ri = 0; ri < this.rotors.length; ri++) {
+      var ro = this.rotors[ri]; if (!ro.r.deadly) continue;
+      var ra = ro.body.getAngle(), rx = Math.cos(ra) * ro.r.r, ry = Math.sin(ra) * ro.r.r;
+      if (distSeg(this.bx, this.by, [ro.r.cx - rx, ro.r.cy - ry], [ro.r.cx + rx, ro.r.cy + ry]) < BALL_R + 5) { this.kill(); break; }
+    }
+    for (var mi2 = 0; mi2 < this.movers.length && !this.killed; mi2++) {
+      var mo = this.movers[mi2]; if (!mo.m.deadly) continue;
+      var mp = mo.body.getPosition(), ddx = Math.max(Math.abs(this.bx - mp.x * S) - mo.m.hw, 0), ddy = Math.max(Math.abs(this.by - mp.y * S) - mo.m.hh, 0);
+      if (Math.hypot(ddx, ddy) < BALL_R + 1) this.kill();
+    }
+  }
+  for (var ji = 0; ji < this.springs.length; ji++) {            // spring blocks throw the ball up
+    var sp = this.springs[ji], ss = sp.s; if (sp.cd > 0) { sp.cd--; continue; }
+    if (!this.killed && Math.abs(this.bx - ss.cx) < ss.hw + BALL_R * 0.5 && this.by + BALL_R > ss.cy - ss.hh - 4 && this.by < ss.cy - ss.hh + 6) {
+      var sv = this.ball.getLinearVelocity(); if (sv.y > -2) { this.ball.setLinearVelocity(Vec2(sv.x, -ss.v)); sp.cd = 12; this.events.push('boing'); }
+    }
+  }
   if (this.portCd > 0) this.portCd--;
   else if (this.lv.portals.length && !this.killed) {
     for (var pi = 0; pi < this.lv.portals.length && !this.portCd; pi++) {
@@ -856,7 +970,7 @@ Sim.prototype.restore = function (snap) {
   if (!snap.rope && this.rope) this.rope = null;
   this.stars.forEach(function (s, i) { s.got = !!snap.got[i]; });
   (snap.rot || []).forEach(function (a, i) { if (self.rotors[i]) self.rotors[i].body.setAngle(a); });
-  this.next = snap.next || 0; this.simT = snap.simT; var p = this.ball.getPosition(); this.bx = p.x * S; this.by = p.y * S;
+  this.next = snap.next || 0; this.simT = snap.simT; if (this.movers.length) this.placeMovers(); var p = this.ball.getPosition(); this.bx = p.x * S; this.by = p.y * S;
   this.events = [];
 };
 

@@ -55,8 +55,13 @@ SFX.pop = function () { tone(1200, 800, 0.05, 'sine', 0.05); };
 
 // ---------------------------------------------------------------- input: every source goes through press(); the auto player uses the same function
 var held = { human: {}, touch: {}, auto: {} };
-var KEYMAP = { ArrowLeft: 'left', a: 'left', A: 'left', ArrowRight: 'right', d: 'right', D: 'right', ArrowUp: 'up', w: 'up', W: 'up', ArrowDown: 'down', s: 'down', S: 'down',
-  ' ': 'jump', z: 'jump', Z: 'jump', k: 'jump', Shift: 'run', x: 'run', X: 'run', j: 'run', J: 'run', c: 'spin', C: 'spin', v: 'spin', V: 'spin' };
+// two crosses: left = move (arrows / WASD), right = actions (I jump, J run, L spin, K act); Z/Space, X/Shift, C/V stay as aliases.  value = [input key, on-screen button id]
+var KEYMAP = { ArrowLeft: ['left', 'L'], a: ['left', 'L'], A: ['left', 'L'], ArrowRight: ['right', 'R'], d: ['right', 'R'], D: ['right', 'R'], ArrowUp: ['up', 'U'], w: ['up', 'U'], W: ['up', 'U'], ArrowDown: ['down', 'D'], s: ['down', 'D'], S: ['down', 'D'],
+  i: ['jump', 'J'], I: ['jump', 'J'], z: ['jump', 'J'], Z: ['jump', 'J'], ' ': ['jump', 'J'], j: ['run', 'RUN'], J: ['run', 'RUN'], x: ['run', 'RUN'], X: ['run', 'RUN'], Shift: ['run', 'RUN'], l: ['spin', 'SPIN'], L: ['spin', 'SPIN'], c: ['spin', 'SPIN'], C: ['spin', 'SPIN'], v: ['spin', 'SPIN'], V: ['spin', 'SPIN'], k: ['up', 'ACT'], K: ['up', 'ACT'] };
+var PADBTN = {};   // button id -> element
+var padCount = {}; // button id -> number of sources currently pressing it
+function padLight(id, on) { var c = (padCount[id] || 0) + (on ? 1 : -1); if (c < 0) c = 0; padCount[id] = c; var el = PADBTN[id]; if (el) el.classList.toggle('on', c > 0); }
+var keyDown = {};
 function press(src, name, down) { held[src][name] = !!down; }
 function mask() {
   var m = 0, k, s; for (s in held) { k = held[s]; if (k.left) m |= IN.L; if (k.right) m |= IN.R; if (k.jump) m |= IN.J; if (k.run) m |= IN.RUN; if (k.up) m |= IN.UP; if (k.down) m |= IN.DN; if (k.spin) m |= IN.SPIN; } return m;
@@ -65,38 +70,63 @@ function setAuto(m) { press('auto', 'left', m & IN.L); press('auto', 'right', m 
 function clearHeld(src) { held[src] = {}; }
 var edge = { };
 function onPress(k) {          // menu / map navigation on key press (human only)
-  if (G.mode === 'start' || G.mode === 'over') { if (k === 'jump') startGame(); }
-  else if (G.mode === 'map') { if (k === 'left') moveSel(-1); else if (k === 'right') moveSel(1); else if (k === 'jump') enterLevel(G.sel); }
+  if (G.mode === 'select') { selectMove(k); return; }
+  if (G.mode === 'super') { if (k === 'jump' && G.superT > 20) leaveSuper(); return; }
+  if (G.mode === 'end') { if (k === 'jump' && G.superT > 30) startGame(true); return; }
+  if (G.mode === 'start') { if (k === 'jump') startGame(false); }
+  else if (G.mode === 'over') { if (k === 'jump') startGame(true); }
+  else if (G.mode === 'map') { if (k === 'left' || k === 'right' || k === 'up' || k === 'down') moveSel(k); else if (k === 'jump') enterLevel(G.sel); }
 }
 window.addEventListener('keydown', function (e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (/^F[2345]$/.test(e.key)) { if (embedded()) return; e.preventDefault(); if (e.key === 'F2') window.newGame(); else if (e.key === 'F3') window.toggleAuto(); else if (e.key === 'F4') window.giveHint(); return; }
   actx();
-  var k = KEYMAP[e.key];
+  var km = KEYMAP[e.key], k = km ? km[0] : null;
+  if (e.key === 't' || e.key === 'T') { e.preventDefault(); window.openSelect(); return; }
+  if (e.key === 'Escape' && G.mode === 'select') { e.preventDefault(); closeSelect(); return; }
   if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') { e.preventDefault(); togglePause(); return; }
   if (e.key === 'm' || e.key === 'M') { window.toggleSound(); return; }
   if (e.key === 'h' || e.key === 'H') { window.giveHint(); return; }
   if (e.key === 'Enter') { e.preventDefault(); onPress('jump'); return; }
-  if (k) { e.preventDefault(); if (!e.repeat) onPress(k); press('human', k, true); }
+  if (k) { e.preventDefault(); if (!e.repeat) onPress(k); press('human', k, true); if (!keyDown[e.key]) { keyDown[e.key] = 1; padLight(km[1], true); } }
 });
-window.addEventListener('keyup', function (e) { var k = KEYMAP[e.key]; if (k) { e.preventDefault(); press('human', k, false); } if (e.key === 'Shift') press('human', 'run', false); });
-window.addEventListener('blur', function () { clearHeld('human'); clearHeld('touch'); });
+window.addEventListener('keyup', function (e) { var km = KEYMAP[e.key]; if (km) { e.preventDefault(); if (keyDown[e.key]) { keyDown[e.key] = 0; padLight(km[1], false); } humanRefresh(); } });
+function humanRefresh() { var d = {}; for (var key in keyDown) if (keyDown[key]) d[KEYMAP[key][0]] = true; held.human = d; }
+window.addEventListener('blur', function () { clearHeld('human'); clearHeld('touch'); for (var kk in keyDown) if (keyDown[kk]) { keyDown[kk] = 0; padLight(KEYMAP[kk][1], false); } releaseAllTouch(); });
 cv.addEventListener('pointerdown', function (e) {
   actx(); try { cv.focus(); } catch (x) {}
-  if (G.mode === 'start' || G.mode === 'over') startGame();
+  var rr = cv.getBoundingClientRect(), qx = (e.clientX - rr.left) / rr.width * VW, qy = (e.clientY - rr.top) / rr.height * VH;
+  if (G.mode === 'select') { var hit = null; (G.selRects || []).forEach(function (q) { if (qx >= q.x && qx <= q.x + q.w && qy >= q.y && qy <= q.y + q.h) hit = q; }); if (hit) { if (hit.kind === 'close') closeSelect(); else if (hit.kind === 'world') { G.selWi = hit.idx; G.selCol = 1; G.selSiInit = -1; refreshSel(); } else if (hit.kind === 'stage') { G.selSi = hit.idx; selectPick(hit.idx); } } else closeSelect(); return; }
+  if (G.mode === 'super') { if (G.superT > 20) leaveSuper(); return; }
+  if (G.mode === 'end') { if (G.superT > 30) startGame(true); return; }
+  if (G.mode === 'start') startGame(false); else if (G.mode === 'over') startGame(true);
   else if (G.mode === 'map') { var r = cv.getBoundingClientRect(), px = (e.clientX - r.left) / r.width * VW, py = (e.clientY - r.top) / r.height * VH, nodes = allNodes(), best = -1, bd = 22;
     for (var i = 0; i < nodes.length; i++) { var d = Math.hypot(nodes[i].x - px, nodes[i].y - py); if (d < bd && isOpen(nodes[i])) { bd = d; best = nodes[i].i; } }
     if (best >= 0) { if (G.sel === best) enterLevel(best); else G.sel = best; } else if (e.clientX > r.left + r.width / 2) enterLevel(G.sel); }
 });
-var touchSeen = false;
+var touchSeen = false, touchPtr = {};      // pointerId -> { cross, ids:[button ids] }
 function showPad(on) { pad.classList.toggle('on', !!on); layout(); }
-[].forEach.call(pad.querySelectorAll('button'), function (b) {
-  var k = b.getAttribute('data-k');
-  function dn(e) { e.preventDefault(); actx(); touchSeen = true; if (!held.touch[k]) onPress(k); press('touch', k, true); b.classList.add('on'); try { b.setPointerCapture(e.pointerId); } catch (x) {} }
-  function up(e) { e.preventDefault(); press('touch', k, false); b.classList.remove('on'); }
-  b.addEventListener('pointerdown', dn); b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up); b.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+[].forEach.call(pad.querySelectorAll('b[data-id]'), function (b) { PADBTN[b.getAttribute('data-id')] = b; });
+var ACTKEY = { U: 'up', L: 'left', R: 'right', D: 'down', J: 'jump', RUN: 'run', SPIN: 'spin', ACT: 'up' };
+function touchRefresh() { var d = {}; for (var id in touchPtr) { var t = touchPtr[id]; t.ids.forEach(function (b) { d[ACTKEY[b]] = true; }); } held.touch = d; }
+function releaseAllTouch() { for (var id in touchPtr) { touchPtr[id].ids.forEach(function (b) { padLight(b, false); }); } touchPtr = {}; held.touch = {}; }
+// each cross is one touch surface: the finger position picks up to two neighbouring buttons (8-way), so a thumb can hold e.g. right+jump
+function crossIds(el, e) {
+  var r = el.getBoundingClientRect(), dx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2), dy = (e.clientY - (r.top + r.height / 2)) / (r.height / 2), ids = [], isMv = el.id === 'crossL', th = 0.32;
+  if (Math.abs(dx) < 0.18 && Math.abs(dy) < 0.18) return ids;
+  if (dy < -th) ids.push('U'); if (dy > th) ids.push('D'); if (dx < -th) ids.push('L'); if (dx > th) ids.push('R');
+  if (!isMv) ids = ids.map(function (i2) { return { U: 'J', D: 'ACT', L: 'RUN', R: 'SPIN' }[i2]; });
+  return ids;
+}
+function setPtr(el, e) { var old = touchPtr[e.pointerId], ids = crossIds(el, e); if (old) old.ids.forEach(function (b) { if (ids.indexOf(b) < 0) padLight(b, false); }); ids.forEach(function (b) { if (!old || old.ids.indexOf(b) < 0) { padLight(b, true); if (ACTKEY[b]) onPress(ACTKEY[b]); } }); touchPtr[e.pointerId] = { ids: ids }; touchRefresh(); }
+['crossL', 'crossR'].forEach(function (cid) {
+  var el = document.getElementById(cid);
+  el.addEventListener('pointerdown', function (e) { e.preventDefault(); actx(); touchSeen = true; try { el.setPointerCapture(e.pointerId); } catch (x) {} setPtr(el, e); });
+  el.addEventListener('pointermove', function (e) { if (touchPtr[e.pointerId]) { e.preventDefault(); setPtr(el, e); } });
+  function up(e) { var o = touchPtr[e.pointerId]; if (o) { o.ids.forEach(function (b) { padLight(b, false); }); delete touchPtr[e.pointerId]; touchRefresh(); } }
+  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('lostpointercapture', up); el.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 });
-window.addEventListener('touchstart', function () { if (!touchSeen) { touchSeen = true; showPad(true); } }, { passive: true });
+
 
 // ---------------------------------------------------------------- layout
 var BS = 1;
@@ -107,7 +137,10 @@ function layout() {
   cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); BS = cv.width / VW;
 }
 window.addEventListener('resize', layout);
-if (Q.get('touch') === '1' || (window.matchMedia && matchMedia('(pointer:coarse)').matches) || window.innerWidth < 700) pad.classList.add('on');
+var PAD_KEY = 'shapeworld.pad', padOn = true; try { if (localStorage.getItem(PAD_KEY) === '0') padOn = false; } catch (e) {}
+if (padOn) pad.classList.add('on');
+window.togglePad = function () { padOn = !padOn; try { localStorage.setItem(PAD_KEY, padOn ? '1' : '0'); } catch (e) {} showPad(padOn); try { if (window.parent !== window && window.parent.setPadMark) window.parent.setPadMark(padOn); } catch (e) {} return padOn; };
+window.isPad = function () { return padOn; };
 layout(); setTimeout(layout, 50);
 
 // ---------------------------------------------------------------- game flow: map -> level (-> bonus room) -> map
@@ -123,47 +156,91 @@ function autoMask(st) {
   G.usingFallback = true; return G.planner.decide(st);
 }
 function say(t, frames) { G.msg = t; G.msgT = frames || 150; }
-function allNodes() { var n = G.map.nodes.slice(); if (G.prog.secret[G.w]) n.push(G.map.bonus); return n; }
-function isDone(i) { var d = G.prog.done[G.w]; return !!(d && d[i]); }
-function isOpen(nd) { return nd.i === 0 || nd.i === 5 || isDone(nd.i - 1); }
-function moveSel(d) {
-  var nodes = allNodes().filter(isOpen), idx = -1, i; for (i = 0; i < nodes.length; i++) if (nodes[i].i === G.sel) idx = i;
-  idx = Math.max(0, Math.min(nodes.length - 1, idx + d)); G.sel = nodes[idx].i; sfx('pop');
+function nodeById(id) { for (var k = 0; k < G.map.nodes.length; k++) if (G.map.nodes[k].i === id) return G.map.nodes[k]; return null; }
+// ---- progress (persisted per seed in localStorage, always inside try/catch)
+function saveKey(seed) { return 'shapeworld.save.' + seed; }
+function saveProg() { try { localStorage.setItem(saveKey(G.seed), JSON.stringify(G.prog)); localStorage.setItem('shapeworld.last', String(G.seed)); } catch (e) {} }
+function loadProg(seed) { try { var s = localStorage.getItem(saveKey(seed)); if (s) { var o = JSON.parse(s); if (o && o.done && o.wcl) return o; } } catch (e) {} return null; }
+function lastSeed() { try { var s = parseInt(localStorage.getItem('shapeworld.last'), 10); return s > 0 ? s : 0; } catch (e) { return 0; } }
+function worldCleared(wid) { return !!G.prog.wcl[wid]; }
+function worldName(wid) { var w = G.sm.worlds[wid], idx = G.sm.layers[w.depth].indexOf(wid); return (w.depth + 1) + 'ABC'.charAt(idx); }
+// ---- map logic, written for any world so the stage-select dialog can reuse it
+function isDoneW(wid, id) { var d = G.prog.done[wid]; return !!(d && d[id]); }
+function edgeOpenW(wid, e) { if (!isDoneW(wid, e.a)) return false; if (e.secret) { var s = G.prog.secret[wid]; return !!(s && s[e.a]); } return true; }
+function isOpenW(wid, map, nd) { if (worldCleared(wid)) return true; if (nd.i === 0) return true; for (var k = 0; k < map.edges.length; k++) if (map.edges[k].b === nd.i && edgeOpenW(wid, map.edges[k])) return true; return false; }
+function isDone(id) { return isDoneW(G.wid, id); }
+function edgeOpen(e) { return edgeOpenW(G.wid, e); }
+function isOpen(nd) { return isOpenW(G.wid, G.map, nd); }
+function isVisible(nd) { return nd.main || isOpen(nd); }
+function allNodes() { return G.map.nodes.filter(isVisible); }
+// the next level the auto player (and the hint) should take: any open, unfinished level, preferring the main route (it never needs a secret exit)
+function nextTarget() { var c = G.map.nodes.filter(function (n) { return isOpenW(G.wid, G.map, n) && !isDone(n.i) && (!worldCleared(G.wid) || n.main); }); c.sort(function (a, b) { return (a.main ? 0 : 1) - (b.main ? 0 : 1) || a.i - b.i; }); return c[0] || null; }
+function moveSel(dir) {
+  var cur = nodeById(G.sel) || G.map.nodes[0], vx = dir === 'right' ? 1 : dir === 'left' ? -1 : 0, vy = dir === 'down' ? 1 : dir === 'up' ? -1 : 0, best = null, bs = 1e9;
+  allNodes().forEach(function (n) { if (!isOpen(n) || n.i === G.sel) return; var dx = n.x - cur.x, dy = n.y - cur.y; if (dx * vx + dy * vy <= 2) return; var sc = Math.hypot(dx, dy) + Math.abs(dx * vy - dy * vx) * 0.6; if (sc < bs) { bs = sc; best = n; } });
+  if (best) { G.sel = best.i; sfx('pop'); }
 }
-function setWorld(w) { G.w = w; G.map = PF.worldMap(G.seed, w); var nx = 0; for (var i = 0; i < 5; i++) if (isDone(i)) nx = Math.min(4, i + 1); G.sel = nx; }
-function startGame() {
-  if (Q.get('seed')) G.seed = parseInt(Q.get('seed'), 10) || 1; else G.seed = 1 + Math.floor(Math.random() * 999999);
-  G.base = 0; G.coinBase = 0; G.lives = 3; G.nextLife = 50; G.prog = { done: {}, secret: {} }; G.main = null; G.st = null; G.L = null; G.hint = null; G.autoWait = 0; G.mapCool = 0;
-  setWorld(0); G.mode = 'map'; setAuto(0); aiReset();
-  say(TT('월드 1: 레벨을 골라 시작하세요', 'World 1: pick a level to start'), 150);
-  var lv = parseInt(Q.get('level'), 10); if (lv) window.__pfGo(lv);
+function setWorld(wid) { var w = G.sm.worlds[wid]; G.wid = wid; G.depth = w.depth; G.map = PF.worldMap(G.seed, wid, w.depth, w.mainEnd); G.prog.cur = wid; var t = nextTarget(); G.sel = t ? t.i : 0; G.fn = { isDone: isDone, isOpen: isOpen, isVisible: isVisible, edgeOpen: edgeOpen }; }
+function startGame(fresh) {
+  if (Q.get('seed')) G.seed = parseInt(Q.get('seed'), 10) || 1; else if (!fresh && lastSeed()) G.seed = lastSeed(); else G.seed = 1 + Math.floor(Math.random() * 999999);
+  G.sm = PF.superMap(G.seed); G.prog = (!fresh && loadProg(G.seed)) || { done: {}, secret: {}, wcl: {}, cur: 0, front: 0 };
+  G.base = 0; G.coinBase = 0; G.lives = 3; G.nextLife = 50; G.main = null; G.st = null; G.L = null; G.hint = null; G.autoWait = 0; G.mapCool = 0;
+  setWorld(G.sm.worlds[G.prog.cur] ? G.prog.cur : 0); G.mode = 'map'; setAuto(0); aiReset(); saveProg();
+  say(TT('월드 ' + worldName(G.wid) + ': 레벨을 골라 시작하세요', 'World ' + worldName(G.wid) + ': pick a level to start'), 150);
+  var lv = parseInt(Q.get('level'), 10); if (lv && !G.lvDone) { G.lvDone = true; window.__pfGo(lv); }
+}
+// ---- world endings (castle / cannon) lead to different next worlds on the super map
+function endWorld(ending) {
+  G.prog.wcl[G.wid] = ending; var w = G.sm.worlds[G.wid], next = w.next ? w.next[ending] : undefined; G.endingTaken = ending; saveProg();
+  if (next === undefined) { G.mode = 'end'; G.superT = 0; sfx('goal'); return; }
+  G.superFrom = G.wid; G.superTo = next; G.superT = 0; G.mode = 'super'; sfx('life');
+}
+function leaveSuper() { var nx = G.superTo; G.prog.front = Math.max(G.prog.front || 0, nx); setWorld(nx); saveProg(); G.mode = 'map'; G.mapCool = 0; say(TT('월드 ' + worldName(nx) + ' 도착!', 'Arrived in world ' + worldName(nx) + '!'), 150); }
+// ---- stage select dialog (Game menu / T): cleared worlds + the current one, and inside a world its cleared stages + the frontier; a cleared world opens all its stages
+function selectableWorlds() { return G.sm.worlds.filter(function (w) { return worldCleared(w.id) || w.id === G.wid || w.id === G.prog.front; }); }
+function selMapOf(wid) { var w = G.sm.worlds[wid]; return wid === G.wid ? G.map : PF.worldMap(G.seed, wid, w.depth, w.mainEnd); }
+function stageState(wid, map, nd) { if (isDoneW(wid, nd.i)) return 'done'; if (isOpenW(wid, map, nd)) return 'open'; return 'locked'; }
+window.openSelect = function () {
+  if (G.mode === 'select') { closeSelect(); return false; }
+  if (G.mode !== 'map' && G.mode !== 'play' && G.mode !== 'pause') return false;
+  G.selPrev = G.mode; G.mode = 'select'; var ws = selectableWorlds(); G.selList = ws; G.selWi = Math.max(0, ws.map(function (w) { return w.id; }).indexOf(G.wid)); G.selCol = 1; G.selSi = 0; refreshSel(); return true;
+};
+function refreshSel() { var w = G.selList[G.selWi]; G.selMapObj = selMapOf(w.id); var first = 0; for (var k = 0; k < G.selMapObj.nodes.length; k++) { var s = stageState(w.id, G.selMapObj, G.selMapObj.nodes[k]); if (s === 'open') { first = k; break; } } G.selSi = Math.min(G.selSi, G.selMapObj.nodes.length - 1); if (G.selCol === 1 && G.selSiInit !== w.id) { G.selSi = first; G.selSiInit = w.id; } }
+function closeSelect() { if (G.mode === 'select') G.mode = G.selPrev === 'play' ? 'play' : G.selPrev; }
+function selectMove(k) {
+  if (k === 'left') G.selCol = 0; else if (k === 'right') G.selCol = 1;
+  else if (k === 'up' || k === 'down') { var d = k === 'up' ? -1 : 1; if (G.selCol === 0) { G.selWi = Math.max(0, Math.min(G.selList.length - 1, G.selWi + d)); G.selSiInit = -1; refreshSel(); } else G.selSi = Math.max(0, Math.min(G.selMapObj.nodes.length - 1, G.selSi + d)); sfx('pop'); }
+  else if (k === 'jump') { if (G.selCol === 0) { G.selCol = 1; sfx('pop'); } else selectPick(G.selSi); }
+}
+function selectPick(si) {
+  var w = G.selList[G.selWi], nd = G.selMapObj.nodes[si]; if (!nd) return; var s = stageState(w.id, G.selMapObj, nd); if (s === 'locked') { sfx('bump'); return; }
+  closeSelect(); G.mode = 'map'; if (w.id !== G.wid) setWorld(w.id); G.sel = nd.i; G.main = null; enterLevel(nd.i, true);
 }
 function levelInit(cp) {
   var node = G.curNode; G.st = PF.newState(G.L, { rec: true, cp: !!cp }); aiReset(); setAuto(0); G.parts = []; G.pops = []; G.bumps = []; G.hint = null; G.cam = Math.max(0, Math.min(G.L.w * TS - VW, G.st.p.x - VW * 0.4)); G.mode = 'play'; G.secretExit = false;
 }
-function enterLevel(i) {
-  var nodes = allNodes(), node = null; for (var k = 0; k < nodes.length; k++) if (nodes[k].i === i) node = nodes[k];
-  if (!node || !isOpen(node) || G.mode === 'loading') return;
+function enterLevel(i, force) {
+  var node = nodeById(i); if (!node || G.mode === 'loading') return; if (!force && !isOpen(node)) return;
   G.curNode = node; G.mode = 'loading'; G.st = null; G.hint = null;
-  setTimeout(function () { G.n = node.n; G.L = PF.generate(G.seed, node.n); G.main = null; levelInit(false); var kn = PF.KIND_NAMES[G.L.kind]; say(PFR.levelLabel({ n: node.n }) + ' ' + (KO ? kn[0] : kn[1]), 150); G.msgIsLevel = true; }, 30);
+  setTimeout(function () { G.n = node.n; var sd = PF.hash(G.seed, G.wid, 31); G.L = PF.generate(sd, node.n, { kind: node.kind, secret: !!node.secret }); G.main = null; levelInit(false); var kn = PF.KIND_NAMES[G.L.kind]; say(PFR.levelLabel({ n: node.n }) + ' ' + (KO ? kn[0] : kn[1]), 150); G.msgIsLevel = true; }, 30);
 }
 function totalCoins() { return G.coinBase + (G.st ? G.st.coins : 0); }
 function finishRun() { var s = G.base + (G.st ? G.st.score : 0); if (s > G.best) { G.best = s; saveBest(); } }
 function togglePause() { if (G.mode === 'play') { G.mode = 'pause'; say(TT('일시정지 (P)', 'Paused (P)'), 9999); } else if (G.mode === 'pause') { G.mode = 'play'; G.msgT = 0; } }
-window.newGame = function () { startGame(); return true; };
+window.newGame = function () { startGame(true); return true; };
 window.toggleAuto = function () {
   G.auto = !G.auto; setAuto(0); aiReset(); reportAuto();
-  if (G.auto) { say(TT('자동 플레이 켜짐 (F3로 끄기)', 'Auto play on (F3 to stop)'), 120); if (G.mode === 'start' || G.mode === 'over') startGame(); } else say(TT('자동 플레이 꺼짐', 'Auto play off'), 90);
+  if (G.auto) { say(TT('자동 플레이 켜짐 (F3로 끄기)', 'Auto play on (F3 to stop)'), 120); if (G.mode === 'start') startGame(false); else if (G.mode === 'over') startGame(true); } else say(TT('자동 플레이 꺼짐', 'Auto play off'), 90);
   return G.auto;
 };
 window.giveHint = function () {
-  if (G.mode === 'map') { var nd = allNodes().filter(function (n) { return isOpen(n) && !isDone(n.i) && n.i !== 5; })[0]; say(nd ? TT('다음 레벨: ' + (G.w + 1) + '-' + (nd.i + 1) + ' (' + PF.KIND_NAMES[nd.kind][0] + ')', 'Next level: ' + (G.w + 1) + '-' + (nd.i + 1) + ' (' + PF.KIND_NAMES[nd.kind][1] + ')') : TT('이 월드를 모두 깼어요', 'World cleared'), 150); return; }
+  if (G.mode === 'map') { var nd = nextTarget(); say(nd ? TT('다음 레벨: ' + worldName(G.wid) + '·' + (nd.i + 1) + ' (' + PF.KIND_NAMES[nd.kind][0] + ')', 'Next level: ' + worldName(G.wid) + '·' + (nd.i + 1) + ' (' + PF.KIND_NAMES[nd.kind][1] + ')') : TT('이 월드를 모두 깼어요', 'World cleared'), 150); return; }
   if (G.mode !== 'play') { say(TT('게임 중에만 힌트를 볼 수 있어요', 'Hints are available while playing'), 90); return; }
   var h = PFPlanner.hint(G.st, G.planner); G.hint = h; G.hintT = 220; G.hintF = G.frame; say(TT(h.ko, h.en), 220); sfx('hint');
 };
 window.toggleSound = function () { G.snd = !G.snd; try { localStorage.setItem(SND_KEY, G.snd ? '1' : '0'); } catch (e) {} reportSound(); if (G.snd) sfx('coin'); return G.snd; };
 window.isSound = function () { return G.snd; };
-window.__pfGo = function (n) { startGame(); var w = Math.floor((n - 1) / 5), si = (n - 1) % 5; for (var ww = 0; ww < w; ww++) G.prog.done[ww] = [1, 1, 1, 1, 1, 0]; G.prog.done[w] = [0, 0, 0, 0, 0, 0]; for (var q = 0; q < si; q++) G.prog.done[w][q] = 1; setWorld(w); G.sel = si; enterLevel(G.sel); };
+window.__pfGo = function (n) { startGame(true); var si = (n - 1) % 5; G.prog.done[G.wid] = {}; for (var q = 0; q < Math.min(si, 4); q++) G.prog.done[G.wid][q] = 1; setWorld(G.wid); G.sel = Math.min(si, 4); enterLevel(G.sel, true); };
 reportSound();
 
 function pop(x, y, t, c) { G.pops.push({ x: x, y: y, t: t, c: c, life: 45 }); }
@@ -225,10 +302,13 @@ function fixedStep() {
   for (i = G.parts.length - 1; i >= 0; i--) { var q = G.parts[i]; q.x += q.vx; q.y += q.vy; q.vy += q.g; if (--q.life <= 0) G.parts.splice(i, 1); }
   for (i = G.pops.length - 1; i >= 0; i--) { var pp = G.pops[i]; pp.y -= 0.5; if (--pp.life <= 0) G.pops.splice(i, 1); }
   for (i = G.bumps.length - 1; i >= 0; i--) if (++G.bumps[i].t > 10) G.bumps.splice(i, 1);
-  if (G.mode === 'start' || G.mode === 'over') { if (G.auto && ++G.autoWait > 90) startGame(); return; }
+  if (G.mode === 'start' || G.mode === 'over') { if (G.auto && ++G.autoWait > 90) startGame(G.mode === 'over'); return; }
   if (G.mode === 'map') {
-    if (G.auto && ++G.mapCool > 70) { G.mapCool = 0; var nd = allNodes().filter(function (n) { return isOpen(n) && !isDone(n.i) && n.i !== 5; })[0]; if (nd) { G.sel = nd.i; enterLevel(nd.i); } }
+    if (G.auto && ++G.mapCool > 70) { G.mapCool = 0; var nd = nextTarget(); if (nd) { G.sel = nd.i; enterLevel(nd.i); } }
     return; }
+  if (G.mode === 'super') { if (++G.superT > 100 && G.auto) leaveSuper(); return; }
+  if (G.mode === 'end') { if (++G.superT > 240 && G.auto) startGame(true); return; }
+  if (G.mode === 'select') return;
   if (G.mode === 'pause' || !st || G.mode === 'loading') return;
   if (G.mode === 'play') {
     if (G.auto) setAuto(autoMask(st));
@@ -254,12 +334,13 @@ function fixedStep() {
   } else if (G.mode === 'clear') {
     G.clearT++; var pw = st.p; pw.y = Math.min(pw.y + 1.2, G.L.poleY - pw.h);
     if (G.clearT > 170) {
-      G.base += st.score; G.coinBase += st.coins; var node = G.curNode, d = G.prog.done[G.w] = G.prog.done[G.w] || [0, 0, 0, 0, 0, 0];
-      d[node.i] = 1; if (G.secretExit) { G.prog.secret[G.w] = true; G.lives++; sfx('life'); }
-      if (node.i === 5) { G.lives++; sfx('life'); }
+      G.base += st.score; G.coinBase += st.coins; var node = G.curNode, d = G.prog.done[G.wid] = G.prog.done[G.wid] || {};
+      d[node.i] = 1; if (G.secretExit) { var sc = G.prog.secret[G.wid] = G.prog.secret[G.wid] || {}; sc[node.i] = true; G.lives++; sfx('life'); }
+      if (node.kind === 'bonus') { G.lives++; sfx('life'); }
       G.mode = 'map'; G.st = null; G.L = null; G.mapCool = 0;
-      if (node.i === 4) { setWorld(G.w + 1); say(TT('월드 클리어! 월드 ' + (G.w + 1) + '로', 'World cleared! On to world ' + (G.w + 1)), 200); }
-      else { G.sel = node.i === 5 ? 2 : node.i + 1; G.map = PF.worldMap(G.seed, G.w); say(G.secretExit ? TT('비밀 출구! 별길이 열렸어요', 'Secret exit! The Star Road opened') : TT('레벨 클리어!', 'Level cleared!'), 150); }
+      if (node.ending) { endWorld(node.ending); }
+      else { var tg = nextTarget(); G.sel = tg ? tg.i : G.sel; if (G.secretExit) { var br = G.map.edges.filter(function (e) { return e.a === node.i && e.secret; })[0]; if (br) G.sel = br.b; } say(G.secretExit ? TT('비밀 출구! 지도에 새 길이 열렸어요', 'Secret exit! A new route opened on the map') : TT('레벨 클리어!', 'Level cleared!'), 150); }
+      saveProg();
     }
   }
   if (G.st) { var p2 = G.st.p, tx = Math.max(0, Math.min(G.L.w * TS - VW, p2.x + 6 - VW * 0.42 + p2.vx * 14)); G.cam += (tx - G.cam) * 0.12; }
@@ -273,7 +354,7 @@ function frame(t) {
   if (n === 6) acc = 0;
   try { if (G.mode === 'start') PFR.startScreen(G, ctx, BS); else PFR.render(G, ctx, BS); } catch (e) { window.__errs.push('render ' + e.message + ' ' + (e.stack || '').split('\n')[0]); }
 }
-G.seed = parseInt(Q.get('seed'), 10) || 1; setWorld(0);
+G.seed = parseInt(Q.get('seed'), 10) || lastSeed() || 1; G.sm = PF.superMap(G.seed); G.prog = loadProg(G.seed) || { done: {}, secret: {}, wcl: {}, cur: 0, front: 0 }; setWorld(G.sm.worlds[G.prog.cur] ? G.prog.cur : 0);
 if (Q.get('autostart') === '1') startGame();
 if (Q.get('auto') === '1') window.toggleAuto();
 requestAnimationFrame(frame);

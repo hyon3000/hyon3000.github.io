@@ -259,7 +259,7 @@ function drawLevel(st, th) {
   var p = st.p;
   if (G.mode === 'dying') drawHero({ x: p.x, y: G.dy, w: p.w, h: p.h, big: false, pw: 0, face: p.face, ground: false, anim: 0, vx: 0, inv: 0, star: 0, spin: 0 }, true, G.dieT * 0.25, false);
   else drawHero(p, false, 0, !!p.mount);
-  for (c = c0; c <= c1; c++) for (r = 0; r < ROWS; r++) { var wt = PF.tileAt(st, c, r); if (PF.isW(wt)) drawWaterOverlay(c * TS, r * TS, r > 0 ? PF.tileAt(st, c, r - 1) : 0, wt, c, r); }
+  for (c = c0; c <= c1; c++) for (r = 0; r < ROWS; r++) { var wt = PF.tileAt(st, c, r); if (wt === T.SPIKE && (PF.isW(PF.tileAt(st, c - 1, r)) || PF.isW(PF.tileAt(st, c + 1, r)) || PF.isW(PF.tileAt(st, c, r - 1)))) wt = T.WATER; if (PF.isW(wt)) drawWaterOverlay(c * TS, r * TS, r > 0 ? PF.tileAt(st, c, r - 1) : 0, wt, c, r); }
   for (i = 0; i < G.parts.length; i++) { var q = G.parts[i]; rect(q.x - q.s / 2, q.y - q.s / 2, q.s, q.s, q.col); }
   for (i = 0; i < G.pops.length; i++) { var pp = G.pops[i]; text(pp.t, pp.x, pp.y, 8, pp.c, 'center'); }
   ctx.restore();
@@ -296,18 +296,18 @@ function drawMap() {
   var g = ctx.createLinearGradient(0, 0, 0, VH); g.addColorStop(0, pal[0]); g.addColorStop(1, pal[1]); ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
   var r = PF.rng(wm.w * 31 + 7), i; for (i = 0; i < 40; i++) spark4(r() * VW, r() * VH, 0.8 + r() * 1.6, 'rgba(255,255,255,.35)');
   for (i = 0; i < 9; i++) { var ix = 20 + r() * 360, iy = 40 + r() * 150, rr = 14 + r() * 30; hex(ix, iy, rr, 'rgba(255,255,255,.07)', r() * 1.5); hex(ix, iy, rr * 0.7, 'rgba(255,255,255,.07)', r() * 1.5); }
-  var nodes = wm.nodes; ctx.lineCap = 'round';
-  for (i = 0; i < nodes.length - 1; i++) { var a = nodes[i], b = nodes[i + 1], ok = G.prog.done[wm.w] && G.prog.done[wm.w][i]; ctx.setLineDash([2, 5]); line(a.x, a.y, b.x, b.y, ok ? '#7affe0' : 'rgba(255,255,255,.35)', 3); ctx.setLineDash([]); }
-  if (G.prog.secret[wm.w]) { var s = nodes[2], bn = wm.bonus; ctx.setLineDash([2, 4]); line(s.x, s.y, bn.x, bn.y, '#ffe08a', 2); ctx.setLineDash([]); }
-  var all = nodes.slice(); if (G.prog.secret[wm.w]) all.push(wm.bonus);
-  for (i = 0; i < all.length; i++) { var nd = all[i], done = G.prog.done[wm.w] && G.prog.done[wm.w][nd.i], open = nd.i === 5 || nd.i === 0 || (G.prog.done[wm.w] && G.prog.done[wm.w][nd.i - 1]), sel = G.sel === nd.i;
+  var nodes = wm.nodes, fn = G.fn; ctx.lineCap = 'round';
+  function nd2(id) { for (var q = 0; q < nodes.length; q++) if (nodes[q].i === id) return nodes[q]; return null; }
+  wm.edges.forEach(function (e) { var A = nd2(e.a), B = nd2(e.b); if (!fn.isVisible(A) || !fn.isVisible(B)) return; var ok = fn.edgeOpen(e); if (e.secret) { ctx.setLineDash([1, 4]); line(A.x, A.y, B.x, B.y, ok ? '#ffe08a' : 'rgba(255,255,255,.0)', 2.5); } else { ctx.setLineDash([2, 5]); line(A.x, A.y, B.x, B.y, fn.isDone(e.a) ? '#7affe0' : 'rgba(255,255,255,.35)', 3); } ctx.setLineDash([]); });
+  var all = nodes.filter(fn.isVisible);
+  for (i = 0; i < all.length; i++) { var nd = all[i], done = fn.isDone(nd.i), open = fn.isOpen(nd), sel = G.sel === nd.i;
     var col = open ? NODE_COL[nd.kind] : '#5a5a7a';
     if (nd.kind === 'castle') { poly([nd.x - 9, nd.y + 8, nd.x - 9, nd.y - 3, nd.x - 4, nd.y - 9, nd.x, nd.y - 3, nd.x + 4, nd.y - 9, nd.x + 9, nd.y - 3, nd.x + 9, nd.y + 8], col, '#1a0a20'); }
     else if (nd.kind === 'bonus') spark8(nd.x, nd.y, 9, col, F * 0.03);
     else { hex(nd.x, nd.y, 9, '#10082a', Math.PI / 6); hex(nd.x, nd.y, 7.3, col, Math.PI / 6); }
     if (done) { diamond(nd.x + 8, nd.y - 8, 4, 5, '#fff'); ctx.strokeStyle = '#18a070'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(nd.x + 6, nd.y - 8); ctx.lineTo(nd.x + 7.8, nd.y - 6); ctx.lineTo(nd.x + 10.5, nd.y - 10); ctx.stroke(); }
     if (sel) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(nd.x, nd.y, 13 + Math.sin(F * 0.2) * 1.5, 0, 6.3); ctx.stroke(); }
-    text(String(nd.i === 5 ? '★' : nd.i + 1), nd.x, nd.y + 0.5, 8, '#fff', 'center'); }
+    text(nd.kind === 'bonus' ? '★' : String(nd.i + 1), nd.x, nd.y + 0.5, 8, '#fff', 'center'); }
   var cur = all.filter(function (n) { return n.i === G.sel; })[0] || nodes[0];
   drawHero({ x: cur.x - 6, y: cur.y - 30 + Math.sin(F * 0.1) * 2, w: 12, h: 14, pw: 0, big: false, face: 1, ground: false, anim: 0, vx: 0, inv: 0, star: 0, spin: 0 }, false, 0, false);
   rrect(3, 3, 90, 14, 7, 'rgba(10,8,34,.62)'); text(TT('월드 ', 'WORLD ') + (wm.w + 1), 10, 10.5, 9, '#ffd0a0');
@@ -316,7 +316,7 @@ function drawMap() {
   var sn = all.filter(function (n) { return n.i === G.sel; })[0]; if (sn) { var kn = PF.KIND_NAMES[sn.kind]; rrect(70, VH - 26, 260, 18, 9, 'rgba(10,8,34,.72)'); text((sn.i === 5 ? '★ ' : (wm.w + 1) + '·' + (sn.i + 1) + '  ') + (KO ? kn[0] : kn[1]), VW / 2, VH - 17, 9, '#fff', 'center', false); }
   if (G.auto) { var w2 = 128; rrect(VW / 2 - w2 / 2, 20, w2, 14, 4, 'rgba(255,138,61,.95)'); text(TT('자동 플레이 (F3 끄기)', 'AUTO PLAY (F3 to stop)'), VW / 2, 27, 8, '#2a1000', 'center', false); }
   if (G.msgT > 0 && G.msg) { var tw = Math.min(VW - 16, 8 + G.msg.length * (KO ? 7.4 : 4.9)); rrect(VW / 2 - tw / 2, 40, tw, 15, 4, 'rgba(10,8,34,.78)'); text(G.msg, VW / 2, 47.5, 8, '#fff', 'center', false); }
-  text(TT('← → 선택   점프/Enter 시작', 'Left/Right select   Jump/Enter start'), VW / 2, VH - 38, 7.5, '#cfe', 'center');
+  text(TT('← → ↑ ↓ 선택   점프/Enter 시작', 'Arrows select   Jump/Enter start'), VW / 2, VH - 38, 7.5, '#cfe', 'center');
 }
 function render(g, c2d, bs) {
   G = g; ctx = c2d; F = g.frame;

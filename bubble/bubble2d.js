@@ -145,7 +145,8 @@
     const g = S.grid, t = trace(g, a); if (!t.cell) return null;
     const g2 = g.map(function (row) { return row.slice(); }), r = t.cell[0], c = t.cell[1], res = resolve(g2, r, c, col);
     const left = count(g2); let sc = res.pops.length * 10 + res.falls.length * 30;
-    if (left === 0) return { score: sc + 1000, a: a, cell: t.cell };
+    const bp = (t.bounces || 0) * 0.2;                                  // same result -> prefer the shot that bounces off the walls least
+    if (left === 0) return { score: sc + 1000 - bp, a: a, cell: t.cell };
     const mr = maxRow(g2);
     if (!res.pops.length) {
       let adj = 0; for (const p of nbrs(r, c)) if (g2[p[0]][p[1]] === col) adj++;
@@ -153,7 +154,7 @@
     }
     const mr2 = mr + (S.since + 1 >= SHOTS_PER_ROW ? 1 : 0);            // the cluster is pushed down by the next row
     sc -= mr2 * 7; if (mr2 >= DANGER - 2) sc -= 80 * (mr2 - DANGER + 3); if (mr2 >= DANGER) sc -= 1e5;
-    return { score: sc + (Math.random() - 0.5) * 0.01, a: a, cell: t.cell };
+    return { score: sc - bp + (Math.random() - 0.5) * 0.01, a: a, cell: t.cell };
   }
   function bestShot() {
     let best = null;

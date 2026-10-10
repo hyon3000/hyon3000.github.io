@@ -160,7 +160,8 @@
       for (let a = 0; a < 360; a += 3) for (let e = 20; e <= 88; e += 5.7) {
         const az = a * Math.PI / 180, el = e * Math.PI / 180, t = trace(S.grid, az, el); if (!t.cell) continue;
         const key = t.cell.join(',') + '/' + col; let sc = cache[key]; if (sc === undefined) sc = cache[key] = evalCell(t.cell, col);
-        if (!best || sc > best.score + (swp ? 4 : 0)) best = { score: sc, az: az, el: el, cell: t.cell, swap: swp };
+        const sb = sc - (t.bounces || 0) * 0.2;               // same result -> prefer the shot that bounces off the walls least
+        if (!best || sb > best.score + (swp ? 4 : 0)) best = { score: sb, az: az, el: el, cell: t.cell, swap: swp };
       }
     }
     return best;

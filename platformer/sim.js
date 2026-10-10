@@ -357,7 +357,7 @@ function step(st, inp) {
     if (Math.abs(cn.x - p.x) < 250 && (f + cn.ph) % cn.per === 0) { var nb = 0; for (j = 0; j < st.en.length; j++) if (st.en[j].t === 4 && st.en[j].alive) nb++;
       if (nb < 3 && !st.noEn) { st.en.push({ t: 4, x: cn.x + (cn.dir > 0 ? 14 : -10), y: cn.y + 3, w: 12, h: 10, vx: cn.dir * 1.8, vy: 0, dir: cn.dir, alive: true, dt: 0, tm: 0, ground: false, sh: 0, kg: 0, s: 0, inv: 0 }); ev(st, 'cannon', cn.x, cn.y); } } }
   // --- enemies / items / projectiles
-  for (i = 0; i < st.en.length; i++) { e = st.en[i]; if (!e.alive) { if (e.dt > 0) e.dt--; continue; } updEnemy(st, e, f); }
+  for (i = 0; i < st.en.length; i++) { e = st.en[i]; if (!e.alive) { if (e.dt > 0) e.dt--; continue; } var oex = e.x, oey = e.y; updEnemy(st, e, f); e.dvx = e.x - oex; e.dvy = e.y - oey; }
   for (i = st.ep.length - 1; i >= 0; i--) { var pr = st.ep[i]; pr.x += pr.vx; pr.y += pr.vy; pr.vy += 0.01; if (--pr.life <= 0 || boxHit(st, pr.x - 3, pr.y - 3, 6, 6)) { st.ep.splice(i, 1); continue; }
     if (pr.x > p.x - 3 && pr.x < p.x + p.w + 3 && pr.y > p.y - 3 && pr.y < p.y + p.h + 3) { st.ep.splice(i, 1); hurt(st, 'shot'); } }
   for (i = 0; i < st.it.length; i++) { e = st.it[i]; if (!e.alive) continue;

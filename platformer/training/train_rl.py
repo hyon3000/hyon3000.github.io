@@ -7,9 +7,9 @@ from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))          # .../platformer
-D, H1, H2 = 604, 256, 128
+D, H1, H2 = 616, 256, 128
 ap = argparse.ArgumentParser(); ap.add_argument('out'); ap.add_argument('--workers', type=int, default=10); ap.add_argument('--minutes', type=float, default=60)
-ap.add_argument('--bc_steps', type=int, default=14000); ap.add_argument('--dagger_rounds', type=int, default=3); ap.add_argument('--dagger_steps', type=int, default=5000); ap.add_argument('--resume', default='')
+ap.add_argument('--bc_steps', type=int, default=25000); ap.add_argument('--dagger_rounds', type=int, default=5); ap.add_argument('--dagger_steps', type=int, default=10000); ap.add_argument('--resume', default='')
 args = ap.parse_args(); os.makedirs(args.out, exist_ok=True)
 dev = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -97,15 +97,15 @@ if not args.resume:
     res = par(workers, lambda w, i: w.js('return RL.collectBC(arguments[0], false, 0)', args.bc_steps))
     X = np.concatenate([dec_obs(r['obs']) for r in res]); A = np.concatenate([bits_to_mat(dec(r['act'], np.uint8)) for r in res])
     P('BC data', X.shape, 'planner wins in collection', sum(r['wins'] for r in res), '/', sum(r['eps'] for r in res), 'episodes', round(time.time() - t0), 's')
-    bc_train(X, A)
+    bc_train(X, A, epochs=16)
     DX, DA = [X], [A]
     # ---------------- phase 2: DAgger
     for rd in range(args.dagger_rounds):
-        beta = [0.5, 0.25, 0.1, 0.0][min(rd, 3)]; t0 = time.time(); wb = net.b64()
+        beta = [0.5, 0.3, 0.2, 0.1, 0.0][min(rd, 4)]; t0 = time.time(); wb = net.b64()
         res = par(workers, lambda w, i: (w.js('RL.setWeights(arguments[0],arguments[1],arguments[2])', wb, H1, H2), w.js('return RL.collectBC(arguments[0], true, arguments[1])', args.dagger_steps, beta))[1])
         X2 = np.concatenate([dec_obs(r['obs']) for r in res]); A2 = np.concatenate([bits_to_mat(dec(r['act'], np.uint8)) for r in res]); DX.append(X2); DA.append(A2)
         P('DAgger round', rd, 'beta', beta, 'new', X2.shape[0], 'policy-driven episodes won', sum(r['wins'] for r in res), '/', sum(r['eps'] for r in res), round(time.time() - t0), 's')
-        bc_train(np.concatenate(DX), np.concatenate(DA), epochs=8, lr=5e-4)
+        bc_train(np.concatenate(DX), np.concatenate(DA), epochs=10, lr=5e-4)
     torch.save(net.state_dict(), os.path.join(args.out, 'bc.pt')); export(net, os.path.join(args.out, 'ai-model-bc.js'), {'stage': 'bc+dagger'})
 
 # ---------------- phase 3: PPO on the real simulator

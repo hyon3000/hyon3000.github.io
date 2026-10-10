@@ -455,6 +455,30 @@ function drawBoosts(c, t) {
   });
   c.globalAlpha = 1;
 }
+function drawSprings(c) {
+  (sim.springs || []).forEach(function (o) {
+    var s = o.s; c.save(); c.translate(s.cx, s.cy);
+    rrect2(c, -s.hw, -s.hh, s.hw * 2, s.hh * 2, 4); c.fillStyle = '#ffd166'; c.fill(); c.lineWidth = 3; c.strokeStyle = INK; c.stroke();
+    c.strokeStyle = '#e07a00'; c.lineWidth = 2.2; c.beginPath(); c.moveTo(-s.hw + 8, 3); for (var k = 0; k < 6; k++) c.lineTo(-s.hw + 8 + (k + 0.5) * (s.hw * 2 - 16) / 6, k % 2 ? 3 : -3); c.lineTo(s.hw - 8, 3); c.stroke();
+    c.fillStyle = INK; c.beginPath(); c.moveTo(-6, -s.hh - 9); c.lineTo(0, -s.hh - 17); c.lineTo(6, -s.hh - 9); c.closePath(); c.fill();
+    c.restore();
+  });
+}
+function drawMovers(c) {
+  (sim.movers || []).forEach(function (o) {
+    var m = o.m, p = o.body.getPosition(), x = p.x * DP.S, y = p.y * DP.S;
+    c.save(); c.translate(x, y);
+    if (m.deadly) {
+      rrect2(c, -m.hw, -m.hh, m.hw * 2, m.hh * 2, 4); c.fillStyle = '#e63946'; c.fill(); c.lineWidth = 3; c.strokeStyle = INK; c.stroke();
+      c.fillStyle = '#9d0208'; for (var sx = -m.hw + 6; sx < m.hw - 2; sx += 12) { c.beginPath(); c.moveTo(sx - 5, -m.hh); c.lineTo(sx, -m.hh - 11); c.lineTo(sx + 5, -m.hh); c.closePath(); c.fill(); c.stroke(); }
+    } else {
+      rrect2(c, -m.hw, -m.hh, m.hw * 2, m.hh * 2, 4); c.fillStyle = '#b7e4c7'; c.fill(); c.lineWidth = 3; c.strokeStyle = INK; c.stroke();
+      c.strokeStyle = '#2d6a4f'; c.lineWidth = 2; c.beginPath(); var dx = m.ax ? 1 : 0, dy = m.ay ? 1 : 0; c.moveTo(-6 * dx, -4 * dy); c.lineTo(6 * dx, 4 * dy); c.moveTo(-6 * dx, -4 * dy); c.stroke();
+    }
+    c.restore();
+  });
+}
+function rrect2(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
 function drawRotors(c) {
   sim.rotors.forEach(function (ro) {
     var r = ro.r, a = ro.body.getAngle();
@@ -462,7 +486,7 @@ function drawRotors(c) {
     c.beginPath(); c.arc(0, 0, r + 12, -2.2, 0.6); c.strokeStyle = '#e63946'; c.lineWidth = 2.4; c.globalAlpha = 0.8; c.stroke();     // spin direction arrow
     var dir = r.omega > 0 ? 1 : -1, ea = dir > 0 ? 0.6 : -2.2, tx = Math.cos(ea) * (r.r + 12), ty = Math.sin(ea) * (r.r + 12), tg = ea + dir * Math.PI / 2;
     c.beginPath(); c.moveTo(tx, ty); c.lineTo(tx + Math.cos(tg - 2.6 * dir) * 9, ty + Math.sin(tg - 2.6 * dir) * 9); c.moveTo(tx, ty); c.lineTo(tx + Math.cos(tg + 2.6 * dir) * 9, ty + Math.sin(tg + 2.6 * dir) * 9); c.stroke();
-    c.rotate(a); c.globalAlpha = 1; rrect(c, r.r, 5, 4); c.fillStyle = '#ffb4a2'; c.fill(); c.lineWidth = 3; c.strokeStyle = INK; c.stroke();
+    c.rotate(a); c.globalAlpha = 1; rrect(c, r.r, 5, 4); c.fillStyle = r.deadly ? '#e63946' : '#ffb4a2'; c.fill(); c.lineWidth = 3; c.strokeStyle = INK; c.stroke();
     c.beginPath(); c.arc(0, 0, 7, 0, 6.3); c.fillStyle = '#f9f5ea'; c.fill(); c.stroke();
     c.restore();
   });
@@ -563,7 +587,7 @@ function render(ts) {
   drawJets(ctx, vt); drawBoosts(ctx, vt); drawPortals(ctx, vt);
   sim.props.forEach(function (p) { drawProp(ctx, p); });
   sim.strokes.forEach(function (st) { drawStroke(ctx, st); });
-  drawRotors(ctx); drawRope(ctx);
+  drawSprings(ctx); drawMovers(ctx); drawRotors(ctx); drawRope(ctx);
   sim.pins.forEach(function (p) { drawPin(ctx, p); });
   sim.stars.forEach(function (s, k) { if (!s.got) drawStar(ctx, s, vt, level.order[sim.next] === k, sim.stars.length > 1); });
   if (!sim.killed) drawBall(ctx, vt);

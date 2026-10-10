@@ -204,4 +204,23 @@ window.testForced = function (kind, seed0, count, n, lives) {
   }
   return out;
 };
+
+// containment: count levels / cells where water or lava is not enclosed (floor + both sides), across all level kinds
+window.testContain = function (seed0, count, n0, n1) {
+  var kinds = ['plain', 'hills', 'flood', 'ghost', 'sky', 'cave', 'maze', 'castle', 'bonus'], res = { levels: 0, badLevels: 0, badCells: 0, withWet: 0, byKind: {}, samples: [] };
+  for (var s = seed0; s < seed0 + count; s++) for (var n = n0; n <= n1; n++) kinds.forEach(function (k) {
+    var L = PF.build(s, k === 'bonus' ? 1000 + n : n, 0, { kind: k }), c = PF.checkContainment(L), wet = false; for (var i = 0; i < L.tiles.length; i++) { var tt = L.tiles[i]; if (tt === 9 || tt === 14 || tt === 29 || (tt >= 22 && tt <= 24)) { wet = true; break; } }
+    res.levels++; if (wet) res.withWet++; if (c.bad) { res.badLevels++; res.badCells += c.bad; res.byKind[k] = (res.byKind[k] || 0) + 1; if (res.samples.length < 6) res.samples.push([k, s, n, JSON.stringify(c.details[0])]); } });
+  return res;
+};
+
+// graph validation: every world map (branching via secret exits, castle / cannon endings) and the super map of worlds
+window.testGraphs = function (seed0, count) {
+  var res = { seeds: 0, superOk: 0, worldMaps: 0, worldOk: 0, fails: [], endsSeen: { castle: 0, cannon: 0 }, forks: 0, worlds: 0, branchHist: {}, bothEndings: 0, mainCannon: 0 };
+  for (var s = seed0; s < seed0 + count; s++) {
+    var sm = PF.superMap(s), v = PF.validateSuper(sm); res.seeds++; res.worlds += sm.worlds.length; if (v.ok) res.superOk++; else res.fails.push(['super', s, v.why]); res.forks += v.forks;
+    sm.worlds.forEach(function (w) { var m = PF.worldMap(s, w.id, w.depth, w.mainEnd), wv = PF.validateWorldMap(m); res.worldMaps++; if (wv.ok) res.worldOk++; else res.fails.push(['world', s, w.id, wv.why]); res.branchHist[wv.branches] = (res.branchHist[wv.branches] || 0) + 1; if (wv.hasAlt) res.bothEndings++; if (w.mainEnd === 'cannon') res.mainCannon++; m.nodes.forEach(function (q) { if (q.ending) res.endsSeen[q.ending]++; }); });
+  }
+  res.fails = res.fails.slice(0, 6); return res;
+};
 </script>

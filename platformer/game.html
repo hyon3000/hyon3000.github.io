@@ -9,23 +9,23 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0a0820;-we
 body{display:flex;flex-direction:column}
 #stage{flex:1 1 auto;min-height:0;position:relative;overflow:hidden}
 canvas{position:absolute;left:0;top:0;touch-action:none;outline:none;background:#0a0820}
-#pad{flex:0 0 auto;display:none;box-sizing:border-box;padding:6px 10px calc(6px + env(safe-area-inset-bottom));background:#120e30;border-top:2px solid #3a2f80;touch-action:none;justify-content:space-between;align-items:stretch;gap:10px}
-#pad.on{display:flex;height:clamp(76px,22vh,140px)}
-#pad .grp{display:flex;gap:8px;flex:1 1 0}
-#pad .grp.r{justify-content:flex-end}
-#pad button{flex:1 1 0;max-width:150px;font:bold 15px/1 system-ui,sans-serif;color:#fff;background:#4a3a9a;border:2px solid #9a8aff;border-bottom-width:4px;border-radius:12px;touch-action:none;-webkit-tap-highlight-color:transparent;padding:0}
-#pad .grp.mid{flex:0 1 auto;gap:5px}#pad button.sm{flex:0 0 auto;width:40px;font-size:13px;padding:0 2px}#pad button.spin{background:#a02a7a;border-color:#ff8ad8;width:46px;font-size:11px}#pad button.run{background:#c2561a;border-color:#ffa070}
-#pad button.jump{background:#18907a;border-color:#7affe0}
-#pad button.on{filter:brightness(1.6);transform:translateY(2px)}
+#pad{flex:0 0 auto;display:none;box-sizing:border-box;padding:6px 14px calc(6px + env(safe-area-inset-bottom));background:#120e30;border-top:2px solid #3a2f80;touch-action:none;justify-content:space-between;align-items:center}
+#pad.on{display:flex;height:clamp(96px,26vh,168px)}
+.cross{position:relative;height:100%;aspect-ratio:1/1;max-width:44vw;touch-action:none;display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr 1fr;gap:4px}
+.cross b{display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:10px;font:bold 13px/1.05 system-ui,sans-serif;color:#fff;background:#4a3a9a;border:2px solid #9a8aff;border-bottom-width:4px;pointer-events:none;box-sizing:border-box;min-width:0;overflow:hidden}
+.cross b small{font-size:9px;font-weight:600;opacity:.75;margin-top:1px;letter-spacing:.5px}
+.cross b.on{filter:brightness(1.7);transform:translateY(2px)}
+.cross .u{grid-area:1/2}.cross .l{grid-area:2/1}.cross .r{grid-area:2/3}.cross .d{grid-area:3/2}
+.cross .hub{grid-area:2/2;border-radius:50%;background:#1c1646;border:2px solid #2b2470;margin:18%}
+.cross.act b{background:#18907a;border-color:#7affe0}.cross.act .l{background:#c2561a;border-color:#ffa070}.cross.act .r{background:#a02a7a;border-color:#ff8ad8}.cross.act .d{background:#3a4a9a;border-color:#8aa0ff}
 </style>
 <script>window.__errs=[];window.addEventListener("error",function(e){window.__errs.push(String(e.message)+" @"+e.filename+":"+e.lineno)});</script>
 </head>
 <body>
 <div id="stage"><canvas id="cv" tabindex="0"></canvas></div>
 <div id="pad">
-  <div class="grp"><button type="button" id="bL" data-k="left">&#9664;</button><button type="button" id="bR" data-k="right">&#9654;</button></div>
-  <div class="grp mid"><button type="button" id="bU" class="sm" data-k="up">&#9650;</button><button type="button" id="bD" class="sm" data-k="down">&#9660;</button><button type="button" id="bS" class="sm spin" data-k="spin">SPIN</button></div>
-  <div class="grp r"><button type="button" id="bRun" class="run" data-k="run">RUN</button><button type="button" id="bJ" class="jump" data-k="jump">JUMP</button></div>
+  <div class="cross mv" id="crossL"><b class="u" data-id="U">&#9650;<small>W</small></b><b class="l" data-id="L">&#9664;<small>A</small></b><i class="hub"></i><b class="r" data-id="R">&#9654;<small>D</small></b><b class="d" data-id="D">&#9660;<small>S</small></b></div>
+  <div class="cross act" id="crossR"><b class="u" data-id="J">JUMP<small>I</small></b><b class="l" data-id="RUN">RUN<small>J</small></b><i class="hub"></i><b class="r" data-id="SPIN">SPIN<small>L</small></b><b class="d" data-id="ACT">ACT<small>K</small></b></div>
 </div>
 <script src="sim.js"></script>
 <script src="gen.js"></script>

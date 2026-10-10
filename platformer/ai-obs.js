@@ -4,7 +4,7 @@
 'use strict';
 var TS = PF.TS, ROWS = PF.ROWS, SOL = PF.SOL, IN = PF.IN;
 var NC = 13, NR = 9, C0 = -3, R0 = -5, NE = 6, NP = 3, NI = 2, NK = 3;
-var D = 16 + NC * NR * 4 + NE * 13 + NP * 4 + NI * 3 + NK * 2 + 14 + 4;
+var D = 16 + NC * NR * 4 + NE * 15 + NP * 4 + NI * 3 + NK * 2 + 14 + 4;
 var GROUP = { 0: 0, 3: 0, 1: 1, 11: 1, 13: 1, 17: 1, 20: 1, 12: 1, 2: 2, 9: 2, 10: 2, 15: 2, 16: 2, 19: 2, 4: 3, 18: 3, 5: 4, 6: 5, 7: 6, 14: 6, 8: 7 };
 var STAGEK = { key: 0, door: 1, sw: 2, tele: 3, xge: 4, goal: 5 };
 function cl(v, m) { return v > m ? m : v < -m ? -m : v; }
@@ -29,10 +29,10 @@ function build(st, out) {
   for (k = 0; k < st.en.length; k++) { var e = st.en[k]; if (!e.alive || (e.t === 7 && e.hid)) continue; var dx = e.x + e.w / 2 - pcx, dy = e.y + e.h / 2 - pcy; if (Math.abs(dx) > 200 || Math.abs(dy) > 130) continue; cand.push([dx * dx + dy * dy, k]); }
   cand.sort(function (a, b) { return a[0] - b[0]; });
   for (i = 0; i < NE; i++) {
-    if (i >= cand.length) { for (j = 0; j < 13; j++) out[o++] = 0; continue; }
+    if (i >= cand.length) { for (j = 0; j < 15; j++) out[o++] = 0; continue; }
     var en = st.en[cand[i][1]], g = GROUP[en.t] || 0;
     out[o++] = cl((en.x + en.w / 2 - pcx) / 150, 1.2); out[o++] = cl((en.y + en.h / 2 - pcy) / 100, 1.2); out[o++] = en.w / 48; out[o++] = en.h / 48;
-    for (j = 0; j < 8; j++) out[o++] = j === g ? 1 : 0; out[o++] = en.t === 3 && en.sh ? (en.sh === 2 ? -1 : 0.5) : (en.dir || 0);
+    for (j = 0; j < 8; j++) out[o++] = j === g ? 1 : 0; out[o++] = en.t === 3 && en.sh ? (en.sh === 2 ? -1 : 0.5) : (en.dir || 0); out[o++] = cl((en.dvx || 0) / 2, 1.2); out[o++] = cl((en.dvy || 0) / 2, 1.2);
   }
   for (i = 0; i < NP; i++) { if (i < st.ep.length) { var pr = st.ep[i]; out[o++] = cl((pr.x - pcx) / 100, 1.2); out[o++] = cl((pr.y - pcy) / 100, 1.2); out[o++] = cl(pr.vx / 3, 1.2); out[o++] = cl(pr.vy / 3, 1.2); } else { out[o++] = 0; out[o++] = 0; out[o++] = 0; out[o++] = 0; } }
   var items = []; for (k = 0; k < st.it.length; k++) if (st.it[k].alive) items.push(k);
