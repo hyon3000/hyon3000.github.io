@@ -10,6 +10,9 @@ body{display:flex;flex-direction:column}
 #stage{flex:1 1 auto;min-height:0;position:relative;overflow:hidden}
 canvas{position:absolute;left:0;top:0;touch-action:none;outline:none;background:#0a0820}
 #pad{flex:0 0 auto;display:none;box-sizing:border-box;padding:6px 14px calc(6px + env(safe-area-inset-bottom));background:#120e30;border-top:2px solid #3a2f80;touch-action:none;justify-content:space-between;align-items:center}
+#padmid{display:flex;flex-direction:column;gap:5px;align-items:stretch;justify-content:center;flex:0 1 auto;min-width:0}
+#padmid b{display:block;text-align:center;font:bold 10px/1.1 system-ui,sans-serif;color:#fff;background:#2b2470;border:2px solid #6a5ab8;border-radius:8px;padding:4px 8px;cursor:pointer;touch-action:none;-webkit-user-select:none}
+#padmid b small{display:block;font-size:8px;opacity:.7;font-weight:600}
 #pad.on{display:flex;height:clamp(96px,26vh,168px)}
 .cross{position:relative;height:100%;aspect-ratio:1/1;max-width:44vw;touch-action:none;display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr 1fr;gap:4px}
 .cross b{display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:10px;font:bold calc(var(--cs,150px)/12) / 1.05 system-ui,sans-serif;color:#fff;background:#4a3a9a;border:2px solid #9a8aff;border-bottom-width:4px;pointer-events:none;box-sizing:border-box;min-width:0;overflow:hidden}
@@ -25,6 +28,7 @@ canvas{position:absolute;left:0;top:0;touch-action:none;outline:none;background:
 <div id="stage"><canvas id="cv" tabindex="0"></canvas></div>
 <div id="pad">
   <div class="cross mv" id="crossL"><b class="u" data-id="U">&#9650;<small>W</small></b><b class="l" data-id="L">&#9664;<small>A</small></b><i class="hub"></i><b class="r" data-id="R">&#9654;<small>D</small></b><b class="d" data-id="D">&#9660;<small>S</small></b></div>
+  <div id="padmid"><b id="bMap">MAP<small>&#9003;</small></b><b id="bSup">WORLD<small>N</small></b><b id="bSel">STAGE<small>T</small></b></div>
   <div class="cross act" id="crossR"><b class="u" data-id="J">JUMP<small>I</small></b><b class="l" data-id="RUN">RUN<small>J</small></b><i class="hub"></i><b class="r" data-id="SPIN">SPIN<small>L</small></b><b class="d" data-id="ACT">ACT<small>K</small></b></div>
 </div>
 <script src="sim.js"></script>

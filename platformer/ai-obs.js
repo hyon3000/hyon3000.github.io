@@ -100,16 +100,18 @@ function make() {
 }
 // RL policy + simulation shield: before a key mask is used, the game's own simulation looks 28 frames ahead with the policy driving; if the hero would die, the look-ahead planner takes the wheel for 14 frames.
 function makeShielded() {
-  var pol = make(), sim = make(), pl = PFPlanner.make(), S = { until: 0, hits: 0, f: 0 };
+  var pol = make(), sim = make(), pl = PFPlanner.make(), S = { until: 0, hits: 0, f: 0, cr: -1, stage: -1, prog: 0, stalls: 0, polF: 0, plF: 0 };
   function dies(st, m0) { var c = PF.clone(st); c.share = true; sim.reset(); var m = m0; for (var k = 0; k < 28; k++) { PF.step(c, m); if (c.p.dead) return true; if (c.p.won) return false; m = sim.decide(c); } return false; }
   return {
     ready: function () { return !!NET; }, stats: S,
-    reset: function () { pol.reset(); pl.reset(); S.until = 0; },
+    reset: function () { pol.reset(); pl.reset(); S.until = 0; S.cr = -1; S.stage = -1; S.prog = 0; },
     decide: function (st) {
-      if (S.until > st.f) return pl.decide(st);
+      if (st.cr > S.cr || st.stage > S.stage) { S.cr = st.cr; S.stage = st.stage; S.prog = st.f; }
+      if (S.until <= st.f && st.f - S.prog > 300) { S.until = st.f + 300; S.prog = st.f; S.stalls++; pl.reset(); }   // no progress for 5 s: the planner helps for a while
+      if (S.until > st.f) { S.plF++; return pl.decide(st); }
       var m = pol.decide(st);
-      if ((st.f & 1) === 0 && dies(st, m)) { S.until = st.f + 14; S.hits++; pl.reset(); return pl.decide(st); }
-      return m;
+      if ((st.f & 1) === 0 && dies(st, m)) { S.until = st.f + 14; S.hits++; pl.reset(); S.plF++; return pl.decide(st); }
+      S.polF++; return m;
     }
   };
 }

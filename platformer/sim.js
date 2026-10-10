@@ -313,7 +313,21 @@ function step(st, inp) {
     if (p.ground) { var tb = tileAt(st, Math.floor(cx0 / TS), Math.floor((p.y + p.h + 0.5) / TS)); if (tb === T.CONVL) carried = -0.7; else if (tb === T.CONVR) carried = 0.7; }
     // --- move x
     var nx = p.x + p.vx + carried;
-    if (boxHit(st, nx, p.y, p.w, p.h)) { if (p.vx + carried > 0) p.x = Math.floor((nx + p.w - 1e-4) / TS) * TS - p.w; else p.x = (Math.floor(nx / TS) + 1) * TS; if (carried === 0 || (p.vx + carried) * p.vx <= 0) p.vx = 0; else p.vx = 0; }
+    var stepY = null;
+    var onSl = false;
+    if (p.ground) { var bb0 = p.y + p.h; for (var xo = 0; xo < 2 && !onSl; xo++) { var co = Math.floor((xo ? p.x + p.w - 1 : p.x + 1) / TS), ro = Math.floor((bb0 - 0.01) / TS); for (var dro = 0; dro < 2; dro++) { var to = tileAt(st, co, ro + dro); if (to === T.SLR || to === T.SLL) onSl = true; } } }
+    if (p.ground && boxHit(st, nx, p.y, p.w, p.h)) {         // walking into the foot of a slope: lift the hero onto it instead of treating its fill as a wall
+      for (var lift = 1; lift <= TS && stepY === null; lift++) {
+        var ny0 = p.y - lift; if (boxHit(st, nx, ny0, p.w, p.h)) continue;
+        var bot0 = ny0 + p.h, sup = false, xs0 = [nx + 1, nx + p.w - 1];
+        for (var xq = 0; xq < 2 && !sup; xq++) { var cq = Math.floor(xs0[xq] / TS), rq = Math.floor((bot0 - 0.01) / TS);
+          for (var dq = 0; dq < 2 && !sup; dq++) { var tq = tileAt(st, cq, rq + dq); if (tq === T.SLR || tq === T.SLL) { var sq = slopeY(tq, cq, rq + dq, xs0[xq]); if (sq >= bot0 - 1.5 && sq <= bot0 + TS) sup = true; } } }
+        if (!sup && onSl && boxHit(st, nx, ny0 + 1, p.w, p.h)) sup = true;      // the top of a ramp: step onto the flat that continues it
+        if (sup) stepY = ny0; else break;                     // free above but nothing slanted to stand on: it is a real wall
+      }
+    }
+    if (stepY !== null) { p.x = nx; p.y = stepY; }
+    else if (boxHit(st, nx, p.y, p.w, p.h)) { if (p.vx + carried > 0) p.x = Math.floor((nx + p.w - 1e-4) / TS) * TS - p.w; else p.x = (Math.floor(nx / TS) + 1) * TS; if (carried === 0 || (p.vx + carried) * p.vx <= 0) p.vx = 0; else p.vx = 0; }
     else { p.x = nx; if (p.x < 0) { p.x = 0; p.vx = 0; } }
     // --- move y
     var ny = p.y + p.vy, wasGround = p.ground, prevB = p.y + p.h; p.ground = false; p.mv = -1;

@@ -215,13 +215,15 @@ window.testContain = function (seed0, count, n0, n1) {
 };
 
 // graph validation: every world map (branching via secret exits, castle / cannon endings) and the super map of worlds
-window.testGraphs = function (seed0, count) {
-  var res = { seeds: 0, superOk: 0, worldMaps: 0, worldOk: 0, fails: [], endsSeen: { castle: 0, cannon: 0 }, forks: 0, worlds: 0, branchHist: {}, bothEndings: 0, mainCannon: 0 };
+window.testGraphs = function (seed0, count, maxWid) {
+  var res = { seeds: 0, infiniteOk: 0, worldMaps: 0, worldOk: 0, fails: [], endsSeen: { castle: 0, cannon: 0 }, forks: 0, merges: 0, branchHist: {}, bothEndings: 0, mainCannon: 0, maxDepth: 0, kindsSeen: {}, bossrush: 0 };
   for (var s = seed0; s < seed0 + count; s++) {
-    var sm = PF.superMap(s), v = PF.validateSuper(sm); res.seeds++; res.worlds += sm.worlds.length; if (v.ok) res.superOk++; else res.fails.push(['super', s, v.why]); res.forks += v.forks;
-    sm.worlds.forEach(function (w) { var m = PF.worldMap(s, w.id, w.depth, w.mainEnd), wv = PF.validateWorldMap(m); res.worldMaps++; if (wv.ok) res.worldOk++; else res.fails.push(['world', s, w.id, wv.why]); res.branchHist[wv.branches] = (res.branchHist[wv.branches] || 0) + 1; if (wv.hasAlt) res.bothEndings++; if (w.mainEnd === 'cannon') res.mainCannon++; m.nodes.forEach(function (q) { if (q.ending) res.endsSeen[q.ending]++; }); });
+    var vi = PF.validateInfinite(s, Math.floor(maxWid / 3) - 1); res.seeds++; if (vi.ok) res.infiniteOk++; else res.fails.push(['infinite', s, vi.why]); res.forks += vi.forks; res.merges += vi.merges;
+    for (var wid = 0; wid <= maxWid; wid++) { if (!PF.worldExists(wid)) continue; var w = PF.worldInfo(s, wid), m = PF.worldMap(s, wid, w.depth, w.mainEnd), wv = PF.validateWorldMap(m); res.worldMaps++; res.maxDepth = Math.max(res.maxDepth, w.depth);
+      if (wv.ok) res.worldOk++; else res.fails.push(['world', s, wid, wv.why]); res.branchHist[wv.branches] = (res.branchHist[wv.branches] || 0) + 1; if (wv.hasAlt) res.bothEndings++; if (w.mainEnd === 'cannon') res.mainCannon++;
+      m.nodes.forEach(function (q) { if (q.ending) res.endsSeen[q.ending]++; res.kindsSeen[q.kind] = (res.kindsSeen[q.kind] || 0) + 1; if (q.kind === 'bossrush') res.bossrush++; }); }
   }
-  res.fails = res.fails.slice(0, 6); return res;
+  res.fails = res.fails.slice(0, 6); res.kindCount = Object.keys(res.kindsSeen).length; return res;
 };
 
 // regression: no hazard in the take-off zone of a gap, and every plain gap is within the measured jump limit
@@ -243,5 +245,16 @@ window.testSpikeGap = function (seed0, count, n0, n1, useGenerate) {
     if (bad) res.badLevels++;
   });
   return res;
+};
+
+// every level kind: generation, validation, replay, containment (all must hold)
+window.ALLKINDS = ['plain', 'hills', 'autumn', 'jungle', 'flood', 'ghost', 'sky', 'cave', 'snow', 'desert', 'swamp', 'storm', 'airship', 'crystal', 'volcano', 'ruins', 'factory', 'neon', 'tower', 'shaft', 'chase', 'gauntlet', 'maze', 'castle', 'bossrush', 'cannon', 'bonus'];
+window.testKinds = function (seed0, count, ns) {
+  var res = { kinds: {}, total: 0, valid: 0, replayOk: 0, contain: 0, maxMs: 0 };
+  ALLKINDS.forEach(function (k) { res.kinds[k] = { n: 0, ok: 0, ms: 0, rows: 0, att: 0 }; });
+  for (var s = seed0; s < seed0 + count; s++) ns.forEach(function (n) { ALLKINDS.forEach(function (k) {
+    var t0 = performance.now(), L = PF.generate(s, k === 'bonus' ? 1000 + n : n, { kind: k }), dt = performance.now() - t0, r = res.kinds[k]; r.n++; r.ms += dt; r.att += L.attempt; r.rows = L.rows || 14; res.total++; res.maxMs = Math.max(res.maxMs, dt);
+    if (L.valid) { r.ok++; res.valid++; if (PF.replay(L)) res.replayOk++; if (PF.checkContainment(L).bad === 0) res.contain++; } else if (!res.fails) res.fails = [k, s, n]; }); });
+  Object.keys(res.kinds).forEach(function (k) { res.kinds[k].ms = Math.round(res.kinds[k].ms / Math.max(1, res.kinds[k].n)); }); res.maxMs = Math.round(res.maxMs); return res;
 };
 </script>
