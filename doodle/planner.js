@@ -83,7 +83,7 @@ function clone(c) { return { picks: c.picks.slice(), vars: c.vars, extras: c.ext
 
 function* plan(lv, snap, running, opts) {
   opts = opts || {};
-  var t0 = now(), n = 0, maxRollouts = opts.maxRollouts || 160, maxMs = opts.maxMs || 60000, feats = lv.features;
+  var t0 = now(), n = 0, maxRollouts = opts.maxRollouts || 160, maxMs = opts.maxMs || 20000, feats = lv.features;
   var vars = feats.map(function (f) { return variants(f, lv); });
   var cons = { picks: feats.map(function () { return 0; }), vars: vars, extras: [], cut: snap.rope ? 0 : null };
   var rng = DP.mulberry32(DP.hash2(lv.seed, lv.L * 31 + snap.simT + snap.strokes.length));
@@ -92,7 +92,7 @@ function* plan(lv, snap, running, opts) {
   var cur, i, r, c2;
   if (snap.rope) {                           // choose the cut time first
     var bestT = 0, bestR = null;
-    for (var t = 0; t <= 150; t += 6) {
+    for (var t = 0; t <= 150 && now() - t0 <= maxMs; t += 6) {
       c2 = clone(cons); c2.cut = t; r = yield* ev(c2);
       if (r.ok) return done(c2, r);
       if (!bestR || r.score > bestR.score) { bestR = r; bestT = t; }
@@ -119,7 +119,7 @@ function* plan(lv, snap, running, opts) {
       if (best) break;
     }
     if (!best && cons.cut != null) {         // re-time the rope cut for the changed course
-      for (var t2 = 0; t2 <= 150; t2 += 6) { if (t2 === cons.cut) continue; c2 = clone(cons); c2.cut = t2; r = yield* ev(c2); if (r.ok) return done(c2, r); if (r.score > cur.score + 5 && (!best || r.score > best.r.score)) best = { c: c2, r: r }; }
+      for (var t2 = 0; t2 <= 150 && now() - t0 <= maxMs; t2 += 6) { if (t2 === cons.cut) continue; c2 = clone(cons); c2.cut = t2; r = yield* ev(c2); if (r.ok) return done(c2, r); if (r.score > cur.score + 5 && (!best || r.score > best.r.score)) best = { c: c2, r: r }; }
     }
     if (!best) {                              // random shooting near where the ball gave up
       for (var k = 0; k < 40 && n <= maxRollouts && now() - t0 <= maxMs; k++) {
