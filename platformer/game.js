@@ -134,7 +134,7 @@ function enterLevel(i) {
   var nodes = allNodes(), node = null; for (var k = 0; k < nodes.length; k++) if (nodes[k].i === i) node = nodes[k];
   if (!node || !isOpen(node) || G.mode === 'loading') return;
   G.curNode = node; G.mode = 'loading'; G.st = null; G.hint = null;
-  setTimeout(function () { G.L = PF.generate(G.seed, node.n); G.main = null; levelInit(false); var kn = PF.KIND_NAMES[G.L.kind]; say(PFR.levelLabel({ n: node.n }) + ' ' + (KO ? kn[0] : kn[1]), 150); G.msgIsLevel = true; }, 30);
+  setTimeout(function () { G.n = node.n; G.L = PF.generate(G.seed, node.n); G.main = null; levelInit(false); var kn = PF.KIND_NAMES[G.L.kind]; say(PFR.levelLabel({ n: node.n }) + ' ' + (KO ? kn[0] : kn[1]), 150); G.msgIsLevel = true; }, 30);
 }
 function totalCoins() { return G.coinBase + (G.st ? G.st.coins : 0); }
 function finishRun() { var s = G.base + (G.st ? G.st.score : 0); if (s > G.best) { G.best = s; saveBest(); } }

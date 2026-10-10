@@ -319,6 +319,13 @@ function genLevel(seed, Lreal, opts) {
   for (i = cands.length - 1; i > 0; i--) { var j = Math.floor(rnd() * (i + 1)); var tmp = cands[i]; cands[i] = cands[j]; cands[j] = tmp; }
   cands.sort(function (a, b) { return (b.mesa ? 1 : 0) - (a.mesa ? 1 : 0); });
   for (i = 0, j = 0; j < extra && i < cands.length; i++) { var okc = true; stars.forEach(function (st0) { if (Math.hypot(st0.x - cands[i].x, st0.y - cands[i].y) < 80) okc = false; }); if (okc && cands[i].x > xD + 20) { stars.push({ x: cands[i].x, y: cands[i].y }); j++; } }
+  // ----- high stars: floating well above the start height. Nothing rolls up there on its own - the player has to lift the ball (balance scale / lever / catapult, bounce, boost ...)
+  var nHigh = L >= 8 ? Math.min(3, 1 + Math.floor((Lreal - 5) / 5)) : 0;
+  for (var hi2 = 0, htry = 0; hi2 < nHigh && htry++ < 80;) {
+    var hx = r12(rr(xD + 80, xF - 40)), hy = Math.max(80, Y1 - rr(250, 470)), okH = !inSpecial(hx);
+    stars.forEach(function (st1) { if (Math.hypot(st1.x - hx, st1.y - hy) < 110) okH = false; });
+    if (okH) { stars.push({ x: hx, y: hy }); hi2++; }
+  }
   // ----- validation: every object must lie in free space (clearance = radius + 6 px) with respect to the static terrain, static props and killer zones
   var pointFree = function (x, y, rad, extra) {
     var m = rad + (extra == null ? 6 : extra), i, f;

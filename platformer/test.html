@@ -120,4 +120,17 @@ window.testMech = function () {
   L = mk(rowsWith({ 8: '   B                                              ' })); st = PF.newState(L); PF.setPw(st.p, 1); st.p.x = 3 * 16 + 2; st.p.y = 12 * 16 - 24; run(st, IN.J, 20); T('big hero breaks a brick from below', st.mod.size > 0);
   return out;
 };
+
+window.testBoss = function (v, seeds) {
+  var res = { v: v, won: 0, n: 0, fails: [] };
+  for (var s = 0; s < seeds; s++) {
+    var rows = []; for (var r = 0; r < 12; r++) rows.push(' '.repeat(90)); rows.push('#'.repeat(90)); rows.push('#'.repeat(90));
+    var L = mk(rows, [{ t: PF.E.BOSS, v: v, x: (50 + s * 3) * 16, y: 12 * 16 - 26, w: 28, h: 26, spd: 0, mn: 40 * 16, mx: 84 * 16, ax: 62 * 16, ay: 8 * 16 - 6, dir: -1 }], { goalX: 86 * 16, sx: 36 * 16 });
+    L.cp = { x: 99999, y: 0 }; L.poleY = 12 * 16;
+    var st = PF.newState(L), pl = PFPlanner.make(), f = 0;
+    while (f < 4000 && !st.p.won && !st.p.dead) { PF.step(st, pl.decide(st)); f++; }
+    res.n++; if (st.p.won) res.won++; else res.fails.push([s, f, st.p.dead ? st.p.why : 'timeout', st.en[0].hp]);
+  }
+  return res;
+};
 </script>

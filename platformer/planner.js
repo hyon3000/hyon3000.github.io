@@ -14,6 +14,8 @@ var CANDS = (function () {
   [20, 40].forEach(function (l) { [12, 22, 32].forEach(function (s) { [99, 12].forEach(function (h) { c.push({ a: RR, b: RR, s: s, h: h, l: l }); }); }); c.push({ a: RR, b: RR, s: 30, h: -1, l: l }); });
   return c;
 })();
+var BOSS_EXTRA = (function () { var c = []; [RR, R, N, Lf].forEach(function (d) { [1, 2, 4, 5, 7, 8, 9, 11, 12, 13, 14, 16, 18, 20, 24, 26].forEach(function (s) { [99, 12].forEach(function (h) { c.push({ a: d, b: d, s: s, h: h }); }); }); }); return c; })();
+function bossNear(st) { if (st.boss <= 0) return false; for (var i = 0; i < st.en.length; i++) { var e = st.en[i]; if (e.t === 8 && e.alive && Math.abs(e.x - st.p.x) < 260) return true; } return false; }
 function inputAt(c, k) { if (c.l) { if (k < c.l) return Lf; k -= c.l; } var m = k < c.s ? c.a : (c.t !== undefined && k >= c.s + c.t ? c.c : c.b); if (c.h > 0 && k >= c.s && k < c.s + c.h) m |= IN.J; return m; }
 
 function groundBelow(st) {
@@ -45,13 +47,13 @@ function makePlanner() {
   var pl = { script: null, i: 0, bestX: 0, bestF: 0, rnd: PF.rng(12345), explore: 0, last: null, stats: { plans: 0, ms: 0, sync: 0 }, pend: null, next: null };
   var now = function () { return typeof performance !== 'undefined' ? performance.now() : 0; };
   pl.reset = function () { pl.script = null; pl.i = 0; pl.bestX = 0; pl.bestF = 0; pl.explore = 0; pl.pend = null; pl.next = null; };
-  function newSearch(st, noise) { return { st: st, i: 0, best: null, bi: -1, noise: noise, rising: st.p.jheld && !st.p.ground && st.p.vy < 0 }; }
+  function newSearch(st, noise) { return { st: st, i: 0, best: null, bi: -1, noise: noise, rising: st.p.jheld && !st.p.ground && st.p.vy < 0, list: bossNear(st) ? CANDS.concat(BOSS_EXTRA) : CANDS }; }
   function work(ps, n) {
-    var end = Math.min(CANDS.length, ps.i + n);
-    for (; ps.i < end; ps.i++) { var c = CANDS[ps.i], r = evaluate(ps.st, c, null); if (ps.rising && c.s === 0 && c.h > 0 && !c.l) r.sc += 8; var sc = r.sc + (ps.noise ? pl.rnd() * ps.noise : 0); if (ps.best === null || sc > ps.best.sc) { ps.best = r; ps.best.sc = sc; ps.bi = ps.i; } }
-    if (ps.i >= CANDS.length) { ps.best.cand = CANDS[ps.bi]; return ps.best; } return null;
+    var end = Math.min(ps.list.length, ps.i + n);
+    for (; ps.i < end; ps.i++) { var c = ps.list[ps.i], r = evaluate(ps.st, c, null); if (ps.rising && c.s === 0 && c.h > 0 && !c.l) r.sc += 8; var sc = r.sc + (ps.noise ? pl.rnd() * ps.noise : 0); if (ps.best === null || sc > ps.best.sc) { ps.best = r; ps.best.sc = sc; ps.bi = ps.i; } }
+    if (ps.i >= ps.list.length) { ps.best.cand = ps.list[ps.bi]; return ps.best; } return null;
   }
-  pl.search = function (st, noise) { var ps = newSearch(st, noise); return work(ps, CANDS.length); };
+  pl.search = function (st, noise) { var ps = newSearch(st, noise); return work(ps, ps.list.length); };
   function makeScript(best) { var len = best.cand.l ? 12 : SL, sc = []; for (var k = 0; k < len; k++) sc.push(inputAt(best.cand, k)); return sc; }
   function predict(st, script) { st.share = true; var q = PF.clone(st); for (var k = 0; k < script.length; k++) PF.step(q, script[k]); return q; }
   function same(a, b) { return Math.abs(a.p.x - b.p.x) < 0.01 && Math.abs(a.p.y - b.p.y) < 0.01 && a.p.dead === b.p.dead && Math.abs(a.p.vx - b.p.vx) < 0.01 && Math.abs(a.p.vy - b.p.vy) < 0.01; }
@@ -60,13 +62,13 @@ function makePlanner() {
     if (p.x > pl.bestX + 4) { pl.bestX = p.x; pl.bestF = st.f; }
     if (!pl.script || pl.i >= pl.script.length) {
       var best = null;
-      if (pl.next && pl.next.pred && same(pl.next.pred, st)) { var ps = pl.next.ps; best = ps.done || work(ps, CANDS.length); }
+      if (pl.next && pl.next.pred && same(pl.next.pred, st)) { var ps = pl.next.ps; best = ps.done || work(ps, ps.list.length); }
       else { if (st.f - pl.bestF > 300) { pl.explore = 40; pl.bestF = st.f - 100; } best = pl.search(st, pl.explore > 0 ? 25 : 0); if (pl.explore > 0) pl.explore -= SL; pl.stats.sync++; }
       pl.next = null; pl.stats.plans++;
       pl.last = best; pl.script = makeScript(best); pl.i = 0;
       var pred = predict(st, pl.script); pl.next = { pred: pred, ps: newSearch(pred, pl.explore > 0 ? 25 : 0) };
     }
-    if (pl.next && !pl.next.ps.done) { var per = Math.ceil(CANDS.length / (pl.script.length - 1)); var r = work(pl.next.ps, per); if (r) pl.next.ps.done = r; }
+    if (pl.next && !pl.next.ps.done) { var per = Math.ceil(pl.next.ps.list.length / (pl.script.length - 1)); var r = work(pl.next.ps, per); if (r) pl.next.ps.done = r; }
     pl.stats.ms += now() - t0;
     return pl.script[pl.i++];
   };
