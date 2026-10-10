@@ -232,7 +232,7 @@ function selectPick(si) {
   closeSelect(); G.mode = 'map'; if (w.id !== G.wid) setWorld(w.id); G.sel = nd.i; G.main = null; enterLevel(nd.i, true);
 }
 function levelInit(cp) {
-  var node = G.curNode; G.st = PF.newState(G.L, { rec: true, cp: !!cp }); aiReset(); setAuto(0); G.parts = []; G.pops = []; G.bumps = []; G.hint = null; G.cam = Math.max(0, Math.min(G.L.w * TS - VW, G.st.p.x - VW * 0.4)); G.mode = 'play'; G.secretExit = false;
+  var node = G.curNode; G.st = PF.newState(G.L, { rec: true, cp: !!cp }); aiReset(); setAuto(0); G.parts = []; G.pops = []; G.bumps = []; G.hint = null; G.cam = Math.max(0, Math.min(G.L.w * TS - VW, G.st.p.x - VW * 0.4)); G.camY = Math.max(0, Math.min((G.L.rows || PF.ROWS) * TS - VH, G.st.p.y - VH * 0.55)); G.mode = 'play'; G.secretExit = false;
 }
 function enterLevel(i, force) {
   var node = nodeById(i); if (!node || G.mode === 'loading') return; if (!force && !isOpen(node)) return;
@@ -359,7 +359,7 @@ function fixedStep() {
       saveProg();
     }
   }
-  if (G.st) { var p2 = G.st.p, tx = Math.max(0, Math.min(G.L.w * TS - VW, p2.x + 6 - VW * 0.42 + p2.vx * 14)); G.cam += (tx - G.cam) * 0.12; }
+  if (G.st) { var p2 = G.st.p, tx = Math.max(0, Math.min(G.L.w * TS - VW, p2.x + 6 - VW * 0.42 + p2.vx * 14)); G.cam += (tx - G.cam) * 0.12; var RW = G.L.rows || PF.ROWS, ty = Math.max(0, Math.min(RW * TS - VH, p2.y + p2.h / 2 - VH * 0.55 + p2.vy * 6)); G.camY = (G.camY === undefined || RW === PF.ROWS) ? ty : G.camY + (ty - G.camY) * 0.14; }
 }
 
 var last = 0, acc = 0;

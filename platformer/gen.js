@@ -553,7 +553,7 @@ function buildMaze(seed, n, a) {
 // ------------------------------------------------------------------ containment check: every water / lava cell needs a solid-or-liquid floor and solid-or-liquid neighbours left and right
 function wetTile(t) { return t === T.WATER || (t >= 22 && t <= 24) || t === T.WLEVEL || t === T.LAVA; }
 function checkContainment(L) {
-  var bad = [], w = L.w, R = ROWS, tiles = L.tiles, solid = PF.SOL;
+  var bad = [], w = L.w, R = L.rows || ROWS, tiles = L.tiles, solid = PF.SOL;
   function at(c, r) { if (c < 0 || c >= w) return 1; if (r < 0) return 0; if (r >= R) return 1; return tiles[c * R + r]; }
   function ok(t) { return solid[t] === 1 || wetTile(t) || t === T.SPIKE; }   // a spike stands on the floor inside the basin
   for (var c = 0; c < w; c++) for (var r = 0; r < R; r++) { var t = tiles[c * R + r]; if (!wetTile(t)) continue;

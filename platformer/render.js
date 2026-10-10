@@ -88,10 +88,10 @@ function drawTile(t, x, y, th, above, bumpDy, c, r, st) {
     case T.BRIDGE: rect(x, y, TS, 5, '#2ee6d6'); rect(x, y, TS, 1.5, '#e8fffa'); for (var q2 = 0; q2 < 2; q2++) line(x + 4 + q2 * 8, y + 1.5, x + 4 + q2 * 8, y + 5, 'rgba(10,106,112,.7)'); break;
     case T.SWITCH: { var pu = 0.7 + 0.3 * Math.sin(F * 0.15); ctx.globalAlpha = 0.3 * pu; hex(x + 8, y + 12, 9, '#ffe08a', 0); ctx.globalAlpha = 1; poly([x + 1, y + 16, x + 15, y + 16, x + 13, y + 11, x + 3, y + 11], '#4a3f86'); poly([x + 3, y + 11, x + 13, y + 11, x + 11, y + 8, x + 5, y + 8], '#ffb02a'); rect(x + 5, y + 8, 6, 1.5, '#fff0b0'); break; }
     case T.SWUSED: poly([x + 1, y + 16, x + 15, y + 16, x + 13, y + 13, x + 3, y + 13], '#3a2f66'); rect(x + 4, y + 12, 8, 1.5, '#7a6ab0'); break;
-    case T.DOOR: { var dc = st && st.L.grp ? st.L.grp[c * ROWS + r] : 0, kc = KEYCOL[dc % 3]; rect(x, y, TS, TS, '#2a2450'); rect(x + 2, y + 1, TS - 4, TS - 2, kc); rect(x + 3, y + 2, TS - 6, TS - 4, 'rgba(0,0,0,.25)'); if (st && st.L.grp && st.L.tiles[c * ROWS + r - 1] !== T.DOOR) { circ(x + 8, y + 9, 2.4, '#1a1a40'); rect(x + 7.2, y + 9, 1.6, 4, '#1a1a40'); } break; }
+    case T.DOOR: { var dc = st && st.L.grp ? st.L.grp[c * (st.L.rows || ROWS) + r] : 0, kc = KEYCOL[dc % 3]; rect(x, y, TS, TS, '#2a2450'); rect(x + 2, y + 1, TS - 4, TS - 2, kc); rect(x + 3, y + 2, TS - 6, TS - 4, 'rgba(0,0,0,.25)'); if (st && st.L.grp && st.L.tiles[c * (st.L.rows || ROWS) + r - 1] !== T.DOOR) { circ(x + 8, y + 9, 2.4, '#1a1a40'); rect(x + 7.2, y + 9, 1.6, 4, '#1a1a40'); } break; }
     case T.TELE: drawTele(x, y, teleColor(st.L, c), true); break;
     case T.LAUNCH: { ctx.save(); ctx.translate(x + 8, y + 9); ctx.rotate(-0.9); rrect(-9, -6, 18, 12, 4, '#4a3f86'); rect(-9, -6, 5, 12, '#2a2450'); rect(5, -5, 4, 10, '#ff8a3a'); ctx.restore(); circ(x + 8, y + 12, 3, '#ffe08a'); poly([x + 12, y + 4, x + 16, y + 1, x + 14, y + 7], '#ff8a3a'); break; }
-    case T.RING: { if (r !== undefined && st && st.L.tiles[c * ROWS + r - 1] === T.RING) break; var gl = 0.6 + 0.4 * Math.sin(F * 0.12); ctx.globalAlpha = 0.28 * gl; ell(x + 8, y + 16, 11, 17, '#7affe0'); ctx.globalAlpha = 1; ctx.strokeStyle = '#d8fff6'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x + 8, y + 16, 7.5, 14, 0, 0, 6.2832); ctx.stroke(); ctx.strokeStyle = '#2ee6d6'; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(x + 8, y + 16, 4.5 + gl, 10 + gl, 0, 0, 6.2832); ctx.stroke(); spark4(x + 8, y + 16, 3.5, '#fff'); break; }
+    case T.RING: { if (r !== undefined && st && st.L.tiles[c * (st.L.rows || ROWS) + r - 1] === T.RING) break; var gl = 0.6 + 0.4 * Math.sin(F * 0.12); ctx.globalAlpha = 0.28 * gl; ell(x + 8, y + 16, 11, 17, '#7affe0'); ctx.globalAlpha = 1; ctx.strokeStyle = '#d8fff6'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x + 8, y + 16, 7.5, 14, 0, 0, 6.2832); ctx.stroke(); ctx.strokeStyle = '#2ee6d6'; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(x + 8, y + 16, 4.5 + gl, 10 + gl, 0, 0, 6.2832); ctx.stroke(); spark4(x + 8, y + 16, 3.5, '#fff'); break; }
   }
 }
 function hh(a, b) { return PF.hash(a, b, 7) % 1000; }
@@ -228,9 +228,10 @@ function drawGoal(L, st, locked) {   // beacon gate: two tapered obelisks and an
 }
 function drawLevel(st, th) {
   var L = st.L, cam = G.cam, c0 = Math.max(0, Math.floor(cam / TS)), c1 = Math.min(L.w - 1, Math.floor((cam + VW) / TS) + 1), c, r, i;
-  ctx.save(); ctx.translate(-Math.round(cam), 0);
-  for (c = c0; c <= c1; c++) for (r = 0; r < ROWS; r++) {
-    var t = PF.tileAt(st, c, r), raw = st.mod.size ? (st.mod.get(c * ROWS + r) !== undefined ? st.mod.get(c * ROWS + r) : L.tiles[c * ROWS + r]) : L.tiles[c * ROWS + r];
+  ctx.save(); ctx.translate(-Math.round(cam), -Math.round(G.camY || 0));
+  var RW = L.rows || ROWS, r0 = Math.max(0, Math.floor((G.camY || 0) / TS)), r1 = Math.min(RW - 1, r0 + 16);
+  for (c = c0; c <= c1; c++) for (r = r0; r <= r1; r++) {
+    var t = PF.tileAt(st, c, r), raw = st.mod.size ? (st.mod.get(c * RW + r) !== undefined ? st.mod.get(c * RW + r) : L.tiles[c * RW + r]) : L.tiles[c * RW + r];
     if (!t && raw === T.BRICK) t = T.BRICK;
     if (!t && (raw === T.GATE || raw === T.BRIDGE || raw === T.WLEVEL)) { ctx.globalAlpha = 0.28; ctx.strokeStyle = raw === T.WLEVEL ? '#7ad0ff' : '#c8b8ff'; ctx.setLineDash([2, 3]); ctx.lineWidth = 1; ctx.strokeRect(c * TS + 1.5, r * TS + 1.5, TS - 3, TS - 3); ctx.setLineDash([]); ctx.globalAlpha = 1; continue; }
     if (!t || PF.isW(t)) continue; var bd = 0;
@@ -259,7 +260,7 @@ function drawLevel(st, th) {
   var p = st.p;
   if (G.mode === 'dying') drawHero({ x: p.x, y: G.dy, w: p.w, h: p.h, big: false, pw: 0, face: p.face, ground: false, anim: 0, vx: 0, inv: 0, star: 0, spin: 0 }, true, G.dieT * 0.25, false);
   else drawHero(p, false, 0, !!p.mount);
-  for (c = c0; c <= c1; c++) for (r = 0; r < ROWS; r++) { var wt = PF.tileAt(st, c, r); if (wt === T.SPIKE && (PF.isW(PF.tileAt(st, c - 1, r)) || PF.isW(PF.tileAt(st, c + 1, r)) || PF.isW(PF.tileAt(st, c, r - 1)))) wt = T.WATER; if (PF.isW(wt)) drawWaterOverlay(c * TS, r * TS, r > 0 ? PF.tileAt(st, c, r - 1) : 0, wt, c, r); }
+  for (c = c0; c <= c1; c++) for (r = r0; r <= r1; r++) { var wt = PF.tileAt(st, c, r); if (wt === T.SPIKE && (PF.isW(PF.tileAt(st, c - 1, r)) || PF.isW(PF.tileAt(st, c + 1, r)) || PF.isW(PF.tileAt(st, c, r - 1)))) wt = T.WATER; if (PF.isW(wt)) drawWaterOverlay(c * TS, r * TS, r > 0 ? PF.tileAt(st, c, r - 1) : 0, wt, c, r); }
   for (i = 0; i < G.parts.length; i++) { var q = G.parts[i]; rect(q.x - q.s / 2, q.y - q.s / 2, q.s, q.s, q.col); }
   for (i = 0; i < G.pops.length; i++) { var pp = G.pops[i]; text(pp.t, pp.x, pp.y, 8, pp.c, 'center'); }
   ctx.restore();

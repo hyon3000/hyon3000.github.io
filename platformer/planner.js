@@ -21,7 +21,7 @@ function inputAt(c, k) { if (c.l) { if (k < c.l) return Lf; k -= c.l; } var m = 
 
 function groundBelow(st) {
   var p = st.p, c0 = Math.floor(p.x / PF.TS), c1 = Math.floor((p.x + p.w - 1e-4) / PF.TS), r0 = Math.floor((p.y + p.h) / PF.TS);
-  for (var c = c0; c <= c1; c++) for (var r = r0; r < PF.ROWS; r++) { var t = PF.tileAt(st, c, r); if (PF.SOL[t] || t === 12 || t === 13 || t === 9 || t === 7) return true; }
+  for (var c = c0; c <= c1; c++) for (var r = r0; r < (st.L.rows || PF.ROWS); r++) { var t = PF.tileAt(st, c, r); if (PF.SOL[t] || t === 12 || t === 13 || t === 9 || t === 7) return true; }
   var L = st.L; for (var i = 0; i < L.movers.length; i++) { var m = L.movers[i], mq = PF.movPos(st, i, st.f); if (p.x + p.w > mq.x - 20 && p.x < mq.x + m.w + 20 && p.y + p.h <= mq.y + 30) return true; }
   return false;
 }
@@ -88,7 +88,7 @@ function nearestHazard(st) {
     d = c * TS + 8 - px;
     var t = PF.tileAt(st, c, r);
     if (t === PF.T.SPIKE) { cons('spike', c * TS + 8, r * TS + 8, d); break; }
-    var fl = false; for (var rr = r + 1; rr < PF.ROWS; rr++) { var tt = PF.tileAt(st, c, rr); if (PF.SOL[tt] || tt === 14) { fl = true; break; } }
+    var fl = false; for (var rr = r + 1; rr < (L.rows || PF.ROWS); rr++) { var tt = PF.tileAt(st, c, rr); if (PF.SOL[tt] || tt === 14) { fl = true; break; } }
     if (!fl) { var onm = false; for (var m = 0; m < L.movers.length; m++) { var mm = L.movers[m]; if (Math.abs(mm.cx - (c * TS + 8)) < mm.amp + 40 && Math.abs(mm.y - (p.y + p.h)) < 60) onm = true; } cons(onm ? 'mover' : 'pit', c * TS + 8, (r + 1) * TS, d); break; }
     var th = PF.tileAt(st, c, r); if (c > c0 && PF.SOL[th]) { cons('wall', c * TS + 8, r * TS + 8, d); break; }
   }

@@ -9,13 +9,13 @@ var GROUP = { 0: 0, 3: 0, 1: 1, 11: 1, 13: 1, 17: 1, 20: 1, 12: 1, 2: 2, 9: 2, 1
 var STAGEK = { key: 0, door: 1, sw: 2, tele: 3, xge: 4, goal: 5 };
 function cl(v, m) { return v > m ? m : v < -m ? -m : v; }
 function build(st, out) {
-  var p = st.p, L = st.L, i, j, k, o = 0, pcx = p.x + p.w / 2, pcy = p.y + p.h / 2, w = st.L.w;
+  var p = st.p, L = st.L, RR = L.rows || ROWS, i, j, k, o = 0, pcx = p.x + p.w / 2, pcy = p.y + p.h / 2, w = st.L.w;
   var cell = PF.tileAt(st, Math.floor(pcx / TS), Math.floor(pcy / TS));
   out[o++] = cl(p.vx / 3, 1.2); out[o++] = cl(p.vy / 8, 1.2); out[o++] = p.ground ? 1 : 0; out[o++] = p.coy > 0 ? 1 : 0; out[o++] = p.jheld ? 1 : 0; out[o++] = p.pw / 3;
   out[o++] = PF.isW(cell) ? 1 : 0; out[o++] = p.air / PF.AIRMAX; out[o++] = p.star > 0 ? 1 : 0; out[o++] = p.mount ? 1 : 0; out[o++] = p.climb ? 1 : 0; out[o++] = p.face; out[o++] = p.pm / PF.P.PMAX; out[o++] = p.inv > 0 ? 1 : 0; out[o++] = p.tcd > 0 ? 1 : 0; out[o++] = p.y / 224;
   var hc = Math.floor(pcx / TS), hr = Math.floor(pcy / TS), base = o;
   for (i = 0; i < NC; i++) for (j = 0; j < NR; j++) {
-    var c = hc + C0 + i, r = hr + R0 + j, eff = PF.tileAt(st, c, r), raw = (c >= 0 && c < w && r >= 0 && r < ROWS) ? L.tiles[c * ROWS + r] : (c < 0 || c >= w ? 1 : 0);
+    var c = hc + C0 + i, r = hr + R0 + j, eff = PF.tileAt(st, c, r), raw = (c >= 0 && c < w && r >= 0 && r < RR) ? L.tiles[c * RR + r] : (c < 0 || c >= w ? 1 : 0);
     var solid = (c < 0 || c >= w) ? 1 : (SOL[eff] ? 1 : 0), haz = (eff === 6 || eff === 14) ? 1 : 0, fl = 0, ms = 0;
     if (eff === 9) fl = 0.5; else if (eff === 22) fl = -1; else if (eff === 23) fl = 1; else if (eff === 24) fl = 0.8; else if (raw === 29 && eff === 0) fl = 0.15;
     switch (eff) { case 12: ms = 0.5; break; case 13: ms = -0.5; break; case 7: ms = 0.9; break; case 8: ms = 0.8; break; case 10: ms = -0.35; break; case 11: ms = 0.35; break; case 27: ms = 0.7; break; case 28: ms = 0.2; break; case 31: ms = 0.6; break; case 32: ms = 0.65; break; case 19: ms = 0.55; break; case 30: ms = 0.4; break; case 25: ms = 0.45; break; case 26: ms = 0.3; break; case 3: case 4: case 20: case 21: ms = 0.25; break; case 2: ms = 0.15; break; case 18: ms = 0.3; break; }

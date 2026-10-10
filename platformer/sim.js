@@ -3,9 +3,10 @@
 (function (root) {
 'use strict';
 var TS = 16, ROWS = 14, VW = 400, VH = 224;
-var T = { AIR: 0, SOLID: 1, BRICK: 2, QC: 3, QP: 4, USED: 5, SPIKE: 6, VINE: 7, SPRING: 8, WATER: 9, CONVL: 10, CONVR: 11, SLR: 12, SLL: 13, LAVA: 14, CANL: 15, CANR: 16, STUMP: 17, PSW: 18, RING: 19, QS: 20, QM: 21, CURL: 22, CURR: 23, CURU: 24, GATE: 25, BRIDGE: 26, SWITCH: 27, SWUSED: 28, WLEVEL: 29, DOOR: 30, TELE: 31, LAUNCH: 32 };
-var SOL = [0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0];
+var T = { AIR: 0, SOLID: 1, BRICK: 2, QC: 3, QP: 4, USED: 5, SPIKE: 6, VINE: 7, SPRING: 8, WATER: 9, CONVL: 10, CONVR: 11, SLR: 12, SLL: 13, LAVA: 14, CANL: 15, CANR: 16, STUMP: 17, PSW: 18, RING: 19, QS: 20, QM: 21, CURL: 22, CURR: 23, CURU: 24, GATE: 25, BRIDGE: 26, SWITCH: 27, SWUSED: 28, WLEVEL: 29, DOOR: 30, TELE: 31, LAUNCH: 32, ICE: 33, MUD: 34, FIRE: 35 };
+var SOL = [0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0];
 function isW(t) { return t === 9 || (t >= 22 && t <= 24); }
+function fireOn(f, c) { return ((f + c * 17) % 130) < 55; }   // timed fire jet / laser at column c
 var IN = { L: 1, R: 2, J: 4, RUN: 8, DN: 16, UP: 32, SPIN: 64 };
 var P = { WALK: 1.4, RUN: 2.2, PRUN: 2.75, PMAX: 64, ACCG: 0.12, ACCA: 0.07, FRIC: 0.14, JUMP: -6.3, JRUN: 0.5, GUP: 0.28, GCUT: 0.7, GDN: 0.55, MAXFALL: 7.5,
           COY: 5, JBUF: 6, PW: 12, SH: 14, BH: 24, INV: 100, ACTIVE: 340, STAR: 600 };
@@ -63,14 +64,14 @@ function setPw(p, v) { var nh = v > 0 ? P.BH : P.SH; p.y += p.h - nh; p.h = nh; 
 function tileRaw(st, c, r) {
   var L = st.L;
   if (c < 0 || c >= L.w) return T.SOLID;
-  if (r < 0 || r >= ROWS) return T.AIR;
-  var i = c * ROWS + r;
+  var R = L.rows || ROWS; if (r < 0 || r >= R) return T.AIR;
+  var i = c * R + r;
   if (st.mod.size) { var m = st.mod.get(i); if (m !== undefined) return m; }
   return L.tiles[i];
 }
 function tileAt(st, c, r) {
   var t = tileRaw(st, c, r); if (t === T.BRICK && st.sw > 0) return T.AIR;
-  if (t >= 25 && t <= 29) { var g = st.L.grp ? st.L.grp[c * ROWS + r] : 0, on = (st.sb >> g) & 1; if (t === T.GATE) return on ? 0 : T.GATE; if (t === T.BRIDGE) return on ? T.BRIDGE : 0; if (t === T.WLEVEL) return on ? T.WATER : 0; }
+  if (t >= 25 && t <= 29) { var g = st.L.grp ? st.L.grp[c * (st.L.rows || ROWS) + r] : 0, on = (st.sb >> g) & 1; if (t === T.GATE) return on ? 0 : T.GATE; if (t === T.BRIDGE) return on ? T.BRIDGE : 0; if (t === T.WLEVEL) return on ? T.WATER : 0; }
   return t;
 }
 function boxHit(st, x, y, w, h) {
@@ -78,7 +79,7 @@ function boxHit(st, x, y, w, h) {
   for (var c = c0; c <= c1; c++) for (var r = r0; r <= r1; r++) if (SOL[tileAt(st, c, r)]) return true;
   return false;
 }
-function setTile(st, c, r, t) { if (st.mod === EMPTY) st.mod = new Map(); st.mod.set(c * ROWS + r, t); }
+function setTile(st, c, r, t) { if (st.mod === EMPTY) st.mod = new Map(); st.mod.set(c * (st.L.rows || ROWS) + r, t); }
 function isSolidTile(t) { return SOL[t] === 1; }
 function slopeY(t, c, r, x) { return t === T.SLR ? (r + 1) * TS - (x - c * TS) : r * TS + (x - c * TS); }
 
@@ -165,13 +166,13 @@ function updEnemy(st, e, f) {
         e.vx = e.dir * 3.4; if (e.kg > 0) e.kg--;
         hw = moveEnt(st, e); if (hw) e.dir = -e.dir;
         for (i = 0; i < st.en.length; i++) { var o = st.en[i]; if (o !== e && o.alive && o.t !== E.BOSS && o.t !== E.CRUSH && overlap(e, o) && !(o.t === 3 && o.sh === 1 && false)) { killEnemy(st, o, 200); } }
-        if (e.y > ROWS * TS + 40) e.alive = false; return;
+        if (e.y > (st.L.rows || ROWS) * TS + 40) e.alive = false; return;
       }
       e.vx = e.dir * e.spd; hw = moveEnt(st, e);
       if (hw) e.dir = -e.dir;
       else if (e.ground) { var ax = e.vx > 0 ? e.x + e.w + 1 : e.x - 1, c = Math.floor(ax / TS), rr = Math.floor((e.y + e.h + 2) / TS), tt = tileAt(st, c, rr); if (!SOL[tt] && tt !== T.SLR && tt !== T.SLL) e.dir = -e.dir; }
       if (e.x < e.mn) { e.x = e.mn; e.dir = 1; } else if (e.x + e.w > e.mx) { e.x = e.mx - e.w; e.dir = -1; }
-      if (e.y > ROWS * TS + 40) e.alive = false; return;
+      if (e.y > (st.L.rows || ROWS) * TS + 40) e.alive = false; return;
     case 4:   // bullet
       e.x += e.vx; if (++e.tm > 420 || boxHit(st, e.x, e.y, e.w, e.h)) { e.alive = false; e.dt = 8; } return;
     case 5: { // crusher
@@ -276,15 +277,17 @@ function step(st, inp) {
   var carried = 0;
   if (!p.climb) {
     // --- run / P-meter
-    var maxv = run ? P.RUN : P.WALK;
+    var maxv = run ? P.RUN : P.WALK, onIce = false, inMud = false;
+    if (L.hasIce && p.ground) { onIce = tileAt(st, Math.floor(cx0 / TS), Math.floor((p.y + p.h + 0.5) / TS)) === T.ICE; }
+    if (L.hasMud) { inMud = tileAt(st, Math.floor(cx0 / TS), Math.floor((p.y + p.h * 0.6) / TS)) === T.MUD; if (inMud) maxv *= 0.5; }
     if (p.ground && run && dir && dir * p.vx > 0 && Math.abs(p.vx) >= P.RUN - 0.06) { if (p.pm < P.PMAX) p.pm++; } else if (p.ground) p.pm = Math.max(0, p.pm - 2); else if (!run) p.pm = Math.max(0, p.pm - 0.5);
     var pfull = p.pm >= P.PMAX && run && !st.noPM; if (pfull) maxv = P.PRUN;
     if (inW) maxv *= 0.65;
     if (dir) {
-      var tv = dir * maxv, acc = p.ground ? P.ACCG : P.ACCA; if (p.ground && dir * p.vx < 0) acc *= 2;
+      var tv = dir * maxv, acc = p.ground ? (onIce ? P.ACCG * 0.3 : P.ACCG) : P.ACCA; if (p.ground && dir * p.vx < 0) acc *= (onIce ? 1 : 2);
       if (p.vx < tv) p.vx = Math.min(tv, p.vx + acc); else if (p.vx > tv) p.vx = Math.max(tv, p.vx - (p.ground ? P.FRIC : 0.015));
       p.face = dir;
-    } else if (p.ground) { if (p.vx > 0) p.vx = Math.max(0, p.vx - P.FRIC); else p.vx = Math.min(0, p.vx + P.FRIC); }
+    } else if (p.ground) { var fr2 = onIce ? P.FRIC * 0.12 : P.FRIC; if (p.vx > 0) p.vx = Math.max(0, p.vx - fr2); else p.vx = Math.min(0, p.vx + fr2); }
     // --- jump / swim
     if (p.ground) p.coy = P.COY; else if (p.coy > 0) p.coy--;
     if (jEdge) p.jbuf = P.JBUF; else if (p.jbuf > 0) p.jbuf--;
@@ -299,7 +302,7 @@ function step(st, inp) {
         p.jbuf = 0; p.coy = 0; p.ground = false; p.mv = -1; ev(st, spinIn ? 'spin' : 'jump', p.x, p.y + p.h);
       }
       var g = p.vy < 0 ? ((jump || p.tcd > 18) ? P.GUP : P.GCUT) : P.GDN;
-      p.vy = Math.min(P.MAXFALL, p.vy + g);
+      p.vy = Math.min(inMud ? 1.6 : P.MAXFALL, p.vy + g);
       if (p.pw === 3 && !p.ground && p.vy > 1.0 && jump) { p.vy = 1.0; p.glide = true; } else p.glide = false;
     }
     if (p.spin > 0) p.spin--;
@@ -349,7 +352,7 @@ function step(st, inp) {
   for (i = st.fb.length - 1; i >= 0; i--) { var b = st.fb[i]; b.vy += 0.32; b.x += b.vx;
     if (boxHit(st, b.x - 3, b.y - 3, 6, 6)) { st.fb.splice(i, 1); continue; }
     b.y += b.vy; if (boxHit(st, b.x - 3, b.y - 3, 6, 6)) { b.y -= b.vy; b.vy = -3.2; }
-    if (--b.life <= 0 || Math.abs(b.x - p.x) > 300 || b.y > ROWS * TS + 10) { st.fb.splice(i, 1); continue; }
+    if (--b.life <= 0 || Math.abs(b.x - p.x) > 300 || b.y > (L.rows || ROWS) * TS + 10) { st.fb.splice(i, 1); continue; }
     for (var j = 0; j < st.en.length; j++) { var o = st.en[j]; if (!o.alive || (o.t === 7 && o.hid)) continue;
       if (b.x > o.x - 3 && b.x < o.x + o.w + 3 && b.y > o.y - 3 && b.y < o.y + o.h + 3) { if (o.t === 8) hitBoss(st, o, 1); else if (o.t !== 5) killEnemy(st, o, 100); st.fb.splice(i, 1); ev(st, 'fireburst', b.x, b.y); break; } } }
   // --- cannons
@@ -365,7 +368,7 @@ function step(st, inp) {
     if (e.k === 0 || e.k === 4 || e.k === 5) { if (moveEnt(st, e)) e.vx = -e.vx; }
     else if (e.k === 3) { if (moveEnt(st, e)) e.vx = -e.vx; if (e.ground) e.vy = -4.6; }
     else { e.vy = Math.min(1, (e.vy || 0) + 0.05); if (!boxHit(st, e.x, e.y + e.vy, e.w, e.h)) e.y += e.vy; }
-    if (e.y > ROWS * TS + 40) { e.alive = false; continue; }
+    if (e.y > (L.rows || ROWS) * TS + 40) { e.alive = false; continue; }
     if (overlap(p, e)) {
       e.alive = false;
       if (e.k === 0) { if (p.pw === 0 && !boxHit(st, p.x, p.y - (P.BH - P.SH), p.w, P.BH)) { setPw(p, 1); st.score += 200; ev(st, 'grow', p.x, p.y); } else { st.score += 300; ev(st, 'pow2', p.x, p.y); } }
@@ -425,16 +428,22 @@ function step(st, inp) {
     for (var c2 = c0; c2 <= c1; c2++) for (var r2 = r0b; r2 <= r1b; r2++) { var t3 = tileAt(st, c2, r2);
       if (t3 === T.SPIKE && p.y + p.h > r2 * TS + 8) { hurt(st, 'spike'); if (!p.dead) p.vy = -5; }
       else if (t3 === T.LAVA && p.y + p.h > r2 * TS + 5) dieNow(st, 'lava'); } }
+  // --- fire jets / lasers: timed hazards standing on the floor
+  if (!p.dead && L.hasFire) { var fc0 = Math.floor((p.x + 2) / TS), fc1 = Math.floor((p.x + p.w - 2) / TS), fr0 = Math.floor((p.y + 2) / TS), fr1 = Math.floor((p.y + p.h - 2) / TS);
+    for (var fc = fc0; fc <= fc1; fc++) for (var fr = fr0; fr <= fr1; fr++) if (tileRaw(st, fc, fr) === T.FIRE && fireOn(f, fc)) { hurt(st, 'fire'); if (!p.dead) p.vy = -4.5; } }
+  // --- auto-scroller: a wall of lava / fog pushes the hero from the left
+  if (L.chase) { if (st.cw === undefined) st.cw = L.chase.x0; if (f > L.chase.delay) st.cw += L.chase.v; if (!p.dead && p.x + p.w < st.cw) { p.dead = true; p.why = 'chased'; ev(st, 'die', p.x, p.y); } }
   // --- pit / timer / goal / checkpoint
-  if (p.y > ROWS * TS + 6) { p.dead = true; p.why = 'pit'; ev(st, 'die', p.x, ROWS * TS); }
+  var RW = L.rows || ROWS; if (p.y > RW * TS + 6) { p.dead = true; p.why = 'pit'; ev(st, 'die', p.x, RW * TS); }
   if (--st.t <= 0 && !p.dead) { p.dead = true; p.why = 'time'; ev(st, 'die', p.x, p.y); }
-  if (!p.dead && st.boss <= 0 && p.x + p.w >= L.goalX) {
+  var inGoal = L.goalRect ? (p.x < L.goalRect.x + L.goalRect.w && p.x + p.w > L.goalRect.x && p.y < L.goalRect.y + L.goalRect.h && p.y + p.h > L.goalRect.y) : p.x + p.w >= L.goalX;
+  if (!p.dead && st.boss <= 0 && inGoal) {
     p.won = true; var ty = L.poleY - 18 - (0.5 + 0.5 * Math.sin(f * 0.045)) * 90, hit = Math.abs(ty - (p.y + p.h / 2)) < 13; if (hit) { st.score += 3000; st.tape = 1; }
     ev(st, 'goal', L.goalX, p.y, hit ? 1 : 0); }
   if (!st.cp && p.x >= L.cp.x) st.cp = 1;
   st.f = f + 1;
 }
 
-root.PF = { stageDone: stageDone, movOn: movOn, isW: isW, AIRMAX: AIRMAX, TS: TS, ROWS: ROWS, VW: VW, VH: VH, T: T, SOL: SOL, IN: IN, P: P, E: E, MV_PERIOD: MV_PERIOD, rng: rng, hash: hash, tri: tri, newState: newState, clone: clone, step: step, tileAt: tileAt, boxHit: boxHit, movPos: movPos,
+root.PF = { fireOn: fireOn, stageDone: stageDone, movOn: movOn, isW: isW, AIRMAX: AIRMAX, TS: TS, ROWS: ROWS, VW: VW, VH: VH, T: T, SOL: SOL, IN: IN, P: P, E: E, MV_PERIOD: MV_PERIOD, rng: rng, hash: hash, tri: tri, newState: newState, clone: clone, step: step, tileAt: tileAt, boxHit: boxHit, movPos: movPos,
   setPw: setPw, slopeY: slopeY, hurt: hurt };
 })(typeof window !== 'undefined' ? window : globalThis);
