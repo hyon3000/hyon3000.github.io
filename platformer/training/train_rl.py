@@ -7,8 +7,8 @@ from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))          # .../platformer
-D, H1, H2 = 616, 256, 128
-ap = argparse.ArgumentParser(); ap.add_argument('out'); ap.add_argument('--workers', type=int, default=10); ap.add_argument('--minutes', type=float, default=60)
+D, H1, H2 = 628, 384, 192
+ap = argparse.ArgumentParser(); ap.add_argument('out'); ap.add_argument('--workers', type=int, default=10); ap.add_argument('--minutes', type=float, default=10)
 ap.add_argument('--bc_steps', type=int, default=25000); ap.add_argument('--dagger_rounds', type=int, default=5); ap.add_argument('--dagger_steps', type=int, default=10000); ap.add_argument('--resume', default='')
 args = ap.parse_args(); os.makedirs(args.out, exist_ok=True)
 dev = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -79,38 +79,44 @@ net = Net().to(dev)
 if args.resume: net.load_state_dict(torch.load(args.resume)); P('resumed', args.resume)
 
 # ---------------- phase 1: behaviour cloning from the planner
-def bc_train(X, A, epochs=12, lr=1e-3, bs=2048):
-    opt = torch.optim.Adam([p for l in (net.l1, net.l2, net.l3) for p in l.parameters()], lr=lr)
-    Xt = torch.tensor(X, device=dev); At = torch.tensor(A, device=dev, dtype=torch.float32)
-    n = len(Xt)
+def bc_train(X8, A, epochs=12, lr=1e-3, bs=4096):
+    # X8: int8 observations (value*100); weighted BCE (the rare jump / run presses matter most)
+    params = [p for l in (net.l1, net.l2, net.l3) for p in l.parameters()]
+    opt = torch.optim.Adam(params, lr=lr); n = len(X8)
+    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs * ((n + bs - 1) // bs))
+    Xt = torch.tensor(X8, device=dev); At = torch.tensor(A, device=dev, dtype=torch.float32)
+    posw = torch.tensor([1.0, 1.0, 1.3, 3.0], device=dev)
     for ep in range(epochs):
-        perm = torch.randperm(n, device=dev); tot = 0; acc = 0
+        perm = torch.randperm(n, device=dev); tot = 0; acc = 0; jac = 0; jn = 0
         for i in range(0, n, bs):
-            idx = perm[i:i + bs]; out = net(Xt[idx])[:, :4]
-            loss = nn.functional.binary_cross_entropy_with_logits(out, At[idx]); opt.zero_grad(); loss.backward(); opt.step()
-            tot += loss.item() * len(idx); acc += ((out > 0).float() == At[idx]).float().mean().item() * len(idx)
-        P('  bc epoch', ep, 'loss %.4f acc %.4f' % (tot / n, acc / n))
+            idx = perm[i:i + bs]; out = net(Xt[idx].float() / 100.0)[:, :4]
+            loss = nn.functional.binary_cross_entropy_with_logits(out, At[idx], pos_weight=posw); opt.zero_grad(); loss.backward(); opt.step(); sched.step()
+            tot += loss.item() * len(idx); pr = (out > 0).float(); acc += (pr == At[idx]).float().mean().item() * len(idx)
+            m = At[idx][:, 3] > 0.5; jac += (pr[:, 3][m] == 1).float().sum().item(); jn += m.sum().item()
+        P('  bc epoch', ep, 'loss %.4f acc %.4f  jump-recall %.3f' % (tot / n, acc / n, jac / max(1, jn)))
+def dec_obs8(b): return np.frombuffer(base64.b64decode(b), dtype=np.int8).reshape(-1, D)
 def bits_to_mat(a): return np.stack([(a >> k) & 1 for k in range(4)], 1).astype(np.float32)
 
 if not args.resume:
     t0 = time.time()
     res = par(workers, lambda w, i: w.js('return RL.collectBC(arguments[0], false, 0)', args.bc_steps))
-    X = np.concatenate([dec_obs(r['obs']) for r in res]); A = np.concatenate([bits_to_mat(dec(r['act'], np.uint8)) for r in res])
+    X = np.concatenate([dec_obs8(r['obs']) for r in res]); A = np.concatenate([bits_to_mat(dec(r['act'], np.uint8)) for r in res])
+    np.savez_compressed(os.path.join(args.out, 'data_bc.npz'), X=X, A=A.astype(np.uint8))
     P('BC data', X.shape, 'planner wins in collection', sum(r['wins'] for r in res), '/', sum(r['eps'] for r in res), 'episodes', round(time.time() - t0), 's')
-    bc_train(X, A, epochs=16)
+    bc_train(X, A, epochs=24)
     DX, DA = [X], [A]
     # ---------------- phase 2: DAgger
     for rd in range(args.dagger_rounds):
         beta = [0.5, 0.3, 0.2, 0.1, 0.0][min(rd, 4)]; t0 = time.time(); wb = net.b64()
         res = par(workers, lambda w, i: (w.js('RL.setWeights(arguments[0],arguments[1],arguments[2])', wb, H1, H2), w.js('return RL.collectBC(arguments[0], true, arguments[1])', args.dagger_steps, beta))[1])
-        X2 = np.concatenate([dec_obs(r['obs']) for r in res]); A2 = np.concatenate([bits_to_mat(dec(r['act'], np.uint8)) for r in res]); DX.append(X2); DA.append(A2)
+        X2 = np.concatenate([dec_obs8(r['obs']) for r in res]); A2 = np.concatenate([bits_to_mat(dec(r['act'], np.uint8)) for r in res]); DX.append(X2); DA.append(A2)
         P('DAgger round', rd, 'beta', beta, 'new', X2.shape[0], 'policy-driven episodes won', sum(r['wins'] for r in res), '/', sum(r['eps'] for r in res), round(time.time() - t0), 's')
-        bc_train(np.concatenate(DX), np.concatenate(DA), epochs=10, lr=5e-4)
+        bc_train(np.concatenate(DX), np.concatenate(DA), epochs=14, lr=6e-4); np.savez_compressed(os.path.join(args.out, 'data_all.npz'), X=np.concatenate(DX), A=np.concatenate(DA).astype(np.uint8)); torch.save(net.state_dict(), os.path.join(args.out, 'dagger_%d.pt' % rd)); export(net, os.path.join(args.out, 'ai-model-dagger%d.js' % rd), {'stage': 'dagger', 'round': rd})
     torch.save(net.state_dict(), os.path.join(args.out, 'bc.pt')); export(net, os.path.join(args.out, 'ai-model-bc.js'), {'stage': 'bc+dagger'})
 
 # ---------------- phase 3: PPO on the real simulator
 def ppo(minutes, steps_per_worker=2048):
-    opt = torch.optim.Adam(net.parameters(), lr=1.5e-4); gamma, lam = 0.995, 0.95; it = 0; best = -1; t_end = time.time() + minutes * 60
+    opt = torch.optim.Adam(net.parameters(), lr=4e-5); gamma, lam = 0.995, 0.95; it = 0; best = -1; t_end = time.time() + minutes * 60
     while time.time() < t_end:
         t0 = time.time(); wb = net.b64()
         res = par(workers, lambda w, i: (w.js('RL.setWeights(arguments[0],arguments[1],arguments[2])', wb, H1, H2), w.js('return RL.rollout(arguments[0])', steps_per_worker))[1])

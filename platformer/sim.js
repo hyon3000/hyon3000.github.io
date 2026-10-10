@@ -33,7 +33,7 @@ var EMPTY = new Map();
 function newState(L, o) {
   o = o || {};
   var s = o.cp ? L.cp : L.start;
-  var st = { L: L, f: 0, mod: EMPTY, score: 0, coins: 0, t: Math.round(L.time * 60), cp: o.cp ? 1 : 0, ev: o.rec ? [] : null, noEn: !!o.noEn, sw: 0, sc: 0, boss: 0, tape: 0,
+  var st = { L: L, f: 0, mod: EMPTY, score: 0, coins: 0, t: Math.round(L.time * 60), cp: o.cp ? 1 : 0, ev: o.rec ? [] : null, noEn: !!o.noEn, noPM: !!o.noPM, sw: 0, sc: 0, boss: 0, tape: 0,
     p: { x: s.x, y: s.y, vx: 0, vy: 0, w: P.PW, h: P.SH, big: false, pw: 0, ground: true, coy: 0, jbuf: 0, jheld: false, sprev: false, rprev: true, face: 1, inv: 0, dead: false, won: false, mv: -1, anim: 0, why: '',
       pm: 0, spin: 0, star: 0, mount: 0, climb: false, carry: -1, swim: false, fbc: 0, air: AIRMAX, wasW: false, dtick: 0, tcd: 0 },
     en: [], it: [], fb: [], ep: [], cg: new Uint8Array(L.coins.length), sg: new Uint8Array((L.special || []).length), pk: new Uint8Array((L.pockets || []).length), mo: [], sb: 0, kb: 0, kg: new Uint8Array((L.keys || []).length), dg: new Uint8Array((L.doors || []).length), sg2: new Uint8Array((L.switches || []).length), tc: 0, stage: 0, cr: 0 };
@@ -278,7 +278,7 @@ function step(st, inp) {
     // --- run / P-meter
     var maxv = run ? P.RUN : P.WALK;
     if (p.ground && run && dir && dir * p.vx > 0 && Math.abs(p.vx) >= P.RUN - 0.06) { if (p.pm < P.PMAX) p.pm++; } else if (p.ground) p.pm = Math.max(0, p.pm - 2); else if (!run) p.pm = Math.max(0, p.pm - 0.5);
-    var pfull = p.pm >= P.PMAX && run; if (pfull) maxv = P.PRUN;
+    var pfull = p.pm >= P.PMAX && run && !st.noPM; if (pfull) maxv = P.PRUN;
     if (inW) maxv *= 0.65;
     if (dir) {
       var tv = dir * maxv, acc = p.ground ? P.ACCG : P.ACCA; if (p.ground && dir * p.vx < 0) acc *= 2;

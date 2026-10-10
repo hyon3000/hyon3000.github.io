@@ -4,7 +4,7 @@
 'use strict';
 var KO = /^ko/i.test(navigator.language || 'ko');
 var TX = KO ? {
-  title: '두들', level: '레벨', seed: '시드', best: '최고', draw: '그리기', erase: '지우기/자르기', undo: '되돌리기', restart: '다시', start: '시작', starsReset: '공을 잃어서 별을 처음부터 다시 먹어야 해요',  pick: '레벨 선택', prevL: '이전 레벨', nextL: '다음 레벨', locked: '아직 열리지 않은 레벨',  ropeLong: '밧줄이 너무 깁니다(최대 120마디, 약 1000px).',  rope: '밧줄', hintRopeTool: '밧줄: 선을 그리면 그린 선의 길이 그대로, 그린 모양 그대로 밧줄이 놓입니다. 끝이 그린 물체나 땅/벽 위면 거기에 매달리고, 빈 곳이면 늘어집니다. 지우기 모드로 가로질러 끌어 끊습니다.',  ouch: '앗! 가시에 찔렸어요. 잠시 뒤 처음 자리로 돌아갑니다.',  wrong: '순서가 틀렸어요',  pin: '핀', hintBoost: '공을 누르면 속도가 붙습니다.', hintPin: '핀: 빈 곳(배경)을 누르면 그 자리에 고정된 핀이 되고, 거기 겹쳐 그리는 것들은 핀을 축으로 회전합니다. 물체/밧줄 위에 꽂으면 배경에는 고정되지 않고, 그 위에 이어서 그리는 것과 서로 연결됩니다. 핀을 다시 누르거나 지우기/자르기 모드로 지우면 빠집니다.', pin: '핀', hintPin: '핀: 빈 곳(배경)을 누르면 그 자리에 고정된 핀이 되고, 거기 겹쳐 그리는 것들은 핀을 축으로 회전합니다. 물체/밧줄 위에 꽂으면 배경에는 고정되지 않고, 그 위에 이어서 그리는 것과 서로 연결됩니다. 핀을 다시 누르거나 지우기 모드로 지우면 빠집니다.',
+  title: '두들', level: '레벨', seed: '시드', best: '최고', draw: '그리기', erase: '지우기/자르기', undo: '되돌리기', restart: '다시', start: '시작', ckptBack: '공을 잃어서 마지막 별을 먹은 시점으로 되돌렸어요(그 뒤에 그린 것은 사라져요). 고친 뒤 시작(스페이스)을 누르세요.', starsReset: '공을 잃어서 별을 처음부터 다시 먹어야 해요',  pick: '레벨 선택', prevL: '이전 레벨', nextL: '다음 레벨', locked: '아직 열리지 않은 레벨',  ropeLong: '밧줄이 너무 깁니다(최대 120마디, 약 1000px).',  rope: '밧줄', hintRopeTool: '밧줄: 선을 그리면 그린 선의 길이 그대로, 그린 모양 그대로 밧줄이 놓입니다. 끝이 그린 물체나 땅/벽 위면 거기에 매달리고, 빈 곳이면 늘어집니다. 지우기 모드로 가로질러 끌어 끊습니다.',  ouch: '앗! 가시에 찔렸어요. 잠시 뒤 처음 자리로 돌아갑니다.',  wrong: '순서가 틀렸어요',  pin: '핀', hintBoost: '공을 누르면 속도가 붙습니다.', hintPin: '핀: 빈 곳(배경)을 누르면 그 자리에 고정된 핀이 되고, 거기 겹쳐 그리는 것들은 핀을 축으로 회전합니다. 물체/밧줄 위에 꽂으면 배경에는 고정되지 않고, 그 위에 이어서 그리는 것과 서로 연결됩니다. 핀을 다시 누르거나 지우기/자르기 모드로 지우면 빠집니다.', pin: '핀', hintPin: '핀: 빈 곳(배경)을 누르면 그 자리에 고정된 핀이 되고, 거기 겹쳐 그리는 것들은 핀을 축으로 회전합니다. 물체/밧줄 위에 꽂으면 배경에는 고정되지 않고, 그 위에 이어서 그리는 것과 서로 연결됩니다. 핀을 다시 누르거나 지우기 모드로 지우면 빠집니다.',
   hint0: '끌어서 그리면 물체가 됩니다. 공을 모든 별에 닿게 하세요. 다 그렸으면 Space(시작).',
   hintRope: ' 밧줄은 지우기/자르기 모드(또는 오른쪽 버튼 드래그)로 가로질러 쓸어서 끊습니다.',
   hintRun: '막히면 다시(R)로 같은 레벨을 처음부터. 공이 떨어지면 1초 뒤 제자리로 돌아옵니다.',
@@ -12,7 +12,7 @@ var TX = KO ? {
   tooLong: '선이 너무 길어요(레벨 8부터 한 획은 최대 약 600px). 나눠서 그리세요.', tooMany: '선이 너무 많아 가장 오래된 선을 지웠어요', thinking: '풀이를 찾는 중...', nosol: '해답을 찾지 못했습니다.', autoOn: '자동으로 푸는 중...',
   hintShown: '힌트: 선 하나를 그렸어요. 다시 누르면 다음 단계입니다.', hintRunMsg: '힌트: 시작했어요.', hintCutMsg: '힌트: 밧줄을 잘랐어요.'
 } : {
-  title: 'Doodle', level: 'Level', seed: 'Seed', best: 'Best', draw: 'Draw', erase: 'Erase / Cut', undo: 'Undo', restart: 'Restart', start: 'Start', starsReset: 'Ball lost - collect the stars again',  pick: 'Choose a level', prevL: 'Previous level', nextL: 'Next level', locked: 'Not unlocked yet',  ropeLong: 'That rope is too long (at most 120 segments, about 1000 px).',  rope: 'Rope', hintRopeTool: 'Rope: draw a line - the rope is exactly as long as the line you draw and starts in that shape. An end over a drawn object or the ground/walls is attached there; over empty space it hangs free. Drag across it in Erase mode to cut it.',  ouch: 'Ouch! Spiked. The ball returns to its start in a moment.',  wrong: 'Wrong order',  pin: 'Pin', hintBoost: 'Press on the ball to give it a push.', hintPin: 'Pin: on empty background it is fixed in place, and anything drawn over it rotates around it. On an object or rope it is NOT fixed to the background - it joins that object with whatever you draw over it next. Click a pin again, or use Erase mode, to remove it.', pin: 'Pin', hintPin: 'Pin: on empty background it is fixed in place, and anything drawn over it rotates around it. On an object or rope it is NOT fixed to the background - it joins that object with whatever you draw over it next. Click a pin again, or use Erase mode, to remove it.',
+  title: 'Doodle', level: 'Level', seed: 'Seed', best: 'Best', draw: 'Draw', erase: 'Erase / Cut', undo: 'Undo', restart: 'Restart', start: 'Start', ckptBack: 'Ball lost - the board went back to your last star (anything drawn afterwards is gone). Fix your build, then press Start (Space).', starsReset: 'Ball lost - collect the stars again',  pick: 'Choose a level', prevL: 'Previous level', nextL: 'Next level', locked: 'Not unlocked yet',  ropeLong: 'That rope is too long (at most 120 segments, about 1000 px).',  rope: 'Rope', hintRopeTool: 'Rope: draw a line - the rope is exactly as long as the line you draw and starts in that shape. An end over a drawn object or the ground/walls is attached there; over empty space it hangs free. Drag across it in Erase mode to cut it.',  ouch: 'Ouch! Spiked. The ball returns to its start in a moment.',  wrong: 'Wrong order',  pin: 'Pin', hintBoost: 'Press on the ball to give it a push.', hintPin: 'Pin: on empty background it is fixed in place, and anything drawn over it rotates around it. On an object or rope it is NOT fixed to the background - it joins that object with whatever you draw over it next. Click a pin again, or use Erase mode, to remove it.', pin: 'Pin', hintPin: 'Pin: on empty background it is fixed in place, and anything drawn over it rotates around it. On an object or rope it is NOT fixed to the background - it joins that object with whatever you draw over it next. Click a pin again, or use Erase mode, to remove it.',
   hint0: 'Drag to draw - drawings become solid objects. Make the ball touch every star. When ready press Space (start).',
   hintRope: ' Cut the rope in Erase / Cut mode (or right-button drag) by swiping across it.',
   hintRun: 'Stuck? Restart (R) replays the same level. A fallen ball returns to its start after 1 s.',
@@ -24,7 +24,7 @@ var TX = KO ? {
 var DP = window.DP, W = DP.W, H = DP.H, S = DP.S, BALL_R = DP.BALL_R, STAR_R = DP.STAR_R;
 var INK = '#27324b';
 var COLORS = ['#e4572e', '#f3a712', '#17a398', '#7768ae', '#ef476f', '#6aa84f', '#2e86ab'];
-var sim, level, running, won, winT, fallT, colorIdx = 0;
+var sim, level, running, won, winT, fallT, colorIdx = 0, ckpt = null;       // ckpt: board snapshot taken when the last star was collected
 var seed0, levelNo = 1, best = 0, particles = [], mode = 'draw', preview = null, swipeFx = null, manual = false;
 try { best = parseInt(localStorage.getItem('doodle_best') || '0', 10) || 0; } catch (e) {}
 function mulberry32(a) { return DP.mulberry32(a); }
@@ -145,7 +145,7 @@ function loadLevel(sd, L, keepAuto) {
   if ((sd >>> 0) !== prog.seed) { prog = freshProg(sd); persist = false; }       // a level of some other seed (shared link): do not touch the saved progress
   seed0 = sd >>> 0; levelNo = L; prog.last = L; if (L > prog.furthest) prog.furthest = L; saveProg();
   level = DP.genLevel(seed0, L);
-  sim = new DP.Sim(level); sim.onStroke = prepStroke; history = [];
+  sim = new DP.Sim(level); sim.onStroke = prepStroke; history = []; ckpt = null;
   running = false; won = false; winT = 0; fallT = 0; failing = false; failT = 0; particles = []; preview = null; swipeFx = null;
   var f = auto.failures, r = auto.restarts; resetAutoPlan(); if (keepAuto) { auto.failures = f; auto.restarts = r; } else { auto.failures = 0; auto.restarts = 0; }
   staticDirty = true; updateHud(); setStatus(TX.hint0 + (level.rope ? TX.hintRope : ''));
@@ -283,12 +283,15 @@ function stepOnce() {
   if (!running || auto.phase === 'planning') return;
   sim.step();
   if (sim.wrong && !won) { failing = true; failT = 60; setStatus(TX.wrong); sim.events = []; return; }
-  if (sim.events.length) { sim.events.forEach(function (e) { if (e === 'star') { burst(sim.bx, sim.by, 16); updateHud(); } else if (e === 'port') { var lp = sim.lastPort; portFx = { from: lp.from, to: lp.to, ci: lp.ci, life: 1 }; for (var pi = 0; pi < 14; pi++) particles.push({ x: lp.to.x, y: lp.to.y, vx: (Math.random() - 0.5) * 260, vy: (Math.random() - 0.5) * 260, life: 0.7, rot: Math.random() * 6, c: pi % 2 ? '#ffffff' : (lp.ci % 2 ? '#e8861c' : '#2e86ab') }); } else if (e === 'ouch') { for (var oi = 0; oi < 18; oi++) particles.push({ x: sim.bx, y: sim.by, vx: (Math.random() - 0.5) * 360, vy: -Math.random() * 300, life: 0.9, rot: Math.random() * 6, c: oi % 2 ? '#e63946' : '#7a0f1a' }); setStatus(TX.ouch); } }); sim.events = []; }
+  if (sim.events.length) { sim.events.forEach(function (e) { if (e === 'star') { burst(sim.bx, sim.by, 16); updateHud(); if (!sim.won) ckpt = sim.snapshot(); } else if (e === 'port') { var lp = sim.lastPort; portFx = { from: lp.from, to: lp.to, ci: lp.ci, life: 1 }; for (var pi = 0; pi < 14; pi++) particles.push({ x: lp.to.x, y: lp.to.y, vx: (Math.random() - 0.5) * 260, vy: (Math.random() - 0.5) * 260, life: 0.7, rot: Math.random() * 6, c: pi % 2 ? '#ffffff' : (lp.ci % 2 ? '#e8861c' : '#2e86ab') }); } else if (e === 'ouch') { for (var oi = 0; oi < 18; oi++) particles.push({ x: sim.bx, y: sim.by, vx: (Math.random() - 0.5) * 360, vy: -Math.random() * 300, life: 0.9, rot: Math.random() * 6, c: oi % 2 ? '#e63946' : '#7a0f1a' }); setStatus(TX.ouch); } }); sim.events = []; }
   if (!won) {
     if (sim.won) { won = true; winT = 90; burst(sim.bx, sim.by, 40); prog.cleared[levelNo] = 1; if (levelNo + 1 > prog.furthest) prog.furthest = levelNo + 1; saveProg(); if (levelNo > best) { best = levelNo; try { localStorage.setItem('doodle_best', String(best)); } catch (e) {} } updateHud(); }
     else {
       if (sim.dead() && !fallT) fallT = 60;
-      if (fallT && --fallT === 0) { sim.respawn(); sim.events = []; updateHud(); setStatus(TX.starsReset); resetFlash = 1; }
+      if (fallT && --fallT === 0) {
+        if (ckpt) { var keepRun = autoActive(); sim = new DP.Sim(level, ckpt); sim.onStroke = prepStroke; sim.strokes.forEach(prepStroke); history = []; sim.events = []; failing = false; if (!keepRun) running = false; staticDirty = true; updateHud(); setStatus(TX.ckptBack); resetFlash = 1; }
+        else { sim.respawn(); sim.events = []; updateHud(); setStatus(TX.starsReset); resetFlash = 1; }
+      }
     }
   } else if (--winT <= 0) { loadLevel(seed0, levelNo + 1, false); }
 }

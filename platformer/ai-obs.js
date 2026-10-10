@@ -4,7 +4,7 @@
 'use strict';
 var TS = PF.TS, ROWS = PF.ROWS, SOL = PF.SOL, IN = PF.IN;
 var NC = 13, NR = 9, C0 = -3, R0 = -5, NE = 6, NP = 3, NI = 2, NK = 3;
-var D = 16 + NC * NR * 4 + NE * 15 + NP * 4 + NI * 3 + NK * 2 + 14 + 4;
+var D = 16 + NC * NR * 4 + NE * 15 + NP * 4 + NI * 3 + NK * 2 + 14 + 4 + 12;
 var GROUP = { 0: 0, 3: 0, 1: 1, 11: 1, 13: 1, 17: 1, 20: 1, 12: 1, 2: 2, 9: 2, 10: 2, 15: 2, 16: 2, 19: 2, 4: 3, 18: 3, 5: 4, 6: 5, 7: 6, 14: 6, 8: 7 };
 var STAGEK = { key: 0, door: 1, sw: 2, tele: 3, xge: 4, goal: 5 };
 function cl(v, m) { return v > m ? m : v < -m ? -m : v; }
@@ -46,6 +46,21 @@ function build(st, out) {
   out[o++] = cl((t1x - pcx) / 150, 1.2); out[o++] = cl((t1y - pcy) / 100, 1.2); out[o++] = cl((t2x - pcx) / 150, 1.2); out[o++] = cl((t2y - pcy) / 100, 1.2);
   var rg = L.route ? L.route[st.stage] : null, sk = rg ? STAGEK[rg.k] : 5; for (j = 0; j < 6; j++) out[o++] = j === sk ? 1 : 0;
   out[o++] = st.boss > 0 ? 1 : 0; out[o++] = cb && cb.length ? 1 : 0; out[o++] = cl((L.goalX - pcx) / 800, 1.2); out[o++] = L.puzzle ? 1 : 0; 
+  // ray features: how far to the next wall / pit / hazard / enemy ahead and behind (in tiles), obstacle height, pit width, ceiling clearance, drop depth
+  var dirf = p.face >= 0 ? 1 : -1, fr = Math.floor((p.y + p.h - 1) / TS), cx0 = Math.floor(pcx / TS);
+  function rays(dr) {
+    var wallD = 12, wallH = 0, pitD = 12, pitW = 0, hazD = 12, k2, q2;
+    for (k2 = 1; k2 <= 12; k2++) { var cc2 = cx0 + dr * k2, tf = PF.tileAt(st, cc2, fr), tg = PF.tileAt(st, cc2, fr - 1);
+      if (wallD === 12 && (SOL[tf] || SOL[tg])) { wallD = k2; var h = 0; for (q2 = fr; q2 > fr - 6 && SOL[PF.tileAt(st, cc2, q2)]; q2--) h++; wallH = h; }
+      if (hazD === 12 && (tf === 6 || tf === 14 || PF.tileAt(st, cc2, fr + 1) === 14)) hazD = k2;
+      if (pitD === 12) { var gr = false; for (q2 = fr + 1; q2 <= fr + 5; q2++) { var tt2 = PF.tileAt(st, cc2, q2); if (SOL[tt2] || tt2 === 9 || tt2 === 12 || tt2 === 13) { gr = true; break; } } if (!gr) { pitD = k2; var w2 = 0; for (var kk2 = k2; kk2 <= 12; kk2++) { var g2 = false; for (q2 = fr + 1; q2 <= fr + 5; q2++) { var t3 = PF.tileAt(st, cx0 + dr * kk2, q2); if (SOL[t3] || t3 === 9) { g2 = true; break; } } if (g2) break; w2++; } pitW = w2; } }
+      if (wallD < 12 && hazD < 12 && pitD < 12) break; }
+    var ed = 12; for (var e2 = 0; e2 < st.en.length; e2++) { var en2 = st.en[e2]; if (!en2.alive) continue; var ddx = (en2.x + en2.w / 2 - pcx) * dr / TS; if (ddx > 0 && ddx < ed && Math.abs(en2.y + en2.h / 2 - pcy) < 26) ed = ddx; }
+    return [wallD / 12, wallH / 5, pitD / 12, pitW / 6, hazD / 12, ed / 12];
+  }
+  var rf = rays(dirf), rb = rays(-dirf), ce = 0; for (j = 1; j <= 6; j++) { if (SOL[PF.tileAt(st, cx0, Math.floor((p.y - 1) / TS) - j + 1)]) break; ce++; }
+  var gd = 0; for (j = 1; j <= 6; j++) { if (SOL[PF.tileAt(st, cx0, fr + j)]) break; gd++; }
+  out[o++] = rf[0]; out[o++] = rf[1]; out[o++] = rf[2]; out[o++] = rf[3]; out[o++] = rf[4]; out[o++] = rf[5]; out[o++] = rb[0]; out[o++] = rb[2]; out[o++] = rb[4]; out[o++] = rb[5]; out[o++] = ce / 6; out[o++] = gd / 6;
   // wind / current at the hero
   var wx = 0, wy = 0; if (L.winds) for (k = 0; k < L.winds.length; k++) { var wz = L.winds[k]; if (pcx > wz.x0 && pcx < wz.x1 && pcy > wz.y0 && pcy < wz.y1) { wx += wz.dx; wy += wz.dy; } }
   out[o++] = cl(wx * 8, 1.2); out[o++] = cl(wy * 2, 1.2); out[o++] = cell === 22 ? -1 : cell === 23 ? 1 : 0; out[o++] = cell === 24 ? 1 : 0;

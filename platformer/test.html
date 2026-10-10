@@ -1,6 +1,6 @@
 <!doctype html><meta charset="utf-8"><title>Shape World seed test</title>
 <pre id="o">open with ?gen=SEEDS&levels=N or ?auto=SEEDS&levels=N (headless test page)</pre>
-<script src="sim.js"></script><script src="gen.js"></script><script src="planner.js"></script>
+<script src="sim.js"></script><script src="gen.js"></script><script src="planner.js"></script><script src="ai-obs.js"></script>
 <script>
 // Headless test helpers. window.testGen(seed0, count, levels) -> generation / validation / replay statistics.
 window.testGen = function (seed0, count, levels) {
@@ -222,5 +222,26 @@ window.testGraphs = function (seed0, count) {
     sm.worlds.forEach(function (w) { var m = PF.worldMap(s, w.id, w.depth, w.mainEnd), wv = PF.validateWorldMap(m); res.worldMaps++; if (wv.ok) res.worldOk++; else res.fails.push(['world', s, w.id, wv.why]); res.branchHist[wv.branches] = (res.branchHist[wv.branches] || 0) + 1; if (wv.hasAlt) res.bothEndings++; if (w.mainEnd === 'cannon') res.mainCannon++; m.nodes.forEach(function (q) { if (q.ending) res.endsSeen[q.ending]++; }); });
   }
   res.fails = res.fails.slice(0, 6); return res;
+};
+
+// regression: no hazard in the take-off zone of a gap, and every plain gap is within the measured jump limit
+window.testSpikeGap = function (seed0, count, n0, n1, useGenerate) {
+  var kinds = ['plain', 'hills', 'flood', 'ghost', 'sky', 'cave', 'castle', 'maze'], lim = PF.probe(), res = { levels: 0, gaps: 0, spikeNearGap: 0, tooWide: 0, badLevels: 0, samples: [], limit: lim.gapRun }, R = 14;
+  for (var s = seed0; s < seed0 + count; s++) for (var n = n0; n <= n1; n++) kinds.forEach(function (k) {
+    var L = useGenerate ? PF.generate(s, n, { kind: k }) : PF.build(s, n, 0, { kind: k }), bad = false; res.levels++;
+    var gt = L.gt, w = L.w, c = 0;
+    function t(cc, r) { return (cc < 0 || cc >= w || r < 0 || r >= R) ? 1 : L.tiles[cc * R + r]; }
+    while (c < w) {
+      if (gt[c] >= R) { var a = c; while (c < w && gt[c] >= R) c++; var b = c - 1, width = b - a + 1; res.gaps++;
+        var platform = false; L.movers.forEach(function (m) { if (m.cx >= a * 16 - 8 && m.cx <= (b + 1) * 16 + 8) platform = true; });
+        for (var cc = a; cc <= b; cc++) for (var r = 0; r < R; r++) { var tt = t(cc, r); if (tt === 1 || tt === 2 || tt === 8) platform = true; }
+        for (cc = a - 4; cc < a; cc++) if (t(cc, 0) === 32 || t(cc, 11) === 32 || t(cc, 7) === 32) platform = true;   // launch barrel
+        for (cc = a - 4; cc < a; cc++) { var g = gt[cc]; if (g !== undefined && g < R) { var above = t(cc, g - 1); if (above === 6 || above === 14 || above === 15 || above === 16 || above === 17 || above === 1) { res.spikeNearGap++; bad = true; if (res.samples.length < 6) res.samples.push([k, s, n, 'hazard@-' + (a - cc), 'gapw' + width]); break; } } }
+        if (!platform && width > lim.gapRun) { res.tooWide++; bad = true; if (res.samples.length < 6) res.samples.push([k, s, n, 'wide', width]); }
+      } else c++;
+    }
+    if (bad) res.badLevels++;
+  });
+  return res;
 };
 </script>
