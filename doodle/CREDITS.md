@@ -1,6 +1,6 @@
 # Credits
 
-**2D Physics / 2D 피직스** is an original game. The idea of "draw shapes, they become physical objects, guide a ball to the star" is inspired by
+**Doodle / 두들** is an original game. The idea of "draw shapes, they become physical objects, guide a ball to the star" is inspired by
 Crayon Physics (and other Box2D puzzle games such as Cut the Rope, World of Goo, Bad Piggies, Poly Bridge). No art, level or code of those games is used;
 all levels are generated procedurally (`core.js`) and all graphics are drawn at run time on a canvas.
 

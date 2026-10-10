@@ -1,4 +1,4 @@
-/* 2D Physics - auto-solver planner (used by Help > Cheat > Solve Automatically / Give a Hint).
+/* Doodle - auto-solver planner (used by Help > Cheat > Solve Automatically / Give a Hint).
    It searches over candidate drawings in COPIES of the physics world (DP.Sim restored from a snapshot, same planck.js code, no rendering)
    and returns a plan: a list of strokes to draw plus an optional rope-cut time. The page then executes the plan like a player (draw / cut only).
    The search is a generator so that the page can run it in time slices (never freezing the UI for long). */
@@ -43,6 +43,11 @@ function variants(f, lv) {
       V.push([pts.concat(line(f.x0 + 4, f.top - 5, f.x1 + 6, f.top - 5))]);
     });
     if (!f.end) { var run2 = Math.min(f.h / Math.tan(25 * Math.PI / 180), 60), dn = line(f.x1 - 8, f.top - 5, f.x1 + run2, Y - 5); ups.forEach(function (u) { V.push([u, dn]); }); }
+    var nx = f.end ? null : lv.features.filter(function (g) { return g.x0 > f.x1 && g.x0 - f.x1 < 300 && (g.type === 'spikes' || g.type === 'pit' || g.type === 'rotor'); })[0];
+    if (nx) [36, 28].forEach(function (a) {      // one long stroke: ramp up, deck over the next hazard at wall-top height, ramp down behind it
+      var run = f.h / Math.tan(a * Math.PI / 180), run3 = Math.min(f.h / Math.tan(25 * Math.PI / 180), 90), pts = line(f.x0 - run - 6, Y - 5, f.x0 + 4, f.top - 5).concat(line(f.x0 + 4, f.top - 5, nx.x1 + 12, f.top - 5), line(nx.x1 + 12, f.top - 5, nx.x1 + 12 + run3, Y - 5));
+      if (DP.pathLen(pts) <= DP.STROKE_MAX - 10) V.push([pts]);
+    });
   } else if (f.type === 'spikes') {              // a hump over the spikes: ramp up, deck above the spikes, ramp down
     [[55, 30], [80, 30], [45, 34], [100, 32]].forEach(function (q) { V.push([line(f.x0 - q[0], Y - 4, f.x0 - 6, Y - q[1]).concat(line(f.x0 - 6, Y - q[1], f.x1 + 6, Y - q[1]), line(f.x1 + 6, Y - q[1], f.x1 + q[0], Y - 4))]); });
     V.push([]);

@@ -1,9 +1,9 @@
-/* 2D Physics / 2D 피직스 - core: procedural level generator, physics simulation wrapper (planck.js = Box2D port), stroke geometry.
+/* Doodle / 두들 - core: procedural level generator, physics simulation wrapper (planck.js = Box2D port), stroke geometry.
    Used by the page (game.js) and by the auto-solver planner (planner.js) that simulates copies of the world. */
 (function () {
 'use strict';
 var W = 1200, H = 800, S = 30;           // world size (px), px per metre
-var BALL_R = 14, STAR_R = 16, MAXBODIES = 60;
+var BALL_R = 14, STAR_R = 16, MAXBODIES = 60, STROKE_MAX = Infinity;
 var planck = window.planck;
 var Vec2 = planck.Vec2;
 function V(x, y) { return Vec2(x / S, y / S); }
@@ -123,33 +123,35 @@ function genLevel(seed, L, opts) {
   var rnd = mulberry32(hash2(seed, L * 7919 + 13));
   var rr = function (a, b) { return a + (b - a) * rnd(); };
   var hmax = Math.min(150, 40 + L * 7.5);
-  var wmax = Math.min(380, 130 + L * 16);
+  var wmax = Math.min(L >= 8 ? 230 : 380, 130 + L * 16), HI = L >= 8;
   var nf = Math.min(1 + Math.floor((L - 1) / 3), 4);
-  var D = Math.min(410, Math.round(3.0 * hmax + 110));
+  var D = Math.min(HI ? 380 : 410, Math.round(3.0 * hmax + 110));
   var Y1 = r12(rr(600, 640));
   var Ys = Y1 - D;
-  var dl = r12(180 + 0.4 * D);
+  var dl = HI ? r12(100 + 0.2 * D) : r12(180 + 0.4 * D);
   var xD = 216 + dl;                       // end of the descent
-  var xF = 1032;                           // final platform starts here
+  var xF = HI ? 1100 : 1032;                           // final platform starts here
   var finalStep = L >= 3 && rnd() < 0.4;
   var wantRope = L >= 2 && rnd() < (L >= 16 ? 0.97 : L >= 10 ? 0.85 : Math.min(0.5, 0.2 + 0.03 * L));
   var pickType = function () {
-    var wts = [['pit', 3], ['wall', 3]]; if (L >= 3) wts.push(['crates', 1.2], ['dominoes', 1.2]);
+    var wts = [['pit', 3], ['wall', 3]]; if (L >= 3) wts.push(['crates', HI ? 0.4 : 1.2], ['dominoes', HI ? 0.4 : 1.2]);
     var t = 0; wts.forEach(function (w) { t += w[1]; });
     var r = rnd() * t; for (var q = 0; q < wts.length; q++) { r -= wts[q][1]; if (r < 0) return wts[q][0]; }
     return 'pit';
   };
   var order = [], i;
   for (i = 0; i < nf; i++) order.push(pickType());
+  if (HI) for (i = 0; i < Math.min(2, order.length); i++) if (order[i] === 'crates' || order[i] === 'dominoes') order[i] = rnd() < 0.5 ? 'pit' : 'wall';     // levels 8+: at least two real obstacles
   if (L <= 2) order = [rnd() < 0.5 ? 'pit' : 'wall'];
   var heavy = wantRope || order.indexOf('dominoes') >= 0 || order.indexOf('crates') >= 0, hscale = heavy ? 0.7 : 1;
   var mk = function (t) {
     if (t === 'pit') {
       var vr = rnd(), variant = 'plain';
-      if (L >= 2) { if (vr < 0.18) variant = 'jet'; else if (vr < 0.36) variant = 'bounce'; else if (L >= 3 && vr < 0.62) variant = 'seesaw'; }
+      if (L >= 2) { if (vr < (HI ? 0.14 : 0.18)) variant = 'jet'; else if (vr < (HI ? 0.38 : 0.36)) variant = 'bounce'; else if (L >= 3 && vr < (HI ? 0.5 : 0.62)) variant = 'seesaw'; }
       var w;
-      if (variant === 'seesaw') w = r12(rr(150, Math.min(264, wmax + 40)));
-      else if (variant === 'jet') w = r12(rr(150, 372));
+      if (variant === 'seesaw') w = r12(rr(HI ? 190 : 150, Math.min(264, wmax + 40)));
+      else if (variant === 'jet') w = r12(rr(HI ? 190 : 150, HI ? 260 : 372));
+      else if (HI) w = r12(rr(190, 250));
       else w = r12(rr(Math.max(110, 0.7 * wmax), wmax));
       return { type: 'pit', variant: variant, w: w, lead: 36, need: 36 + w + 48 };
     }
@@ -160,6 +162,7 @@ function genLevel(seed, L, opts) {
     return { type: 'wall', h: h, ww: ww, lead: lead, need: lead + ww + 60 };
   };
   var list = order.map(mk);
+  if (L >= 10) list.splice(1, 0, { type: 'slot', need: 170, w: 170 });       // room reserved for a hazard (spikes / rotor) between the obstacles
   var step = null;
   if (finalStep) { var hs = Math.max(40, Math.round(rr(0.4, 0.75) * hmax * hscale)); step = { type: 'wall', h: hs, ww: 0, lead: r12(1.25 * hs + 36), need: r12(1.25 * hs + 36), end: true }; }
   var avail = xF - xD;
@@ -174,6 +177,7 @@ function genLevel(seed, L, opts) {
   seq.forEach(function (f, idx) {
     var sp = r12(spare * rr(0.0, 0.6)); if (sp > spare) sp = r12(spare); spare -= sp;
     var base = cursor + sp;
+    if (f.type === 'slot') { cursor = base + f.need; return; }
     if (f.type === 'pit') {
       var x0 = r12(base + f.lead), x1 = x0 + f.w;
       features.push({ type: 'pit', variant: f.variant, x0: x0, x1: x1, y: Y1 });
@@ -257,7 +261,7 @@ function genLevel(seed, L, opts) {
     };
     var need = 0;
     for (var qe = 0; qe < ne; qe++) {
-      var tt = rnd(), typs = (L >= 10 && qe === 0) ? ['spikes', 'rotor', 'boost'] : tt < 0.35 ? ['boost', 'spikes', 'rotor'] : tt < 0.65 ? ['rotor', 'spikes', 'boost'] : ['spikes', 'boost', 'rotor'], typ = null, ew = 0, spans = null;
+      var tt = rnd(), typs = (L >= 10 && qe === 0) ? ['spikes', 'rotor', 'boost'] : (L >= 16 && qe === 1) ? ['rotor', 'spikes', 'boost'] : tt < 0.35 ? ['boost', 'spikes', 'rotor'] : tt < 0.65 ? ['rotor', 'spikes', 'boost'] : ['spikes', 'boost', 'rotor'], typ = null, ew = 0, spans = null;
       for (var ti = 0; ti < 3 && !typ; ti++) {
         var tp = typs[ti], w2 = tp === 'boost' ? 96 : tp === 'rotor' ? 120 : r12(rr(60, 100)), nd2 = tp === 'spikes' ? w2 + 70 : w2 + 30;
         var sp2 = freeSpans().filter(function (s) { return s[1] - s[0] >= nd2; });
@@ -525,6 +529,14 @@ Sim.prototype.addRope = function (A, B, attA, attB, P0) {
   if (ba) this.world.createJoint(new planck.RevoluteJoint({}, ba, ch.links[0], V(P[0][0], P[0][1])));
   if (bb) this.world.createJoint(new planck.RevoluteJoint({}, bb, ch.links[N2 - 1], V(P[N2][0], P[N2][1])));
   this.ropes.push(rec);
+  this.pins.forEach(function (p) {                         // pins on an object / rope hinge it with a new rope segment lying on the pin
+    if (p.type !== 'hinge' || !p.b0) return;
+    var pp = this.pinPos(p), best = -1, bd = 6;
+    ch.links.forEach(function (b, k) { var e = this.linkEnds(b), d = distSeg(pp[0], pp[1], e[0], e[1]); if (d < bd) { bd = d; best = k; } }, this);
+    if (best < 0) return;
+    if ((attA && attA.kind === 'stroke' && p.sts.indexOf(attA.st) >= 0 && best === 0) || (attB && attB.kind === 'stroke' && p.sts.indexOf(attB.st) >= 0 && best === N2 - 1)) return;
+    p.joints.push(this.world.createJoint(new planck.RevoluteJoint({}, p.b0, ch.links[best], V(pp[0], pp[1])))); p.lk.push({ rec: rec, k: best });
+  }, this);
   this.pins.forEach(function (p) {                         // fixed pegs also catch rope segments lying on them
     if (p.type !== 'peg') return;
     var best = -1, bd = 6;
@@ -618,6 +630,11 @@ Sim.prototype.addGeom = function (geom, meta, st0) {
   this.strokes.push(st);
   if (this.onStroke) this.onStroke(st);
   this.pins.forEach(function (p) { if (p.type === 'peg' && p.sts.indexOf(st) < 0 && this.hitStroke(st, p.x, p.y, 6)) { p.joints.push(this.world.createJoint(new planck.RevoluteJoint({}, p.anchor, st.body, V(p.x, p.y)))); p.sts.push(st); } }, this);
+  this.pins.forEach(function (p) {                         // a pin set on an object / rope waits for the next thing drawn over it and hinges the two
+    if (p.type !== 'hinge' || !p.b0 || p.sts.indexOf(st) >= 0) return;
+    var pp = this.pinPos(p); if (!this.hitStroke(st, pp[0], pp[1], 6)) return;
+    p.joints.push(this.world.createJoint(new planck.RevoluteJoint({}, p.b0, st.body, V(pp[0], pp[1])))); p.sts.push(st);
+  }, this);
   if (this.strokes.length > MAXBODIES) { var victim = this.strokes.filter(function (q) { return q !== st && !this.pinned(q); }, this)[0] || this.strokes[0]; this.removeStroke(victim); this.events.push('toomany'); }
   return st;
 };
@@ -625,7 +642,7 @@ Sim.prototype.addStroke = function (raw, meta) {
   var geom = makeGeom(raw); if (!geom) return null;
   return this.addGeom(geom, meta);
 };
-/* ---- pins: ONE body (drawn body or rope segment) under the click = fixed to the world there; 2+ bodies = free hinge between them; background = fixed peg
+/* ---- pins: on a drawn body / rope segment = a free hinge between it and whatever is drawn over that point afterwards (NOT fixed to the world); background = fixed peg
    (hinges every body / rope segment that contains it, now or created later). Rope ends can be attached to pegs / pins (see addRope). ---- */
 Sim.prototype.localOf = function (st, x, y) { var p = st.body.getPosition(), a = st.body.getAngle(), c = Math.cos(-a), s = Math.sin(-a), dx = x - p.x * S, dy = y - p.y * S; return [dx * c - dy * s, dy * c + dx * s]; };
 Sim.prototype.worldOf = function (st, lx, ly) { var p = st.body.getPosition(), a = st.body.getAngle(), c = Math.cos(a), s = Math.sin(a); return [p.x * S + lx * c - ly * s, p.y * S + lx * s + ly * c]; };
@@ -667,8 +684,7 @@ Sim.prototype.addPinAt = function (x, y) {
   if (this.pins.length >= 40) return null;
   var hits = this.strokesAt(x, y), lks = this.ropeLinksAt(x, y, 10), n = hits.length + lks.length, px = x, py = y;
   if (!hits.length && lks.length === 1) { var e = this.linkEnds(lks[0].rec.links[lks[0].k]), dx = e[1][0] - e[0][0], dy = e[1][1] - e[0][1], l2 = dx * dx + dy * dy, t = l2 < 1e-9 ? 0 : Math.max(0, Math.min(1, ((x - e[0][0]) * dx + (y - e[0][1]) * dy) / l2)); px = e[0][0] + dx * t; py = e[0][1] + dy * t; }
-  if (n >= 2) return this._mkPin('hinge', px, py, hits, lks);
-  if (n === 1) return this._mkPin('fix', px, py, hits, lks);
+  if (n >= 1) return this._mkPin('hinge', px, py, hits, lks);        // on an object / rope: hinges it with what is drawn over it next (not fixed to the background)
   return this._mkPin('peg', x, y, [], []);
 };
 Sim.prototype.removePin = function (pin) {
@@ -686,7 +702,7 @@ Sim.prototype.pinsPrune = function () {               // drop references to dead
     p.lk = p.lk.filter(function (l) { return self.ropes.indexOf(l.rec) >= 0 && l.rec.links[l.k]; });
     var nb = self.pinBodies(p);
     if (p.type === 'fix' && nb.length < 1) self.removePin(p);
-    else if (p.type === 'hinge' && (nb.length < 2 || nb.indexOf(p.b0) < 0)) self.removePin(p);
+    else if (p.type === 'hinge' && (nb.length < 1 || nb.indexOf(p.b0) < 0)) self.removePin(p);
   });
 };
 Sim.prototype.pinned = function (st) { return this.pins.some(function (p) { return p.sts.indexOf(st) >= 0; }) || this.ropes.some(function (r) { return (r.attA && r.attA.st === st) || (r.attB && r.attB.st === st); }); };
@@ -782,7 +798,7 @@ Sim.prototype.restore = function (snap) {
     var sts = pp.sids.map(function (id) { return self.strokes.filter(function (q) { return q.id === id; })[0]; }).filter(Boolean);
     var lks = (pp.lks || []).map(function (l) { var rec = self.ropes[l.ri]; return rec && rec.links[l.k] ? { rec: rec, k: l.k } : null; }).filter(Boolean);
     var n = sts.length + lks.length;
-    if (pp.type === 'hinge' ? n >= 2 : n === 1) self._mkPin(pp.type, pp.x, pp.y, sts, lks);
+    if (pp.type === 'hinge' ? n >= 1 : n === 1) self._mkPin(pp.type, pp.x, pp.y, sts, lks);
   });
   if (!snap.rope && this.rope) this.rope = null;
   this.stars.forEach(function (s, i) { s.got = !!snap.got[i]; });
@@ -791,6 +807,6 @@ Sim.prototype.restore = function (snap) {
   this.events = [];
 };
 
-window.DP = { W: W, H: H, S: S, BALL_R: BALL_R, STAR_R: STAR_R, MAXBODIES: MAXBODIES, genLevel: genLevel, Sim: Sim, makeGeom: makeGeom, pathLen: pathLen, mulberry32: mulberry32, hash2: hash2, V: V,
+window.DP = { STROKE_MAX: STROKE_MAX, W: W, H: H, S: S, BALL_R: BALL_R, STAR_R: STAR_R, MAXBODIES: MAXBODIES, genLevel: genLevel, Sim: Sim, makeGeom: makeGeom, pathLen: pathLen, mulberry32: mulberry32, hash2: hash2, V: V,
   distSeg: distSeg, inPoly: inPoly, decompose: decompose, area2: area2, rdp: rdp };
 })();

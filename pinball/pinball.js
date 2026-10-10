@@ -85,7 +85,7 @@
   }
   // ---- auto play (F3): a simple vision bot. The game is a compiled original (no state API), so the bot looks at the canvas: it watches for movement of bright pixels
   // (the steel ball) in the area in front of the flippers and flips the flipper on that side; it plugs the plunger when the ball is waiting. It cannot promise to never lose the ball.
-  var pcy = 0, autoOn = false, autoTimer = 0, prev = null, lastMotion = 0, lastLaunch = 0, held = {};
+  var lastKick = 0, kickN = 0, pcy = 0, autoOn = false, autoTimer = 0, prev = null, lastMotion = 0, lastLaunch = 0, held = {};
   var sc = document.createElement('canvas'), sx = sc.getContext('2d', { willReadFrequently: true });
   function press(sel, ms) { var b = document.querySelector(sel); if (!b || held[sel]) return; held[sel] = 1; key('keydown', b); b.classList.add('on'); setTimeout(function () { key('keyup', b); b.classList.remove('on'); held[sel] = 0; }, ms); }
   function look() {
@@ -113,6 +113,13 @@
         if (cy > 0.8 && cy - pcy > 0.01 && (!vguard || vguard.nudgeOK)) { if (cx > 0.3 && cx < 0.7) nudge('ArrowUp', 38, 'ArrowUp'); else if (cx <= 0.3) nudge('KeyX', 88, 'x'); else nudge('Period', 190, '.'); }       // the ball sinks towards the drain: shake the table
         pcy = cy;
       }
+    }
+    // nothing has moved in the flipper area for a while (a ball resting in front of the drain makes no motion, so the movement detector never fires): shake it loose - alternate
+    // flips of the two flippers (held long enough to launch a resting ball off a flipper tip), every few kicks a table nudge
+    if (gs === 0 && now - lastMotion > 1300 && now - lastKick > 1100) {
+      lastKick = now; kickN++;
+      press(kickN % 2 ? '.pb.fl' : '.pb.fr', 280);
+      if (kickN % 3 === 0) nudge('ArrowUp', 38, 'ArrowUp');
     }
     if (now - lastLaunch > 6500) {                                        // every few seconds pull the plunger (it does nothing while a ball is in play, but starts the next ball)
       lastLaunch = now; var b = document.querySelector('.pb.ln'); key('keydown', b); b.classList.add('on'); setTimeout(function () { key('keyup', b); b.classList.remove('on'); }, 1000 + Math.random() * 400);

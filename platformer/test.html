@@ -1,0 +1,35 @@
+<!doctype html><meta charset="utf-8"><title>Shape Runner seed test</title>
+<pre id="o">open with ?gen=SEEDS&levels=N or ?auto=SEEDS&levels=N (headless test page)</pre>
+<script src="sim.js"></script><script src="planner.js"></script>
+<script>
+// Headless test helpers. window.testGen(seed0, count, levels) -> generation / validation / replay statistics.
+window.testGen = function (seed0, count, levels) {
+  var res = { total: 0, valid: 0, replayOk: 0, attempts: {}, ms: 0, maxMs: 0, fails: [], lim: PF.probe() };
+  for (var s = seed0; s < seed0 + count; s++) for (var n = 1; n <= levels; n++) {
+    var t0 = performance.now(), L = PF.generate(s, n), dt = performance.now() - t0;
+    res.total++; res.ms += dt; if (dt > res.maxMs) res.maxMs = dt;
+    res.attempts[L.attempt] = (res.attempts[L.attempt] || 0) + 1;
+    if (L.valid) res.valid++; var rp = L.valid && PF.replay(L); if (rp) res.replayOk++; else res.fails.push([s, n]);
+  }
+  res.ms = Math.round(res.ms); res.maxMs = Math.round(res.maxMs); return res;
+};
+var q = new URLSearchParams(location.search);
+if (q.get('gen')) document.getElementById('o').textContent = JSON.stringify(window.testGen(1, +q.get('gen'), +q.get('levels') || 5));
+</script>
+<script>
+// auto-play statistics: for each (seed, level) the planner plays through the same input path as a human (bitmask per frame)
+window.testAuto = function (seed0, count, level, maxLives) {
+  var out = { total: 0, cleared: 0, ms: 0, deaths: 0, fails: [], frames: 0, maxPlanMs: 0 };
+  for (var s = seed0; s < seed0 + count; s++) {
+    var L = PF.generate(s, level), lives = maxLives || 1, cleared = false, pl = PFPlanner.make(), st = PF.newState(L), t0 = performance.now(), f = 0;
+    while (f < 60 * L.time && !cleared) {
+      var inp = pl.decide(st); PF.step(st, inp); f++;
+      if (st.p.won) { cleared = true; break; }
+      if (st.p.dead) { out.deaths++; lives--; if (lives <= 0) { out.fails.push([s, level, Math.round(st.p.x / 16), st.p.why]); break; } st = PF.newState(L, { cp: !!st.cp }); pl.reset(); }
+    }
+    if (!cleared && lives > 0) out.fails.push([s, level, 'timeout', Math.round(st.p.x / 16)]);
+    out.total++; if (cleared) out.cleared++; out.ms += performance.now() - t0; out.frames += f;
+  }
+  out.ms = Math.round(out.ms); return out;
+};
+</script>
