@@ -364,9 +364,17 @@ function genLevel(seed, Lreal, opts) {
   if (!pointFree(start.x, start.y, BALL_R, 0)) invalidBefore++;
   // ----- floating decorative slabs (kept clear of every corridor)
   var topY = function (xx) { var t = gy(xx); features.forEach(function (f) { if (f.type === 'wall' && xx >= f.x0 && xx <= f.x1) t = Math.min(t, f.top); }); return t; };
+  // floating things only go where the ball plays: over the obstacles (pits, walls, ...) or beside the descent, never in far-away corners of the sky
+  var poiX = function () {
+    var fs = features.filter(function (f) { return f.type === 'pit' || f.type === 'wall' || f.type === 'crates' || f.type === 'dominoes' || f.type === 'spikes'; });
+    if (!fs.length || rnd() < 0.2) return rr(216, xD + 60);
+    var f = fs[Math.floor(rnd() * fs.length)];
+    return (f.x0 + f.x1) / 2 + rr(-80, 80);
+  };
   var nd = L >= 2 ? Math.min(10, 1 + Math.floor(L / 4)) : 0, tries = 0, slabs = 0;
   while (slabs < nd && tries++ < 60) {
-    var len2 = rr(90, 200), ang2 = rr(-0.45, 0.45), cx = rr(160, W - 160), cy = rr(70, 420);
+    var len2 = rr(90, 200), ang2 = rr(-0.45, 0.45), cx = Math.max(160, Math.min(W - 160, poiX())), cy = rr(Y1 - 270, Y1 - 180);
+    if (cx < xD + 40) cy = Math.min(cy, gy(cx) - rr(130, 200));
     var hw = len2 / 2, hh = 9, ok = true, c = Math.cos(ang2), s = Math.sin(ang2);
     var ext = Math.abs(hw * s) + hh * Math.abs(c), exx = Math.abs(hw * c) + hh * Math.abs(s);
     if (cy + ext > Y1 - 150) ok = false;
@@ -382,7 +390,7 @@ function genLevel(seed, Lreal, opts) {
   // ----- airborne spinners: their number keeps growing with the level number (more things to build around)
   var nAir = Math.min(8, Math.floor((Lreal - 5) / 2.5));
   for (var ai = 0, atry = 0; ai < nAir && atry++ < 80;) {
-    var ar = rr(38, 62), ax = rr(xD + 60, W - 200), ay = rr(Y1 - 330, Y1 - 190 - ar * 0.3), okA = true;
+    var ar = rr(38, 62), ax = Math.max(xD + 40, Math.min(W - 200, poiX())), ay = rr(Y1 - 250, Y1 - 190 - ar * 0.3), okA = true;
     stars.forEach(function (s0) { if (Math.hypot(s0.x - ax, s0.y - ay) < ar + 46) okA = false; });
     rotors.forEach(function (r0) { if (Math.hypot(r0.cx - ax, r0.cy - ay) < r0.r + ar + 40) okA = false; });
     portals.forEach(function (p0) { if (Math.hypot(p0.a.x - ax, p0.a.y - ay) < ar + 60 || Math.hypot(p0.b.x - ax, p0.b.y - ay) < ar + 60) okA = false; });

@@ -18,8 +18,8 @@ function inputAt(c, k) { if (c.l) { if (k < c.l) return Lf; k -= c.l; } var m = 
 
 function groundBelow(st) {
   var p = st.p, c0 = Math.floor(p.x / PF.TS), c1 = Math.floor((p.x + p.w - 1e-4) / PF.TS), r0 = Math.floor((p.y + p.h) / PF.TS);
-  for (var c = c0; c <= c1; c++) for (var r = r0; r < PF.ROWS; r++) { var t = PF.tileAt(st, c, r); if (PF.SOL[t] || t === 12 || t === 13 || t === 9 || t === 7) return true; }
-  var L = st.L; for (var i = 0; i < L.movers.length; i++) { var m = L.movers[i], mq = PF.movPos(st, i, st.f); if (p.x + p.w > mq.x - 20 && p.x < mq.x + m.w + 20 && p.y + p.h <= mq.y + 30) return true; }
+  for (var c = c0; c <= c1; c++) for (var r = r0; r < PF.ROWS; r++) { var t = PF.tileAt(st, c, r); if (t !== 0 && t !== 6) return true; }
+  var L = st.L; for (var i = 0; i < L.movers.length; i++) { var m = L.movers[i], mx = PF.moverX(m, st.f); if (p.x + p.w > mx - 20 && p.x < mx + m.w + 20 && p.y + p.h <= m.y + 4) return true; }
   return false;
 }
 function evaluate(st0, c, traj) {
@@ -66,15 +66,15 @@ function makePlanner() {
 function nearestHazard(st) {
   var p = st.p, L = st.L, TS = PF.TS, best = null, px = p.x + p.w / 2, d;
   function cons(kind, x, y, dx) { if (dx >= -4 && (best === null || dx < best.dx)) best = { kind: kind, x: x, y: y, dx: dx }; }
-  for (var i = 0; i < st.en.length; i++) { var e = st.en[i]; if (!e.alive) continue; d = e.x + e.w / 2 - px; if (d < 220 && Math.abs(e.y - p.y) < 60) cons(e.t === PF.E.SPIKY ? 'spiky' : e.t === PF.E.FLYER ? 'flyer' : 'blob', e.x + e.w / 2, e.y + e.h / 2, d); }
+  for (var i = 0; i < st.en.length; i++) { var e = st.en[i]; if (!e.alive) continue; d = e.x + e.w / 2 - px; if (d < 220 && Math.abs(e.y - p.y) < 60) cons(e.t === PF.SPIKY ? 'spiky' : e.t === PF.FLYER ? 'flyer' : 'blob', e.x + e.w / 2, e.y + e.h / 2, d); }
   var c0 = Math.floor(px / TS), r = Math.floor((p.y + p.h - 1) / TS);
   for (var c = c0; c < Math.min(L.w, c0 + 14); c++) {
     d = c * TS + 8 - px;
     var t = PF.tileAt(st, c, r);
     if (t === PF.T.SPIKE) { cons('spike', c * TS + 8, r * TS + 8, d); break; }
-    var fl = false; for (var rr = r + 1; rr < PF.ROWS; rr++) { var tt = PF.tileAt(st, c, rr); if (PF.SOL[tt] || tt === 14) { fl = true; break; } }
-    if (!fl) { var onm = false; for (var m = 0; m < L.movers.length; m++) { var mm = L.movers[m]; if (Math.abs(mm.cx - (c * TS + 8)) < mm.amp + 40 && Math.abs(mm.y - (p.y + p.h)) < 60) onm = true; } cons(onm ? 'mover' : 'pit', c * TS + 8, (r + 1) * TS, d); break; }
-    var th = PF.tileAt(st, c, r); if (c > c0 && PF.SOL[th]) { cons('wall', c * TS + 8, r * TS + 8, d); break; }
+    var fl = false; for (var rr = r + 1; rr < PF.ROWS; rr++) { var tt = PF.tileAt(st, c, rr); if (tt !== 0 && tt !== 6) { fl = true; break; } }
+    if (!fl) { var onm = false; for (var m = 0; m < L.movers.length; m++) { var mm = L.movers[m]; if (Math.abs(mm.cx - (c * TS + 8)) < mm.amp + 40 && Math.abs(mm.y - (p.y + p.h)) < 40) onm = true; } cons(onm ? 'mover' : 'pit', c * TS + 8, (r + 1) * TS, d); break; }
+    var th = PF.tileAt(st, c, r), th2 = PF.tileAt(st, c, r - 1); if (c > c0 && th !== 0 && th !== 6) { cons('wall', c * TS + 8, r * TS + 8, d); break; }
   }
   return best;
 }
