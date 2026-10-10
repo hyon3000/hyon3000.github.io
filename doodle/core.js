@@ -578,6 +578,7 @@ Sim.prototype.respawn = function () {
   var b = this.ball, lv = this.lv;
   if (lv.rope) { var lr = this.ropes.filter(function (r) { return r.level; })[0]; if (lr) this.destroyRope(lr); }
   b.setActive(true); this.killed = false; this.portCd = 0;
+  this.stars.forEach(function (s) { s.got = false; }); this.next = 0; this.wrong = false; this.events.push('reset');     // a lost ball: every star has to be collected again
   b.setPosition(V(lv.start.x, lv.start.y)); b.setLinearVelocity(Vec2(0, 0)); b.setAngularVelocity(0); b.setAngle(0); b.setAwake(true);
   if (lv.rope) this.makeRope();
 };

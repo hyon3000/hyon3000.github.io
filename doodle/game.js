@@ -4,19 +4,19 @@
 'use strict';
 var KO = /^ko/i.test(navigator.language || 'ko');
 var TX = KO ? {
-  title: '2D 피직스', level: '레벨', seed: '시드', best: '최고', draw: '그리기', erase: '지우기', undo: '되돌리기', restart: '다시', start: '시작', pick: '레벨 선택', prevL: '이전 레벨', nextL: '다음 레벨', locked: '아직 열리지 않은 레벨',  ropeLong: '밧줄이 너무 깁니다(최대 120마디, 약 1000px).',  rope: '밧줄', hintRopeTool: '밧줄: 선을 그리면 그린 선의 길이 그대로, 그린 모양 그대로 밧줄이 놓입니다. 끝이 그린 물체나 땅/벽 위면 거기에 매달리고, 빈 곳이면 늘어집니다. 지우기 모드로 가로질러 끌어 끊습니다.',  ouch: '앗! 가시에 찔렸어요. 잠시 뒤 처음 자리로 돌아갑니다.',  wrong: '순서가 틀렸어요',  pin: '핀', hintBoost: '공을 누르면 속도가 붙습니다.', hintPin: '핀: 그린 물체를 눌러 그 점에 고정합니다(그 점을 중심으로 회전). 핀을 다시 누르거나 지우기 모드로 지우면 빠집니다.', pin: '핀', hintPin: '핀: 그린 물체를 눌러 그 점에 고정합니다(그 점을 중심으로 회전). 핀을 다시 누르거나 지우기 모드로 지우면 빠집니다.',
+  title: '2D 피직스', level: '레벨', seed: '시드', best: '최고', draw: '그리기', erase: '지우기/자르기', undo: '되돌리기', restart: '다시', start: '시작', starsReset: '공을 잃어서 별을 처음부터 다시 먹어야 해요',  pick: '레벨 선택', prevL: '이전 레벨', nextL: '다음 레벨', locked: '아직 열리지 않은 레벨',  ropeLong: '밧줄이 너무 깁니다(최대 120마디, 약 1000px).',  rope: '밧줄', hintRopeTool: '밧줄: 선을 그리면 그린 선의 길이 그대로, 그린 모양 그대로 밧줄이 놓입니다. 끝이 그린 물체나 땅/벽 위면 거기에 매달리고, 빈 곳이면 늘어집니다. 지우기 모드로 가로질러 끌어 끊습니다.',  ouch: '앗! 가시에 찔렸어요. 잠시 뒤 처음 자리로 돌아갑니다.',  wrong: '순서가 틀렸어요',  pin: '핀', hintBoost: '공을 누르면 속도가 붙습니다.', hintPin: '핀: 그린 물체를 눌러 그 점에 고정합니다(그 점을 중심으로 회전). 핀을 다시 누르거나 지우기/자르기 모드로 지우면 빠집니다.', pin: '핀', hintPin: '핀: 그린 물체를 눌러 그 점에 고정합니다(그 점을 중심으로 회전). 핀을 다시 누르거나 지우기 모드로 지우면 빠집니다.',
   hint0: '끌어서 그리면 물체가 됩니다. 공을 모든 별에 닿게 하세요. 다 그렸으면 Space(시작).',
-  hintRope: ' 밧줄은 지우기 모드(또는 오른쪽 버튼 드래그)로 가로질러 쓸어서 끊습니다.',
+  hintRope: ' 밧줄은 지우기/자르기 모드(또는 오른쪽 버튼 드래그)로 가로질러 쓸어서 끊습니다.',
   hintRun: '막히면 다시(R)로 같은 레벨을 처음부터. 공이 떨어지면 1초 뒤 제자리로 돌아옵니다.',
-  hintErase: '지우기: 선과 핀은 누르거나 끌어서 지우고, 밧줄은 가로질러 끌거나 눌러서 끊습니다.', win: '클리어!', copied: '이 레벨의 주소를 복사했어요', nolink: '주소: ',
+  hintErase: '지우기/자르기: 선과 핀은 누르거나 끌어서 지우고, 밧줄은 가로질러 끌거나 눌러서 끊습니다.', win: '클리어!', copied: '이 레벨의 주소를 복사했어요', nolink: '주소: ',
   tooMany: '선이 너무 많아 가장 오래된 선을 지웠어요', thinking: '풀이를 찾는 중...', nosol: '해답을 찾지 못했습니다.', autoOn: '자동으로 푸는 중...',
   hintShown: '힌트: 선 하나를 그렸어요. 다시 누르면 다음 단계입니다.', hintRunMsg: '힌트: 시작했어요.', hintCutMsg: '힌트: 밧줄을 잘랐어요.'
 } : {
-  title: '2D Physics', level: 'Level', seed: 'Seed', best: 'Best', draw: 'Draw', erase: 'Erase', undo: 'Undo', restart: 'Restart', start: 'Start', pick: 'Choose a level', prevL: 'Previous level', nextL: 'Next level', locked: 'Not unlocked yet',  ropeLong: 'That rope is too long (at most 120 segments, about 1000 px).',  rope: 'Rope', hintRopeTool: 'Rope: draw a line - the rope is exactly as long as the line you draw and starts in that shape. An end over a drawn object or the ground/walls is attached there; over empty space it hangs free. Drag across it in Erase mode to cut it.',  ouch: 'Ouch! Spiked. The ball returns to its start in a moment.',  wrong: 'Wrong order',  pin: 'Pin', hintBoost: 'Press on the ball to give it a push.', hintPin: 'Pin: click a drawn object to pin it at that point (it rotates around the pin). Click a pin again, or use Erase mode, to remove it.', pin: 'Pin', hintPin: 'Pin: click a drawn object to pin it at that point (it rotates around the pin). Click a pin again, or use Erase mode, to remove it.',
+  title: '2D Physics', level: 'Level', seed: 'Seed', best: 'Best', draw: 'Draw', erase: 'Erase / Cut', undo: 'Undo', restart: 'Restart', start: 'Start', starsReset: 'Ball lost - collect the stars again',  pick: 'Choose a level', prevL: 'Previous level', nextL: 'Next level', locked: 'Not unlocked yet',  ropeLong: 'That rope is too long (at most 120 segments, about 1000 px).',  rope: 'Rope', hintRopeTool: 'Rope: draw a line - the rope is exactly as long as the line you draw and starts in that shape. An end over a drawn object or the ground/walls is attached there; over empty space it hangs free. Drag across it in Erase mode to cut it.',  ouch: 'Ouch! Spiked. The ball returns to its start in a moment.',  wrong: 'Wrong order',  pin: 'Pin', hintBoost: 'Press on the ball to give it a push.', hintPin: 'Pin: click a drawn object to pin it at that point (it rotates around the pin). Click a pin again, or use Erase mode, to remove it.', pin: 'Pin', hintPin: 'Pin: click a drawn object to pin it at that point (it rotates around the pin). Click a pin again, or use Erase mode, to remove it.',
   hint0: 'Drag to draw - drawings become solid objects. Make the ball touch every star. When ready press Space (start).',
-  hintRope: ' Cut the rope in Erase mode (or right-button drag) by swiping across it.',
+  hintRope: ' Cut the rope in Erase / Cut mode (or right-button drag) by swiping across it.',
   hintRun: 'Stuck? Restart (R) replays the same level. A fallen ball returns to its start after 1 s.',
-  hintErase: 'Erase: tap or drag over strokes and pins to erase them; drag across a rope (or tap it) to cut it.', win: 'Cleared!', copied: 'Level link copied', nolink: 'Link: ',
+  hintErase: 'Erase / Cut: tap or drag over strokes and pins to erase them; drag across a rope (or tap it) to cut it.', win: 'Cleared!', copied: 'Level link copied', nolink: 'Link: ',
   tooMany: 'Too many strokes - the oldest one was removed', thinking: 'Looking for a solution...', nosol: 'No solution found.', autoOn: 'Solving automatically...',
   hintShown: 'Hint: one stroke drawn. Press again for the next step.', hintRunMsg: 'Hint: started.', hintCutMsg: 'Hint: rope cut.'
 };
@@ -259,7 +259,7 @@ function cutSwipe(p, q) {
   userChanged();
   return true;
 }
-var boostT = -999, boostFx = null, failing = false, failT = 0;
+var resetFlash = 0, boostT = -999, boostFx = null, failing = false, failT = 0;
 function ballHit(x, y) { return Math.hypot(x - sim.bx, y - sim.by) <= BALL_R + 6; }
 function boostBall() {                       // press on the ball: +3 m/s along its velocity (toward a star / up-right when almost at rest)
   if (!running || won) return false;
@@ -288,7 +288,7 @@ function stepOnce() {
     if (sim.won) { won = true; winT = 90; burst(sim.bx, sim.by, 40); prog.cleared[levelNo] = 1; if (levelNo + 1 > prog.furthest) prog.furthest = levelNo + 1; saveProg(); if (levelNo > best) { best = levelNo; try { localStorage.setItem('doodle_best', String(best)); } catch (e) {} } updateHud(); }
     else {
       if (sim.dead() && !fallT) fallT = 60;
-      if (fallT && --fallT === 0) sim.respawn();
+      if (fallT && --fallT === 0) { sim.respawn(); sim.events = []; updateHud(); setStatus(TX.starsReset); resetFlash = 1; }
     }
   } else if (--winT <= 0) { loadLevel(seed0, levelNo + 1, false); }
 }
@@ -590,6 +590,7 @@ function render(ts) {
     ctx.globalAlpha = Math.min(1, p.life * 1.5); sparklePath(ctx, p.x, p.y, 6 + 6 * p.life, p.rot); ctx.fillStyle = p.c; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1.2; ctx.stroke();
   }
   ctx.globalAlpha = 1;
+  if (resetFlash > 0) { resetFlash -= 0.02; ctx.save(); ctx.globalAlpha = Math.min(0.28, resetFlash * 0.3); ctx.fillStyle = '#ffd166'; ctx.fillRect(-offx / sc, -offy / sc, cw / sc, ch / sc); ctx.globalAlpha = Math.min(1, resetFlash * 1.5); ctx.translate(W / 2, 120); ctx.font = 'bold 40px "Comic Sans MS","Noto Sans KR",sans-serif'; ctx.textAlign = 'center'; ctx.lineWidth = 8; ctx.strokeStyle = '#f9f5ea'; ctx.lineJoin = 'round'; ctx.strokeText(TX.starsReset, 0, 0); ctx.fillStyle = '#e63946'; ctx.fillText(TX.starsReset, 0, 0); ctx.restore(); }
   if (failing) {
     ctx.save(); ctx.globalAlpha = 0.18 + 0.12 * Math.sin(vt * 25); ctx.fillStyle = '#e63946'; ctx.fillRect(-offx / sc, -offy / sc, cw / sc, ch / sc); ctx.globalAlpha = 1;
     ctx.translate(W / 2, 170); ctx.rotate(0.03); ctx.font = 'bold 64px "Comic Sans MS","Segoe Print","Noto Sans KR",cursive'; ctx.textAlign = 'center'; ctx.lineJoin = 'round';
@@ -634,13 +635,13 @@ function updateHud() {
   else $('chStars').innerHTML = level.order.map(function (k, r) { var cls = r < sim.next ? 'ns done' : r === sim.next ? 'ns next' : 'ns'; return '<i class="' + cls + '" style="--c:' + COLORS[r % COLORS.length] + '">' + (r + 1) + '</i>'; }).join('');
   $('chBest').textContent = TX.best + ' ' + best;
   $('btnStart').style.display = running || won ? 'none' : '';
-  $('btnErase').textContent = mode === 'erase' ? '✐ ' + TX.erase : '✎ ' + TX.draw; $('btnErase').classList.toggle('on', mode === 'erase'); $('btnPin').classList.toggle('on', mode === 'pin'); $('btnRope').classList.toggle('on', mode === 'rope');
+  $('btnDraw').classList.toggle('on', mode === 'draw'); $('btnErase').classList.toggle('on', mode === 'erase'); $('btnPin').classList.toggle('on', mode === 'pin'); $('btnRope').classList.toggle('on', mode === 'rope');
 }
 function setMode(m) { mode = m; updateHud(); setStatus(m === 'rope' ? TX.hintRopeTool : m === 'pin' ? TX.hintPin : m === 'erase' ? TX.hintErase : (running ? TX.hintRun : TX.hint0)); }
-function toggleEraser() { setMode(mode === 'erase' ? 'draw' : 'erase'); return mode === 'erase'; }
-function modeButton() { setMode(mode === 'draw' ? 'erase' : 'draw'); }          // draw -> erase; erase / rope / pin -> back to draw
-function toggleRope() { setMode(mode === 'rope' ? 'draw' : 'rope'); return mode === 'rope'; }
-function togglePin() { setMode(mode === 'pin' ? 'draw' : 'pin'); return mode === 'pin'; }
+function toggleEraser() { setMode('erase'); return true; }          // kept as API names: they now SELECT the tool
+function setDraw() { setMode('draw'); return true; }
+function toggleRope() { setMode('rope'); return true; }
+function togglePin() { setMode('pin'); return true; }
 function toWorld(e) { var r = canvas.getBoundingClientRect(); return [(e.clientX - r.left - offx) / sc, (e.clientY - r.top - offy) / sc]; }
 var drawing = null, touches = {};
 function initInput() {
@@ -686,13 +687,14 @@ function initInput() {
     if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'Z')) { e.preventDefault(); undoStroke(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (k === 'PageUp' || k === '[') { e.preventDefault(); stepLevel(-1); return; } if (k === 'PageDown' || k === ']') { e.preventDefault(); stepLevel(1); return; } if (k === 'Escape') { closePicker(); return; }
-    if (k === 'r' || k === 'R') { restartLevel(); } else if (k === ' ') { e.preventDefault(); startSim(); userChanged(); } else if (k === 'e' || k === 'E') { toggleEraser(); } else if (k === 'p' || k === 'P') { togglePin(); } else if (k === 't' || k === 'T') { toggleRope(); }
+    if (k === 'r' || k === 'R') { restartLevel(); } else if (k === ' ') { e.preventDefault(); startSim(); userChanged(); } else if (k === 'd' || k === 'D') { setDraw(); } else if (k === 'e' || k === 'E') { toggleEraser(); } else if (k === 'p' || k === 'P') { togglePin(); } else if (k === 't' || k === 'T') { toggleRope(); }
   });
   $('btnStart').onclick = function () { startSim(); userChanged(); };
   $('btnPrev').onclick = function () { stepLevel(-1); }; $('btnNext').onclick = function () { stepLevel(1); };
   $('chLevel').onclick = function (e) { e.stopPropagation(); togglePicker(); };
   document.addEventListener('pointerdown', function (e) { var pk = $('picker'); if (pk.style.display === 'block' && !pk.contains(e.target)) closePicker(); });
-  $('btnErase').onclick = function () { modeButton(); };
+  $('btnDraw').onclick = function () { setDraw(); };
+  $('btnErase').onclick = function () { toggleEraser(); };
   $('btnPin').onclick = function () { togglePin(); };
   $('btnRope').onclick = function () { toggleRope(); };
   $('btnUndo').onclick = function () { undoStroke(); };
@@ -706,7 +708,7 @@ function initInput() {
 function init() {
   document.documentElement.lang = KO ? 'ko' : 'en';
   document.title = TX.title;
-  $('btnStart').textContent = '▶ ' + TX.start; $('btnPin').textContent = '◉ ' + TX.pin; $('btnRope').textContent = '〰 ' + TX.rope; $('btnUndo').textContent = '↶ ' + TX.undo; $('btnRestart').textContent = '⟲ ' + TX.restart;
+  $('btnStart').textContent = '▶ ' + TX.start; $('btnDraw').textContent = '✎ ' + TX.draw; $('btnErase').textContent = '✐ ' + TX.erase; $('btnPin').textContent = '◉ ' + TX.pin; $('btnRope').textContent = '〰 ' + TX.rope; $('btnUndo').textContent = '↶ ' + TX.undo; $('btnRestart').textContent = '⟲ ' + TX.restart;
   canvas = $('cv'); ctx = canvas.getContext('2d');
   var q = new URLSearchParams(location.search), sd = parseInt(q.get('seed'), 10), lv = parseInt(q.get('level'), 10);
   var st0 = readProg(), startSeed, startLevel;
