@@ -10,7 +10,7 @@ body{display:flex;flex-direction:column}
 #stage{flex:1 1 auto;min-height:0;position:relative;overflow:hidden}
 canvas{position:absolute;left:0;top:0;touch-action:none;outline:none;background:#0b1030}
 #pad{flex:0 0 auto;display:none;box-sizing:border-box;padding:6px 10px calc(6px + env(safe-area-inset-bottom));background:#14193a;border-top:2px solid #2b3470;touch-action:none;justify-content:space-between;align-items:stretch;gap:10px}
-#pad.on{display:flex}
+#pad.on{display:flex;height:clamp(76px,22vh,140px)}
 #pad .grp{display:flex;gap:8px;flex:1 1 0}
 #pad .grp.r{justify-content:flex-end}
 #pad button{flex:1 1 0;max-width:150px;font:bold 15px/1 system-ui,sans-serif;color:#fff;background:#3a4aa8;border:2px solid #7e8ee8;border-bottom-width:4px;border-radius:12px;touch-action:none;-webkit-tap-highlight-color:transparent;padding:0}

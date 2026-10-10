@@ -23,7 +23,7 @@ window.testAuto = function (seed0, count, level, maxLives) {
   for (var s = seed0; s < seed0 + count; s++) {
     var L = PF.generate(s, level), lives = maxLives || 1, cleared = false, pl = PFPlanner.make(), st = PF.newState(L), t0 = performance.now(), f = 0;
     while (f < 60 * L.time && !cleared) {
-      var inp = pl.decide(st); hist.push(inp + ':' + Math.round(st.p.x) + ',' + Math.round(st.p.y)); if (hist.length > 70) hist.shift(); PF.step(st, inp); f++;
+      var inp = pl.decide(st); PF.step(st, inp); f++;
       if (st.p.won) { cleared = true; break; }
       if (st.p.dead) { out.deaths++; lives--; if (lives <= 0) { out.fails.push([s, level, Math.round(st.p.x / 16), st.p.why]); break; } st = PF.newState(L, { cp: !!st.cp }); pl.reset(); }
     }

@@ -118,11 +118,14 @@ function inPoly(px, py, p) {
 }
 
 /* ================= PROCEDURAL LEVEL ================= */
-function genLevel(seed, L, opts) {
+// difficulty ramps ~3.9x faster than the level number after level 3: level 10 plays like the old level 30 and it keeps rising from there
+function effLevel(n) { return n <= 3 ? n : Math.round(3 + (n - 3) * 3.86); }
+function genLevel(seed, Lreal, opts) {
+  var L = effLevel(Lreal);
   var noRepair = !!(opts && opts.norepair), repairs = 0, invalidBefore = 0;
-  var rnd = mulberry32(hash2(seed, L * 7919 + 13));
+  var rnd = mulberry32(hash2(seed, Lreal * 7919 + 13));
   var rr = function (a, b) { return a + (b - a) * rnd(); };
-  var hmax = Math.min(150, 40 + L * 7.5);
+  var hmax = Math.min(L > 30 ? 190 : 150, 40 + L * 7.5);
   var wmax = Math.min(L >= 8 ? 230 : 380, 130 + L * 16), HI = L >= 8;
   var nf = Math.min(1 + Math.floor((L - 1) / 3), 4);
   var D = Math.min(HI ? 380 : 410, Math.round(3.0 * hmax + 110));
@@ -155,8 +158,8 @@ function genLevel(seed, L, opts) {
       else w = r12(rr(Math.max(110, 0.7 * wmax), wmax));
       return { type: 'pit', variant: variant, w: w, lead: 36, need: 36 + w + 48 };
     }
-    if (t === 'crates') return { type: 'crates', rows: L >= 8 ? 3 : 2, lead: 48, w: 56, need: 48 + 56 + 72 };
-    if (t === 'dominoes') { var n = 4 + Math.min(5, Math.floor(L / 4)); return { type: 'dominoes', n: n, lead: 48, w: n * 36, need: 48 + n * 36 + 72 }; }
+    if (t === 'crates') return { type: 'crates', rows: L >= 8 ? Math.min(6, Math.max(3, 2 + Math.floor(L / 12))) : 2, lead: 48, w: 56, need: 48 + 56 + 72 };
+    if (t === 'dominoes') { var n = 4 + Math.min(9, Math.floor(L / 4)); return { type: 'dominoes', n: n, lead: 48, w: n * 36, need: 48 + n * 36 + 72 }; }
     var h = Math.max(40, Math.round(rr(0.55, 1) * hmax * hscale));
     var lead = r12(1.25 * h + 36), ww = 48;
     return { type: 'wall', h: h, ww: ww, lead: lead, need: lead + ww + 60 };
@@ -246,7 +249,7 @@ function genLevel(seed, L, opts) {
   // ----- special elements (levels 6+): boost zones, rotating bars, spike patches (all seeded)
   var boosts = [], rotors = [], spikes = [];
   if (L >= 6) {
-    var ne = L >= 10 ? Math.min(5, 2 + Math.floor((L - 10) / 4) + (rnd() < 0.5 ? 1 : 0)) : Math.min(3, 1 + Math.floor((L - 6) / 4) + (rnd() < 0.4 ? 1 : 0)), occ = [];
+    var ne = L >= 10 ? Math.min(10, 2 + Math.floor((L - 10) / 4) + (rnd() < 0.5 ? 1 : 0)) : Math.min(3, 1 + Math.floor((L - 6) / 4) + (rnd() < 0.4 ? 1 : 0)), occ = [];
     features.forEach(function (f) {
       if (f.type === 'wall') occ.push([f.x0 - (1.25 * (f.h || 0) + 44), f.x1 + 70]);
       else if (f.type === 'pit') occ.push([f.x0 - 50, f.x1 + 50]);
@@ -300,7 +303,7 @@ function genLevel(seed, L, opts) {
   var last = features.filter(function (f) { return f.end; })[0] || null;
   if (last && last.end) stars.push({ x: W - 70, y: last.top - 24 }); else stars.push({ x: W - 70, y: Y1 - 24 });
   var extra = 0;
-  if (L >= 8) { extra = 1 + (rnd() < 0.6 ? 1 : 0) + (L >= 12 && rnd() < 0.5 ? 1 : 0); }   // ordered levels: 2-4 stars
+  if (L >= 8) { extra = 1 + (rnd() < 0.6 ? 1 : 0) + (L >= 12 && rnd() < 0.5 ? 1 : 0) + (L >= 30 && rnd() < 0.5 ? 1 : 0) + (L >= 50 && rnd() < 0.5 ? 1 : 0); }   // ordered levels: 2-4 stars
   var cands = [];
   features.forEach(function (f) {
     if (f.type === 'wall' && !f.end) cands.push({ x: (f.x0 + f.x1) / 2, y: f.top - 24 });
@@ -361,7 +364,7 @@ function genLevel(seed, L, opts) {
   if (!pointFree(start.x, start.y, BALL_R, 0)) invalidBefore++;
   // ----- floating decorative slabs (kept clear of every corridor)
   var topY = function (xx) { var t = gy(xx); features.forEach(function (f) { if (f.type === 'wall' && xx >= f.x0 && xx <= f.x1) t = Math.min(t, f.top); }); return t; };
-  var nd = L >= 2 ? Math.min(4, 1 + Math.floor(L / 3)) : 0, tries = 0, slabs = 0;
+  var nd = L >= 2 ? Math.min(10, 1 + Math.floor(L / 4)) : 0, tries = 0, slabs = 0;
   while (slabs < nd && tries++ < 60) {
     var len2 = rr(90, 200), ang2 = rr(-0.45, 0.45), cx = rr(160, W - 160), cy = rr(70, 420);
     var hw = len2 / 2, hh = 9, ok = true, c = Math.cos(ang2), s = Math.sin(ang2);
@@ -375,6 +378,16 @@ function genLevel(seed, L, opts) {
     rotors.forEach(function (ro) { if (Math.abs(cx - ro.cx) < ro.r + len2 / 2 + 60 && cy + ext > ro.cy - ro.r - 60) ok = false; });
     jets.forEach(function (jt) { if (cx + exx > jt.x0 - 20 && cx - exx < jt.x1 + 20 && cy + ext > Y1 - 260) ok = false; });
     if (ok) { boxes.push({ cx: cx, cy: cy, hw: hw, hh: hh, a: ang2, kind: 'slab' }); slabs++; }
+  }
+  // ----- airborne spinners: their number keeps growing with the level number (more things to build around)
+  var nAir = Math.min(8, Math.floor((Lreal - 5) / 2.5));
+  for (var ai = 0, atry = 0; ai < nAir && atry++ < 80;) {
+    var ar = rr(38, 62), ax = rr(xD + 60, W - 200), ay = rr(Y1 - 330, Y1 - 190 - ar * 0.3), okA = true;
+    stars.forEach(function (s0) { if (Math.hypot(s0.x - ax, s0.y - ay) < ar + 46) okA = false; });
+    rotors.forEach(function (r0) { if (Math.hypot(r0.cx - ax, r0.cy - ay) < r0.r + ar + 40) okA = false; });
+    portals.forEach(function (p0) { if (Math.hypot(p0.a.x - ax, p0.a.y - ay) < ar + 60 || Math.hypot(p0.b.x - ax, p0.b.y - ay) < ar + 60) okA = false; });
+    if (!okA) continue;
+    rotors.push({ cx: ax, cy: ay, r: ar, omega: (rnd() < 0.5 ? -1 : 1) * rr(1.4, 2.8), air: true }); ai++;
   }
   var lv = { seed: seed, L: L, Ys: Ys, Y1: Y1, D: D, xD: xD, chains: chains, boxes: boxes, dyn: dyn, seesaws: seesaws, jets: jets, boosts: boosts, rotors: rotors, spikes: spikes, portals: portals, rope: rope, stars: stars, order: order, features: features,
     start: start, gy: gy, ice: iceOn ? [iceX0, iceX1] : null };
@@ -522,12 +535,17 @@ Sim.prototype.addRope = function (A, B, attA, attB, P0) {
   while (this.ropeSegCount() + N2 > ROPE_CAP) { var old = this.ropes.filter(function (r) { return !r.level; })[0]; if (!old) return null; this.destroyRope(old); this.events.push('toomanyropes'); }
   var ch = this.buildChain(P, false), rec = { level: false, links: ch.links, spec: { P: P, attA: attA || null, attB: attB || null }, attA: attA || null, attB: attB || null, cut: false };
   var ba = this.attachBody(attA), bb = this.attachBody(attB);
+  rec.endA = ba ? { b: ba, p: [P[0][0], P[0][1]] } : null; rec.endB = bb ? { b: bb, p: [P[P.length - 1][0], P[P.length - 1][1]] } : null;
   [attA, attB].forEach(function (att) {                    // bodies a rope end is hung on (and the bodies pinned together with it) do not collide with that rope
     if (!att || att.kind !== 'stroke') return;
     [att.st].concat(att.also || []).forEach(function (st) { if (!st || this.strokes.indexOf(st) < 0) return; for (var f = st.body.getFixtureList(); f; f = f.getNext()) f.setFilterData({ groupIndex: -ch.gid, categoryBits: 1, maskBits: 0xFFFF }); }, this);
   }, this);
   if (ba) this.world.createJoint(new planck.RevoluteJoint({}, ba, ch.links[0], V(P[0][0], P[0][1])));
   if (bb) this.world.createJoint(new planck.RevoluteJoint({}, bb, ch.links[N2 - 1], V(P[N2][0], P[N2][1])));
+  if (ba && bb && ba !== bb) {                             // both ends hung: the rope can never be longer than its drawn length, however heavy the load (a plain chain of joints stretches)
+    var tl = 0; for (var ri = 0; ri < N2; ri++) tl += Math.hypot(P[ri + 1][0] - P[ri][0], P[ri + 1][1] - P[ri][1]);
+    this.world.createJoint(new planck.RopeJoint({ maxLength: tl / S, collideConnected: true, localAnchorA: ba.getLocalPoint(V(P[0][0], P[0][1])), localAnchorB: bb.getLocalPoint(V(P[N2][0], P[N2][1])) }, ba, bb));
+  }
   this.ropes.push(rec);
   this.pins.forEach(function (p) {                         // pins on an object / rope hinge it with a new rope segment lying on the pin
     if (p.type !== 'hinge' || !p.b0) return;
@@ -536,6 +554,7 @@ Sim.prototype.addRope = function (A, B, attA, attB, P0) {
     if (best < 0) return;
     if ((attA && attA.kind === 'stroke' && p.sts.indexOf(attA.st) >= 0 && best === 0) || (attB && attB.kind === 'stroke' && p.sts.indexOf(attB.st) >= 0 && best === N2 - 1)) return;
     p.joints.push(this.world.createJoint(new planck.RevoluteJoint({}, p.b0, ch.links[best], V(pp[0], pp[1])))); p.lk.push({ rec: rec, k: best });
+    this.limitRope(rec, best, p.b0, pp, p);
   }, this);
   this.pins.forEach(function (p) {                         // fixed pegs also catch rope segments lying on them
     if (p.type !== 'peg') return;
@@ -634,6 +653,7 @@ Sim.prototype.addGeom = function (geom, meta, st0) {
     if (p.type !== 'hinge' || !p.b0 || p.sts.indexOf(st) >= 0) return;
     var pp = this.pinPos(p); if (!this.hitStroke(st, pp[0], pp[1], 6)) return;
     p.joints.push(this.world.createJoint(new planck.RevoluteJoint({}, p.b0, st.body, V(pp[0], pp[1])))); p.sts.push(st);
+    p.lk.forEach(function (l) { this.limitRope(l.rec, l.k, st.body, pp, p); }, this);
   }, this);
   if (this.strokes.length > MAXBODIES) { var victim = this.strokes.filter(function (q) { return q !== st && !this.pinned(q); }, this)[0] || this.strokes[0]; this.removeStroke(victim); this.events.push('toomany'); }
   return st;
@@ -662,6 +682,18 @@ Sim.prototype.ropeLinksAt = function (x, y, tol) {      // the nearest segment o
   });
   return res;
 };
+Sim.prototype.limitRope = function (rec, k, body, pt, pin) {   // a body hinged to link k of a rope that is hung at an end: it can never be farther from that end than the rope up to link k is long
+  if (!rec || !rec.links || !body || rec.links.indexOf(body) >= 0) return;
+  [['endA', 0], ['endB', 1]].forEach(function (e) {
+    var end = rec[e[0]]; if (!end || !end.b || end.b === body) return;
+    var len = 0, ok = true, i, n = rec.links.length;
+    if (e[1] === 0) { for (i = 0; i <= k; i++) { if (!rec.links[i]) { ok = false; break; } len += rec.links[i].__hl * 2; } }
+    else { for (i = k; i < n; i++) { if (!rec.links[i]) { ok = false; break; } len += rec.links[i].__hl * 2; } }
+    if (!ok) return;
+    var j = this.world.createJoint(new planck.RopeJoint({ maxLength: len / S, collideConnected: true, localAnchorA: end.b.getLocalPoint(V(end.p[0], end.p[1])), localAnchorB: body.getLocalPoint(V(pt[0], pt[1])) }, end.b, body));
+    if (pin) pin.joints.push(j);
+  }, this);
+};
 Sim.prototype.pinBodies = function (p) { var r = []; p.sts.forEach(function (st) { r.push(st.body); }); p.lk.forEach(function (l) { var b = l.rec.links[l.k]; if (b) r.push(b); }); return r; };
 Sim.prototype.pinPos = function (p) {
   if (p.type === 'hinge' && p.b0) { var b = p.b0, q = b.getPosition(), a = b.getAngle(), c = Math.cos(a), s = Math.sin(a); return [q.x * S + p.lx * c - p.ly * s, q.y * S + p.lx * s + p.ly * c]; }
@@ -677,6 +709,7 @@ Sim.prototype._mkPin = function (type, x, y, sts, lks) {
     pin.anchor = world.createBody({ type: 'static', position: V(x, y) });
     bodies.forEach(function (b) { pin.joints.push(world.createJoint(new planck.RevoluteJoint({}, pin.anchor, b, V(x, y)))); });
   }
+  if (pin.lk.length) { var self = this; pin.lk.forEach(function (l) { pin.sts.forEach(function (st) { self.limitRope(l.rec, l.k, st.body, [x, y], pin); }); }); }
   bodies.forEach(function (b) { b.setAwake(true); });
   this.pins.push(pin); return pin;
 };

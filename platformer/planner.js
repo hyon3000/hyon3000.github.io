@@ -10,10 +10,11 @@ var CANDS = (function () {
   [0, 8, 20, 40].forEach(function (s) { dirs.forEach(function (a) { dirs.forEach(function (b) { if (s === 0 && a !== b) return; c.push({ a: a, b: b, s: s, h: -1 }); }); }); });
   [0, 3, 6, 10, 15, 22, 30].forEach(function (s) { dirs.forEach(function (a) { dirs.forEach(function (b) { if (s === 0 && a !== RR && a !== R) return; [99, 12, 4].forEach(function (h) { c.push({ a: a, b: b, s: s, h: h }); }); }); }); });
   [8, 16].forEach(function (s) { [R, RR].forEach(function (b) { c.push({ a: Lf, b: b, s: s, h: -1 }); [99, 12].forEach(function (h) { c.push({ a: Lf, b: b, s: s, h: h }); }); }); });
+  [0, 6, 12].forEach(function (s) { [R, RR].forEach(function (a) { [R, RR].forEach(function (b) { [18, 30].forEach(function (t) { [99, 12].forEach(function (h) { c.push({ a: a, b: b, s: s, h: h, t: t, c: N }); }); }); }); }); });
   [20, 40].forEach(function (l) { [12, 22, 32].forEach(function (s) { [99, 12].forEach(function (h) { c.push({ a: RR, b: RR, s: s, h: h, l: l }); }); }); c.push({ a: RR, b: RR, s: 30, h: -1, l: l }); });
   return c;
 })();
-function inputAt(c, k) { if (c.l) { if (k < c.l) return Lf; k -= c.l; } var m = k < c.s ? c.a : c.b; if (c.h > 0 && k >= c.s && k < c.s + c.h) m |= IN.J; return m; }
+function inputAt(c, k) { if (c.l) { if (k < c.l) return Lf; k -= c.l; } var m = k < c.s ? c.a : (c.t !== undefined && k >= c.s + c.t ? c.c : c.b); if (c.h > 0 && k >= c.s && k < c.s + c.h) m |= IN.J; return m; }
 
 function groundBelow(st) {
   var p = st.p, c0 = Math.floor(p.x / PF.TS), c1 = Math.floor((p.x + p.w - 1e-4) / PF.TS), r0 = Math.floor((p.y + p.h) / PF.TS);
@@ -33,7 +34,7 @@ function evaluate(st0, c, traj) {
   sc = p.x * 3 + (st.score - st0.score) * 0.25;
   if (big0 && !p.big) sc -= 400;
   if (!p.ground) { sc -= 25; if (!groundBelow(st)) sc -= 3000; }
-  if (c.h > 0) sc -= 2;
+  if (c.h > 0) sc -= 2 + c.s * 0.4;
   if (c.a === Lf || c.l) sc -= 30;
   return { sc: sc, dead: false, land: land, k: k };
 }
@@ -41,19 +42,20 @@ function makePlanner() {
   var pl = { script: null, i: 0, bestX: 0, bestF: 0, rnd: PF.rng(12345), explore: 0, last: null, stats: { plans: 0, ms: 0 } };
   pl.reset = function () { pl.script = null; pl.i = 0; pl.bestX = 0; pl.bestF = 0; pl.explore = 0; };
   pl.search = function (st, noise) {
-    var best = null, bi = -1, sc;
-    for (var i = 0; i < CANDS.length; i++) { var r = evaluate(st, CANDS[i], null); sc = r.sc + (noise ? pl.rnd() * noise : 0); if (best === null || sc > best.sc) { best = r; best.sc = sc; bi = i; } }
+    var best = null, bi = -1, sc, rising = st.p.jheld && !st.p.ground && st.p.vy < 0;
+    for (var i = 0; i < CANDS.length; i++) { var r = evaluate(st, CANDS[i], null); if (rising && CANDS[i].s === 0 && CANDS[i].h > 0 && !CANDS[i].l) r.sc += 8; sc = r.sc + (noise ? pl.rnd() * noise : 0); if (best === null || sc > best.sc) { best = r; best.sc = sc; bi = i; } }
     best.cand = CANDS[bi]; return best;
   };
   pl.decide = function (st) {
     var p = st.p;
     if (p.x > pl.bestX + 4) { pl.bestX = p.x; pl.bestF = st.f; }
     if (!pl.script || pl.i >= pl.script.length) {
-      if (st.f - pl.bestF > 200) { pl.explore = 40; pl.bestF = st.f - 100; }
+      if (st.f - pl.bestF > 300) { pl.explore = 40; pl.bestF = st.f - 100; }
       var t0 = (typeof performance !== 'undefined' ? performance.now() : 0);
-      var best = pl.search(st, pl.explore > 0 ? 60 : 0); if (pl.explore > 0) pl.explore -= REPLAN;
+      var best = pl.search(st, pl.explore > 0 ? 25 : 0); if (pl.explore > 0) pl.explore -= REPLAN;
       pl.stats.plans++; pl.stats.ms += (typeof performance !== 'undefined' ? performance.now() : 0) - t0;
-      pl.last = best; pl.script = []; for (var k = 0; k < REPLAN; k++) pl.script.push(inputAt(best.cand, k)); pl.i = 0;
+      pl.last = best; var len = best.cand.l ? 12 : REPLAN;
+      pl.script = []; for (var k = 0; k < len; k++) pl.script.push(inputAt(best.cand, k)); pl.i = 0;
     }
     return pl.script[pl.i++];
   };
