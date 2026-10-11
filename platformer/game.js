@@ -160,7 +160,7 @@ function autoMask(st) {
     if (G.fbUntil > st.f) { G.usingFallback = true; return G.planner.decide(st); }
     G.usingFallback = false; return G.ai.decide(st);
   }
-  G.usingFallback = true; return G.planner.decide(st);
+  G.usingFallback = true; return G.planner.decide(st, 9);
 }
 function say(t, frames) { G.msg = t; G.msgT = frames || 150; }
 function nodeById(id) { for (var k = 0; k < G.map.nodes.length; k++) if (G.map.nodes[k].i === id) return G.map.nodes[k]; return null; }
@@ -360,7 +360,8 @@ function fixedStep() {
   if (G.mode === 'sbrowse') { if (G.auto && ++G.sbT > 120) closeSuper(); return; }
   if (G.mode === 'pause' || !st || G.mode === 'loading') return;
   if (G.mode === 'play') {
-    if (G.auto) setAuto(autoMask(st));
+    G.thinking = false;
+    if (G.auto) { var am = autoMask(st); if (am === null || am === undefined) { G.thinking = true; return; } setAuto(am); }   // null: the route search is still running (spread over frames), the game waits
     PF.step(st, mask());
     handleEvents(st);
     if (G.pendingWarp !== undefined) { var wi = G.pendingWarp; G.pendingWarp = undefined; if (!G.auto) enterRoom(wi); }

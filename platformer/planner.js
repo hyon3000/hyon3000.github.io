@@ -156,22 +156,31 @@ function makeHint(st, pl) {
 function settles(s) { var q = PF.clone(s); for (var k = 0; k < 24; k++) { PF.step(q, 0); if (q.p.dead) return false; } return q.p.ground; }
 function makeNavigator() {
   var fb = makePlanner(), nv = { fb: fb, seq: null, i: 0, stage: -1, wait: 0, st: { plans: 0, fails: 0, ms: 0 } };
-  nv.reset = function () { fb.reset(); nv.seq = null; nv.i = 0; nv.stage = -1; nv.wait = 0; };
-  nv.decide = function (st) {
+  nv.reset = function () { fb.reset(); nv.job = null; nv.busy = false; nv.seq = null; nv.i = 0; nv.stage = -1; nv.wait = 0; };
+  // decide(st, budgetMs): with a budget the search is spread over several calls and null is returned while it is still thinking (the game does not step then)
+  nv.job = null; nv.busy = false;
+  nv.decide = function (st, budgetMs) {
     var L = st.L;
-    if (!L.route || !PF.searchStage) return fb.decide(st);
+    if (!L.route || !PF.searchIter) return fb.decide(st);
     if (nv.seq && nv.i < nv.seq.length && nv.stage === st.stage) return nv.seq[nv.i++];
     nv.seq = null;
-    if (nv.wait > 0 || !st.p.ground) { if (nv.wait > 0) nv.wait--; return fb.decide(st); }
-    var g = L.route[Math.min(st.stage, L.route.length - 1)], tx = g.x === undefined ? L.goalX : g.x, ty = g.y === undefined ? null : g.y, t0 = Date.now();
-    var res = null, lim = [4000, 14000];
-    for (var q = 0; q < lim.length && !res; q++) res = PF.searchStage(PF.clone(st), function (s) { return PF.stageDone(s, g) && (g.k === 'goal' || settles(s)); }, tx, ty, lim[q]);
-    if (!res) res = PF.searchStage(PF.clone(st), function (s) { return PF.stageDone(s, g); }, tx, ty, 8000);
-    if (!res) {   // enemies make the route impossible to time: plan as if they were not there (the hero may take a hit; a hit is better than standing still)
+    if (!nv.job) {
+      if (nv.wait > 0 || !st.p.ground) { if (nv.wait > 0) nv.wait--; return fb.decide(st); }
+      var g = L.route[Math.min(st.stage, L.route.length - 1)], tx = g.x === undefined ? L.goalX : g.x, ty = g.y === undefined ? null : g.y;
+      var strict = function (s) { return PF.stageDone(s, g) && (g.k === 'goal' || settles(s)); }, loose = function (s) { return PF.stageDone(s, g); };
       var c2 = PF.clone(st); c2.en = []; c2.noEn = true;
-      res = PF.searchStage(c2, function (s) { return PF.stageDone(s, g) && (g.k === 'goal' || settles(s)); }, tx, ty, 9000);
+      // tiers: with enemies and a safe stop, with a smaller budget, without the safe stop; last resort: as if the enemies were not there (a hit beats standing still)
+      nv.job = { stage: st.stage, ti: 0, it: null, tiers: [[PF.clone(st), strict, 3000], [PF.clone(st), strict, 8000], [PF.clone(st), loose, 3000], [c2, strict, 4000]], tx: tx, ty: ty };
     }
-    nv.st.ms += Date.now() - t0;
+    var jb = nv.job, t0 = Date.now(), res;
+    for (;;) {
+      if (!jb.it) { var tr = jb.tiers[jb.ti]; jb.it = PF.searchIter(tr[0], tr[1], jb.tx, jb.ty, tr[2]); }
+      res = jb.it.run(budgetMs ? 60 : 1e9);
+      if (res === undefined) { if (budgetMs && Date.now() - t0 >= budgetMs) { nv.busy = true; nv.st.ms += Date.now() - t0; return null; } continue; }
+      if (res || ++jb.ti >= jb.tiers.length) break;
+      jb.it = null;
+    }
+    nv.st.ms += Date.now() - t0; nv.busy = false; nv.job = null;
     if (res && res.seq.length) { nv.st.plans++; nv.seq = res.seq; nv.i = 0; nv.stage = st.stage; return nv.seq[nv.i++]; }
     nv.st.fails++; nv.fl = (nv.fl || 0) + 1; if (nv.fl % 3 !== 0) { nv.seq = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]; nv.i = 0; nv.stage = st.stage; return 0; }   // brake and search again from a standing start; every third failure lets the look-ahead planner move
     nv.wait = 30; return fb.decide(st);

@@ -31,14 +31,18 @@ function heapPush(h, it) { h.push(it); var i = h.length - 1; while (i > 0) { var
 function heapPop(h) { var top = h[0], last = h.pop(); if (h.length) { h[0] = last; var i = 0, n = h.length; for (;;) { var l = 2 * i + 1, r = l + 1, m = i; if (l < n && h[l].h < h[m].h) m = l; if (r < n && h[r].h < h[m].h) m = r; if (m === i) break; var t = h[m]; h[m] = h[i]; h[i] = t; i = m; } } return top; }
 var AIRS = [0, IN.R, IN.R | IN.RUN, IN.L], HOLDS = [3, 10, 99];
 // best-first macro search on the real simulation from state st0 until pred(state) holds; returns { st, seq } or null
-function searchStage(st0, pred, tx, ty, maxNodes) {
-  if (pred(st0)) return { st: st0, seq: [], nodes: 0 };
+function searchStage(st0, pred, tx, ty, maxNodes) { var it = searchIter(st0, pred, tx, ty, maxNodes), r; while ((r = it.run(1e9)) === undefined); return r; }
+// resumable form: run(n) expands up to n nodes and returns undefined (not finished), null (no route) or { st, seq }
+function searchIter(st0, pred, tx, ty, maxNodes) {
+  if (pred(st0)) return { run: function () { return { st: st0, seq: [], nodes: 0 }; } };
   var seen = new Set(), heap = [], nodes = 0;
   function key(st) { var p = st.p, a = Math.abs(p.vx), sc = (p.vx < -0.3 ? -1 : 1) * (a < 0.3 ? 0 : a < 1.8 ? 1 : 2) + 2, ph = (p.mv >= 0 || st.sw || st.L.hasFire) ? Math.floor((st.f % MV_PERIOD) / 20) + 1 : (st.en.length ? 40 + Math.floor(st.f / 10) % 32 : 0); return ((((Math.round(p.x / 3) * 256 + Math.round(p.y)) * 5 + sc) * 80 + ph) * 64 + (st.kb & 7) * 8 + (st.sb & 7)) * 40 + Math.min(39, st.mod.size); }
   function hval(st) { var p = st.p; return Math.abs(p.x + 6 - tx) + (ty === null ? 0 : 1.5 * Math.abs(p.y + 7 - ty)); }
   var root = { st: st0, par: null, seq: [], h: hval(st0) }; seen.add(key(st0)); heapPush(heap, root);
   function path(nd, extra) { var parts = [extra]; while (nd) { parts.push(nd.seq); nd = nd.par; } var out = []; for (var i = parts.length - 1; i >= 0; i--) for (var j = 0; j < parts[i].length; j++) out.push(parts[i][j]); return out; }
-  while (heap.length && nodes < maxNodes) {
+  return { run: function (budget) {
+  var lim = Math.min(maxNodes, nodes + budget);
+  while (heap.length && nodes < lim) {
     var nd = heapPop(heap); nodes++;
     var found = null, tryMacro = function (fn) {
       if (found) return; var s = clone(nd.st), seq = fn(s); if (!seq || s.p.dead) return;
@@ -54,7 +58,8 @@ function searchStage(st0, pred, tx, ty, maxNodes) {
     }
     if (found) return found;
   }
-  return null;
+  return (heap.length && nodes < maxNodes) ? undefined : null;
+  } };
 }
 function validate(L, maxNodes) {
   var multi = L.route && L.route.length > 1; maxNodes = maxNodes || (multi ? 9000 : 4000);
@@ -796,7 +801,7 @@ function buildGhostHouse(seed, n, a) {
     var x0 = i * RW + 1;
     for (var q2 = 0; q2 < 3; q2++) coins.push({ x: (x0 + 3 + q2 * 3) * TS + 8, y: (g - 1.5) * TS, b: 0 });
     if (i !== 0 && i !== goalRoom && r() < 0.35 + 0.4 * diff) put(x0 + [2, 5, 8][rnd(0, 2)], g - 1, T.SPIKE);
-    var ng = rnd(1, 1 + (diff > 0.4 ? 1 : 0)); for (var k = 0; k < ng; k++) enemies.push({ t: E.GHOST, x: (x0 + rnd(2, 8)) * TS, y: (g - 7) * TS, w: 14, h: 14, ax: (x0 + 5) * TS, ay: (g - 7) * TS, rg: 30, sp: 1 / (220 + r() * 120), ph: r(), am: 6, spd: 0 });
+    var ng = path.indexOf(i) >= 0 ? 0 : rnd(1, 2); for (var k = 0; k < ng; k++) enemies.push({ t: E.GHOST, x: (x0 + rnd(2, 8)) * TS, y: (g - 7) * TS, w: 14, h: 14, ax: (x0 + 5) * TS, ay: (g - 7) * TS, rg: 30, sp: 1 / (220 + r() * 120), ph: r(), am: 6, spd: 0 });
     if (deg[i] === 1 && i !== 0 && i !== goalRoom && specials.length < 5) specials.push({ x: (x0 + 4) * TS, y: (g - 2) * TS });
   }
   while (specials.length < 5) specials.push({ x: (rnd(1, R) * RW - 3) * TS, y: (g - 7) * TS });
@@ -938,5 +943,5 @@ function generate(seed, n, o) {
 function makeCrumbs(L) { var st = newState(L, { noEn: true, noPM: true }), out = [], last = -99; for (var i = 0; i < L.script.length; i++) { var px0 = st.p.x + 6, py0 = st.p.y + 7, sg0 = st.stage, tc0 = st.tc, kb0 = st.kb, sb0 = st.sb; step(st, L.script[i]); if (st.stage !== sg0 || st.tc !== tc0 || st.kb !== kb0 || st.sb !== sb0) { out.push([Math.round(px0), Math.round(py0), sg0]); last = i; } if (st.p.dead || st.p.won) break; if (i - last >= 36 && st.p.ground) { out.push([Math.round(st.p.x + 6), Math.round(st.p.y + 7), st.stage]); last = i; } } out.push([Math.round(L.goalX), Math.round(L.poleY - 8), (L.route ? L.route.length - 1 : 0)]); return out; }
 function replay(L) { var st = newState(L, { noEn: true, noPM: true }); if (!L.script) return false; for (var i = 0; i < L.script.length; i++) { step(st, L.script[i]); if (st.p.dead) return false; if (st.p.won) return true; } return st.p.won; }
 
-root.PF.probe = probe; root.PF.build = build; root.PF.generate = generate; root.PF.validate = validate; root.PF.checkContainment = checkContainment; root.PF.replay = replay; root.PF.makeCrumbs = makeCrumbs; root.PF.searchStage = searchStage; root.PF.roomLevel = roomLevel; root.PF.worldMap = worldMap; root.PF.worldInfo = worldInfo; root.PF.worldExists = worldExists; root.PF.validateWorldMap = validateWorldMap; root.PF.validateInfinite = validateInfinite; root.PF.unlocked = unlocked; root.PF.kindOf = kindOf; root.PF.worldKinds = worldKinds; root.PF.KIND_NAMES = KIND_NAMES; root.PF.THEME_NAMES = THEME_NAMES; root.PF.pickTheme = pickTheme; root.PF.LAYOUT_THEMES = LAYOUT_THEMES;
+root.PF.probe = probe; root.PF.build = build; root.PF.generate = generate; root.PF.validate = validate; root.PF.checkContainment = checkContainment; root.PF.replay = replay; root.PF.makeCrumbs = makeCrumbs; root.PF.searchStage = searchStage; root.PF.searchIter = searchIter; root.PF.roomLevel = roomLevel; root.PF.worldMap = worldMap; root.PF.worldInfo = worldInfo; root.PF.worldExists = worldExists; root.PF.validateWorldMap = validateWorldMap; root.PF.validateInfinite = validateInfinite; root.PF.unlocked = unlocked; root.PF.kindOf = kindOf; root.PF.worldKinds = worldKinds; root.PF.KIND_NAMES = KIND_NAMES; root.PF.THEME_NAMES = THEME_NAMES; root.PF.pickTheme = pickTheme; root.PF.LAYOUT_THEMES = LAYOUT_THEMES;
 })(typeof window !== 'undefined' ? window : globalThis);
