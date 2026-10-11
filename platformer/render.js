@@ -147,7 +147,7 @@ function drawTile(t, x, y, th, above, bumpDy, c, r, st) {
     case T.SWITCH: { var pu = 0.7 + 0.3 * Math.sin(F * 0.15); ctx.globalAlpha = 0.3 * pu; hex(x + 8, y + 12, 9, '#ffe08a', 0); ctx.globalAlpha = 1; poly([x + 1, y + 16, x + 15, y + 16, x + 13, y + 11, x + 3, y + 11], '#4a3f86'); poly([x + 3, y + 11, x + 13, y + 11, x + 11, y + 8, x + 5, y + 8], '#ffb02a'); rect(x + 5, y + 8, 6, 1.5, '#fff0b0'); break; }
     case T.SWUSED: poly([x + 1, y + 16, x + 15, y + 16, x + 13, y + 13, x + 3, y + 13], '#3a2f66'); rect(x + 4, y + 12, 8, 1.5, '#7a6ab0'); break;
     case T.DOOR: { var dc = st && st.L.grp ? st.L.grp[c * (st.L.rows || ROWS) + r] : 0, kc = KEYCOL[dc % 3]; rect(x, y, TS, TS, '#2a2450'); rect(x + 2, y + 1, TS - 4, TS - 2, kc); rect(x + 3, y + 2, TS - 6, TS - 4, 'rgba(0,0,0,.25)'); if (st && st.L.grp && st.L.tiles[c * (st.L.rows || ROWS) + r - 1] !== T.DOOR) { circ(x + 8, y + 9, 2.4, '#1a1a40'); rect(x + 7.2, y + 9, 1.6, 4, '#1a1a40'); } break; }
-    case T.TELE: drawTele(x, y, teleColor(st.L, c), true); break;
+    case T.TELE: if (st.L.tele && st.L.tele.some(function (t) { return t.door && t.c === c; })) drawDoor(x, y, teleColor(st.L, c)); else drawTele(x, y, teleColor(st.L, c), true); break;
     case T.LAUNCH: { ctx.save(); ctx.translate(x + 8, y + 9); ctx.rotate(-0.9); rrect(-9, -6, 18, 12, 4, '#4a3f86'); rect(-9, -6, 5, 12, '#2a2450'); rect(5, -5, 4, 10, '#ff8a3a'); ctx.restore(); circ(x + 8, y + 12, 3, '#ffe08a'); poly([x + 12, y + 4, x + 16, y + 1, x + 14, y + 7], '#ff8a3a'); break; }
     case T.RING: { if (r !== undefined && st && st.L.tiles[c * (st.L.rows || ROWS) + r - 1] === T.RING) break; var gl = 0.6 + 0.4 * Math.sin(F * 0.12); ctx.globalAlpha = 0.28 * gl; ell(x + 8, y + 16, 11, 17, '#7affe0'); ctx.globalAlpha = 1; ctx.strokeStyle = '#d8fff6'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x + 8, y + 16, 7.5, 14, 0, 0, 6.2832); ctx.stroke(); ctx.strokeStyle = '#2ee6d6'; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(x + 8, y + 16, 4.5 + gl, 10 + gl, 0, 0, 6.2832); ctx.stroke(); spark4(x + 8, y + 16, 3.5, '#fff'); break; }
   }
@@ -169,6 +169,10 @@ function drawWind(w) {
 }
 var KEYCOL = ['#2ee6d6', '#ff6ad5', '#b8ff3a'];
 function drawKey(x, y, c, got) { var col = KEYCOL[c % 3], bob = Math.sin(F * 0.1 + x) * 1.5; if (got) ctx.globalAlpha = 0.25; ctx.save(); ctx.translate(x, y + bob); ctx.rotate(Math.sin(F * 0.05) * 0.2); diamond(0, -4, 4.5, 5.5, col, '#1a1a40'); circ(0, -4, 1.6, '#1a1a40'); rect(-1, 0, 2, 8, col); rect(1, 4, 3, 1.6, col); rect(1, 7, 2.4, 1.6, col); ctx.restore(); ctx.globalAlpha = 1; }
+function drawDoor(x, y, col) {   // a ghost-house door standing on its ledge (the tile is the lower half)
+  var cc = KEYCOL[col % 3], gl = 0.5 + 0.5 * Math.sin(F * 0.08 + x);
+  rect(x + 1, y - 18, 14, 34, '#1a1030'); rect(x + 2, y - 17, 12, 33, cc); poly([x + 2, y - 16, x + 8, y - 22, x + 14, y - 16], cc); rect(x + 4, y - 14, 8, 28, 'rgba(10,6,30,.55)'); circ(x + 11, y + 2, 1.3, '#ffe08a'); ctx.globalAlpha = 0.25 * gl; rect(x + 4, y - 14, 8, 28, '#fff'); ctx.globalAlpha = 1;
+}
 function teleColor(L, c) { if (!L._tc) { L._tc = {}; (L.tele || []).forEach(function (t) { L._tc[t.c] = t.col; L._tc[Math.floor((t.tx + 8) / TS)] = t.col; }); } return L._tc[c] === undefined ? 0 : L._tc[c]; }
 function drawTele(x, y, col, active) { var cc = KEYCOL[col % 3], gl = 0.6 + 0.4 * Math.sin(F * 0.15 + x); ctx.globalAlpha = 0.3 * gl; ell(x + 8, y + 12, 9, 6, cc); ctx.globalAlpha = 1; ctx.strokeStyle = cc; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x + 8, y + 12, 7, 3.5, 0, 0, 6.2832); ctx.stroke(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(x + 8, y + 12, 3.5 + gl, 1.7 + gl * 0.4, 0, 0, 6.2832); ctx.stroke(); for (var k = 0; k < 3; k++) { var yy = y + 10 - ((F * 0.6 + k * 5) % 14); ctx.globalAlpha = 0.6; spark4(x + 5 + (k * 3) % 7, yy, 1.6, cc); ctx.globalAlpha = 1; } }
 function drawWaterOverlay(x, y, above, wt, c, r) {
@@ -324,6 +328,8 @@ function drawLevel(st, th) {
   drawGoal(L, st, st.boss > 0);
   for (i = 0; i < L.movers.length; i++) drawMover(L.movers[i], PF.movPos(st, i, st.f), st, i);
   if (L.maces) for (i = 0; i < L.maces.length; i++) drawMace(L.maces[i], st.f);
+  if (L.chase && st.cw !== undefined) { var cwx = st.cw, gw = ctx.createLinearGradient(cwx - 60, 0, cwx, 0); gw.addColorStop(0, 'rgba(255,60,20,0)'); gw.addColorStop(1, 'rgba(255,90,30,.85)'); ctx.fillStyle = gw; ctx.fillRect(cwx - 60, -2000, 60, 6000); rect(cwx - 6, -2000, 6, 6000, '#ffd24a'); }
+  if (st.lv !== undefined) { var ly = st.lv, gl2 = ctx.createLinearGradient(0, ly - 14, 0, ly + 40); gl2.addColorStop(0, 'rgba(255,200,60,.95)'); gl2.addColorStop(0.2, '#ff6a1a'); gl2.addColorStop(1, '#8a1a08'); ctx.fillStyle = gl2; ctx.fillRect(-50, ly, L.w * TS + 100, 4000); for (var lx = 0; lx < L.w * TS; lx += 18) circ(lx + (st.f * 0.4 % 18), ly + Math.sin((lx + st.f * 2) * 0.05) * 2, 5, '#ffb04a'); }
   for (i = 0; i < L.coins.length; i++) if (!st.cg[i] && L.coins[i].x > cam - 10 && L.coins[i].x < cam + VW + 10) drawCoin(L.coins[i], i);
   if (L.special) for (i = 0; i < L.special.length; i++) drawSpecial(L.special[i], st.sg[i]);
   for (i = 0; i < st.it.length; i++) if (st.it[i].alive) drawItem(st.it[i]);

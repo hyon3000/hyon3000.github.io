@@ -479,6 +479,7 @@ function step(st, inp) {
   if (!p.dead && L.hasFire) { var fc0 = Math.floor((p.x + 2) / TS), fc1 = Math.floor((p.x + p.w - 2) / TS), fr0 = Math.floor((p.y + 2) / TS), fr1 = Math.floor((p.y + p.h - 2) / TS);
     for (var fc = fc0; fc <= fc1; fc++) for (var fr = fr0; fr <= fr1; fr++) if (tileRaw(st, fc, fr) === T.FIRE && fireOn(f, fc)) { hurt(st, 'fire'); if (!p.dead) p.vy = -4.5; } }
   // --- auto-scroller: a wall of lava / fog pushes the hero from the left
+  if (L.rise) { if (st.lv === undefined) st.lv = L.rise.y0; if (f > L.rise.delay) st.lv -= L.rise.v; if (!p.dead && p.y + p.h > st.lv) { p.dead = true; p.why = 'lava'; ev(st, 'die', p.x, p.y); } }
   if (L.chase) { if (st.cw === undefined) st.cw = L.chase.x0; if (f > L.chase.delay) st.cw += L.chase.v; if (!p.dead && p.x + p.w < st.cw) { p.dead = true; p.why = 'chased'; ev(st, 'die', p.x, p.y); } }
   // --- pit / timer / goal / checkpoint
   if (L.maces && !st.noEn) for (i = 0; i < L.maces.length; i++) { var mc = L.maces[i], balls = maceBalls(mc, f); for (var bi = 0; bi < balls.length; bi++) { var bb = balls[bi]; if (bb.x + bb.r > p.x && bb.x - bb.r < p.x + p.w && bb.y + bb.r > p.y && bb.y - bb.r < p.y + p.h) hurt(st, 'mace'); } }

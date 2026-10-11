@@ -268,7 +268,7 @@ function levelInit(cp) {
 function enterLevel(i, force) {
   var node = nodeById(i); if (!node || G.mode === 'loading') return; if (!force && !isOpen(node)) return;
   G.curNode = node; G.mode = 'loading'; G.st = null; G.hint = null; saveProg();
-  setTimeout(function () { G.n = node.n; var sd = PF.hash(G.seed, G.wid, 31); G.L = PF.generate(sd, node.n, { kind: node.kind, secret: !!node.secret }); G.main = null; levelInit(false); var kn = PF.KIND_NAMES[G.L.kind]; say(PFR.levelLabel({ n: node.n }) + ' ' + (KO ? kn[0] : kn[1]), 150); G.msgIsLevel = true; }, 30);
+  setTimeout(function () { G.n = node.n; var sd = PF.hash(G.seed, G.wid, 31); G.L = PF.generate(sd, node.n, { kind: node.kind, secret: !!node.secret }); G.main = null; levelInit(false); var kn = PF.KIND_NAMES[G.L.kind]; say(PFR.levelLabel({ n: node.n }) + ' ' + (KO ? PF.THEME_NAMES[G.L.theme | 0][0] + ' ' + kn[0] : PF.THEME_NAMES[G.L.theme | 0][1] + ' ' + kn[1]), 150); G.msgIsLevel = true; }, 30);
 }
 function totalCoins() { return G.coinBase + (G.st ? G.st.coins : 0); }
 function finishRun() { var s = G.base + (G.st ? G.st.score : 0); if (s > G.best) { G.best = s; saveBest(); } }
