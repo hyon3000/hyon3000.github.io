@@ -479,7 +479,9 @@ function render(g, c2d, bs) {
   if (G.mode === 'map' || (G.mode === 'start' && !G.st)) { drawMap(); return; }
   var st = G.st; if (!st) return;
   var th = THEMES[G.L.theme] || THEMES[0];
-  drawBackground(th, G.cam); drawParticles(th, G.cam); drawLevel(st, th); drawHUD(st);
+  drawBackground(th, G.cam); drawParticles(th, G.cam); drawLevel(st, th);
+  if (st.L.roomPx) { var rx0 = Math.floor((st.p.x + 6) / st.L.roomPx) * st.L.roomPx - Math.round(G.cam), rx1 = rx0 + st.L.roomPx + TS; ctx.fillStyle = '#000'; if (rx0 > 0) ctx.fillRect(0, 0, rx0, VH); if (rx1 < VW) ctx.fillRect(rx1, 0, VW - rx1, VH); }
+  drawHUD(st);
   if (G.mode === 'loading') { panel(120, 90, 160, 40); text(TT('레벨 만드는 중...', 'Building level...'), VW / 2, 110, 10, '#fff', 'center'); }
   else if (G.mode === 'over') overlay(TT('게임 오버', 'GAME OVER'), [TT('점수: ', 'Score: ') + G.base, TT('도달: ', 'Reached: ') + levelLabel(G), TT('최고 점수: ', 'Best score: ') + G.best, TT('스페이스 또는 터치로 다시 시작 (F2)', 'Space or tap to play again (F2)')]);
   else if (G.mode === 'clear') { text(TT('레벨 클리어!', 'LEVEL CLEAR!'), VW / 2, 66, 20, '#ff8a3d', 'center'); text('+' + G.bonus + (st.tape ? TT('  (빔 보너스!)', '  (beam bonus!)') : ''), VW / 2, 90, 11, '#7affe0', 'center'); if (G.secretExit) text(TT('비밀 출구 발견!', 'Secret exit found!'), VW / 2, 110, 11, '#ff9ae8', 'center'); }

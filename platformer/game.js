@@ -9,7 +9,7 @@ var Q = new URLSearchParams(location.search);
 var BEST_KEY = 'shapeworld.best', SND_KEY = 'shapeworld.sound';
 var G = window.__pf = { mode: 'start', n: 1, seed: 1, lives: 3, base: 0, coinBase: 0, best: 0, L: null, st: null, auto: false, planner: PFPlanner.make(), hint: null, msg: null, msgT: 0, frame: 0,
   cam: 0, parts: [], pops: [], bumps: [], snd: true, dieT: 0, clearT: 0, dy: 0, dvy: 0, bonus: 0, nextLife: 50, autoWait: 0, loading: false,
-  useRL: true, ai: (window.PFAI ? PFAI.makeShielded() : null), w: 0, map: null, sel: 0, prog: { done: {}, secret: {} }, main: null, curNode: null, secretExit: false, mapCool: 0 };
+  useRL: false, ai: (window.PFAI ? PFAI.makeShielded() : null), w: 0, map: null, sel: 0, prog: { done: {}, secret: {} }, main: null, curNode: null, secretExit: false, mapCool: 0 };
 try { G.best = parseInt(localStorage.getItem(BEST_KEY), 10) || 0; } catch (e) {}
 try { var sv = localStorage.getItem(SND_KEY); if (sv === '0') G.snd = false; } catch (e) {}
 var embedded = function () { try { return window.parent !== window && !!window.parent.setAutoMark; } catch (e) { return false; } };
@@ -153,7 +153,7 @@ layout(); setTimeout(layout, 50);
 // ---------------------------------------------------------------- game flow: map -> level (-> bonus room) -> map
 function aiReset() { G.planner.reset(); if (G.ai) G.ai.reset(); G.stallF = 0; G.fbUntil = 0; G.lastProg = 0; G.lastCr = 0; G.lastStage = 0; }
 function autoMask(st) {
-  // the shipped auto player is the reinforcement-learning policy (ai-model.js); the look-ahead planner is only the fallback when no model is loaded or the policy makes no progress for 8 seconds
+  // the auto player is the route navigator (planner.js: stage-by-stage search on the real simulation); the RL policy (ai-model.js) is only used when G.useRL is switched on
   if (G.useRL && G.ai && G.ai.ready()) {
     if (st.cr > G.lastCr || st.stage > G.lastStage) { G.lastCr = st.cr; G.lastStage = st.stage; G.lastProg = st.f; }
     if (st.f - G.lastProg > 480 && !(G.fbUntil > st.f)) { G.fbUntil = st.f + 300; G.lastProg = st.f; G.planner.reset(); }
@@ -263,7 +263,7 @@ function selectPick(si) {
   closeSelect(); G.mode = 'map'; if (w.id !== G.wid) setWorld(w.id); G.sel = nd.i; G.main = null; enterLevel(nd.i, true);
 }
 function levelInit(cp) {
-  var node = G.curNode; G.st = PF.newState(G.L, { rec: true, cp: !!cp }); aiReset(); setAuto(0); G.parts = []; G.pops = []; G.bumps = []; G.hint = null; G.cam = Math.max(0, Math.min(G.L.w * TS - VW, G.st.p.x - VW * 0.4)); G.camY = Math.max(0, Math.min((G.L.rows || PF.ROWS) * TS - VH, G.st.p.y - VH * 0.55)); G.mode = 'play'; G.secretExit = false;
+  var node = G.curNode; G.st = PF.newState(G.L, { rec: true, cp: !!cp }); aiReset(); setAuto(0); G.roomK = undefined; G.parts = []; G.pops = []; G.bumps = []; G.hint = null; G.cam = Math.max(0, Math.min(G.L.w * TS - VW, G.st.p.x - VW * 0.4)); G.camY = Math.max(0, Math.min((G.L.rows || PF.ROWS) * TS - VH, G.st.p.y - VH * 0.55)); G.mode = 'play'; G.secretExit = false;
 }
 function enterLevel(i, force) {
   var node = nodeById(i); if (!node || G.mode === 'loading') return; if (!force && !isOpen(node)) return;
@@ -392,7 +392,9 @@ function fixedStep() {
       saveProg();
     }
   }
-  if (G.st) { var p2 = G.st.p, tx = Math.max(0, Math.min(G.L.w * TS - VW, p2.x + 6 - VW * 0.42 + p2.vx * 14)); G.cam += (tx - G.cam) * 0.12; var RW = G.L.rows || PF.ROWS, ty = Math.max(0, Math.min(RW * TS - VH, p2.y + p2.h / 2 - VH * 0.55 + p2.vy * 6)); G.camY = (G.camY === undefined || RW === PF.ROWS) ? ty : G.camY + (ty - G.camY) * 0.14; }
+  if (G.st) { var p2 = G.st.p, tx = Math.max(0, Math.min(G.L.w * TS - VW, p2.x + 6 - VW * 0.42 + p2.vx * 14)); G.cam += (tx - G.cam) * 0.12;
+    if (G.L.roomPx) { var rk = Math.floor((p2.x + 6) / G.L.roomPx); tx = rk * G.L.roomPx + (G.L.roomPx - VW) / 2 + TS / 2; G.cam = (G.roomK === rk) ? G.cam + (tx - G.cam) * 0.2 : tx; G.roomK = rk; }   // door mazes: the camera stays on the current room (never shows the next room over the wall)
+    var RW = G.L.rows || PF.ROWS, ty = Math.max(0, Math.min(RW * TS - VH, p2.y + p2.h / 2 - VH * 0.55 + p2.vy * 6)); G.camY = (G.camY === undefined || RW === PF.ROWS) ? ty : G.camY + (ty - G.camY) * 0.14; }
 }
 
 var last = 0, acc = 0;

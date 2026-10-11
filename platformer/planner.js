@@ -149,5 +149,34 @@ function makeHint(st, pl) {
   var m = MSG[key];
   return { key: key, ko: m[0] + (key === 'go' ? extra[0] : ''), en: m[1] + (key === 'go' ? extra[1] : ''), traj: traj, land: land, haz: hz, way: way, jumpIn: jumpAt, sc: best.sc };
 }
-root.PFPlanner = { make: makePlanner, hint: makeHint, CANDS: CANDS, LEFT_EXTRA: LEFT_EXTRA, H: H, evaluate: evaluate, inputAt: inputAt };
+
+// ---- navigator: the generator's own route search (PF.searchStage, a best-first search over jump/walk macros on the real simulation, enemies included)
+// plans each route stage (key, door, teleport, switch, exit ...) from the live state; the look-ahead planner only drives while airborne or when no plan is found
+// the plan may only end where the hero can stand still afterwards (an 'at' waypoint reached while sliding into a spike is a dead end)
+function settles(s) { var q = PF.clone(s); for (var k = 0; k < 24; k++) { PF.step(q, 0); if (q.p.dead) return false; } return q.p.ground; }
+function makeNavigator() {
+  var fb = makePlanner(), nv = { fb: fb, seq: null, i: 0, stage: -1, wait: 0, st: { plans: 0, fails: 0, ms: 0 } };
+  nv.reset = function () { fb.reset(); nv.seq = null; nv.i = 0; nv.stage = -1; nv.wait = 0; };
+  nv.decide = function (st) {
+    var L = st.L;
+    if (!L.route || !PF.searchStage) return fb.decide(st);
+    if (nv.seq && nv.i < nv.seq.length && nv.stage === st.stage) return nv.seq[nv.i++];
+    nv.seq = null;
+    if (nv.wait > 0 || !st.p.ground) { if (nv.wait > 0) nv.wait--; return fb.decide(st); }
+    var g = L.route[Math.min(st.stage, L.route.length - 1)], tx = g.x === undefined ? L.goalX : g.x, ty = g.y === undefined ? null : g.y, t0 = Date.now();
+    var res = null, lim = [4000, 14000];
+    for (var q = 0; q < lim.length && !res; q++) res = PF.searchStage(PF.clone(st), function (s) { return PF.stageDone(s, g) && (g.k === 'goal' || settles(s)); }, tx, ty, lim[q]);
+    if (!res) res = PF.searchStage(PF.clone(st), function (s) { return PF.stageDone(s, g); }, tx, ty, 8000);
+    if (!res) {   // enemies make the route impossible to time: plan as if they were not there (the hero may take a hit; a hit is better than standing still)
+      var c2 = PF.clone(st); c2.en = []; c2.noEn = true;
+      res = PF.searchStage(c2, function (s) { return PF.stageDone(s, g) && (g.k === 'goal' || settles(s)); }, tx, ty, 9000);
+    }
+    nv.st.ms += Date.now() - t0;
+    if (res && res.seq.length) { nv.st.plans++; nv.seq = res.seq; nv.i = 0; nv.stage = st.stage; return nv.seq[nv.i++]; }
+    nv.st.fails++; nv.fl = (nv.fl || 0) + 1; if (nv.fl % 3 !== 0) { nv.seq = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]; nv.i = 0; nv.stage = st.stage; return 0; }   // brake and search again from a standing start; every third failure lets the look-ahead planner move
+    nv.wait = 30; return fb.decide(st);
+  };
+  return nv;
+}
+root.PFPlanner = { make: makeNavigator, plain: makePlanner, hint: makeHint, CANDS: CANDS, LEFT_EXTRA: LEFT_EXTRA, H: H, evaluate: evaluate, inputAt: inputAt };
 })(typeof window !== 'undefined' ? window : globalThis);

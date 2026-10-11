@@ -34,7 +34,7 @@ var AIRS = [0, IN.R, IN.R | IN.RUN, IN.L], HOLDS = [3, 10, 99];
 function searchStage(st0, pred, tx, ty, maxNodes) {
   if (pred(st0)) return { st: st0, seq: [], nodes: 0 };
   var seen = new Set(), heap = [], nodes = 0;
-  function key(st) { var p = st.p, a = Math.abs(p.vx), sc = (p.vx < -0.3 ? -1 : 1) * (a < 0.3 ? 0 : a < 1.8 ? 1 : 2) + 2, ph = (p.mv >= 0 || st.sw || st.L.hasFire) ? Math.floor((st.f % MV_PERIOD) / 20) + 1 : 0; return ((((Math.round(p.x / 3) * 256 + Math.round(p.y)) * 5 + sc) * 80 + ph) * 64 + (st.kb & 7) * 8 + (st.sb & 7)) * 40 + Math.min(39, st.mod.size); }
+  function key(st) { var p = st.p, a = Math.abs(p.vx), sc = (p.vx < -0.3 ? -1 : 1) * (a < 0.3 ? 0 : a < 1.8 ? 1 : 2) + 2, ph = (p.mv >= 0 || st.sw || st.L.hasFire) ? Math.floor((st.f % MV_PERIOD) / 20) + 1 : (st.en.length ? 40 + Math.floor(st.f / 10) % 32 : 0); return ((((Math.round(p.x / 3) * 256 + Math.round(p.y)) * 5 + sc) * 80 + ph) * 64 + (st.kb & 7) * 8 + (st.sb & 7)) * 40 + Math.min(39, st.mod.size); }
   function hval(st) { var p = st.p; return Math.abs(p.x + 6 - tx) + (ty === null ? 0 : 1.5 * Math.abs(p.y + 7 - ty)); }
   var root = { st: st0, par: null, seq: [], h: hval(st0) }; seen.add(key(st0)); heapPush(heap, root);
   function path(nd, extra) { var parts = [extra]; while (nd) { parts.push(nd.seq); nd = nd.par; } var out = []; for (var i = parts.length - 1; i >= 0; i--) for (var j = 0; j < parts[i].length; j++) out.push(parts[i][j]); return out; }
@@ -796,17 +796,17 @@ function buildGhostHouse(seed, n, a) {
     var x0 = i * RW + 1;
     for (var q2 = 0; q2 < 3; q2++) coins.push({ x: (x0 + 3 + q2 * 3) * TS + 8, y: (g - 1.5) * TS, b: 0 });
     if (i !== 0 && i !== goalRoom && r() < 0.35 + 0.4 * diff) put(x0 + [2, 5, 8][rnd(0, 2)], g - 1, T.SPIKE);
-    var ng = rnd(1, 1 + (diff > 0.4 ? 1 : 0)); for (var k = 0; k < ng; k++) enemies.push({ t: E.GHOST, x: (x0 + rnd(2, 8)) * TS, y: (g - rnd(2, 6)) * TS, w: 14, h: 14, ax: (x0 + 5) * TS, ay: (g - 4) * TS, rg: 30, sp: 1 / (220 + r() * 120), ph: r(), am: 6, spd: 0 });
+    var ng = rnd(1, 1 + (diff > 0.4 ? 1 : 0)); for (var k = 0; k < ng; k++) enemies.push({ t: E.GHOST, x: (x0 + rnd(2, 8)) * TS, y: (g - 7) * TS, w: 14, h: 14, ax: (x0 + 5) * TS, ay: (g - 7) * TS, rg: 30, sp: 1 / (220 + r() * 120), ph: r(), am: 6, spd: 0 });
     if (deg[i] === 1 && i !== 0 && i !== goalRoom && specials.length < 5) specials.push({ x: (x0 + 4) * TS, y: (g - 2) * TS });
   }
   while (specials.length < 5) specials.push({ x: (rnd(1, R) * RW - 3) * TS, y: (g - 7) * TS });
   var route = [], cnt = 0;
-  for (i = 0; i + 1 < path.length; i++) { var dd = door[path[i] + '>' + path[i + 1]]; route.push({ k: 'tele', n: ++cnt, x: dd.c * TS + 8, y: (g - 4) * TS + 8 }); }
+  for (i = 0; i + 1 < path.length; i++) { var dd = door[path[i] + '>' + path[i + 1]]; var back = door[path[i + 1] + '>' + path[i]]; route.push({ k: 'at', x: (back.c + 2) * TS + 7, y: g * TS - 7 }); }   // done on landing at that very door (a tele count could be farmed by hopping one door back and forth)
   var gxr = goalRoom * RW + 1 + 9, poleCol = gxr;
   route.push({ k: 'goal', x: poleCol * TS + 6, y: null });
   var mid = path[Math.floor(path.length / 2)];
   return { seed: seed, n: n, kind: 'ghost', attempt: a, diff: diff, w: W, tiles: tiles, gt: gt, coins: coins, special: specials, enemies: enemies, movers: [], cannons: [], rings: [], winds: [], pockets: [], keys: [], doors: [], switches: [], tele: tele, launch: [], grp: new Uint8Array(W * ROWS),
-    route: route, puzzle: true, vertical: true, goalRect: { x: poleCol * TS - 2, y: g * TS - 4 * TS, w: 16, h: 4 * TS }, goalX: poleCol * TS + 6, poleCol: poleCol, poleY: g * TS, start: { x: (s * RW + 4) * TS + 2, y: g * TS - 14 }, cp: { x: (mid * RW + 4) * TS + 2, y: g * TS - 14 },
+    route: route, puzzle: true, vertical: true, roomPx: RW * TS, goalRect: { x: poleCol * TS - 2, y: g * TS - 4 * TS, w: 16, h: 4 * TS }, goalX: poleCol * TS + 6, poleCol: poleCol, poleY: g * TS, start: { x: (s * RW + 4) * TS + 2, y: g * TS - 14 }, cp: { x: (mid * RW + 4) * TS + 2, y: g * TS - 14 },
     time: 200 + R * 40, theme: 2, room: false, hasBoss: false, kindAsked: 'ghost', hasFire: false, hasIce: false, hasMud: false };
 }
 // ------------------------------------------------------------------ switchback castle: long floors joined by stair shafts at alternating ends, so the route runs right, climbs, runs left, climbs ... (scrolls both ways)
