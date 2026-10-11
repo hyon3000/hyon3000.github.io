@@ -162,6 +162,7 @@ function makeNavigator() {
   nv.decide = function (st, budgetMs) {
     var L = st.L;
     if (!L.route || !PF.searchIter) return fb.decide(st);
+    if (st.boss > 0 && (bossNear(st) || nv.job === null && L.kind === 'bossrush')) { nv.seq = null; nv.job = null; return fb.decide(st); }   // boss arenas: the reactive look-ahead planner dodges and stomps
     if (nv.seq && nv.i < nv.seq.length && nv.stage === st.stage) return nv.seq[nv.i++];
     nv.seq = null;
     if (!nv.job) {
@@ -170,7 +171,9 @@ function makeNavigator() {
       var strict = function (s) { return PF.stageDone(s, g) && (g.k === 'goal' || settles(s)); }, loose = function (s) { return PF.stageDone(s, g); };
       var c2 = PF.clone(st); c2.en = []; c2.noEn = true;
       // tiers: with enemies and a safe stop, with a smaller budget, without the safe stop; last resort: as if the enemies were not there (a hit beats standing still)
-      nv.job = { stage: st.stage, ti: 0, it: null, tiers: [[PF.clone(st), strict, 3000], [PF.clone(st), strict, 8000], [PF.clone(st), loose, 3000], [c2, strict, 4000]], tx: tx, ty: ty };
+      var tiers = [[PF.clone(st), strict, 3000], [PF.clone(st), strict, 8000], [PF.clone(st), loose, 3000], [c2, strict, 4000]];
+      if (L.route.length <= 2) tiers = [[PF.clone(st), strict, 1500]];   // plain run-to-the-flag stage: if the search is not quick, the reactive planner drives for a while
+      nv.job = { stage: st.stage, ti: 0, it: null, tiers: tiers, tx: tx, ty: ty, plain: L.route.length <= 2 };
     }
     var jb = nv.job, t0 = Date.now(), res;
     for (;;) {
@@ -182,6 +185,7 @@ function makeNavigator() {
     }
     nv.st.ms += Date.now() - t0; nv.busy = false; nv.job = null;
     if (res && res.seq.length) { nv.st.plans++; nv.seq = res.seq; nv.i = 0; nv.stage = st.stage; return nv.seq[nv.i++]; }
+    if (jb.plain) { nv.st.fails++; nv.wait = 60; return fb.decide(st); }
     nv.st.fails++; nv.fl = (nv.fl || 0) + 1; if (nv.fl % 3 !== 0) { nv.seq = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]; nv.i = 0; nv.stage = st.stage; return 0; }   // brake and search again from a standing start; every third failure lets the look-ahead planner move
     nv.wait = 30; return fb.decide(st);
   };
