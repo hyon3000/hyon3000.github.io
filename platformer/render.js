@@ -32,6 +32,7 @@ function mkTheme(s1, s2, m1, m2, str, edge, slab, mode, sun, part, pitch) { retu
 THEMES[0].part = 'none'; THEMES[1].part = 'sparks'; THEMES[2].part = 'fireflies'; THEMES[3].part = 'bubbles'; THEMES[4].part = 'embers'; THEMES[5].part = 'dust'; THEMES[3].pitch = 0.85; THEMES[4].pitch = 0.8; THEMES[5].pitch = 0.9; THEMES[2].pitch = 0.95; THEMES[1].pitch = 1.1;
 THEMES[6] = mkTheme('#ff8a4a', '#ffe0a8', '#b8582a', '#8a3a1a', ['#6a3a22', '#5a301c', '#4a2616'], '#ffb04a', '#a8754a', 'autumn', '#fff0c0', 'leaves', 1.03);
 THEMES[7] = mkTheme('#123a2a', '#6ac88a', '#1a6a3a', '#0e4a28', ['#2a4a2a', '#244024', '#1c341c'], '#7affb0', '#6a8a5a', 'jungle', '#d8ffc8', 'fireflies', 0.97);
+THEMES[22] = mkTheme('#0c2a4a', '#6ad0ff', '#2a6a9a', '#1a4a7a', ['#8ad8ff', '#6ac4f4', '#4aa8e0'], '#e8fbff', '#3a8ac0', 'snow', '#c8f4ff', 'snow', 0.95);
 THEMES[8] = mkTheme('#8aa8e0', '#f4fbff', '#c8d8f0', '#9ab4de', ['#c4d6f2', '#aec4e6', '#98b0d8'], '#ffffff', '#a8c0e0', 'snow', '#ffffff', 'snow', 1.22);
 THEMES[9] = mkTheme('#f0a050', '#ffe4a8', '#d89a5a', '#b87a3a', ['#d8a860', '#c89850', '#b88840'], '#ffe0a0', '#b89060', 'desert', '#fff4c0', 'dust', 0.92);
 THEMES[10] = mkTheme('#1c2a22', '#6a7a54', '#2a3a2a', '#1a2a1a', ['#3a3a2a', '#323224', '#2a2a1e'], '#8aff7a', '#5a5a3a', 'swamp', '#c8d8a8', 'fireflies', 0.88);
@@ -262,6 +263,11 @@ function drawItem(e) {
   else if (e.k === 1) { poly([cx - 6, cy + 6, cx - 5, cy - 2, cx - 2.5, cy + 0.5, cx, cy - 8, cx + 2.5, cy + 0.5, cx + 5, cy - 3, cx + 6, cy + 6], '#ff7a1a', '#7a2a04'); poly([cx - 3, cy + 6, cx, cy - 1, cx + 3, cy + 6], '#ffe08a'); }
   else if (e.k === 2) { poly([cx - 6, cy + 5, cx - 1, cy - 7, cx + 6, cy - 5, cx + 1, cy + 7], '#d8ff6a', '#4a7a08'); line(cx - 3, cy + 4, cx + 3, cy - 4, '#4a7a08'); }
   else if (e.k === 3) spark8(cx, cy, 7, 'hsl(' + (F * 12 % 360) + ',95%,62%)', F * 0.08);
+  else if (e.k === 5) { rect(cx - 6, cy - 3, 12, 9, '#c8902a'); rect(cx - 6, cy - 3, 12, 3, '#f0c04a'); rect(cx - 1.5, cy - 1, 3, 4, '#5a3a0a'); }
+  else if (e.k === 6) { poly([cx - 7, cy + 5, cx - 5, cy - 3, cx, cy - 6, cx + 5, cy - 3, cx + 7, cy + 5], '#46a8ff'); circ(cx - 2, cy - 1, 1.5, '#e0f0ff'); circ(cx + 2.5, cy, 1.2, '#e0f0ff'); rect(cx - 2.5, cy + 3, 5, 3, '#e8e0d0'); poly([cx + 6, cy - 7, cx + 9, cy - 4, cx + 3, cy - 4], '#ff6a6a'); }
+  else if (e.k === 7) { poly([cx - 7, cy + 5, cx - 1, cy - 6, cx + 1, cy - 4, cx - 3, cy + 5], '#2ee6d6', '#0a6a60'); poly([cx + 7, cy + 5, cx + 1, cy - 6, cx - 1, cy - 4, cx + 3, cy + 5], '#2ee6d6', '#0a6a60'); line(cx - 5, cy + 2, cx - 3, cy - 2, '#d8fffa', 1); line(cx + 5, cy + 2, cx + 3, cy - 2, '#d8fffa', 1); }
+  else if (e.k === 8) { poly([cx, cy + 3, cx - 9, cy - 5, cx - 3, cy - 1], '#f4f0ff', '#8a7ac0'); poly([cx, cy + 3, cx + 9, cy - 5, cx + 3, cy - 1], '#f4f0ff', '#8a7ac0'); circ(cx, cy + 1, 3, '#ffd24a'); }
+  else if (e.k === 9) { circ(cx, cy, 6.5, '#f4f4f8'); circ(cx, cy, 5, '#2a3a6a'); line(cx, cy, cx, cy - 4, '#fff', 1.5); line(cx, cy, cx + 3, cy + 1, '#fff', 1.5); }
   else { ctx.fillStyle = '#7a4ae0'; ctx.beginPath(); ctx.arc(cx, cy + 3, 7, Math.PI, 0); ctx.fill(); line(cx + 4, cy - 1, cx + 8, cy - 6, '#d8c8ff', 1.5); circ(cx + 8, cy - 6, 1.4, '#2ee6d6'); rect(cx - 6, cy + 3, 12, 2, '#4a2a9a'); }
 }
 function drawCoin(c, i) {
@@ -274,7 +280,23 @@ function drawMover(m, pos, st, i) {
   if (k === 3) { var s = st.mo[i].s; ctx.globalAlpha = s === 3 ? 0.15 : 1; var sh = s === 1 ? Math.sin(F * 1.2) : 0; poly([x + sh, y, x + w + sh, y, x + w - 4 + sh, y + 7, x + 4 + sh, y + 7], '#ff9a6a'); rect(x + 2 + sh, y, w - 4, 2, '#ffd0b0'); line(x + 10 + sh, y + 1, x + 13 + sh, y + 6, '#6a2a14'); line(x + w - 12 + sh, y + 1, x + w - 14 + sh, y + 6, '#6a2a14'); ctx.globalAlpha = 1; return; }
   if (k === 2) { ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(m.cx, m.y, m.amp, 0, 6.2832); ctx.stroke(); }
   if (k === 4) { var on = PF.movOn(st, i, st.f), nxt = PF.movOn(st, i, st.f + 40); if (!on) { ctx.globalAlpha = 0.12; } else if (!nxt) { ctx.globalAlpha = (Math.floor(st.f / 4) % 2) ? 0.35 : 1; } ell(x + w / 2, y + 3, w / 2, 4, '#e8f4ff'); ell(x + w / 2, y + 2, w / 2 - 3, 2.4, '#fff'); for (var cl = 0; cl < 3; cl++) line(x + 6 + cl * 8, y + 5, x + 10 + cl * 8, y + 5, 'rgba(120,150,220,.6)', 1); ctx.globalAlpha = 1; return; }
+  if (k === 5 || k === 6) { var gc = k === 5 ? '#46d36a' : '#46c8d3'; rrect(x, y, w, 9, 3, gc); rect(x + 2, y + 1, w - 4, 2, 'rgba(255,255,255,.55)'); line(x + 4, y + 5, x + w - 4, y + 5, 'rgba(0,60,20,.45)', 1); var ar = k === 5 ? [[-1, 0], [1, 0]] : [[0, -1], [0, 1]]; ar.forEach(function (d) { diamond(x + w / 2 + d[0] * 7, y + 4.5 + d[1] * 1.5, 2.2, 2.2, 'rgba(255,255,255,.85)'); }); ctx.globalAlpha = 0.22; if (k === 5) rect(m.cx - m.amp - w / 2, y + 3, m.amp * 2 + w, 3, '#46d36a'); else rect(m.cx - 2, m.y - m.amp, 4, m.amp * 2 + 9, '#46c8d3'); ctx.globalAlpha = 1; return; }
+  if (k === 14) { poly([x, y, x + w, y, x + w - 3, y + 7, x + 3, y + 7], '#8ae0ff'); rect(x + 2, y, w - 4, 2, '#e8fbff'); line(x + 6, y + 2, x + 12, y + 6, 'rgba(255,255,255,.6)', 1); line(x + w - 12, y + 1, x + w - 7, y + 5, 'rgba(255,255,255,.6)', 1); return; }
+  if (k === 8 || k === 9 || k === 10 || k === 12 || k === 13) {   // mushroom caps (original: faceted caps on a stem)
+    var cc = k === 8 ? ['#ff6ab0', '#ffc0e0'] : k === 9 ? ['#ffb04a', '#ffe0a0'] : k === 10 ? ['#6ad8ff', '#c0f0ff'] : k === 12 ? ['#b08aff', '#e0d0ff'] : ['#7aff9a', '#d0ffe0'];
+    var sq = k === 8 ? 1 + 0.12 * Math.sin(F * 0.25) : 1; poly([x, y + 6 * sq, x + 4, y, x + w - 4, y, x + w, y + 6 * sq], cc[0]); rect(x + 4, y, w - 8, 2, cc[1]); circ(x + w * 0.3, y + 3, 1.6, cc[1]); circ(x + w * 0.7, y + 3, 1.6, cc[1]);
+    if (k !== 13) rect(x + w / 2 - 3, y + 6, 6, 5, '#e8e0d0');
+    if (k === 8) { diamond(x + w / 2, y - 4 - Math.abs(Math.sin(F * 0.2)) * 3, 2.5, 3, cc[1]); }
+    if (k === 9) { diamond(x + w / 2, y + 3, 2, 2.4, 'rgba(60,20,0,.55)'); } if (k === 10) { diamond(x + w / 2, y + 3, 2, 2.4, 'rgba(0,40,80,.55)'); }
+    return; }
   var col = k === 1 ? '#6ac8ff' : k === 2 ? '#ff8ad8' : '#9a8aff'; poly([x, y, x + w, y, x + w - 4, y + 7, x + 4, y + 7], col); rect(x + 2, y, w - 4, 2, 'rgba(255,255,255,.55)'); diamond(x + w / 2, y + 4, 3, 2.5, 'rgba(20,10,60,.5)');
+}
+function drawMace(m, f) {
+  var balls = PF.maceBalls(m, f), n = m.n || 1;
+  circ(m.cx, m.cy, 5, '#5a4a6a'); circ(m.cx, m.cy, 2.2, '#c8b8e0');
+  for (var k = 0; k < balls.length; k++) { var b = balls[k];
+    if (n === 1) { var segs = 5; for (var q = 1; q < segs; q++) circ(m.cx + (b.x - m.cx) * q / segs, m.cy + (b.y - m.cy) * q / segs, 1.6, '#8a7aa0'); var rot = f * 0.08; poly([b.x, b.y - 11, b.x + 4, b.y - 4, b.x - 4, b.y - 4], '#6a5a80'); for (var s2 = 0; s2 < 8; s2++) { var aa = s2 * 0.7854 + rot; poly([b.x + Math.cos(aa - 0.3) * 6, b.y + Math.sin(aa - 0.3) * 6, b.x + Math.cos(aa) * 11, b.y + Math.sin(aa) * 11, b.x + Math.cos(aa + 0.3) * 6, b.y + Math.sin(aa + 0.3) * 6], '#c04a5a'); } circ(b.x, b.y, 7.5, '#3a2a4a'); circ(b.x - 2, b.y - 2, 2.5, '#8a7aa0'); }
+    else { ctx.globalAlpha = 0.3; circ(b.x, b.y, b.r + 3, '#ff9a3a'); ctx.globalAlpha = 1; circ(b.x, b.y, b.r, '#ff7a2a'); circ(b.x, b.y, b.r * 0.5, '#ffe08a'); } }
 }
 function drawGoal(L, st, locked) {   // beacon gate: two tapered obelisks and an energy beam
   var gx = L.goalX, base = L.poleY, top = base - 9 * TS, tx = gx + 14, col = locked ? '#7a3a4a' : '#7a6ae0';
@@ -301,6 +323,7 @@ function drawLevel(st, th) {
   if (L.pockets) for (i = 0; i < L.pockets.length; i++) if (!st.pk[i]) drawPocket(L.pockets[i]);
   drawGoal(L, st, st.boss > 0);
   for (i = 0; i < L.movers.length; i++) drawMover(L.movers[i], PF.movPos(st, i, st.f), st, i);
+  if (L.maces) for (i = 0; i < L.maces.length; i++) drawMace(L.maces[i], st.f);
   for (i = 0; i < L.coins.length; i++) if (!st.cg[i] && L.coins[i].x > cam - 10 && L.coins[i].x < cam + VW + 10) drawCoin(L.coins[i], i);
   if (L.special) for (i = 0; i < L.special.length; i++) drawSpecial(L.special[i], st.sg[i]);
   for (i = 0; i < st.it.length; i++) if (st.it[i].alive) drawItem(st.it[i]);
@@ -316,7 +339,13 @@ function drawLevel(st, th) {
   }
   var p = st.p;
   if (G.mode === 'dying') drawHero({ x: p.x, y: G.dy, w: p.w, h: p.h, big: false, pw: 0, face: p.face, ground: false, anim: 0, vx: 0, inv: 0, star: 0, spin: 0 }, true, G.dieT * 0.25, false);
-  else drawHero(p, false, 0, !!p.mount);
+  else {
+    if (p.mini) { var mcx = p.x + p.w / 2, mby = p.y + p.h; ctx.save(); ctx.translate(mcx, mby); ctx.scale(0.85, 0.85); ctx.translate(-mcx, -mby); }
+    if (p.wing > 0) { var wf = Math.sin(F * 0.5) * 4, wx = p.x + p.w / 2, wy = p.y + p.h * 0.45; poly([wx - 3, wy, wx - 14, wy - 8 + wf, wx - 9, wy + 1], '#f4f0ff', '#8a7ac0'); poly([wx + 3, wy, wx + 14, wy - 8 + wf, wx + 9, wy + 1], '#f4f0ff', '#8a7ac0'); }
+    drawHero(p, false, 0, !!p.mount);
+    if (p.fin > 0) { var fx = p.x + p.w / 2; poly([fx - 7, p.y + p.h, fx - 1, p.y + p.h, fx - 6, p.y + p.h + 3], '#2ee6d6'); poly([fx + 1, p.y + p.h, fx + 7, p.y + p.h, fx + 6, p.y + p.h + 3], '#2ee6d6'); }
+    if (p.mini) ctx.restore();
+  }
   for (c = c0; c <= c1; c++) for (r = r0; r <= r1; r++) { var wt = PF.tileAt(st, c, r); if (wt === T.SPIKE && (PF.isW(PF.tileAt(st, c - 1, r)) || PF.isW(PF.tileAt(st, c + 1, r)) || PF.isW(PF.tileAt(st, c, r - 1)))) wt = T.WATER; if (PF.isW(wt)) drawWaterOverlay(c * TS, r * TS, r > 0 ? PF.tileAt(st, c, r - 1) : 0, wt, c, r); }
   for (i = 0; i < G.parts.length; i++) { var q = G.parts[i]; rect(q.x - q.s / 2, q.y - q.s / 2, q.s, q.s, q.col); }
   for (i = 0; i < G.pops.length; i++) { var pp = G.pops[i]; text(pp.t, pp.x, pp.y, 8, pp.c, 'center'); }

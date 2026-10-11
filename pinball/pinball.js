@@ -51,12 +51,16 @@
   });
   document.getElementById('padNew').addEventListener('click', function () { newGame(); });
   // show the buttons on phones / tablets / touch screens (any hint of touch, a coarse pointer, no hover, or a narrow screen) - they are only a convenience, the keyboard keeps working
-  function wantPad() {
+  // the buttons appear only on touch devices (coarse pointer / no hover / touch points / mobile UA); a computer with a keyboard and mouse does not show them.
+  // Options > Touch buttons overrides this either way and remembers the choice
+  function touchDevice() {
     var mq = function (q) { try { return window.matchMedia && matchMedia(q).matches; } catch (e) { return false; } };
-    return /[?&]touch=1/.test(location.search) || mq('(pointer: coarse)') || mq('(any-pointer: coarse)') || mq('(hover: none)') || 'ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0 || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.innerWidth < 760;
+    return /[?&]touch=1/.test(location.search) || mq('(pointer: coarse)') || mq('(any-pointer: coarse)') || (navigator.maxTouchPoints || 0) > 0 || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   }
+  function wantPad() { var v = null; try { v = localStorage.getItem('pinball_pad'); } catch (e) {} return v === '1' ? true : v === '0' ? false : touchDevice(); }
+  window.togglePad = function () { var on = !wantPad(); try { localStorage.setItem('pinball_pad', on ? '1' : '0'); } catch (e) {} placePad(); if (window.igLabels) igLabels(); return on; };
   function placePad() { document.getElementById('pad').classList.toggle('on', wantPad()); }
-  placePad(); window.addEventListener('resize', placePad); window.addEventListener('touchstart', function () { document.getElementById('pad').classList.add('on'); }, { once: true, passive: true });
+  placePad(); window.addEventListener('resize', placePad); window.addEventListener('touchstart', function () { var v = null; try { v = localStorage.getItem('pinball_pad'); } catch (e) {} if (v === null) { document.getElementById('pad').classList.add('on'); if (window.igLabels) igLabels(); } }, { once: true, passive: true }); 
 
   // ---- sound on/off (Game > Sound): the game's WebAudio output goes through one master gain per AudioContext, muted by this switch (remembered) ----
   var soundOn = true, masters = [];
@@ -76,6 +80,25 @@
     masters.forEach(function (g) { try { g.gain.value = soundOn ? 1 : 0; } catch (e) {} }); soundLabel(); return soundOn;
   };
   soundLabel();
+  // ---- the game's own menu bar is switched off in our build of SpaceCadetPinball (engine/, see pinball/BUILD.md); its entries are called through exported functions
+  var IGT = KO ? { launch: '　공 발사', pause: '　일시정지 / 계속', scores: '　최고 점수...', demo: '　데모', options: '옵션', players: '　플레이어 수', controls: '　플레이어 조작키...', res: '　테이블 해상도', resmax: '　최대 해상도 사용', gfx: '　그래픽', about: '　핀볼 정보', p: '플레이어', music: '음악', uniform: '균일 확대', linear: '선형 필터' }
+    : { launch: '　Launch Ball', pause: '　Pause / Resume', scores: '　High Scores...', demo: '　Demo', options: 'Options', players: '　Select Players', controls: '　Player Controls...', res: '　Table Resolution', resmax: '　Use Maximum Resolution', gfx: '　Graphics', about: '　About Pinball', p: 'Player', music: 'Music', uniform: 'Uniform Scaling', linear: 'Linear Filtering' };
+  var IGCMD = { launch: 2, pause: 3, scores: 4, demo: 5, players1: 6, players2: 7, players3: 8, players4: 9, music: 11, controls: 12, resmax: 13, res640: 20, uniform: 15, linear: 16, about: 17 };
+  function igGet(i) { try { return window.Module && Module._pbweb_get ? Module._pbweb_get(i) : null; } catch (e) { return null; } }
+  function igLabels() {
+    [].forEach.call(document.querySelectorAll('[data-ig]'), function (e) { var k = e.getAttribute('data-ig'); if (IGT[k]) e.textContent = IGT[k]; });
+    var pl = igGet(1), mu = igGet(3), un = igGet(4), li = igGet(5);
+    for (var n = 1; n <= 4; n++) { var e1 = document.getElementById('ig-p' + n); if (e1) e1.textContent = (pl === n ? '✓ ' : '　') + n + ' ' + IGT.p + (KO || n === 1 ? '' : 's'); }
+    [['ig-music', mu, 'music'], ['ig-uniform', un, 'uniform'], ['ig-linear', li, 'linear']].forEach(function (q) { var e2 = document.getElementById(q[0]); if (e2) e2.textContent = (q[1] ? '✓ ' : '　') + IGT[q[2]]; });
+    var pd = document.getElementById('padLabel'); if (pd) pd.textContent = (wantPad() ? '✓ ' : '\u3000') + (KO ? '터치 버튼' : 'Touch buttons');
+    var s2 = document.getElementById('soundLabel2'); if (s2) s2.textContent = (soundOn ? '✓ ' : '　') + (KO ? '소리' : 'Sound');
+  }
+  window.igLabels = igLabels;
+  window.igDo = function (name) { var id = IGCMD[name]; if (id && window.Module && Module._pbweb_cmd) { try { Module._pbweb_cmd(id); } catch (e) {} } setTimeout(igLabels, 60); };
+  setInterval(igLabels, 1500);
+  var oldToggleSound = window.toggleSound; window.toggleSound = function () { var v = oldToggleSound(); igLabels(); return v; };
+  $(function () { igLabels(); });
+
   // ---- table nudge for the auto player (X / . / Up): used sparingly (the game tilts when it is shaken too often) ----
   var nudgeLast = 0, nudgeSent = 0; window.pinballNudges = 0; window.pinballTilts = 0;
   function nudge(code, kc, k) {
@@ -130,10 +153,13 @@
   };
   document.addEventListener('keydown', function (e) { if (e.key === 'F3') { e.preventDefault(); window.toggleAuto(); } });
   // the original game, loaded from the web build's host
-  var HOST = 'https://pinball.alula.me/', st = document.getElementById('status'), cv = document.getElementById('canvas');
+  function showErr(t) { window.__pbErr = t; if (st.style.display !== 'none') st.textContent = (KO ? '불러오기 실패: ' : 'Load failed: ') + t.slice(0, 160) + (location.protocol === 'file:' ? (KO ? ' (file:// 로 열면 브라우저가 로컬 파일 읽기를 막습니다. 웹서버로 여세요: python3 -m http.server)' : ' (browsers block local files on file://; open it through a web server: python3 -m http.server)') : ''); }
+  setTimeout(function () { if (st.style.display !== 'none' && !window.__pbErr) showErr(location.protocol === 'file:' ? 'file://' : (KO ? '시간 초과 - engine/ 폴더의 파일(.js .wasm .data)이 서버에 있는지 확인' : 'timeout - check that the engine/ files (.js .wasm .data) are served')); }, 20000);
+  var HOST = 'engine/', st = document.getElementById('status'), cv = document.getElementById('canvas');
   try { cv.getContext('webgl', { preserveDrawingBuffer: true, alpha: false, antialias: false, depth: true, stencil: false }); } catch (e) {}      // (so the bot can read the frames)
   window.Module = {
-    canvas: cv, locateFile: function (p) { return HOST + p; }, print: function () {}, printErr: function () {},
+    canvas: cv, locateFile: function (p) { return HOST + p; }, print: function () {}, printErr: function (t) { if (/fail|error|abort|not found|404|CORS|wasm/i.test(String(t))) showErr(String(t)); },
+    onAbort: function (w) { showErr('abort: ' + w); },
     setStatus: function (s) { if (!s) { st.style.display = 'none'; cv.style.display = ''; cv.focus(); } else { st.style.display = ''; st.textContent = s; } },
     totalDependencies: 0, monitorRunDependencies: function (n) { this.totalDependencies = Math.max(this.totalDependencies, n); Module.setStatus(n ? 'Preparing... (' + (this.totalDependencies - n) + '/' + this.totalDependencies + ')' : ''); }
   };

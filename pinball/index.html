@@ -13,7 +13,8 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: auto; background: #
 .d-main .title-bar .title-icon { background-image: url(icon_pinball.png); image-rendering: pixelated; }
 .d-main .window-content { padding: 0; box-sizing: border-box; width: auto; border-left: 3px solid #808080; border-top: 3px solid #808080; border-right: 3px solid #fff; border-bottom: 3px solid #fff; background: #fff; }
 /* the original page centres the runner in a 600px column; here it sits inside the window */
-#frame { width: 640px; max-width: 100%; aspect-ratio: 640 / 478; height: auto; }
+#frame { width: 640px; max-width: 100%; height: auto; }
+#frame { aspect-ratio: 640 / 478; }
 #frame canvas { width: 100%; height: 100%; display: block; background: #000; outline: none; }
 #status { position: absolute; left: 0; right: 0; top: 40%; text-align: center; color: #fff; font: 13px sans-serif; pointer-events: none; }
 #frame { position: relative; background: #000; }
@@ -58,14 +59,54 @@ ul.menu { min-width: 150px; width: max-content; }
         <ul class="menu">
           <li onclick="return runMenu(function(){ newGame(); });"><a href="#"><span class="mi-label" data-t="new">　새 게임(N)</span><span class="mi-key">F2</span></a></li>
           <li id="opt-sound" onclick="return runMenu(function(){ toggleSound(); });"><a href="#"><span class="mi-label" id="soundLabel">✓ 소리(S)</span></a></li>
+          <li onclick="return runMenu(function(){ igDo('launch'); });"><a href="#" data-ig="launch">　공 발사</a></li>
+          <li onclick="return runMenu(function(){ igDo('pause'); });"><a href="#" data-ig="pause">　일시정지 / 계속</a></li>
+          <li class="separator"></li>
+          <li onclick="return runMenu(function(){ igDo('scores'); });"><a href="#" data-ig="scores">　최고 점수...</a></li>
+          <li onclick="return runMenu(function(){ igDo('demo'); });"><a href="#" data-ig="demo">　데모</a></li>
           <li class="separator"></li>
           <li onclick="return runMenu(function(){ document.getElementById('mainwin').style.visibility='hidden'; });"><a href="#" data-t="exit">　끝내기(X)</a></li>
+        </ul>
+      </li>
+      <li>
+        <a href="#" data-access-key="o" data-ig="options">옵션</a>
+        <ul class="menu">
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" data-ig="players">　플레이어 수</a>
+            <ul class="menu">
+              <li onclick="return runMenu(function(){ igDo('players1'); });"><a href="#"><span class="mi-label" id="ig-p1"></span></a></li>
+              <li onclick="return runMenu(function(){ igDo('players2'); });"><a href="#"><span class="mi-label" id="ig-p2"></span></a></li>
+              <li onclick="return runMenu(function(){ igDo('players3'); });"><a href="#"><span class="mi-label" id="ig-p3"></span></a></li>
+              <li onclick="return runMenu(function(){ igDo('players4'); });"><a href="#"><span class="mi-label" id="ig-p4"></span></a></li>
+            </ul>
+          </li>
+          <li class="separator"></li>
+          <li onclick="return runMenu(function(){ toggleSound(); });"><a href="#"><span class="mi-label" id="soundLabel2">✓ 소리</span></a></li>
+          <li onclick="return runMenu(function(){ togglePad(); });"><a href="#"><span class="mi-label" id="padLabel">✓ 터치 버튼</span></a></li>
+          <li onclick="return runMenu(function(){ igDo('music'); });"><a href="#"><span class="mi-label" id="ig-music"></span></a></li>
+          <li class="separator"></li>
+          <li onclick="return runMenu(function(){ igDo('controls'); });"><a href="#"><span class="mi-label" data-ig="controls">　플레이어 조작키...</span><span class="mi-key">F8</span></a></li>
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" data-ig="res">　테이블 해상도</a>
+            <ul class="menu">
+              <li onclick="return runMenu(function(){ igDo('resmax'); });"><a href="#" data-ig="resmax">　최대 해상도 사용 (640 x 480)</a></li>
+              <li onclick="return runMenu(function(){ igDo('res640'); });"><a href="#">　640 x 480</a></li>
+            </ul>
+          </li>
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" data-ig="gfx">　그래픽</a>
+            <ul class="menu">
+              <li onclick="return runMenu(function(){ igDo('uniform'); });"><a href="#"><span class="mi-label" id="ig-uniform"></span></a></li>
+              <li onclick="return runMenu(function(){ igDo('linear'); });"><a href="#"><span class="mi-label" id="ig-linear"></span></a></li>
+            </ul>
+          </li>
         </ul>
       </li>
       <li>
         <a href="#" data-access-key="h" data-t="help">도움말</a>
         <ul class="menu">
           <li onclick="return runMenu(function(){ openHelp(); });"><a href="#" data-t="how">　게임 방법(H)</a></li>
+          <li onclick="return runMenu(function(){ igDo('about'); });"><a href="#" data-ig="about">　핀볼 정보</a></li>
           <li class="separator"></li>
           <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
             <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="cheat">　치트...</a>

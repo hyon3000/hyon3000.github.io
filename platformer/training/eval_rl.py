@@ -7,7 +7,7 @@ from selenium.webdriver.firefox.options import Options
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ap = argparse.ArgumentParser(); ap.add_argument('model'); ap.add_argument('--per_kind', type=int, default=12); ap.add_argument('--seed0', type=int, default=9000); ap.add_argument('--who', default='both', help='policy | shield | planner | both (= policy+shield+planner) '); ap.add_argument('--lo', type=int, default=6); ap.add_argument('--hi', type=int, default=24)
 args = ap.parse_args()
-KINDS = ['plain', 'hills', 'autumn', 'jungle', 'flood', 'ghost', 'sky', 'cave', 'snow', 'desert', 'storm', 'volcano', 'ruins', 'factory', 'neon', 'maze', 'castle']
+KINDS = ['plain', 'hills', 'autumn', 'jungle', 'flood', 'ghost', 'sky', 'cave', 'snow', 'desert', 'storm', 'volcano', 'ruins', 'factory', 'neon', 'maze', 'castle', 'tower', 'shaft', 'skymaze']
 m = json.loads(open(args.model).read().split('=', 1)[1].strip().rstrip(';'))
 h = functools.partial(http.server.SimpleHTTPRequestHandler, directory=os.path.dirname(ROOT)); h.log_message = lambda *a, **k: None
 socketserver.TCPServer.allow_reuse_address = True
