@@ -764,43 +764,49 @@ function buildSkyMaze(seed, n, a) {
 // ------------------------------------------------------------------ ghost house: sealed rooms joined only by doors (two-way pairs); wrong doors lead into dead ends and loops. Each door sits on a ledge (jump onto it to enter) and lands beside the partner door.
 function buildGhostHouse(seed, n, a) {
   var nn = effN(n), r = rng(hash(seed, n, a * 7919 + 51)), diff = Math.min(1, (nn - 1) / 18); if (a >= 3) diff *= 0.6; if (a >= 6) diff *= 0.3;
-  var rnd = function (lo, hi) { return lo + Math.floor(r() * (hi - lo + 1)); }, R = 6 + Math.floor(diff * 3.2), RW = 16, g = 12, W = R * RW + 1;
+  var rnd = function (lo, hi) { return lo + Math.floor(r() * (hi - lo + 1)); }, R = 9 + Math.floor(diff * 7), RW = 10, g = 12, W = R * RW + 1;   // many narrow rooms: every room is walled off (vertical walls) and only doors lead on
   var gt = [], tiles = new Uint8Array(W * ROWS), put = function (c, rr, t) { if (c >= 0 && c < W && rr >= 0 && rr < ROWS) tiles[c * ROWS + rr] = t; };
   for (var c = 0; c < W; c++) { gt.push(g); for (var rr = g; rr < ROWS; rr++) put(c, rr, T.SOLID); put(c, 0, T.SOLID); put(c, 1, T.SOLID); if (c % RW === 0) for (rr = 0; rr < ROWS; rr++) put(c, rr, T.SOLID); }
   // room graph: random tree with at most 3 doors per room, plus a few extra loops
-  var deg = [], adj = [], i, edges = [], tries;
-  for (i = 0; i < R; i++) { deg.push(0); adj.push([]); }
-  for (i = 1; i < R; i++) { var p; tries = 0; do { p = rnd(Math.max(0, i - 3), i - 1); } while (deg[p] >= 3 && ++tries < 30); if (deg[p] >= 3) { for (p = 0; p < i && deg[p] >= 3; p++); } edges.push([p, i]); deg[p]++; deg[i]++; adj[p].push(i); adj[i].push(p); }
-  var extra = Math.round(R * (0.2 + 0.2 * diff)); for (tries = 0; extra > 0 && tries < 80; tries++) { var u = rnd(0, R - 1), v = rnd(0, R - 1); if (u !== v && deg[u] < 3 && deg[v] < 3 && adj[u].indexOf(v) < 0) { edges.push([u, v]); deg[u]++; deg[v]++; adj[u].push(v); adj[v].push(u); } }
+  var deg, adj, i, edges, tries, best = null;
+  function mkGraph() {
+    deg = []; adj = []; edges = [];
+    for (i = 0; i < R; i++) { deg.push(0); adj.push([]); }
+    for (i = 1; i < R; i++) { var p; tries = 0; do { p = rnd(Math.max(0, i - 2), i - 1); } while (deg[p] >= 3 && ++tries < 30); if (deg[p] >= 3) { for (p = 0; p < i && deg[p] >= 3; p++); } edges.push([p, i]); deg[p]++; deg[i]++; adj[p].push(i); adj[i].push(p); }
+    var extra = Math.round(R * (0.15 + 0.15 * diff)); for (tries = 0; extra > 0 && tries < 80; tries++) { var u = rnd(0, R - 1), v = rnd(0, R - 1); if (u !== v && deg[u] < 3 && deg[v] < 3 && adj[u].indexOf(v) < 0) { edges.push([u, v]); deg[u]++; deg[v]++; adj[u].push(v); adj[v].push(u); extra--; } }
+  }
+  function dia() { var f = function (s0) { var ds = {}, q = [s0], l = s0; ds[s0] = 0; while (q.length) { var x = q.shift(); if (ds[x] > ds[l]) l = x; adj[x].forEach(function (y) { if (ds[y] === undefined) { ds[y] = ds[x] + 1; q.push(y); } }); } return [l, ds[l]]; }; return f(f(0)[0])[1]; }
+  for (var gtry = 0; gtry < 14; gtry++) { mkGraph(); var dm = dia(); if (!best || dm > best.dm) best = { dm: dm, deg: deg, adj: adj, edges: edges }; }   // the door graph with the longest route
+  deg = best.deg; adj = best.adj; edges = best.edges;
   function bfs(s0) { var ds = {}, q = [s0], fr = s0, pv = {}; ds[s0] = 0; while (q.length) { var x = q.shift(); if (ds[x] > ds[fr]) fr = x; adj[x].forEach(function (y) { if (ds[y] === undefined) { ds[y] = ds[x] + 1; pv[y] = x; q.push(y); } }); } return { far: fr, prev: pv }; }
   var s = bfs(0).far, bb = bfs(s), goalRoom = bb.far, path = [goalRoom]; while (path[0] !== s) path.unshift(bb.prev[path[0]]);
   // doors: slot offsets inside a room (ledge centres)
-  var SL = [3, 8, 12], used = []; for (i = 0; i < R; i++) used.push(0);
+  var SL = [1, 4, 7], used = []; for (i = 0; i < R; i++) used.push(0);
   var tele = [], coins = [], enemies = [], specials = [], door = {};
   edges.forEach(function (e, ei) {
     var sa = used[e[0]]++, sb = used[e[1]]++, xa = e[0] * RW + 1 + SL[sa], xb = e[1] * RW + 1 + SL[sb], col = ei % 3;
-    function ledge(xc) { for (var q = -1; q <= 1; q++) put(xc + q, g - 3, T.SOLID); put(xc, g - 4, T.TELE); }
+    function ledge(xc) { put(xc, g - 3, T.SOLID); put(xc + 1, g - 3, T.SOLID); put(xc, g - 4, T.TELE); }
     ledge(xa); ledge(xb);
-    function land(xc) { var side = (xc % RW) > RW / 2 ? -3 : 3; return (xc + side) * TS + 1; }
+    function land(xc) { return (xc + 2) * TS + 1; }
     tele.push({ c: xa, r: g - 4, tx: land(xb), ty: g * TS - 14, col: col, door: 1 }); tele.push({ c: xb, r: g - 4, tx: land(xa), ty: g * TS - 14, col: col, door: 1 });
     door[e[0] + '>' + e[1]] = { c: xa }; door[e[1] + '>' + e[0]] = { c: xb };
   });
   // decoration: coins on floors, ghosts, spikes, bonus items in dead-end rooms
   for (i = 0; i < R; i++) {
     var x0 = i * RW + 1;
-    for (var q2 = 0; q2 < 3; q2++) coins.push({ x: (x0 + 5 + q2 * 2) * TS + 8, y: (g - 1.5) * TS, b: 0 });
-    if (i !== 0 && i !== goalRoom && r() < 0.35 + 0.4 * diff) put(x0 + rnd(5, 6), g - 1, T.SPIKE);
-    var ng = rnd(1, 1 + (diff > 0.4 ? 1 : 0)); for (var k = 0; k < ng; k++) enemies.push({ t: E.GHOST, x: (x0 + rnd(3, 12)) * TS, y: (g - rnd(3, 6)) * TS, w: 14, h: 14, ax: (x0 + 7) * TS, ay: (g - 4) * TS, rg: 30, sp: 1 / (220 + r() * 120), ph: r(), am: 6, spd: 0 });
-    if (deg[i] === 1 && i !== 0 && i !== goalRoom && specials.length < 5) specials.push({ x: (x0 + 7) * TS, y: (g - 2) * TS });
+    for (var q2 = 0; q2 < 3; q2++) coins.push({ x: (x0 + 3 + q2 * 3) * TS + 8, y: (g - 1.5) * TS, b: 0 });
+    if (i !== 0 && i !== goalRoom && r() < 0.35 + 0.4 * diff) put(x0 + [2, 5, 8][rnd(0, 2)], g - 1, T.SPIKE);
+    var ng = rnd(1, 1 + (diff > 0.4 ? 1 : 0)); for (var k = 0; k < ng; k++) enemies.push({ t: E.GHOST, x: (x0 + rnd(2, 8)) * TS, y: (g - rnd(2, 6)) * TS, w: 14, h: 14, ax: (x0 + 5) * TS, ay: (g - 4) * TS, rg: 30, sp: 1 / (220 + r() * 120), ph: r(), am: 6, spd: 0 });
+    if (deg[i] === 1 && i !== 0 && i !== goalRoom && specials.length < 5) specials.push({ x: (x0 + 4) * TS, y: (g - 2) * TS });
   }
-  while (specials.length < 5) specials.push({ x: (rnd(1, R) * RW - 6) * TS, y: (g - 7) * TS });
+  while (specials.length < 5) specials.push({ x: (rnd(1, R) * RW - 3) * TS, y: (g - 7) * TS });
   var route = [], cnt = 0;
   for (i = 0; i + 1 < path.length; i++) { var dd = door[path[i] + '>' + path[i + 1]]; route.push({ k: 'tele', n: ++cnt, x: dd.c * TS + 8, y: (g - 4) * TS + 8 }); }
-  var gxr = goalRoom * RW + 1 + 11, poleCol = gxr;
+  var gxr = goalRoom * RW + 1 + 9, poleCol = gxr;
   route.push({ k: 'goal', x: poleCol * TS + 6, y: null });
   var mid = path[Math.floor(path.length / 2)];
   return { seed: seed, n: n, kind: 'ghost', attempt: a, diff: diff, w: W, tiles: tiles, gt: gt, coins: coins, special: specials, enemies: enemies, movers: [], cannons: [], rings: [], winds: [], pockets: [], keys: [], doors: [], switches: [], tele: tele, launch: [], grp: new Uint8Array(W * ROWS),
-    route: route, puzzle: true, vertical: true, goalRect: { x: poleCol * TS - 2, y: g * TS - 4 * TS, w: 16, h: 4 * TS }, goalX: poleCol * TS + 6, poleCol: poleCol, poleY: g * TS, start: { x: (s * RW + 3) * TS + 2, y: g * TS - 14 }, cp: { x: (mid * RW + 4) * TS + 2, y: g * TS - 14 },
+    route: route, puzzle: true, vertical: true, goalRect: { x: poleCol * TS - 2, y: g * TS - 4 * TS, w: 16, h: 4 * TS }, goalX: poleCol * TS + 6, poleCol: poleCol, poleY: g * TS, start: { x: (s * RW + 4) * TS + 2, y: g * TS - 14 }, cp: { x: (mid * RW + 4) * TS + 2, y: g * TS - 14 },
     time: 200 + R * 40, theme: 2, room: false, hasBoss: false, kindAsked: 'ghost', hasFire: false, hasIce: false, hasMud: false };
 }
 // ------------------------------------------------------------------ switchback castle: long floors joined by stair shafts at alternating ends, so the route runs right, climbs, runs left, climbs ... (scrolls both ways)
