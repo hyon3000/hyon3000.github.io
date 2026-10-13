@@ -63,7 +63,7 @@ function searchIter(st0, pred, tx, ty, maxNodes) {
 }
 function validate(L, maxNodes) {
   var multi = L.route && L.route.length > 1; maxNodes = maxNodes || (multi ? 9000 : 4000);
-  var st = newState(L, { noEn: true, noPM: true }), seq0 = [0, 0, 0]; runSeq(st, seq0);
+  var st = newState(L, { noEn: !L.stepEn, noPM: true }), seq0 = [0, 0, 0]; runSeq(st, seq0);
   if (!st.p.ground) return { ok: false, why: 'start' };
   var route = L.route || [{ k: 'goal', x: L.goalX, y: null }], script = seq0.slice(), total = 0;
   for (var i = 0; i < route.length; i++) {
@@ -100,22 +100,22 @@ function probe() {
 }
 
 // ------------------------------------------------------------------ worlds
-var KIND_THEME = { plain: 0, hills: 0, flood: 3, ghost: 2, sky: 1, cave: 5, bonus: 1, castle: 4, autumn: 6, jungle: 7, snow: 8, desert: 9, swamp: 10, storm: 11, airship: 12, crystal: 13, volcano: 14, ruins: 15, factory: 16, neon: 17, glacier: 22, tower: 18, shaft: 19, chase: 20, skymaze: 1, zigzag: 15, lavatower: 14, gauntlet: 21, bossrush: 4, maze: 5 };
-var KIND_NAMES = { autumn: ['가을 과수원', 'Autumn Orchard'], jungle: ['정글', 'Jungle'], snow: ['설원', 'Snowfield'], desert: ['사막', 'Desert'], swamp: ['늪', 'Swamp'], storm: ['폭풍 구름', 'Storm Clouds'], airship: ['비행선', 'Airship Fleet'], crystal: ['수정 동굴', 'Crystal Cavern'], volcano: ['화산', 'Volcano'], ruins: ['유적', 'Ruins'], factory: ['공장', 'Factory'], neon: ['네온 도시', 'Neon City'], skymaze: ['공중 미로', 'Sky Labyrinth'], zigzag: ['굽이굽이 성', 'Switchback Keep'], lavatower: ['용암 탑', 'Rising Lava Tower'], glacier: ['얼음 지대', 'Ice Fields'], tower: ['탑 오르기', 'Tower Climb'], shaft: ['깊은 수직굴', 'Deep Shaft'], chase: ['추격전', 'Chase'], gauntlet: ['시간제 관문', 'Timed Gauntlet'], bossrush: ['보스 러시', 'Boss Rush'], cannon: ['대포', 'Cannon'], plain: ['초원', 'Meadow'], hills: ['언덕', 'Hills'], flood: ['물가', 'Lagoon'], ghost: ['유령의 숲', 'Haunted Grove'], sky: ['하늘길', 'Sky Path'], cave: ['동굴', 'Cavern'], castle: ['성채', 'Fortress'], maze: ['미궁', 'Labyrinth'], room: ['비밀방', 'Bonus Room'], bonus: ['별길', 'Star Road'] };
+var KIND_THEME = { plain: 0, hills: 0, flood: 3, ghost: 2, sky: 1, cave: 5, bonus: 1, castle: 4, autumn: 6, jungle: 7, snow: 8, desert: 9, swamp: 10, storm: 11, airship: 12, crystal: 13, volcano: 14, ruins: 15, factory: 16, neon: 17, glacier: 22, tower: 18, shaft: 19, chase: 20, skymaze: 1, aircourse: 1, flystep: 1, zigzag: 15, lavatower: 14, gauntlet: 21, bossrush: 4, maze: 5 };
+var KIND_NAMES = { autumn: ['가을 과수원', 'Autumn Orchard'], jungle: ['정글', 'Jungle'], snow: ['설원', 'Snowfield'], desert: ['사막', 'Desert'], swamp: ['늪', 'Swamp'], storm: ['폭풍 구름', 'Storm Clouds'], airship: ['비행선', 'Airship Fleet'], crystal: ['수정 동굴', 'Crystal Cavern'], volcano: ['화산', 'Volcano'], ruins: ['유적', 'Ruins'], factory: ['공장', 'Factory'], neon: ['네온 도시', 'Neon City'], skymaze: ['공중 미로', 'Sky Labyrinth'], aircourse: ['공중 코스', 'Sky Course'], flystep: ['날것 징검다리', 'Flyer Hops'], zigzag: ['굽이굽이 성', 'Switchback Keep'], lavatower: ['용암 탑', 'Rising Lava Tower'], glacier: ['얼음 지대', 'Ice Fields'], tower: ['탑 오르기', 'Tower Climb'], shaft: ['깊은 수직굴', 'Deep Shaft'], chase: ['추격전', 'Chase'], gauntlet: ['시간제 관문', 'Timed Gauntlet'], bossrush: ['보스 러시', 'Boss Rush'], cannon: ['대포', 'Cannon'], plain: ['초원', 'Meadow'], hills: ['언덕', 'Hills'], flood: ['물가', 'Lagoon'], ghost: ['유령의 숲', 'Haunted Grove'], sky: ['하늘길', 'Sky Path'], cave: ['동굴', 'Cavern'], castle: ['성채', 'Fortress'], maze: ['미궁', 'Labyrinth'], room: ['비밀방', 'Bonus Room'], bonus: ['별길', 'Star Road'] };
 function effN(n) { return n >= 1000 ? n : n + 5 - (n === 1 ? 2 : 0); }   // the difficulty curve starts one world later (stage 1 stays gentle)
 // every world: a gentle starter, three stages from a seeded rotation of all the other kinds (so neighbouring stages and worlds feel different), one labyrinth, and the ending
 // map types (layouts) x themes (looks): 20 x 23 = 460 combinations. Layout list (20): plain, hills + the rotation below (flood sky cave ice storm swamp crystal airship ruins factory volcano ghost-maze tower shaft chase gauntlet sky-labyrinth) + the labyrinth slot (key rooms / tunnel grid). Castles, cannons and bonus stages keep their own look.
-var STARTERS = ['plain', 'hills'], ROTATION = ['flood', 'sky', 'cave', 'glacier', 'zigzag', 'lavatower', 'crystal', 'airship', 'ruins', 'factory', 'volcano', 'ghost', 'tower', 'shaft', 'chase', 'gauntlet', 'skymaze'];
+var STARTERS = ['plain', 'hills'], ROTATION = ['flood', 'sky', 'cave', 'glacier', 'zigzag', 'lavatower', 'aircourse', 'crystal', 'flystep', 'airship', 'ruins', 'factory', 'volcano', 'ghost', 'tower', 'shaft', 'chase', 'gauntlet', 'skymaze'];
 var THEME_COUNT = 23, THEME_NAMES = [['초원', 'Meadow'], ['하늘', 'Sky'], ['유령', 'Haunted'], ['물가', 'Lagoon'], ['성채', 'Fortress'], ['동굴', 'Cavern'], ['가을', 'Autumn'], ['정글', 'Jungle'], ['설원', 'Snow'], ['사막', 'Desert'], ['늪', 'Swamp'], ['폭풍', 'Storm'], ['비행선', 'Airship'], ['수정', 'Crystal'], ['화산', 'Volcano'], ['유적', 'Ruins'], ['공장', 'Factory'], ['네온', 'Neon'], ['탑', 'Tower'], ['수직굴', 'Shaft'], ['추격', 'Chase'], ['시간제', 'Timed'], ['빙하', 'Glacier']];
 // which looks go with which map type (no snow with lava, no meadow in a dark maze ...): 0 meadow 1 sky 2 haunted 3 lagoon 4 fortress 5 cavern 6 autumn 7 jungle 8 snow 9 desert 10 swamp 11 storm 12 airship 13 crystal 14 volcano 15 ruins 16 factory 17 neon 18 tower 19 shaft 20 chase 21 timed 22 glacier
 var HOT = [2, 4, 5, 9, 14, 15, 16, 17, 19, 20, 21], DARK = [2, 4, 5, 10, 13, 15, 16, 17, 19], AIRY = [0, 1, 6, 11, 12, 13, 17, 18], COLD = [1, 5, 8, 11, 13, 18, 22], WET = [0, 3, 5, 6, 7, 10, 13];
-var LAYOUT_THEMES = { plain: [0, 1, 3, 6, 7, 8, 9, 10, 11, 13, 22], hills: [0, 1, 6, 7, 8, 9, 10, 11, 22], flood: WET, sky: AIRY, cave: [5, 2, 9, 10, 13, 15, 16, 19, 22], glacier: COLD, zigzag: [2, 4, 5, 9, 12, 13, 15, 16, 17, 19, 22, 8], lavatower: HOT, crystal: [13, 5, 1, 17, 22, 8, 18], airship: [12, 1, 11, 18, 17, 0, 6], ruins: [15, 2, 5, 7, 9, 10, 19, 4], factory: [16, 17, 12, 19, 5, 20, 21, 15], volcano: HOT, ghost: [2, 15, 19, 4, 10, 5], tower: [18, 1, 0, 6, 8, 11, 22, 13, 17, 12, 15], shaft: [19, 5, 14, 15, 16, 4, 17, 2, 10, 9], chase: [20, 14, 9, 16, 17, 4, 19, 12, 11, 2, 15], gauntlet: [21, 17, 16, 12, 11, 1, 13, 18, 0, 6, 9], skymaze: AIRY.concat([12]), maze: DARK };
+var LAYOUT_THEMES = { plain: [0, 1, 3, 6, 7, 8, 9, 10, 11, 13, 22], hills: [0, 1, 6, 7, 8, 9, 10, 11, 22], flood: WET, sky: AIRY, cave: [5, 2, 9, 10, 13, 15, 16, 19, 22], glacier: COLD, zigzag: [2, 4, 5, 9, 12, 13, 15, 16, 17, 19, 22, 8], lavatower: HOT, crystal: [13, 5, 1, 17, 22, 8, 18], airship: [12, 1, 11, 18, 17, 0, 6], ruins: [15, 2, 5, 7, 9, 10, 19, 4], factory: [16, 17, 12, 19, 5, 20, 21, 15], volcano: HOT, ghost: [2, 15, 19, 4, 10, 5], tower: [18, 1, 0, 6, 8, 11, 22, 13, 17, 12, 15], shaft: [19, 5, 14, 15, 16, 4, 17, 2, 10, 9], chase: [20, 14, 9, 16, 17, 4, 19, 12, 11, 2, 15], gauntlet: [21, 17, 16, 12, 11, 1, 13, 18, 0, 6, 9], skymaze: AIRY.concat([12]), aircourse: AIRY.concat([12, 22]), flystep: AIRY.concat([12, 22]), maze: DARK };
 function pickTheme(seed, n, kind) { var list = LAYOUT_THEMES[kind]; if (!list) return hash(seed, n, 911) % THEME_COUNT; if (n === 1 && list.indexOf(0) >= 0) return 0; return list[hash(seed, n, 911) % list.length]; }
 function unlocked(depth) { return Math.min(ROTATION.length, 6 + depth * 3); }   // new kinds are mixed in as the world index grows
 function worldKinds(seed, w, depth) {
   depth = depth || 0; var pool = ROTATION.slice(0, unlocked(depth)), r = rng(hash(seed, w, 1357)), i, j, t;
   for (i = pool.length - 1; i > 0; i--) { j = Math.floor(r() * (i + 1)); t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
-  var out = [STARTERS[Math.floor(r() * STARTERS.length)]]; var vk = (w % 2 === 0) ? 'tower' : 'shaft'; pool = pool.filter(function (k) { return k !== 'tower' && k !== 'shaft'; }); out.push(vk); for (i = 0; i < 2; i++) out.push(pool[i]); if (w % 2 === 0 && depth > 0 && out[2] !== 'maze') out[2] = 'skymaze'; if (w % 2 === 1 && depth > 0) out[2] = vk === 'tower' ? 'shaft' : 'tower';
+  var out = [STARTERS[Math.floor(r() * STARTERS.length)]]; var vk = (w % 2 === 0) ? 'tower' : 'shaft'; pool = pool.filter(function (k) { return k !== 'tower' && k !== 'shaft'; }); out.push(vk); for (i = 0; i < 2; i++) out.push(pool[i]); if (w % 2 === 0 && depth > 0 && out[2] !== 'maze') out[2] = ['skymaze', 'aircourse', 'flystep'][Math.floor(r() * 3)]; if (w % 2 === 1 && depth > 0) out[2] = vk === 'tower' ? 'shaft' : 'tower';
   var mp = depth === 0 ? 3 : 1 + Math.floor(r() * 3); out[mp] = 'maze'; out.push('castle'); return out;
 }
 // the super map is an endless DAG of worlds generated lazily from the seed: id = depth * 3 + slot; depth 0 has 1 world, depth 1 has 2, deeper depths have 3 (forks and merges everywhere)
@@ -202,6 +202,8 @@ function buildRaw(seed, n, a, o) {
     if (kk1 === 'maze') return (hash(seed, n, 5) % 2 === 0) ? buildMaze(seed, n, a) : buildGrid(seed, n, a, 'cave');
     if (kk1 === 'ghost') return buildGhostHouse(seed, n, a);
     if (kk1 === 'skymaze') return buildSkyMaze(seed, n, a);
+    if (kk1 === 'aircourse') return buildSkyMaze(seed, n, a, true);
+    if (kk1 === 'flystep') return buildSkyMaze(seed, n, a, 'fly');
     if (kk1 === 'zigzag') return buildSwitchback(seed, n, a);
     if (kk1 === 'lavatower') return buildLavaTower(seed, n, a);
     if (kk1 === 'tower' || kk1 === 'shaft') return buildVertical(seed, n, a, kk1);
@@ -703,13 +705,16 @@ function buildGrid(seed, n, a, variant) {
     start: { x: (X0(sp.ci) + 3) * TS + 2, y: FR(sp.cj) * TS - P.SH }, cp: { x: (X0(cpc.ci) + 3) * TS + 2, y: FR(cpc.cj) * TS - P.SH }, time: 200 + GW * GH * 25, theme: variant === 'ghost' ? 2 : 5, room: false, hasBoss: false, kindAsked: kind, hasFire: false, hasIce: false, hasMud: false, maze: 'grid' };
 }
 // sky labyrinth: platforms floating over a void, forks with dead ends and loops, the screen's death wall chases from the left (auto-scroll)
-function buildSkyMaze(seed, n, a) {
+function buildSkyMaze(seed, n, a, air) {
+  var fly = air === 'fly'; air = !!air;   // fly: the 'flystep' variant - the gaps are crossed by stomping hovering flyers (each can be used once), validated with the enemies switched on
+   // air: the 'aircourse' variant - no ordinary platforms at all, every gap is crossed on a moving block / ring / lift
+
   var nn = effN(n), r = rng(hash(seed, n, a * 7919 + 31)), lim = probe(), diff = Math.min(1, (nn - 1) / 18); if (a >= 3) diff *= 0.6; if (a >= 6) diff *= 0.3;
   var rnd = function (lo, hi) { return lo + Math.floor(r() * (hi - lo + 1)); }, rows = 26, W = 96 + Math.round(diff * 30), tiles = new Uint8Array(W * rows);
   var put = function (c, rr, t) { if (c >= 0 && c < W && rr >= 0 && rr < rows) tiles[c * rows + rr] = t; };
   var maxUp = Math.max(1, Math.min(3, lim.up - 1)), maxGap = Math.max(2, Math.min(5, lim.gapRun - 2)), coins = [], enemies = [], plats = [], specials = [];
   function plat(c, len, rw) { for (var q = 0; q < len; q++) { put(c + q, rw, T.SOLID); if (q === 0 || q === len - 1) put(c + q, rw + 1, T.SOLID); } var p = { c: c, len: len, row: rw }; plats.push(p); for (var q2 = 0; q2 < Math.min(3, len - 1); q2++) coins.push({ x: (c + 1 + q2) * TS + 8, y: (rw - 1.5) * TS, b: 0 }); return p; }
-  var main = plat(2, 8, 15), cur = main, forkN = 0;
+  var main = plat(2, 8, 15), cur = main, forkN = 0, chain = [];
   function nextFrom(p, dir) {   // a platform reachable from p
     var len = rnd(4, 7), dy = dir === 'up' ? -rnd(1, maxUp) : dir === 'down' ? rnd(2, 6) : rnd(-maxUp, 2), rw = Math.max(6, Math.min(21, p.row + dy));
     var gap = rnd(1, maxGap - (dy < -1 ? 1 : 0)); return { c: p.c + p.len + gap, len: len, row: rw };
@@ -720,6 +725,9 @@ function buildSkyMaze(seed, n, a) {
   function connector(cu, kindSel) {
     var cE = (cu.c + cu.len) * TS, y0 = cu.row * TS, G, nx2, ids;
     switch (kindSel) {
+      case 'fly': { var kf = rnd(1, 2 + (diff > 0.5 ? 1 : 0)); G = 4 * kf + 3 + (kf > 1 ? 0 : 1); nx2 = { c: cu.c + cu.len + G, len: rnd(3, 5), row: Math.max(7, Math.min(20, cu.row + rnd(-1, 1))) }; for (var qf = 1; qf <= kf; qf++) { var fx = cE + G * TS * qf / (kf + 1), fy = (cu.row + (nx2.row - cu.row) * qf / (kf + 1)) * TS + 2 + rnd(0, 1) * TS; enemies.push({ t: E.FLYER, x: fx, y: fy, w: 14, h: 10, ax: fx, ay: fy, rg: rnd(14, 26), sp: 1 / 320, ph: r(), am: 0, spd: 0 }); } break; }
+      case 'h': { G = rnd(8, 11); nx2 = { c: cu.c + cu.len + G, len: rnd(3, 5), row: cu.row + rnd(-1, 1) }; var amH = G * TS / 2 - 22; addMover({ kind: 0, cx: cE + G * TS / 2, y: y0, w: 40, amp: amH, per: [360, 480, 720][rnd(0, 2)], ph: 0 }); break; }
+      case 'v': { var dhv = rnd(4, 6), up = r() < 0.65; G = 3; nx2 = { c: cu.c + cu.len + G, len: rnd(3, 5), row: cu.row + (up ? -dhv : dhv) }; addMover({ kind: 1, cx: cE + 1.5 * TS, y: y0 + (up ? -dhv : dhv) * TS / 2, w: 40, amp: dhv * TS / 2, per: [480, 720][rnd(0, 1)], ph: 0 }); break; }
       case 'ctrl': G = rnd(7, 10); nx2 = { c: cu.c + cu.len + G, len: rnd(4, 6), row: cu.row + rnd(-1, 0) }; var nS = nx2.c * TS, am = (nS - cE) / 2 - 22; addMover({ kind: 5, cx: (cE + nS) / 2, y: y0, w: 40, amp: am, ox0: -am, per: 1, ph: 0 }); break;
       case 'ctrlv': { var dh = rnd(5, 8); G = 3; nx2 = { c: cu.c + cu.len + G, len: rnd(4, 6), row: cu.row - dh }; addMover({ kind: 6, cx: cE + 1.5 * TS, y: y0 - dh * TS / 2, w: 40, amp: dh * TS / 2, per: 1, ph: 0, off0: dh * TS / 2 }); break; }
       case 'ring': G = rnd(9, 11); nx2 = { c: cu.c + cu.len + G, len: rnd(4, 6), row: cu.row }; var R = G * TS / 2 - 18; for (var q = 0; q < 4; q++) addMover({ kind: 2, cx: cE + G * TS / 2, y: y0, w: 32, amp: R, per: 480, ph: q * Math.PI / 2 }); break;
@@ -732,36 +740,36 @@ function buildSkyMaze(seed, n, a) {
     }
     return nx2;
   }
-  var SP = ['ctrl', 'ring', 'bounce', 'sink', 'seesaw', 'rise', 'ctrlv', 'belt', 'ice'];
+  var SP = (air && root.PF.AIR_SP) ? root.PF.AIR_SP : fly ? ['fly'] : air ? ['h', 'h', 'h', 'v', 'ring', 'sink', 'seesaw', 'ctrl', 'rise', 'ice', 'bounce', 'sink'] : ['ctrl', 'ring', 'bounce', 'sink', 'seesaw', 'rise', 'ctrlv', 'belt', 'ice'];
   while (cur.c + cur.len < W - 14) {
     var np, sp0 = null;
-    if (sinceSp >= 2 && r() < fancy) { sp0 = SP[rnd(0, SP.length - 1)]; var nx3 = connector(cur, sp0); nx3.row = Math.max(5, Math.min(21, nx3.row)); if (nx3.c + nx3.len > W - 12) { movers = movers.slice(0, mvKeep(movers)); break; } np = plat(nx3.c, nx3.len, nx3.row); sinceSp = 0; }
+    if (air || (sinceSp >= 2 && r() < fancy)) { sp0 = SP[rnd(0, SP.length - 1)]; var nx3 = connector(cur, sp0); nx3.row = Math.max(5, Math.min(21, nx3.row)); if (nx3.c + nx3.len > W - 12) { movers = movers.slice(0, mvKeep(movers)); break; } np = plat(nx3.c, nx3.len, nx3.row); sinceSp = 0; }
     else {
       var dir = r() < 0.3 ? 'up' : r() < 0.35 ? 'down' : 'flat', nx = nextFrom(cur, dir);
       if (nx.c + nx.len > W - 12) break;
       np = plat(nx.c, nx.len, nx.row); sinceSp++;
-      if (r() < 0.4 + 0.3 * diff) {   // fork: a side branch from this platform on another height; it either dead-ends (coins / a bonus) or loops back
+      if (!air && r() < 0.4 + 0.3 * diff) {   // fork: a side branch from this platform on another height; it either dead-ends (coins / a bonus) or loops back
         var bdir = np.row > 14 ? 'up' : 'down', bp = np, bl = rnd(2, 4), bk;
         for (bk = 0; bk < bl; bk++) { var bn = nextFrom(bp, bk === 0 ? bdir : 'flat'); bn.c = Math.max(bn.c, bp.c + 2); if (bn.c + bn.len > cur.c + cur.len + 40 || bn.c + bn.len > W - 12) break; if (Math.abs(bn.row - np.row) < 2 && bn.c < np.c + np.len + 2) bn.row = np.row + (bdir === 'up' ? -5 : 5); bp = plat(bn.c, bn.len, Math.max(5, Math.min(21, bn.row))); }
         if (bk > 1 && specials.length < 5 && r() < 0.6) specials.push({ x: (bp.c + 2) * TS, y: (bp.row - 3) * TS });
         forkN++;
       }
     }
-    cur = np;
+    cur = np; chain.push(np);
   }
   function mvKeep(m) { return m.length; }
   var goalP = plat(cur.c + cur.len + 3, 12, Math.max(8, Math.min(18, cur.row)));
   // rotating maces / fire bars over some platforms and in some gaps
-  plats.forEach(function (p, k) { if (k > 1 && !p.pad && p.len >= 6 && r() < 0.15 + 0.35 * diff) { var kk = r(); if (kk < 0.5) maces.push({ cx: (p.c + p.len / 2) * TS, cy: p.row * TS - 62, len: 54, n: 1, swing: 1.0, per: 220 + rnd(0, 80), ph: r() * 6, w: 0 }); else if (kk < 0.8) maces.push({ cx: (p.c + p.len / 2) * TS, cy: p.row * TS - 30, len: 46, n: 5, per: 300 + rnd(0, 120), ph: r() * 6, dir: r() < 0.5 ? 1 : -1 }); else maces.push({ cx: (p.c + p.len / 2) * TS, cy: p.row * TS - 40, len: 36, n: 1, per: 200, ph: r() * 6, dir: r() < 0.5 ? 1 : -1 }); } });
+  if (!fly) plats.forEach(function (p, k) { if (k > 1 && !p.pad && p.len >= 6 && r() < 0.15 + 0.35 * diff) { var kk = r(); if (kk < 0.5) maces.push({ cx: (p.c + p.len / 2) * TS, cy: p.row * TS - 62, len: 54, n: 1, swing: 1.0, per: 220 + rnd(0, 80), ph: r() * 6, w: 0 }); else if (kk < 0.8) maces.push({ cx: (p.c + p.len / 2) * TS, cy: p.row * TS - 30, len: 46, n: 5, per: 300 + rnd(0, 120), ph: r() * 6, dir: r() < 0.5 ? 1 : -1 }); else maces.push({ cx: (p.c + p.len / 2) * TS, cy: p.row * TS - 40, len: 36, n: 1, per: 200, ph: r() * 6, dir: r() < 0.5 ? 1 : -1 }); } });
   // bridge from the last platform if the final step is too far
   var bridgeRow = Math.max(goalP.row, cur.row);
-  plats.forEach(function (p, k) { if (k > 2 && p.len >= 5 && r() < 0.15 + 0.4 * diff) enemies.push({ t: E.FLYER, x: (p.c + p.len / 2) * TS, y: (p.row - 4) * TS, w: 14, h: 10, ax: (p.c + p.len / 2) * TS, ay: (p.row - 4) * TS, rg: 28, sp: 1 / (220 + r() * 100), ph: r(), am: 8, spd: 0 }); else if (k > 2 && p.len >= 6 && r() < 0.3 + 0.3 * diff) enemies.push({ t: E.WALKER, x: (p.c + 1) * TS, y: p.row * TS - 12, w: 12, h: 12, spd: 0.4, dir: 1, mn: (p.c + 0.5) * TS, mx: (p.c + p.len - 0.5) * TS }); });
+  if (!fly) plats.forEach(function (p, k) { if (k > 2 && p.len >= 5 && r() < 0.15 + 0.4 * diff) enemies.push({ t: E.FLYER, x: (p.c + p.len / 2) * TS, y: (p.row - 4) * TS, w: 14, h: 10, ax: (p.c + p.len / 2) * TS, ay: (p.row - 4) * TS, rg: 28, sp: 1 / (220 + r() * 100), ph: r(), am: 8, spd: 0 }); else if (k > 2 && p.len >= 6 && r() < 0.3 + 0.3 * diff) enemies.push({ t: E.WALKER, x: (p.c + 1) * TS, y: p.row * TS - 12, w: 12, h: 12, spd: 0.4, dir: 1, mn: (p.c + 0.5) * TS, mx: (p.c + p.len - 0.5) * TS }); });
   while (specials.length < 5) { var pp = plats[Math.floor(r() * plats.length)]; specials.push({ x: (pp.c + 2) * TS, y: (pp.row - 3) * TS }); }
   var gx = (goalP.c + 6) * TS, gy = goalP.row * TS, start = { x: 4 * TS + 2, y: main.row * TS - P.SH }, mp = plats[Math.floor(plats.length / 2)];
   var gtv = []; for (var c = 0; c < W; c++) gtv.push(rows - 1);
-  var L = { seed: seed, n: n, kind: 'skymaze', attempt: a, diff: diff, w: W, rows: rows, tiles: tiles, gt: gtv, coins: coins, special: specials, enemies: enemies, movers: movers, maces: maces, cannons: [], rings: [], winds: [], pockets: [], keys: [], doors: [], switches: [], tele: [], launch: [], grp: new Uint8Array(W * rows),
-    route: [{ k: 'goal', x: gx, y: gy - 10 }], puzzle: true, vertical: true, goalRect: { x: gx - 8, y: gy - 4 * TS, w: 16, h: 4 * TS }, goalX: gx, poleCol: Math.floor(gx / TS), poleY: gy,
-    start: start, cp: { x: (mp.c + 1) * TS, y: mp.row * TS - P.SH }, time: 220 + Math.floor(W * 0.8), theme: 1, room: false, hasBoss: false, kindAsked: 'skymaze', hasFire: false, hasIce: false, hasMud: false };
+  var L = { seed: seed, n: n, kind: fly ? 'flystep' : air ? 'aircourse' : 'skymaze', attempt: a, stepEn: fly, diff: diff, w: W, rows: rows, tiles: tiles, gt: gtv, coins: coins, special: specials, enemies: enemies, movers: movers, maces: maces, cannons: [], rings: [], winds: [], pockets: [], keys: [], doors: [], switches: [], tele: [], launch: [], grp: new Uint8Array(W * rows),
+    route: (air ? chain : []).map(function (p) { return { k: 'at', x: (p.c + p.len / 2) * TS, y: p.row * TS - 7 }; }).concat([{ k: 'goal', x: gx, y: gy - 10 }]), puzzle: true, vertical: true, goalRect: { x: gx - 8, y: gy - 4 * TS, w: 16, h: 4 * TS }, goalX: gx, poleCol: Math.floor(gx / TS), poleY: gy,
+    start: start, cp: { x: (mp.c + 1) * TS, y: mp.row * TS - P.SH }, time: 220 + Math.floor(W * 0.8), theme: 1, room: false, hasBoss: false, kindAsked: fly ? 'flystep' : air ? 'aircourse' : 'skymaze', hasFire: false, hasIce: false, hasMud: false };
   L.chase = { x0: start.x - 140, v: 0.35 + 0.25 * diff, delay: 240 };
   return L;
 }
@@ -940,8 +948,8 @@ function generate(seed, n, o) {
   L.valid = false; L.attempt = 16; return L;
 }
 // replay the validator's input script on a fresh enemy-free state: proves the flag is reachable with the real physics
-function makeCrumbs(L) { var st = newState(L, { noEn: true, noPM: true }), out = [], last = -99; for (var i = 0; i < L.script.length; i++) { var px0 = st.p.x + 6, py0 = st.p.y + 7, sg0 = st.stage, tc0 = st.tc, kb0 = st.kb, sb0 = st.sb; step(st, L.script[i]); if (st.stage !== sg0 || st.tc !== tc0 || st.kb !== kb0 || st.sb !== sb0) { out.push([Math.round(px0), Math.round(py0), sg0]); last = i; } if (st.p.dead || st.p.won) break; if (i - last >= 36 && st.p.ground) { out.push([Math.round(st.p.x + 6), Math.round(st.p.y + 7), st.stage]); last = i; } } out.push([Math.round(L.goalX), Math.round(L.poleY - 8), (L.route ? L.route.length - 1 : 0)]); return out; }
-function replay(L) { var st = newState(L, { noEn: true, noPM: true }); if (!L.script) return false; for (var i = 0; i < L.script.length; i++) { step(st, L.script[i]); if (st.p.dead) return false; if (st.p.won) return true; } return st.p.won; }
+function makeCrumbs(L) { var st = newState(L, { noEn: !L.stepEn, noPM: true }), out = [], last = -99; for (var i = 0; i < L.script.length; i++) { var px0 = st.p.x + 6, py0 = st.p.y + 7, sg0 = st.stage, tc0 = st.tc, kb0 = st.kb, sb0 = st.sb; step(st, L.script[i]); if (st.stage !== sg0 || st.tc !== tc0 || st.kb !== kb0 || st.sb !== sb0) { out.push([Math.round(px0), Math.round(py0), sg0]); last = i; } if (st.p.dead || st.p.won) break; if (i - last >= 36 && st.p.ground) { out.push([Math.round(st.p.x + 6), Math.round(st.p.y + 7), st.stage]); last = i; } } out.push([Math.round(L.goalX), Math.round(L.poleY - 8), (L.route ? L.route.length - 1 : 0)]); return out; }
+function replay(L) { var st = newState(L, { noEn: !L.stepEn, noPM: true }); if (!L.script) return false; for (var i = 0; i < L.script.length; i++) { step(st, L.script[i]); if (st.p.dead) return false; if (st.p.won) return true; } return st.p.won; }
 
 root.PF.probe = probe; root.PF.build = build; root.PF.generate = generate; root.PF.validate = validate; root.PF.checkContainment = checkContainment; root.PF.replay = replay; root.PF.makeCrumbs = makeCrumbs; root.PF.searchStage = searchStage; root.PF.searchIter = searchIter; root.PF.roomLevel = roomLevel; root.PF.worldMap = worldMap; root.PF.worldInfo = worldInfo; root.PF.worldExists = worldExists; root.PF.validateWorldMap = validateWorldMap; root.PF.validateInfinite = validateInfinite; root.PF.unlocked = unlocked; root.PF.kindOf = kindOf; root.PF.worldKinds = worldKinds; root.PF.KIND_NAMES = KIND_NAMES; root.PF.THEME_NAMES = THEME_NAMES; root.PF.pickTheme = pickTheme; root.PF.LAYOUT_THEMES = LAYOUT_THEMES;
 })(typeof window !== 'undefined' ? window : globalThis);
