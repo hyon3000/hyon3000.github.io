@@ -69,7 +69,7 @@ function validate(L, maxNodes) {
   var route = L.route || [{ k: 'goal', x: L.goalX, y: null }], script = seq0.slice(), total = 0;
   for (var i = 0; i < route.length; i++) {
     var g = route[i], ty = g.y === undefined ? null : g.y, tx = g.x === undefined ? L.goalX : g.x;
-    var res = searchStage(st, function (s) { return PF.stageDone(s, g); }, tx, ty, maxNodes);
+    var res = searchStage(st, function (s) { return PF.stageDone(s, g) && !(s.p.pois > 0); }, tx, ty, maxNodes);   // a stage must not end inside poison (the grace timer is still running)
     if (!res) return { ok: false, why: 'stage' + i + ':' + g.k, nodes: total };
     total += res.nodes; st = res.st; for (var j = 0; j < res.seq.length; j++) script.push(res.seq[j]);
   }
@@ -192,6 +192,7 @@ function validateInfinite(seed, maxDepth) {   // every world up to maxDepth exis
 function build(seed, n, a, o) {
   var L = buildRaw(seed, n, a, o), o2 = o || {};
   if (o2.theme !== undefined) L.theme = o2.theme;
+  else if (L.themeList) L.theme = L.themeList[hash(seed, n, 911) % L.themeList.length];
   else if (!L.room && L.kind !== 'castle' && L.kind !== 'bossrush' && L.kind !== 'cannon' && L.kind !== 'bonus') L.theme = pickTheme(seed, n, L.kind);
   L.layout = L.kind; return L;
 }
@@ -272,7 +273,7 @@ function buildRaw(seed, n, a, o) {
   // chunk weights per level kind
   function weights() {
     var d = diff, w = { flat: 3, gap: 1.5 + 2 * d, stairs: 1.2, hurdle: 1.5 + d, spikes: nn >= 2 ? 0.5 + 1.5 * d : 0, islands: nn >= 2 ? 0.5 + d : 0, mover: nn >= 3 ? 0.4 + 1.2 * d : 0, vmover: 0, orbit: 0, falling: 0, hills: nn >= 2 ? 1.4 : 0, flood: 0, conv: 0, cannon: nn >= 4 ? 0.3 + 0.6 * d : 0, plant: nn >= 3 ? 0.3 + 0.6 * d : 0, crush: 0, ghost: 0, spring: 0.25, vine: 0.25, psw: 0.3, ring: 0.3, wind: nn >= 4 ? 0.25 : 0, updraft: nn >= 4 ? 0.2 : 0, cloud: nn >= 4 ? 0.25 : 0, keydoor: nn >= 5 ? 0.2 : 0, sgate: nn >= 5 ? 0.15 : 0, split: nn >= 2 ? 0.9 : 0 };
-    if (nn >= 3 && kind !== 'flood') w.flood = 0.3;
+    if (nn >= 3 && kind !== 'flood') w.flood = 0.6;
     var KT = KIND_TABLE[kind];
     if (KT) { for (var k0 in w) w[k0] = 0; w.flat = 1; for (var k1 in KT) w[k1] = KT[k1]; if (KT.spikes === undefined && nn >= 2) w.spikes = 0.4; if (kind === 'chase') { w.islands = 0; } }
     if (kind === 'hills') { w.hills = 4; w.flat = 2; }
@@ -282,13 +283,15 @@ function buildRaw(seed, n, a, o) {
     if (kind === 'cave') { w.conv = 3; w.cannon = 0.8; w.plant = 0.5; w.hills = 0.8; }
     if (castle) { w.keydoor = 1.0; w.sgate = 0.8; w.cloud = 0.3; w.wind = 0; w.updraft = 0; w.flood = 0; w.gap = 2.5; w.crush = 2 + d; w.cannon = 1.2; w.conv = 1; w.orbit = 0.8; w.falling = 0.6; w.mover = 0.6; w.islands = 0.6; w.plant = 0.6; w.spring = 0; w.vine = 0; w.psw = 0; w.ring = 0; }
     if (kind === 'bonus') { w.spring = 0.8; w.ring = 0; }
+    if (kind === 'volcano') w.lava = 2.4; if (kind === 'factory' || kind === 'neon') w.lava = 0.8; if (castle) w.lava = 0.7; if (kind === 'swamp') w.poison = 2.2; if (kind === 'flood') w.poison = 0.6; if (nn >= 5 && (kind === 'plain' || kind === 'hills' || kind === 'jungle')) w.poison = 0.45;
     if (o.only) { for (var kk in w) w[kk] = (kk === 'flat' ? 2 : kk === o.only ? 4 : 0); }
     if (castle) w.split = 0.3;
     if (room) { for (var k in w) w[k] = 0; w.flat = 3; w.gap = 1; w.hurdle = 1; w.islands = 0.6; w.stairs = 0.5; }
+    ['ice', 'mud', 'fire', 'lava', 'poison', 'split', 'keydoor', 'sgate', 'cloud', 'updraft', 'wind', 'ring', 'psw', 'vine', 'spring', 'ghost', 'crush', 'plant', 'cannon', 'conv', 'flood', 'hills', 'falling', 'orbit', 'vmover', 'mover'].forEach(function (nm) { if (!(w[nm] >= 0)) w[nm] = 0; });   // a missing weight used to make the whole sum NaN: every stage then picked only plain floor (and the water pools / fish vanished)
     return w;
   }
-  var names = ['flat', 'gap', 'stairs', 'hurdle', 'spikes', 'islands', 'mover', 'vmover', 'orbit', 'falling', 'hills', 'flood', 'conv', 'cannon', 'plant', 'crush', 'ghost', 'spring', 'vine', 'psw', 'ring', 'wind', 'updraft', 'cloud', 'keydoor', 'sgate', 'split', 'ice', 'mud', 'fire'];
-  var guard = 0, endReserve = castle ? 40 : 26;
+  var names = ['flat', 'gap', 'stairs', 'hurdle', 'spikes', 'islands', 'mover', 'vmover', 'orbit', 'falling', 'hills', 'flood', 'conv', 'cannon', 'plant', 'crush', 'ghost', 'spring', 'vine', 'psw', 'ring', 'wind', 'updraft', 'cloud', 'keydoor', 'sgate', 'split', 'ice', 'mud', 'fire', 'lava', 'poison'];
+  var guard = 0, endReserve = castle ? 40 : 26, prevCk = '';
   while (gt.length < W - endReserve && guard++ < 500) {
     if (cpCol < 0 && gt.length >= W / 2) { var cb = flat(7, g); cpCol = cb + 3; continue; }
     var wts = weights(), tot = 0, i; for (i = 0; i < names.length; i++) tot += wts[names[i]];
@@ -296,6 +299,8 @@ function buildRaw(seed, n, a, o) {
     var ck = names[k];
     if (wantSecret && ringCount === 0 && gt.length >= W * 0.25 && !castle) ck = 'ring';
     markHaz(); var sr = safeRunway(); if (sr < 4) { if (gt[gt.length - 1] === g) flat(4 - sr, g); else flat(4, g); }
+    var wallBefore = (ck === 'poison' && prevCk === 'flood') || (ck === 'flood' && prevCk === 'poison'); prevCk = ck;
+    if (wallBefore) { var wgh = g - 2 < 7 ? g - 1 : g - 2; flat(2, g); flat(2, wgh); flat(2, g); }   // water and poison never touch: a wall always stands between them
     var c0, len, gw, dg, i2, q;
     if (ck === 'flat') { len = rnd(6, 13); c0 = flat(len, g); flats.push({ c: c0, len: len, g: g }); }
     else if (ck === 'gap') {
@@ -339,6 +344,16 @@ function buildRaw(seed, n, a, o) {
       for (i2 = 0; i2 < hk; i2++) { var cd = flat(1, g - hk + i2 + 1); tl.push([cd, g - hk + i2, T.SLL]); }
       flat(3, g);
     }
+    else if (ck === 'lava' || ck === 'poison') {   // a liquid river crossed on stone steps; embers leap out of the lava (fire-proof), fish out of the poison (killable)
+      var isL = ck === 'lava', ks = rnd(2, 3), gsz = rnd(2, 3), cur2 = gt.length, jl = [];
+      flat(3, g); cur2 = gt.length;
+      for (var sI = 0; sI <= ks; sI++) {
+        for (i2 = 0; i2 < gsz; i2++) { var cl = gt.length; gt.push(isL ? ROWS : ROWS - 1); for (q = g; q < (isL ? ROWS : ROWS - 1); q++) tl.push([cl, q, isL ? T.LAVA : T.POISON]); if (i2 === (gsz >> 1)) jl.push(cl); }
+        if (sI < ks) { var st0c = flat(2, g); coinsX.push({ x: (st0c + 1) * TS, y: (g - 1.6) * TS }); }
+      }
+      jl.forEach(function (cl2) { var per = rnd(110, 170), hg = rnd(34, 58); enemiesX.push(isL ? { t: E.EMBER, x: cl2 * TS + 2, y: g * TS, w: 12, h: 12, ax: cl2 * TS + 2, by: g * TS, per: per, pho: rnd(0, per), hgt: hg, up: 1, hid: true, spd: 0 } : { t: E.LEAPFISH, poison: 1, x: cl2 * TS + 2, y: g * TS, w: 14, h: 9, ax: cl2 * TS + 2, by: g * TS, per: per, pho: rnd(0, per), hgt: hg, up: 1, hid: true, spd: 0 }); });
+      flat(4, g);
+    }
     else if (ck === 'flood') {
       while (g > 9) { g--; flat(2, g); } flat(3, g);
       var D = Math.min(4, 13 - g), inner = rnd(12, 18), bs = basin(g, D, inner), f = bs.f, wdn = D;
@@ -347,7 +362,7 @@ function buildRaw(seed, n, a, o) {
       if (r() < 0.55 && inner >= 14) { var cs0 = bs.c0 + rnd(3, inner - 9), csl = rnd(4, 6), ct = r() < 0.5 ? T.CURL : T.CURR; for (i2 = 0; i2 < csl; i2++) for (q = g; q < f; q++) if (!pill[cs0 + i2]) tl.push([cs0 + i2, q, ct]); }
       if (r() < 0.35 && inner >= 12) { var cu0 = bs.c0 + rnd(4, inner - 6); for (i2 = 0; i2 < 2; i2++) for (q = g; q < f; q++) if (!pill[cu0 + i2]) tl.push([cu0 + i2, q, T.CURU]); }
       for (var pc = bs.c0 + 4; pc < bs.c0 + inner - 2; pc += 7) if (!pill[pc]) pockets.push({ x: pc * TS + 8, y: (g + 1.5) * TS });
-      if (!room) waterLife(bs.c0, inner, g, D, pill);
+      if (!room) { waterLife(bs.c0, inner, g, D, pill); if (diff > 0.15 && r() < 0.6) { var lc = bs.c0 + rnd(4, Math.max(4, inner - 5)), lper = rnd(120, 180); enemiesX.push({ t: E.LEAPFISH, x: lc * TS + 1, y: g * TS, w: 14, h: 9, ax: lc * TS + 1, by: g * TS, per: lper, pho: rnd(0, lper), hgt: rnd(30, 50), up: 1, hid: true, spd: 0 }); } }
       flat(3, g);
     }
     else if (ck === 'conv') {
@@ -617,7 +632,7 @@ function buildMaze(seed, n, a) {
 }
 
 // ------------------------------------------------------------------ containment check: every water / lava cell needs a solid-or-liquid floor and solid-or-liquid neighbours left and right
-function wetTile(t) { return t === T.WATER || (t >= 22 && t <= 24) || t === T.WLEVEL || t === T.LAVA || t === T.MUD; }
+function wetTile(t) { return t === T.POISON || t === T.WATER || (t >= 22 && t <= 24) || t === T.WLEVEL || t === T.LAVA || t === T.MUD; }
 function checkContainment(L) {
   var bad = [], w = L.w, R = L.rows || ROWS, tiles = L.tiles, solid = PF.SOL;
   function at(c, r) { if (c < 0 || c >= w) return 1; if (r < 0) return 0; if (r >= R) return 1; return tiles[c * R + r]; }
@@ -804,9 +819,15 @@ var TRANSIT = {
   ice: function (sg, r, rnd, g, put, coins3) { sg.w = rnd(16, 20); for (var c = 4; c < sg.w - 4; c++) put(c, g, T.ICE); if (r() < 0.5) put(rnd(7, sg.w - 8), g - 1, T.SPIKE); coins3(5, 2); },
   mover: function (sg, r, rnd, g, put, coins3) { var pw = rnd(7, 9); sg.w = 8 + pw + 2; var c0 = 4; for (var c = c0; c < c0 + pw; c++) for (var rr = g; rr < ROWS; rr++) put(c, rr, 0); sg.movers = sg.movers || []; sg.movers.push({ kind: 0, cx: (c0 + pw / 2) * TS, y: g * TS, w: 40, amp: pw * TS / 2 - 22, per: [360, 480, 720][rnd(0, 2)], ph: 0 }); },
   flybridge: function (sg, r, rnd, g, put, coins3) { var kf = rnd(1, 2), pw = 4 * kf + 4; sg.w = 8 + pw + 2; var c0 = 4, c, rr; for (c = c0; c < c0 + pw; c++) for (rr = g; rr < ROWS; rr++) put(c, rr, 0); for (var q = 1; q <= kf; q++) { var fx = (c0 + pw * q / (kf + 1)) * TS, fy = g * TS + 2 + rnd(0, 1) * TS; sg.enemies.push({ t: E.FLYER, x: fx, y: fy, w: 14, h: 10, ax: fx, ay: fy, rg: rnd(14, 24), sp: 1 / 320, ph: r(), am: 0, spd: 0 }); } },
+  lavahop: function (sg, r, rnd, g, put, coins3) { var ks = rnd(2, 3), gs = rnd(2, 3), c = 4; sg.w = 4 + ks * 2 + (ks + 1) * gs + 4; for (var s = 0; s <= ks; s++) { for (var i = 0; i < gs; i++) for (var rr = g; rr < ROWS; rr++) put(c + i, rr, T.LAVA); var ex = (c + (gs >> 1)) * TS + 2, per = rnd(110, 170); sg.enemies.push({ t: E.EMBER, x: ex, y: g * TS, w: 12, h: 12, ax: ex, by: g * TS, per: per, pho: rnd(0, per), hgt: rnd(34, 58), up: 1, hid: true, spd: 0 }); c += gs + (s < ks ? 2 : 0); } },
+  poisonhop: function (sg, r, rnd, g, put, coins3) { var ks = rnd(2, 3), gs = rnd(2, 3), c = 4; sg.w = 4 + ks * 2 + (ks + 1) * gs + 4; for (var s = 0; s <= ks; s++) { for (var i = 0; i < gs; i++) for (var rr = g; rr < ROWS - 1; rr++) put(c + i, rr, T.POISON); var ex = (c + (gs >> 1)) * TS + 2, per = rnd(110, 170); sg.enemies.push({ t: E.LEAPFISH, poison: 1, x: ex, y: g * TS, w: 14, h: 9, ax: ex, by: g * TS, per: per, pho: rnd(0, per), hgt: rnd(34, 58), up: 1, hid: true, spd: 0 }); c += gs + (s < ks ? 2 : 0); } },
   bricks: function (sg, r, rnd, g, put, coins3) { sg.w = rnd(14, 18); for (var c = 5; c < sg.w - 5; c++) put(c, g - 4, c % 3 === 0 ? T.QC : T.BRICK); coins3(4, 3); }
 };
 var TRANSIT_NAMES = Object.keys(TRANSIT);
+// plausibility: every template has a climate; one climate per stage (lava only in a hot stage, ice only in a cold one, no poison / water next to a volcano), the theme is then picked from the matching looks
+var SEG_TAG = { lavahop: 'hot', ice: 'cold', poisonhop: 'wet', poison: 'wet' };
+var CLIMATE_THEMES = { hot: [2, 4, 5, 9, 14, 15, 16, 17, 19], cold: [1, 5, 8, 11, 13, 18, 22], mild: [0, 1, 3, 6, 7, 10, 11, 12, 13] };
+function climateOK(tag, climate) { if (tag === 'hot') return climate === 'hot'; if (tag === 'cold') return climate === 'cold'; if (tag === 'wet') return climate !== 'hot'; return true; }
 function gateSeg(type, r, rnd, g) {
   var sg = { type: type, w: 0, tiles: [], enemies: [], items: [], coins: [], route: [] }, put = function (c, rr, t) { sg.tiles.push([c, rr, t]); };
   var IY = g * TS - 12, bx = 0, c, rr;
@@ -833,6 +854,38 @@ function gateSeg(type, r, rnd, g) {
     else { sg.items.push({ k: 1, x: 5 * TS + 2, y: IY }, { k: 1, x: 10 * TS + 2, y: IY }); sg.route.push({ k: 'pw', v: 'fire', x: 5 * TS + 8, y: g * TS - 7 }, { k: 'tile', c: cw, r: g - 1, x: (cw - 2) * TS }); }
     sg.route.push({ k: 'xge', x: (cw + 3) * TS });
   }
+  if (type === 'forge') {   // STRATEGY: a brick lid leads up into a vault holding a fire flower and a shrink item (only ONE power can be carried). Then come a cracked wall (needs fire) and a mouse hole (needs mini).
+    // The flower has to be taken FIRST (shoot the wall), then back up the stairs for the shrink item - the other order is a dead end.
+    sg.w = 44; var U = g - 4, lidC = 8;
+    for (c = 3; c <= 24; c++) for (rr = 0; rr <= g - 9; rr++) put(c, rr, T.SOLID);
+    for (c = 3; c <= 20; c++) put(c, U, T.SOLID);
+    put(lidC, U, T.BRICK); put(lidC + 1, U, T.BRICK);
+    for (c = 14; c <= 20; c++) for (rr = g - 3; rr <= g - 1; rr++) put(c, rr, T.SOLID);
+    for (c = 21; c <= 23; c++) for (rr = g - (24 - c); rr <= g - 1; rr++) put(c, rr, T.SOLID);
+    for (rr = 0; rr <= g - 1; rr++) put(30, rr, T.CRACK);
+    for (rr = 0; rr <= g - 2; rr++) put(37, rr, T.SOLID); put(37, g - 1, T.NARROW);
+    sg.items.push({ k: 0, x: 3 * TS + 2, y: IY }, { k: 0, x: 6 * TS + 2, y: IY }, { k: 1, x: 12 * TS + 2, y: U * TS - 12 }, { k: 6, x: 17 * TS + 2, y: U * TS - 12 }); coins3(26, 2);
+    sg.route.push({ k: 'pw', v: 'big', x: 3 * TS + 8, y: g * TS - 7 }, { k: 'pw', v: 'fire', x: 12 * TS + 8, y: U * TS - 7 }, { k: 'tile', c: 30, r: g - 1, x: 28 * TS }, { k: 'pw', v: 'mini', x: 17 * TS + 8, y: U * TS - 7 }, { k: 'xge', x: 41 * TS });
+  }
+  if (type === 'swap') {   // STRATEGY: only a big hero breaks the lid, the shrink item lies in the vault above it, and the mouse hole is the way on - the big power has to be traded in for the small one
+    sg.w = 34; var U2 = g - 4, lid2 = rnd(8, 9);
+    for (c = 3; c <= 20; c++) for (rr = 0; rr <= g - 9; rr++) put(c, rr, T.SOLID);
+    for (c = 3; c <= 18; c++) put(c, U2, T.SOLID);
+    put(lid2, U2, T.BRICK); put(lid2 + 1, U2, T.BRICK);
+    for (c = 13; c <= 18; c++) for (rr = g - 3; rr <= g - 1; rr++) put(c, rr, T.SOLID);
+    for (c = 19; c <= 21; c++) for (rr = g - (22 - c); rr <= g - 1; rr++) put(c, rr, T.SOLID);
+    for (rr = 0; rr <= g - 2; rr++) put(27, rr, T.SOLID); put(27, g - 1, T.NARROW);
+    sg.items.push({ k: 0, x: 3 * TS + 2, y: IY }, { k: 0, x: 6 * TS + 2, y: IY }, { k: 6, x: 15 * TS + 2, y: U2 * TS - 12 }); coins3(23, 2);
+    sg.route.push({ k: 'pw', v: 'big', x: 3 * TS + 8, y: g * TS - 7 }, { k: 'pw', v: 'mini', x: 15 * TS + 8, y: U2 * TS - 7 }, { k: 'xge', x: 31 * TS });
+  }
+  if (type === 'poison') {   // a poison river under a low ceiling (it cannot be jumped): only a powered hero can wade through - the power is lost on entering and 3 seconds are granted
+    sg.w = 24; var rw = rnd(5, 6), rc = rnd(10, 12);
+    for (c = rc - 1; c <= rc + rw; c++) for (rr = 0; rr <= g - 3; rr++) put(c, rr, T.SOLID);
+    for (c = rc; c < rc + rw; c++) for (rr = g; rr < ROWS - 1; rr++) put(c, rr, T.POISON);
+    var fx = (rc + (rw >> 1)) * TS + 1; sg.enemies.push({ t: E.LEAPFISH, poison: 1, x: fx, y: g * TS, w: 14, h: 9, ax: fx, by: g * TS, per: 150, pho: rnd(0, 150), hgt: 30, up: 1, hid: true, spd: 0 });
+    sg.items.push({ k: 0, x: 3 * TS + 2, y: IY }, { k: 0, x: (rc - 3) * TS + 2, y: IY }); coins3(5, 1);
+    sg.route.push({ k: 'pw', v: 'big', x: 3 * TS + 8, y: g * TS - 7 }, { k: 'xge', x: (rc + rw + 3) * TS });
+  }
   if (type === 'pound') {   // a plateau reached by steps; a wall closes it, but its floor has a heavy slab: pound through it and walk on under the wall in the cavity below
     sg.w = 25; var ps = rnd(11, 12), wl = ps + rnd(3, 4);
     for (c = 3; c <= 7; c++) for (rr = g - (c - 2); rr <= g - 1; rr++) put(c, rr, T.SOLID);
@@ -842,6 +895,7 @@ function gateSeg(type, r, rnd, g) {
     sg.items.push({ k: 0, x: 1 * TS + 2, y: IY }, { k: 0, x: 9 * TS + 2, y: (g - 5) * TS - 12 }); coins3(2, 1);
     sg.route.push({ k: 'pw', v: 'big', x: 1 * TS + 8, y: g * TS - 7 }, { k: 'tile', c: ps, r: g - 5, x: ps * TS + 8 }, { k: 'xge', x: 22 * TS });
   }
+  var lr = sg.route[sg.route.length - 1]; if (lr && lr.k === 'xge') lr.x2 = Math.max(lr.x + 4 * TS, (sg.w + 1) * TS);
   return sg;
 }
 // a tiny stand-alone level around one segment: flat floor, 4 pad columns in front, 6 behind, the flag at the very end
@@ -850,7 +904,7 @@ function segLevel(sg, g, entry) {
   for (c = 0; c < W; c++) { gt.push(g); for (rr = g; rr < ROWS; rr++) tiles[c * ROWS + rr] = T.SOLID; }
   sg.tiles.forEach(function (e) { if (e[0] + PADL < W) tiles[(e[0] + PADL) * ROWS + e[1]] = e[2]; });
   var en = sg.enemies.map(function (e) { var o2 = {}; for (var k in e) o2[k] = e[k]; o2.x += PADL * TS; if (o2.ax !== undefined) o2.ax += PADL * TS; if (o2.mn !== undefined) { o2.mn += PADL * TS; o2.mx += PADL * TS; } return o2; });
-  var route = sg.route.filter(function (e) { return !(entry === 'fire' && e.k === 'kick'); }).map(function (e) { var o2 = {}; for (var k in e) o2[k] = e[k]; if (o2.x !== undefined) o2.x += PADL * TS; if (o2.c !== undefined) o2.c += PADL; return o2; });
+  var route = sg.route.filter(function (e) { return !(entry === 'fire' && e.k === 'kick'); }).map(function (e) { var o2 = {}; for (var k in e) o2[k] = e[k]; if (o2.x !== undefined) o2.x += PADL * TS; if (o2.x2 !== undefined) o2.x2 += PADL * TS; if (o2.c !== undefined) o2.c += PADL; return o2; });
   var pole = W - 3; route.push({ k: 'goal', x: pole * TS + 6, y: null });
   return { seed: 1, n: 1, kind: 'gates', diff: 0, w: W, tiles: tiles, gt: gt, coins: [], special: [], enemies: en, movers: (sg.movers || []).map(function (m) { var o2 = {}; for (var k in m) o2[k] = m[k]; o2.cx += PADL * TS; return o2; }), cannons: [], rings: [], winds: [], pockets: [], keys: [], doors: [], switches: [], tele: [], launch: [], grp: new Uint8Array(W * ROWS),
     items: sg.items.map(function (i) { return { k: i.k, x: i.x + PADL * TS, y: i.y }; }), stepEn: en.length > 0, entry: entry || '', pound: sg.type === 'pound',
@@ -859,10 +913,11 @@ function segLevel(sg, g, entry) {
 function buildGates(seed, n, a) {
   var nn = effN(n), r = rng(hash(seed, n, a * 7919 + 71)), diff = Math.min(1, (nn - 1) / 18), g = 11;
   var rnd = function (lo, hi) { return lo + Math.floor(r() * (hi - lo + 1)); };
-  var G = 2 + Math.floor(diff * 2.4), pool = ['big', 'mini', 'shell', 'fire', 'pound'], i, kinds = [];
+  var G = 2 + Math.floor(diff * 2.4), pool = ['big', 'mini', 'shell', 'fire', 'pound', 'poison', 'forge', 'swap'], i, kinds = [];
   for (i = pool.length - 1; i > 0; i--) { var j = Math.floor(r() * (i + 1)), t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
   for (i = 0; i < G; i++) kinds.push(pool[i % pool.length]);
-  var segs = [], tries = 0;
+  var climate = (function () { var x = r(); return x < 0.5 ? 'mild' : x < 0.75 ? 'hot' : 'cold'; })(), segs = [], tries = 0;
+  pool = pool.filter(function (k) { return climateOK(SEG_TAG[k], climate); }); kinds = []; for (i = 0; i < G; i++) kinds.push(pool[i % pool.length]);
   function seg(type, idx) {   // generate + validate one segment alone; a few redraws, then the always-valid plain run
     for (var t2 = 0; t2 < 8; t2++) {
       var rr2 = rng(hash(seed, n, a * 131 + idx * 17 + t2 * 3 + 5)), sg = gateSeg(type, rr2, function (lo, hi) { return lo + Math.floor(rr2() * (hi - lo + 1)); }, g);
@@ -874,7 +929,7 @@ function buildGates(seed, n, a) {
   }
   segs.push(gateSeg('run', r, rnd, g)); segs[0].w = 10; segs[0].tiles = []; segs[0].coins = []; segs[0].route = [];
   var lastT = 'run', sidx = 100;
-  function transit(k) { var nm; do { nm = TRANSIT_NAMES[rnd(0, TRANSIT_NAMES.length - 1)]; } while (nm === lastT || (nm === 'run' && r() < 0.6)); lastT = nm; segs.push(seg(nm, sidx++)); }
+  function transit(k) { var nm, guard2 = 0; do { nm = TRANSIT_NAMES[rnd(0, TRANSIT_NAMES.length - 1)]; } while ((nm === lastT || (nm === 'run' && r() < 0.6) || !climateOK(SEG_TAG[nm], climate)) && ++guard2 < 60); lastT = nm; segs.push(seg(nm, sidx++)); }
   kinds.forEach(function (k, idx) { var pre = rnd(1, 2); for (var q = 0; q < pre; q++) transit(); segs.push(seg(k, idx + 1)); });
   for (var q3 = 0, post = rnd(1, 2); q3 < post; q3++) transit();
   // lay the segments side by side
@@ -887,7 +942,7 @@ function buildGates(seed, n, a) {
     s0.enemies.forEach(function (e) { var o2 = {}; for (var k in e) o2[k] = e[k]; o2.x += s0.x0 * TS; if (o2.ax !== undefined) o2.ax += s0.x0 * TS; if (o2.mn !== undefined) { o2.mn += s0.x0 * TS; o2.mx += s0.x0 * TS; } enemies.push(o2); });
     (s0.movers || []).forEach(function (m) { var o2 = {}; for (var k in m) o2[k] = m[k]; o2.cx += s0.x0 * TS; movers.push(o2); });
     s0.items.forEach(function (i2) { items.push({ k: i2.k, x: i2.x + s0.x0 * TS, y: i2.y }); });
-    s0.route.forEach(function (e) { var o2 = {}; for (var k in e) o2[k] = e[k]; if (o2.x !== undefined) o2.x += s0.x0 * TS; if (o2.c !== undefined) o2.c += s0.x0; route.push(o2); });
+    s0.route.forEach(function (e) { var o2 = {}; for (var k in e) o2[k] = e[k]; if (o2.x !== undefined) o2.x += s0.x0 * TS; if (o2.x2 !== undefined) o2.x2 += s0.x0 * TS; if (o2.c !== undefined) o2.c += s0.x0; route.push(o2); });
     if (s0.type === 'run' && si > 0) specials.push({ x: (s0.x0 + 6) * TS, y: (g - 3) * TS });
   });
   while (specials.length < 5) specials.push({ x: (4 + specials.length * 7) * TS, y: (g - 3) * TS });
@@ -896,7 +951,7 @@ function buildGates(seed, n, a) {
   var mid = segs[Math.floor(segs.length / 2)];
   return { seed: seed, n: n, kind: 'gates', attempt: a, diff: diff, w: W, tiles: tiles, gt: gt, coins: coins, special: specials, enemies: enemies, movers: movers, cannons: [], rings: [], winds: [], pockets: [], keys: [], doors: [], switches: [], tele: [], launch: [], grp: new Uint8Array(W * ROWS),
     items: items, pound: kinds.indexOf('pound') >= 0, stepEn: enemies.length > 0, route: route, puzzle: true, goalX: poleCol * TS + 6, poleCol: poleCol, poleY: g * TS, start: { x: 2 * TS + 2, y: g * TS - 14 }, cp: { x: (mid.x0 + 2) * TS, y: g * TS - 14 },
-    time: 150 + Math.floor(W * 0.7), theme: 0, room: false, hasBoss: false, kindAsked: 'gates', hasFire: false, hasIce: false, hasMud: false, segKinds: kinds };
+    time: 150 + Math.floor(W * 0.7), theme: 0, themeList: CLIMATE_THEMES[climate], climate: climate, segNames: segs.map(function (s0) { return s0.type; }), segX: segs.map(function (s0) { return s0.x0; }), room: false, hasBoss: false, kindAsked: 'gates', hasFire: false, hasIce: false, hasMud: false, segKinds: kinds };
 }
 
 
@@ -1171,7 +1226,7 @@ function generate(seed, n, o) {
     L = build(seed, n, a, oo); v = L.plan ? { ok: !!L.planOk, script: L.plan, nodes: 0 } : (L.kindFail ? { ok: false } : validate(L));
     if (v.ok && L.rise) { var climb = L.rows * TS - 100, frames = v.script.length; L.rise.v = Math.max(0.06, Math.min(0.5, climb / (frames * 1.9))); L.rise.delay = 240; }
     if (v.ok) { L.script = v.script; if (replay(L)) { var cc = checkContainment(L); if (!cc.bad) { L.valid = true; L.attempt = a; L.vnodes = v.nodes; L.crumbs = L.plan ? null : makeCrumbs(L); if (L.kindAsked === 'gauntlet') L.time = Math.min(L.time, Math.ceil(L.script.length / 60 * 1.6) + 14); return L; } } }
-    if (Date.now() - t0 > 4200) break;
+    if (Date.now() - t0 > (L.kindAsked === 'gates' ? 9500 : 4200)) break;   // the segment-composed stages are built piece by piece and may need a second attempt
   }
   L.valid = false; L.attempt = 16; return L;
 }

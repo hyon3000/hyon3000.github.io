@@ -75,7 +75,7 @@ function onPress(k) {          // menu / map navigation on key press (human only
   if (G.mode === 'super') { if (k === 'jump' && G.superT > 20) leaveSuper(); return; }
   if (G.mode === 'end') { if (k === 'jump' && G.superT > 30) startGame(true); return; }
   if (G.mode === 'start') { if (k === 'jump') startGame(false); }
-  else if (G.mode === 'over') { if (k === 'jump') startGame(true); }
+  else if (G.mode === 'over') { if (k === 'jump') startGame(false); }
   else if (G.mode === 'map') { if (k === 'left' || k === 'right' || k === 'up' || k === 'down') moveSel(k); else if (k === 'jump') enterLevel(G.sel); }
 }
 window.addEventListener('keydown', function (e) {
@@ -104,7 +104,7 @@ cv.addEventListener('pointerdown', function (e) {
   if (G.mode === 'sbrowse') { var sh = null; (G.sRects || []).forEach(function (q) { if (qx >= q.x && qx <= q.x + q.w && qy >= q.y && qy <= q.y + q.h) sh = q; }); if (sh) sbPick(sh.id); else closeSuper(); return; }
   if (G.mode === 'super') { if (G.superT > 20) leaveSuper(); return; }
   if (G.mode === 'end') { if (G.superT > 30) startGame(true); return; }
-  if (G.mode === 'start') startGame(false); else if (G.mode === 'over') startGame(true);
+  if (G.mode === 'start') startGame(false); else if (G.mode === 'over') startGame(false);
   else if (G.mode === 'map') { var r = cv.getBoundingClientRect(), px = (e.clientX - r.left) / r.width * VW, py = (e.clientY - r.top) / r.height * VH, nodes = allNodes(), best = -1, bd = 22;
     for (var i = 0; i < nodes.length; i++) { var d = Math.hypot(nodes[i].x - px, nodes[i].y - py); if (d < bd && isOpen(nodes[i])) { bd = d; best = nodes[i].i; } }
     if (best >= 0) { if (G.sel === best) enterLevel(best); else G.sel = best; } else if (e.clientX > r.left + r.width / 2) enterLevel(G.sel); }
@@ -169,10 +169,20 @@ function saveKey(seed) { return 'shapeworld.save.' + seed; }
 function saveProg() {   // the whole resumable state: cleared stages / worlds, secret routes, current world, map position, lives, score, coins
   if (!G.sm || !G.prog) return;
   try {
-    G.prog.lives = G.lives; G.prog.base = G.base; G.prog.coinBase = G.coinBase; G.prog.nextLife = G.nextLife; G.prog.sel = G.sel; G.prog.cur = G.wid;
+    G.prog.carry = G.carry || null; G.prog.lives = G.lives; G.prog.base = G.base; G.prog.coinBase = G.coinBase; G.prog.nextLife = G.nextLife; G.prog.sel = G.sel; G.prog.cur = G.wid;
     G.prog.inLevel = (G.curNode && (G.mode === 'play' || G.mode === 'pause' || G.mode === 'dying' || G.mode === 'loading' || G.mode === 'clear')) ? G.curNode.i : -1; G.prog.t = Date.now();
     var pk = {}; for (var kk in G.prog) pk[kk] = G.prog[kk]; pk.done = packMap(G.prog.done); pk.secret = packMap(G.prog.secret);   // compact: one bit mask per visited world
     localStorage.setItem(saveKey(G.seed), JSON.stringify(pk)); localStorage.setItem('shapeworld.last', String(G.seed));
+  } catch (e) {}
+}
+// game over: the worlds that were already cleared stay cleared (their stages, secret exits and the way on); the world that was lost starts over with fresh lives and score
+function keepClearedWorlds() {
+  try {
+    var p = G.prog, keep = {}, done = {}, secret = {}, w;
+    for (w in p.wcl) { keep[w] = p.wcl[w]; if (p.done[w]) done[w] = p.done[w]; if (p.secret[w]) secret[w] = p.secret[w]; }
+    var any = false; for (w in keep) any = true; if (!any) { clearSave(); return; }
+    localStorage.setItem(saveKey(G.seed), JSON.stringify({ done: packMap(done), secret: packMap(secret), wcl: keep, cur: p.cur, front: p.front || 0, lives: 3, base: 0, coinBase: 0, nextLife: 50, sel: 0, inLevel: -1, carry: null, t: Date.now() }));
+    localStorage.setItem('shapeworld.last', String(G.seed));
   } catch (e) {}
 }
 function clearSave() { try { localStorage.removeItem(saveKey(G.seed)); localStorage.removeItem('shapeworld.last'); } catch (e) {} }
@@ -206,7 +216,7 @@ function startGame(fresh) {
   if (Q.get('seed')) G.seed = parseInt(Q.get('seed'), 10) || 1; else if (!fresh && lastSeed()) G.seed = lastSeed(); else G.seed = 1 + Math.floor(Math.random() * 999999);
   G.sm = {}; G.prog = (!fresh && loadProg(G.seed)) || { done: {}, secret: {}, wcl: {}, cur: 0, front: 0 };
   var p0 = G.prog, resumed = !fresh && hasProgress(p0);
-  G.base = resumed ? (p0.base || 0) : 0; G.coinBase = resumed ? (p0.coinBase || 0) : 0; G.lives = resumed && p0.lives > 0 ? p0.lives : 3; G.nextLife = resumed && p0.nextLife ? p0.nextLife : 50; G.main = null; G.st = null; G.L = null; G.hint = null; G.autoWait = 0; G.mapCool = 0;
+  G.base = resumed ? (p0.base || 0) : 0; G.coinBase = resumed ? (p0.coinBase || 0) : 0; G.lives = resumed && p0.lives > 0 ? p0.lives : 3; G.nextLife = resumed && p0.nextLife ? p0.nextLife : 50; G.main = null; G.st = null; G.L = null; G.hint = null; G.autoWait = 0; G.mapCool = 0; G.carry = resumed && p0.carry ? p0.carry : null;
   setWorld(PF.worldExists(G.prog.cur) ? G.prog.cur : 0); if (resumed) { var rs = p0.inLevel >= 0 ? p0.inLevel : p0.sel, nd = nodeById(rs); if (nd && isOpen(nd)) G.sel = nd.i; }
   G.mode = 'map'; setAuto(0); aiReset(); saveProg();
   say(resumed ? TT('이어하기: 월드 ' + worldName(G.wid) + ' (목숨 ' + G.lives + ')', 'Resumed: world ' + worldName(G.wid) + ' (lives ' + G.lives + ')') : TT('월드 ' + worldName(G.wid) + ': 레벨을 골라 시작하세요', 'World ' + worldName(G.wid) + ': pick a level to start'), 150);
@@ -262,8 +272,9 @@ function selectPick(si) {
   var w = G.selList[G.selWi], nd = G.selMapObj.nodes[si]; if (!nd) return; var s = stageState(w.id, G.selMapObj, nd); if (s === 'locked') { sfx('bump'); return; }
   closeSelect(); G.mode = 'map'; if (w.id !== G.wid) setWorld(w.id); G.sel = nd.i; G.main = null; enterLevel(nd.i, true);
 }
+function carryOf(p) { return (p.pw > 0 || p.mini || p.fin > 0 || p.wing > 0 || p.mount) ? { pw: p.pw | 0, mini: p.mini ? 1 : 0, fin: Math.max(0, p.fin | 0), wing: Math.max(0, p.wing | 0), mount: p.mount ? 1 : 0 } : null; }   // what the hero keeps from one stage to the next
 function levelInit(cp) {
-  var node = G.curNode; G.st = PF.newState(G.L, { rec: true, cp: !!cp }); aiReset(); setAuto(0); G.roomK = undefined; G.parts = []; G.pops = []; G.bumps = []; G.hint = null; G.cam = Math.max(0, Math.min(G.L.w * TS - VW, G.st.p.x - VW * 0.4)); G.camY = Math.max(0, Math.min((G.L.rows || PF.ROWS) * TS - VH, G.st.p.y - VH * 0.55)); G.mode = 'play'; G.secretExit = false;
+  var node = G.curNode, cy = (!cp && G.carry) || null; G.st = PF.newState(G.L, { rec: true, cp: !!cp, pw: cy ? cy.pw : 0, mini: cy ? cy.mini : 0, fin: cy ? cy.fin : 0, wing: cy ? cy.wing : 0, mount: cy ? cy.mount : 0 }); aiReset(); setAuto(0); G.roomK = undefined; G.parts = []; G.pops = []; G.bumps = []; G.hint = null; G.cam = Math.max(0, Math.min(G.L.w * TS - VW, G.st.p.x - VW * 0.4)); G.camY = Math.max(0, Math.min((G.L.rows || PF.ROWS) * TS - VH, G.st.p.y - VH * 0.55)); G.mode = 'play'; G.secretExit = false;
 }
 function enterLevel(i, force) {
   var node = nodeById(i); if (!node || G.mode === 'loading') return; if (!force && !isOpen(node)) return;
@@ -276,7 +287,7 @@ function togglePause() { if (G.mode === 'play') { G.mode = 'pause'; say(TT('일�
 window.newGame = function () { startGame(true); return true; };
 window.toggleAuto = function () {
   G.auto = !G.auto; setAuto(0); aiReset(); reportAuto();
-  if (G.auto) { say(TT('자동 플레이 켜짐 (F3로 끄기)', 'Auto play on (F3 to stop)'), 120); if (G.mode === 'start') startGame(false); else if (G.mode === 'over') startGame(true); } else say(TT('자동 플레이 꺼짐', 'Auto play off'), 90);
+  if (G.auto) { say(TT('자동 플레이 켜짐 (F3로 끄기)', 'Auto play on (F3 to stop)'), 120); if (G.mode === 'start') startGame(false); else if (G.mode === 'over') startGame(false); } else say(TT('자동 플레이 꺼짐', 'Auto play off'), 90);
   return G.auto;
 };
 window.giveHint = function () {
@@ -350,7 +361,7 @@ function fixedStep() {
   for (i = G.parts.length - 1; i >= 0; i--) { var q = G.parts[i]; q.x += q.vx; q.y += q.vy; q.vy += q.g; if (--q.life <= 0) G.parts.splice(i, 1); }
   for (i = G.pops.length - 1; i >= 0; i--) { var pp = G.pops[i]; pp.y -= 0.5; if (--pp.life <= 0) G.pops.splice(i, 1); }
   for (i = G.bumps.length - 1; i >= 0; i--) if (++G.bumps[i].t > 10) G.bumps.splice(i, 1);
-  if (G.mode === 'start' || G.mode === 'over') { if (G.auto && ++G.autoWait > 90) startGame(G.mode === 'over'); return; }
+  if (G.mode === 'start' || G.mode === 'over') { if (G.auto && ++G.autoWait > 90) startGame(false); return; }
   if (G.mode === 'map') {
     if (G.auto && ++G.mapCool > 70) { G.mapCool = 0; var nd = nextTarget(); if (nd) { G.sel = nd.i; enterLevel(nd.i); } }
     return; }
@@ -371,14 +382,14 @@ function fixedStep() {
     if (p.dead) { G.mode = 'dying'; G.dieT = 0; G.dy = p.y; G.dvy = -5.5; setAuto(0); finishRun(); if (p.why === 'time') say(TT('시간 초과!', 'Time is up!'), 120); }
     else if (p.won) {
       if (G.main) leaveRoom();
-      else { st = G.st; G.mode = 'clear'; G.clearT = 0; G.bonus = 1000 + Math.floor(st.t / 60) * 5; st.score += G.bonus; setAuto(0); finishRun(); }
+      else { st = G.st; G.carry = carryOf(st.p); G.mode = 'clear'; G.clearT = 0; G.bonus = 1000 + Math.floor(st.t / 60) * 5; st.score += G.bonus; setAuto(0); finishRun(); }
     }
   } else if (G.mode === 'dying') {
     G.dieT++; G.dvy += 0.32; G.dy += G.dvy;
     if (G.dieT > 100) {
       if (G.main) { G.L = G.main.L; G.st = G.main.st; G.main = null; st = G.st; }
-      G.base += st.score; G.coinBase += st.coins; G.lives--;
-      if (G.lives <= 0) { G.mode = 'over'; G.autoWait = 0; finishRun(); clearSave(); }
+      G.base += st.score; G.coinBase += st.coins; G.lives--; G.carry = null;   // a lost life drops the power-ups
+      if (G.lives <= 0) { G.mode = 'over'; G.autoWait = 0; finishRun(); keepClearedWorlds(); }
       else { saveProg(); levelInit(st.cp); say(TT('다시 도전! 남은 목숨 ' + G.lives, 'Try again! Lives left: ' + G.lives), 120); }
     }
   } else if (G.mode === 'clear') {

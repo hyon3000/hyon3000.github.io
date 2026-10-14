@@ -201,7 +201,7 @@ function makeNavigator() {
     if (!nv.job) {
       if (nv.wait > 0 || !st.p.ground) { if (nv.wait > 0) nv.wait--; return fb.decide(st); }
       var g = L.route[Math.min(st.stage, L.route.length - 1)], tx = g.x === undefined ? L.goalX : g.x, ty = g.y === undefined ? null : g.y;
-      var strict = function (s) { return PF.stageDone(s, g) && (g.k === 'goal' || settles(s)); }, loose = function (s) { return PF.stageDone(s, g); };
+      var strict = function (s) { return PF.stageDone(s, g) && !(s.p.pois > 0) && (g.k === 'goal' || settles(s)); }, loose = function (s) { return PF.stageDone(s, g) && !(s.p.pois > 0); };
       var c2 = PF.clone(st); c2.en = []; c2.noEn = true;
       // tiers: with enemies and a safe stop, with a smaller budget, without the safe stop; last resort: as if the enemies were not there (a hit beats standing still)
       var tiers = [[PF.clone(st), strict, 3000], [PF.clone(st), strict, 8000], [PF.clone(st), loose, 3000], [c2, strict, 4000]];
