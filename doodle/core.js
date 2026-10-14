@@ -557,13 +557,15 @@ function Sim(lv, snap) {
   if (snap) this.restore(snap);
 }
 /* ---- ropes: chains of small boxes joined by revolute joints (own negative filter group, so a rope does not collide with itself) ---- */
-var ROPE_SEG = 12, ROPE_CAP = 120, RSUB = 3, RVEL = 16, RPOS = 6;
+var ROPE_SEG = 12, ROPE_CAP = 120, RSUB = 3, RVEL = 16, RPOS = 6, ROPE_DENS = 0.5, ROPE_DENS_LEVEL = 0.15;
+var ROPE_TUNE = { sub: 3, vel: 16, pos: 6 };
 Sim.prototype.buildChain = function (P, level) {
   var world = this.world, links = [], joints = [], gid = this.ropeGid++;
   for (var i = 0; i + 1 < P.length; i++) {
     var a = P[i], b = P[i + 1], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
     var body = world.createBody({ type: 'dynamic', position: V((a[0] + b[0]) / 2, (a[1] + b[1]) / 2), angle: Math.atan2(b[1] - a[1], b[0] - a[0]), linearDamping: 0.12, angularDamping: 0.3, bullet: !level });
-    body.createFixture({ shape: new planck.Box((len / 2 + 0.8) / S, 3.2 / S), density: level ? 0.6 : 5, friction: 0.4, restitution: 0,
+    body.createFixture({ shape: new planck.Box((len / 2 + 0.8) / S, 3.2 / S), density: level ? ROPE_DENS_LEVEL : ROPE_DENS, friction: 0.4, restitution: 0,   // ropes weigh a tenth of what they used to
+      
       filterGroupIndex: level ? 0 : -gid, filterCategoryBits: level ? 2 : 1, filterMaskBits: level ? 0 : 0xFFFF });
     body.__hl = len / 2;
     links.push(body);
@@ -764,7 +766,8 @@ Sim.prototype.ropeLinksAt = function (x, y, tol) {      // the nearest segment o
 };
 Sim.prototype.projectRopes = function () {     // rope length is invariant: after each step every joint touching a rope link is pulled shut again (mass-weighted position projection)
   var js = [], j, it, i, MCAP = 1e9;
-  for (var l0 = this.ropes.length - 1; l0 >= 0 && MCAP === 1e9; l0--) { var lb = this.ropes[l0].links.filter(Boolean)[0]; if (lb) MCAP = lb.getMass() * 30; }       // heavy loads count as at most 30 rope links so the projection can actually pull them
+  var VLINK = 0.2, mOf = function (b) { return b.__hl !== undefined ? VLINK : b.getMass(); };   // ropes are weightless for the physics, but the length projection weighs a link like a light plank so it can still pull loads
+  MCAP = VLINK * 30;       // heavy loads count as at most 30 rope links so the projection can actually pull them
   for (j = this.world.getJointList(); j; j = j.getNext()) {
     if (j.getType() !== 'revolute-joint') continue;
     var ba = j.getBodyA(), bb = j.getBodyB();
@@ -775,7 +778,7 @@ Sim.prototype.projectRopes = function () {     // rope length is invariant: afte
     i = (it & 1) ? js.length - 1 - ii : ii;
     var jt = js[i], A = jt.getBodyA(), B = jt.getBodyB(), pa = jt.getAnchorA(), pb = jt.getAnchorB();
     var dx = pb.x - pa.x, dy = pb.y - pa.y; if (dx * dx + dy * dy < 1e-10) continue;
-    var wa = A.isDynamic() ? 1 / Math.min(A.getMass(), MCAP) : 0, wb = B.isDynamic() ? 1 / Math.min(B.getMass(), MCAP) : 0, ws = wa + wb; if (ws === 0) continue;
+    var wa = A.isDynamic() ? 1 / Math.min(mOf(A), MCAP) : 0, wb = B.isDynamic() ? 1 / Math.min(mOf(B), MCAP) : 0, ws = wa + wb; if (ws === 0) continue;
     if (wa) { var qa = A.getPosition(); A.setPosition(Vec2(qa.x + dx * wa / ws, qa.y + dy * wa / ws)); }
     if (wb) { var qb = B.getPosition(); B.setPosition(Vec2(qb.x - dx * wb / ws, qb.y - dy * wb / ws)); }
   }
@@ -894,13 +897,13 @@ Sim.prototype.limitRope = function (rec, k, body, pt, pin) {
     if (pin) pin.joints.push(j);
   }, this);
 };
-Sim.prototype.pinBodies = function (p) { var r = []; p.sts.forEach(function (st) { r.push(st.body); }); p.lk.forEach(function (l) { var b = l.rec.links[l.k]; if (b) r.push(b); }); return r; };
+Sim.prototype.pinBodies = function (p) { var r = (p.ob || []).slice(); p.sts.forEach(function (st) { r.push(st.body); }); p.lk.forEach(function (l) { var b = l.rec.links[l.k]; if (b) r.push(b); }); return r; };
 Sim.prototype.pinPos = function (p) {
   if (p.type === 'hinge' && p.b0) { var b = p.b0, q = b.getPosition(), a = b.getAngle(), c = Math.cos(a), s = Math.sin(a); return [q.x * S + p.lx * c - p.ly * s, q.y * S + p.lx * s + p.ly * c]; }
   return [p.x, p.y];
 };
-Sim.prototype._mkPin = function (type, x, y, sts, lks) {
-  var world = this.world, pin = { type: type, x: x, y: y, sts: sts.slice(), lk: (lks || []).slice(), anchor: null, joints: [], lx: 0, ly: 0, b0: null }, bodies = this.pinBodies(pin), i;
+Sim.prototype._mkPin = function (type, x, y, sts, lks, ob) {
+  var world = this.world, pin = { type: type, x: x, y: y, sts: sts.slice(), lk: (lks || []).slice(), ob: (ob || []).slice(), anchor: null, joints: [], lx: 0, ly: 0, b0: null }, bodies = this.pinBodies(pin), i;
   if (type === 'hinge') {
     var b0 = bodies[0], q = b0.getPosition(), a = b0.getAngle(), c = Math.cos(-a), s = Math.sin(-a), dx = x - q.x * S, dy = y - q.y * S;
     pin.b0 = b0; pin.lx = dx * c - dy * s; pin.ly = dy * c + dx * s;
@@ -913,11 +916,20 @@ Sim.prototype._mkPin = function (type, x, y, sts, lks) {
   bodies.forEach(function (b) { b.setAwake(true); });
   this.pins.push(pin); return pin;
 };
+// level bodies a pin can be stuck into: gliding platforms, rotors, see-saw planks and the loose level crates (the pin then rides on the body and hinges what is drawn over it)
+Sim.prototype.platformsAt = function (x, y) {
+  var out = [], tol = 5;
+  function inBox(b, hw, hh) { var p = b.getPosition(), a = b.getAngle(), c = Math.cos(-a), s = Math.sin(-a), dx = x - p.x * S, dy = y - p.y * S, lx = dx * c - dy * s, ly = dy * c + dx * s; return Math.abs(lx) <= hw + tol && Math.abs(ly) <= hh + tol; }
+  this.movers.forEach(function (o) { if (!o.m.deadly && inBox(o.body, o.m.hw, o.m.hh)) out.push(o.body); });
+  this.rotors.forEach(function (o) { if (inBox(o.body, o.r.r, 5)) out.push(o.body); });
+  (this.props || []).forEach(function (o) { if (inBox(o.body, o.hw, o.hh)) out.push(o.body); });
+  return out;
+};
 Sim.prototype.addPinAt = function (x, y) {
   if (this.pins.length >= 40) return null;
-  var hits = this.strokesAt(x, y), lks = this.ropeLinksAt(x, y, 10), n = hits.length + lks.length, px = x, py = y;
+  var hits = this.strokesAt(x, y), lks = this.ropeLinksAt(x, y, 10), plat = this.platformsAt(x, y), n = hits.length + lks.length + plat.length, px = x, py = y;
   if (!hits.length && lks.length === 1) { var e = this.linkEnds(lks[0].rec.links[lks[0].k]), dx = e[1][0] - e[0][0], dy = e[1][1] - e[0][1], l2 = dx * dx + dy * dy, t = l2 < 1e-9 ? 0 : Math.max(0, Math.min(1, ((x - e[0][0]) * dx + (y - e[0][1]) * dy) / l2)); px = e[0][0] + dx * t; py = e[0][1] + dy * t; }
-  if (n >= 1) return this._mkPin('hinge', px, py, hits, lks);        // on an object / rope: hinges it with what is drawn over it next (not fixed to the background)
+  if (n >= 1) return this._mkPin('hinge', px, py, hits, lks, plat.slice(0, 1));        // on an object / rope / moving platform: hinges it with what is drawn over it next (not fixed to the background)
   return this._mkPin('peg', x, y, [], []);
 };
 Sim.prototype.removePin = function (pin) {
@@ -969,7 +981,7 @@ Sim.prototype.step = function () {
     var bp0 = this.ball.getPosition(), m0 = this.ball.getMass();
     for (var bi = 0; bi < this.lv.boosts.length; bi++) { var bz = this.lv.boosts[bi], px = bp0.x * S, py = bp0.y * S; if (px > bz.x0 && px < bz.x1 && py > bz.y0 && py < bz.y1) this.ball.applyForceToCenter(Vec2(m0 * bz.ax, m0 * bz.ay), true); }
   }
-  if (this.ropeSegCount() > 0) { var nsub = RSUB; for (var si = 0; si < nsub; si++) this.world.step(1 / 60 / nsub, RVEL, RPOS); }       // drawn ropes: sub-steps + more solver iterations keep the chain from stretching under a heavy load
+  if (this.ropeSegCount() > 0) { var nsub = ROPE_TUNE.sub; for (var si = 0; si < nsub; si++) this.world.step(1 / 60 / nsub, ROPE_TUNE.vel, ROPE_TUNE.pos); }       // drawn ropes: sub-steps + more solver iterations keep the chain from stretching under a heavy load
   else this.world.step(1 / 60, 8, 3);
   if (this.ropeSegCount() > 0) this.projectRopes();
   this.simT++;
@@ -1069,6 +1081,6 @@ Sim.prototype.restore = function (snap) {
   this.events = [];
 };
 
-window.DP = { STROKE_MAX: STROKE_MAX, W: W, H: H, S: S, BALL_R: BALL_R, STAR_R: STAR_R, MAXBODIES: MAXBODIES, genLevel: genLevel, Sim: Sim, makeGeom: makeGeom, pathLen: pathLen, mulberry32: mulberry32, hash2: hash2, V: V,
+window.DP = { ropeTune: ROPE_TUNE, setRopeDens: function (v, lv) { ROPE_DENS = v; if (lv !== undefined) ROPE_DENS_LEVEL = lv; }, STROKE_MAX: STROKE_MAX, W: W, H: H, S: S, BALL_R: BALL_R, STAR_R: STAR_R, MAXBODIES: MAXBODIES, genLevel: genLevel, Sim: Sim, makeGeom: makeGeom, pathLen: pathLen, mulberry32: mulberry32, hash2: hash2, V: V,
   distSeg: distSeg, inPoly: inPoly, decompose: decompose, area2: area2, rdp: rdp };
 })();

@@ -52,6 +52,7 @@ function searchIter(st0, pred, tx, ty, maxNodes) {
     };
     var mi, walks = [[IN.R, 8], [IN.R | IN.RUN, 8], [IN.L, 8], [IN.L | IN.RUN, 8], [0, 20], [IN.R | IN.RUN, 3]];
     for (mi = 0; mi < walks.length; mi++) tryMacro(function (s) { return macroWalk(s, walks[mi][0], walks[mi][1]); });
+    if (st0.L.duck) [5, 8, 12, 17].forEach(function (rr2) { tryMacro(function (s) { var a = macroWalk(s, IN.R | IN.RUN, rr2); if (s.p.dead || s.p.won) return a; return a.concat(macroWalk(s, IN.DN, 40)); }); });   // run-up, then duck and slide on the momentum (one-tile holes)
     var airs = st0.L.pound ? AIRS.concat([IN.DN]) : AIRS;
     for (var hi = 0; hi < 3; hi++) for (var ai = 0; ai < airs.length; ai++) {
       tryMacro(function (s) { return macroJump(s, HOLDS[hi], airs[ai], 0, 0); });
@@ -850,8 +851,8 @@ function gateSeg(type, r, rnd, g) {
   } else if (type === 'shell' || type === 'fire') {   // a cracked wall: a kicked shell (or a fireball) breaks it
     sg.w = 27; var cw = rnd(19, 21);
     for (rr = 0; rr <= g - 1; rr++) put(cw, rr, T.CRACK);
-    if (type === 'shell') { var b0 = rnd(7, 9); sg.enemies.push({ t: E.BEETLE, x: b0 * TS, y: g * TS - 13, w: 12, h: 13, spd: 0.4, dir: 1, mn: (b0 - 3) * TS, mx: (b0 + 4) * TS }); sg.items.push({ k: 0, x: 3 * TS + 2, y: IY }); sg.route.push({ k: 'pw', v: 'notmini', x: 3 * TS + 8 }, { k: 'kick', x: (b0 + 1) * TS }, { k: 'tile', c: cw, r: g - 1, x: (cw - 2) * TS }); }
-    else { sg.items.push({ k: 1, x: 5 * TS + 2, y: IY }, { k: 1, x: 10 * TS + 2, y: IY }); sg.route.push({ k: 'pw', v: 'fire', x: 5 * TS + 8, y: g * TS - 7 }, { k: 'tile', c: cw, r: g - 1, x: (cw - 2) * TS }); }
+    if (type === 'shell') { var b0 = rnd(7, 9); sg.enemies.push({ t: E.BEETLE, x: b0 * TS, y: g * TS - 13, w: 12, h: 13, spd: 0.4, dir: 1, mn: (b0 - 3) * TS, mx: (b0 + 4) * TS }); sg.items.push({ k: 0, x: 3 * TS + 2, y: IY }); sg.route.push({ k: 'pw', v: 'notmini', x: 3 * TS + 8 }, { k: 'kick', x: (b0 + 1) * TS }, { k: 'tile', c: cw, r: g - 1, x: (cw - 2) * TS, x2: cw * TS }); }
+    else { sg.items.push({ k: 1, x: 5 * TS + 2, y: IY }, { k: 1, x: 10 * TS + 2, y: IY }); sg.route.push({ k: 'pw', v: 'fire', x: 5 * TS + 8, y: g * TS - 7 }, { k: 'tile', c: cw, r: g - 1, x: (cw - 2) * TS, x2: cw * TS }); }
     sg.route.push({ k: 'xge', x: (cw + 3) * TS });
   }
   if (type === 'forge') {   // STRATEGY: a brick lid leads up into a vault holding a fire flower and a shrink item (only ONE power can be carried). Then come a cracked wall (needs fire) and a mouse hole (needs mini).
@@ -865,7 +866,7 @@ function gateSeg(type, r, rnd, g) {
     for (rr = 0; rr <= g - 1; rr++) put(30, rr, T.CRACK);
     for (rr = 0; rr <= g - 2; rr++) put(37, rr, T.SOLID); put(37, g - 1, T.NARROW);
     sg.items.push({ k: 0, x: 3 * TS + 2, y: IY }, { k: 0, x: 6 * TS + 2, y: IY }, { k: 1, x: 12 * TS + 2, y: U * TS - 12 }, { k: 6, x: 17 * TS + 2, y: U * TS - 12 }); coins3(26, 2);
-    sg.route.push({ k: 'pw', v: 'big', x: 3 * TS + 8, y: g * TS - 7 }, { k: 'pw', v: 'fire', x: 12 * TS + 8, y: U * TS - 7 }, { k: 'tile', c: 30, r: g - 1, x: 28 * TS }, { k: 'pw', v: 'mini', x: 17 * TS + 8, y: U * TS - 7 }, { k: 'xge', x: 41 * TS });
+    sg.route.push({ k: 'pw', v: 'big', x: 3 * TS + 8, y: g * TS - 7 }, { k: 'pw', v: 'fire', x: 12 * TS + 8, y: U * TS - 7 }, { k: 'tile', c: 30, r: g - 1, x: 28 * TS, x2: 30 * TS }, { k: 'pw', v: 'mini', x: 17 * TS + 8, y: U * TS - 7 }, { k: 'xge', x: 41 * TS });
   }
   if (type === 'swap') {   // STRATEGY: only a big hero breaks the lid, the shrink item lies in the vault above it, and the mouse hole is the way on - the big power has to be traded in for the small one
     sg.w = 34; var U2 = g - 4, lid2 = rnd(8, 9);
@@ -907,7 +908,7 @@ function segLevel(sg, g, entry) {
   var route = sg.route.filter(function (e) { return !(entry === 'fire' && e.k === 'kick'); }).map(function (e) { var o2 = {}; for (var k in e) o2[k] = e[k]; if (o2.x !== undefined) o2.x += PADL * TS; if (o2.x2 !== undefined) o2.x2 += PADL * TS; if (o2.c !== undefined) o2.c += PADL; return o2; });
   var pole = W - 3; route.push({ k: 'goal', x: pole * TS + 6, y: null });
   return { seed: 1, n: 1, kind: 'gates', diff: 0, w: W, tiles: tiles, gt: gt, coins: [], special: [], enemies: en, movers: (sg.movers || []).map(function (m) { var o2 = {}; for (var k in m) o2[k] = m[k]; o2.cx += PADL * TS; return o2; }), cannons: [], rings: [], winds: [], pockets: [], keys: [], doors: [], switches: [], tele: [], launch: [], grp: new Uint8Array(W * ROWS),
-    items: sg.items.map(function (i) { return { k: i.k, x: i.x + PADL * TS, y: i.y }; }), stepEn: en.length > 0, entry: entry || '', pound: sg.type === 'pound',
+    items: sg.items.map(function (i) { return { k: i.k, x: i.x + PADL * TS, y: i.y }; }), stepEn: en.length > 0, entry: entry || '', pound: sg.type === 'pound', duck: true,
     route: route, puzzle: true, goalX: pole * TS + 6, poleCol: pole, poleY: g * TS, start: { x: 2 * TS + 2, y: g * TS - 14 }, cp: { x: 99999, y: 0 }, time: 300, theme: 0, room: false, hasBoss: false, kindAsked: 'gates', hasFire: false, hasIce: false, hasMud: false };
 }
 function buildGates(seed, n, a) {
@@ -950,7 +951,7 @@ function buildGates(seed, n, a) {
   route.push({ k: 'goal', x: poleCol * TS + 6, y: null });
   var mid = segs[Math.floor(segs.length / 2)];
   return { seed: seed, n: n, kind: 'gates', attempt: a, diff: diff, w: W, tiles: tiles, gt: gt, coins: coins, special: specials, enemies: enemies, movers: movers, cannons: [], rings: [], winds: [], pockets: [], keys: [], doors: [], switches: [], tele: [], launch: [], grp: new Uint8Array(W * ROWS),
-    items: items, pound: kinds.indexOf('pound') >= 0, stepEn: enemies.length > 0, route: route, puzzle: true, goalX: poleCol * TS + 6, poleCol: poleCol, poleY: g * TS, start: { x: 2 * TS + 2, y: g * TS - 14 }, cp: { x: (mid.x0 + 2) * TS, y: g * TS - 14 },
+    items: items, duck: true, pound: kinds.indexOf('pound') >= 0, stepEn: enemies.length > 0, route: route, puzzle: true, goalX: poleCol * TS + 6, poleCol: poleCol, poleY: g * TS, start: { x: 2 * TS + 2, y: g * TS - 14 }, cp: { x: (mid.x0 + 2) * TS, y: g * TS - 14 },
     time: 150 + Math.floor(W * 0.7), theme: 0, themeList: CLIMATE_THEMES[climate], climate: climate, segNames: segs.map(function (s0) { return s0.type; }), segX: segs.map(function (s0) { return s0.x0; }), room: false, hasBoss: false, kindAsked: 'gates', hasFire: false, hasIce: false, hasMud: false, segKinds: kinds };
 }
 

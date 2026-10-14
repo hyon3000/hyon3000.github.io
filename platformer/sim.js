@@ -73,7 +73,7 @@ function clone(st) {
   c.cg = st.cg.slice(); c.sg = st.sg.slice(); c.pk = st.pk.slice(); c.kg = st.kg.slice(); c.dg = st.dg.slice(); c.sg2 = st.sg2.slice(); c.ev = null; return c;
 }
 function ev(st, k, x, y, a) { if (st.ev) st.ev.push({ k: k, x: x, y: y, a: a }); }
-function setPw(p, v) { if (p.mini) { p.mini = 0; p.x -= (P.PW - p.w) / 2; p.w = P.PW; } var nh = v > 0 ? P.BH : P.SH; p.y += p.h - nh; p.h = nh; p.pw = v; p.big = v > 0; }
+function setPw(p, v) { p.duck = 0; if (p.mini) { p.mini = 0; p.x -= (P.PW - p.w) / 2; p.w = P.PW; } var nh = v > 0 ? P.BH : P.SH; p.y += p.h - nh; p.h = nh; p.pw = v; p.big = v > 0; }
 function miniSurface(st, p, ny) {   // the shrunk hero stands on the water surface; a star hero walks on any liquid surface, poison included (a mini hero sinks into poison and dies)
   var rr = Math.floor((ny + p.h - 1e-4) / TS), cx = Math.floor((p.x + p.w / 2) / TS), t = tileAt(st, cx, rr);
   return (p.star > 0 ? isW(t) : (isW(t) && t !== T.POISON)) && !isW(tileAt(st, cx, rr - 1)) && p.y + p.h <= rr * TS + 3;
@@ -153,6 +153,7 @@ function overlap(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y 
 
 function updEnemy(st, e, f) {
   var p = st.p, i, hw;
+  if (e.t === E.BOSS && e.alive && e.y > (st.L.rows || ROWS) * TS + 30) { e.hp = 0; e.alive = false; e.dt = 70; st.boss--; st.score += 3000; ev(st, 'bossdead', e.x + e.w / 2, e.y); return; }   // a boss that ends up in the void counts as beaten
   if (e.t >= 9) { var anc = e.ax !== undefined ? e.ax : e.x; if (Math.abs(anc - p.x) > P.ACTIVE + 100) return; }
   switch (e.t) {
     case 9: e.x = e.ax + e.rg * tri(f * e.sp + e.ph); e.y = e.ay + Math.sin(f * 0.07 + e.ph * 6.283) * e.am; e.dir = tri((f + 1) * e.sp + e.ph) > tri(f * e.sp + e.ph) ? 1 : -1; return;
@@ -246,12 +247,10 @@ function updBoss(st, e, f) {
   }
 }
 // a cracked wall (T.CRACK) breaks along its whole column when a kicked shell runs into it or a fireball hits it
-function crackWall(st, x, y, h) {
+function crackWall(st, x, y, h) {   // only the struck tile(s) break (one tile for a rolling shell / a fireball): the hole is one tile high
   var c = Math.floor(x / TS), r0 = Math.floor(y / TS), r1 = Math.floor((y + h - 1e-4) / TS), hit = false, rr;
-  for (rr = r0; rr <= r1; rr++) if (tileAt(st, c, rr) === T.CRACK) hit = true;
-  if (!hit) return false;
-  for (rr = 0; rr < (st.L.rows || ROWS); rr++) if (tileAt(st, c, rr) === T.CRACK) { setTile(st, c, rr, T.AIR); ev(st, 'brick', c * TS + 8, rr * TS + 8); }
-  st.score += 200; return true;
+  for (rr = r0; rr <= r1; rr++) if (tileAt(st, c, rr) === T.CRACK) { setTile(st, c, rr, T.AIR); hit = true; ev(st, 'brick', c * TS + 8, rr * TS + 8); }
+  if (hit) st.score += 200; return hit;
 }
 // ground pound: a big hero holding Down in the air drops fast and smashes the bricks / heavy slabs it lands on, falling on through the hole
 function poundBreak(st, p, row) {
@@ -274,7 +273,7 @@ function stageDone(st, g) {
     case 'tele': return st.tc >= g.n;
     case 'pw': return g.v === 'notmini' ? !st.p.mini : g.v === 'big' ? st.p.big : g.v === 'mini' ? !!st.p.mini : g.v === 'fire' ? st.p.pw === 2 : true;
     case 'kick': if (st.p.pw === 2) return true; for (var kq = 0; kq < st.en.length; kq++) if (st.en[kq].alive && st.en[kq].t === 3 && st.en[kq].sh === 2 && st.en[kq].dir === (g.d || 1)) return true; return false;
-    case 'tile': return tileAt(st, g.c, g.r) === T.AIR;
+    case 'tile': return tileAt(st, g.c, g.r) === T.AIR && (g.x2 === undefined || st.p.x + st.p.w <= g.x2);   // x2: the hero must still stand in front of the wall (he has to pass the hole afterwards)
     case 'at': return st.p.ground && Math.abs(st.p.x + 6 - g.x) < 20 && Math.abs(st.p.y + 7 - g.y) < 10;
     case 'xge': return st.p.x >= g.x && (g.x2 === undefined || (st.p.x <= g.x2 && st.p.ground));   // x2: the stage ends in a window on the ground (so the next segment starts from its own seam, not from somewhere beyond its pickups)
     case 'goal': return st.p.won;
@@ -320,8 +319,14 @@ function step(st, inp) {
       p.vx = 0; p.vy = 0; p.jheld = !!jump; p.anim += 0.1; if (p.y + p.h < 0) p.climb = false;
     }
   }
+  // --- duck: a big hero holding Down on the ground crouches to the small height and slides on with its momentum (cannot steer): the way through a one-tile hole without losing the power
+  if (p.big && !p.mini && !p.climb) {
+    if (!p.duck && p.ground && down && !inW) { p.duck = 1; p.y += p.h - P.SH; p.h = P.SH; }
+    else if (p.duck && (!down || !p.ground) && !boxHit(st, p.x, p.y - (P.BH - P.SH), p.w, P.BH)) { p.y -= P.BH - P.SH; p.h = P.BH; p.duck = 0; }
+  } else if (p.duck) p.duck = 0;
   var carried = 0;
   if (!p.climb) {
+    if (p.duck) dir = 0;
     // --- run / P-meter
     var maxv = run ? P.RUN : P.WALK, onIce = false, inMud = false;
     if (L.hasIce && p.ground) { onIce = tileAt(st, Math.floor(cx0 / TS), Math.floor((p.y + p.h + 0.5) / TS)) === T.ICE; }
@@ -334,7 +339,7 @@ function step(st, inp) {
       var tv = dir * maxv, acc = p.ground ? (onIce ? P.ACCG * 0.3 : P.ACCG) : P.ACCA; if (p.ground && dir * p.vx < 0) acc *= (onIce ? 1 : 2);
       if (p.vx < tv) p.vx = Math.min(tv, p.vx + acc); else if (p.vx > tv) p.vx = Math.max(tv, p.vx - (p.ground ? P.FRIC : 0.015));
       p.face = dir;
-    } else if (p.ground) { var fr2 = onIce ? P.FRIC * 0.12 : P.FRIC; if (p.vx > 0) p.vx = Math.max(0, p.vx - fr2); else p.vx = Math.min(0, p.vx + fr2); }
+    } else if (p.ground) { var fr2 = onIce ? P.FRIC * 0.12 : P.FRIC * (p.duck ? 0.22 : 1); if (p.vx > 0) p.vx = Math.max(0, p.vx - fr2); else p.vx = Math.min(0, p.vx + fr2); }
     // --- jump / swim
     if (p.ground) p.coy = P.COY; else if (p.coy > 0) p.coy--;
     if (jEdge) p.jbuf = P.JBUF; else if (p.jbuf > 0) p.jbuf--;
