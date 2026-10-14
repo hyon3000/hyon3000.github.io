@@ -149,6 +149,9 @@ function drawTile(t, x, y, th, above, bumpDy, c, r, st) {
     case T.DOOR: { var dc = st && st.L.grp ? st.L.grp[c * (st.L.rows || ROWS) + r] : 0, kc = KEYCOL[dc % 3]; rect(x, y, TS, TS, '#2a2450'); rect(x + 2, y + 1, TS - 4, TS - 2, kc); rect(x + 3, y + 2, TS - 6, TS - 4, 'rgba(0,0,0,.25)'); if (st && st.L.grp && st.L.tiles[c * (st.L.rows || ROWS) + r - 1] !== T.DOOR) { circ(x + 8, y + 9, 2.4, '#1a1a40'); rect(x + 7.2, y + 9, 1.6, 4, '#1a1a40'); } break; }
     case T.TELE: if (st.L.tele && st.L.tele.some(function (t) { return t.door && t.c === c; })) drawDoor(x, y, teleColor(st.L, c)); else drawTele(x, y, teleColor(st.L, c), true); break;
     case T.LAUNCH: { ctx.save(); ctx.translate(x + 8, y + 9); ctx.rotate(-0.9); rrect(-9, -6, 18, 12, 4, '#4a3f86'); rect(-9, -6, 5, 12, '#2a2450'); rect(5, -5, 4, 10, '#ff8a3a'); ctx.restore(); circ(x + 8, y + 12, 3, '#ffe08a'); poly([x + 12, y + 4, x + 16, y + 1, x + 14, y + 7], '#ff8a3a'); break; }
+    case T.ICE: { rect(x, y, TS, TS, '#7ad4f0'); rect(x + 1, y + 1, TS - 2, TS - 2, '#a8e8ff'); rect(x, y, TS, 3, '#e8fbff'); ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x + 3, y + 12); ctx.lineTo(x + 8, y + 6); ctx.moveTo(x + 9, y + 13); ctx.lineTo(x + 13, y + 9); ctx.stroke(); ctx.strokeStyle = 'rgba(40,110,150,.55)'; ctx.strokeRect(x + 0.5, y + 0.5, TS - 1, TS - 1); break; }
+    case T.MUD: { ctx.fillStyle = 'rgba(96,66,38,.9)'; ctx.fillRect(x, y + 3, TS, TS - 3); ctx.fillStyle = 'rgba(138,98,58,.9)'; ctx.fillRect(x, y + 3, TS, 3); for (var mq = 0; mq < 2; mq++) { var mb = (F * 0.4 + mq * 9 + c * 5) % 18; ctx.strokeStyle = 'rgba(190,150,100,.8)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x + 4 + mq * 7, y + 12 - mb * 0.5, 1.5 + (mq ? 0.5 : 0), 0, 6.2832); ctx.stroke(); } break; }
+    case T.FIRE: { var on = st && PF.fireOn(st.f, c); poly([x + 2, y + 16, x + 14, y + 16, x + 12, y + 11, x + 4, y + 11], '#5a3a4a'); rect(x + 5, y + 10, 6, 2, '#2a1a24'); if (on) { var fh = 11 + Math.sin(F * 0.6 + c) * 2.5; poly([x + 3, y + 11, x + 6, y + 11 - fh, x + 8, y + 5, x + 10, y + 11 - fh * 0.9, x + 13, y + 11], '#ff7a1a'); poly([x + 5.5, y + 11, x + 8, y + 11 - fh * 0.7, x + 10.5, y + 11], '#ffd24a'); } else { ctx.globalAlpha = 0.5 + 0.5 * Math.sin(F * 0.3); circ(x + 8, y + 9, 1.6, '#ff8a3a'); ctx.globalAlpha = 1; } break; }
     case T.NARROW: { rect(x, y, TS, TS, th.str[1]); rect(x, y, TS, 2, th.edge); ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, TS - 1, TS - 1); ctx.fillStyle = '#05030c'; ctx.beginPath(); ctx.arc(x + 8, y + 11.5, 4.6, Math.PI, 0); ctx.lineTo(x + 12.6, y + TS); ctx.lineTo(x + 3.4, y + TS); ctx.fill(); ctx.strokeStyle = '#ffd24a'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x + 8, y + 11.5, 5.6, Math.PI, 0); ctx.stroke(); break; }
     case T.POUND: { rect(x, y, TS, TS, '#6a6280'); rect(x + 1, y + 1, TS - 2, TS - 2, '#8a82a8'); rect(x, y, TS, 2, '#c8c0e0'); ctx.fillStyle = '#2a2040'; ctx.beginPath(); ctx.moveTo(x + 4, y + 5); ctx.lineTo(x + 12, y + 5); ctx.lineTo(x + 8, y + 12); ctx.fill(); ctx.strokeStyle = '#2a2040'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, TS - 1, TS - 1); break; }
     case T.CRACK: { rect(x, y, TS, TS, '#8a7a9a'); rect(x + 1, y + 1, TS - 2, TS - 2, '#a898b8'); ctx.strokeStyle = '#2a2038'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x + 8, y); ctx.lineTo(x + 6, y + 5); ctx.lineTo(x + 10, y + 9); ctx.lineTo(x + 7, y + 16); ctx.moveTo(x + 6, y + 5); ctx.lineTo(x + 1, y + 7); ctx.moveTo(x + 10, y + 9); ctx.lineTo(x + 15, y + 11); ctx.stroke(); break; }
@@ -316,6 +319,8 @@ function drawGoal(L, st, locked) {   // beacon gate: two tapered obelisks and an
   if (locked) { for (var k = 0; k < 3; k++) { ctx.globalAlpha = 0.5; line(gx + 6, base - 20 - k * 22, tx - 2, base - 20 - k * 22, '#ff4a6a', 2); } ctx.globalAlpha = 1; return; }
   var ty = base - 18 - (0.5 + 0.5 * Math.sin(st.f * 0.045)) * 90; ctx.globalAlpha = 0.35; rect(gx + 6, ty - 4, tx - gx - 8, 8, '#7affe0'); ctx.globalAlpha = 1; rect(gx + 6, ty - 1, tx - gx - 8, 2, '#e8fffa');
 }
+// stages made of zones (odyssey) have a look per zone (cell); the others one look
+function zoneTheme(L, c, r, def) { if (!L.zones) return def; var zi = Math.floor(r / L.zoneCH) * L.zoneGX + Math.floor(c / L.zoneCW), z = L.zones[zi]; return z >= 0 && THEMES[z] ? THEMES[z] : def; }
 function drawLevel(st, th) {
   var L = st.L, cam = G.cam, c0 = Math.max(0, Math.floor(cam / TS)), c1 = Math.min(L.w - 1, Math.floor((cam + VW) / TS) + 1), c, r, i;
   ctx.save(); ctx.translate(-Math.round(cam), -Math.round(G.camY || 0));
@@ -327,7 +332,7 @@ function drawLevel(st, th) {
     if (!t && (raw === T.GATE || raw === T.BRIDGE || raw === T.WLEVEL)) { ctx.globalAlpha = 0.28; ctx.strokeStyle = raw === T.WLEVEL ? '#7ad0ff' : '#c8b8ff'; ctx.setLineDash([2, 3]); ctx.lineWidth = 1; ctx.strokeRect(c * TS + 1.5, r * TS + 1.5, TS - 3, TS - 3); ctx.setLineDash([]); ctx.globalAlpha = 1; continue; }
     if (!t || PF.isW(t)) continue; var bd = 0;
     for (i = 0; i < G.bumps.length; i++) if (G.bumps[i].c === c && G.bumps[i].r === r) bd = -Math.sin(G.bumps[i].t / 10 * Math.PI) * 5;
-    drawTile(t, c * TS, r * TS, th, r > 0 ? PF.tileAt(st, c, r - 1) : 0, bd, c, r, st);
+    drawTile(t, c * TS, r * TS, L.zones ? zoneTheme(L, c, r, th) : th, r > 0 ? PF.tileAt(st, c, r - 1) : 0, bd, c, r, st);
     if (t === T.SOLID && r > 0 && PF.isW(PF.tileAt(st, c, r - 1))) drawSeabed(c, r);
   }
   if (L.keys) for (i = 0; i < L.keys.length; i++) if (!st.kg[i]) drawKey(L.keys[i].x, L.keys[i].y, L.keys[i].c, false);
@@ -488,6 +493,7 @@ function render(g, c2d, bs) {
   if (G.mode === 'map' || (G.mode === 'start' && !G.st)) { drawMap(); return; }
   var st = G.st; if (!st) return;
   var th = THEMES[G.L.theme] || THEMES[0];
+  if (st.L.zones) th = zoneTheme(st.L, Math.floor((G.cam + VW / 2) / TS), Math.floor(((G.camY || 0) + VH / 2) / TS), th);
   drawBackground(th, G.cam); drawParticles(th, G.cam); drawLevel(st, th);
   if (st.L.roomPx) { var rx0 = Math.floor((st.p.x + 6) / st.L.roomPx) * st.L.roomPx - Math.round(G.cam), rx1 = rx0 + st.L.roomPx + TS; ctx.fillStyle = '#000'; if (rx0 > 0) ctx.fillRect(0, 0, rx0, VH); if (rx1 < VW) ctx.fillRect(rx1, 0, VW - rx1, VH); }
   drawHUD(st);

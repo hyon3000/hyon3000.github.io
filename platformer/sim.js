@@ -274,6 +274,7 @@ function stageDone(st, g) {
     case 'pw': return g.v === 'notmini' ? !st.p.mini : g.v === 'big' ? st.p.big : g.v === 'mini' ? !!st.p.mini : g.v === 'fire' ? st.p.pw === 2 : true;
     case 'kick': if (st.p.pw === 2) return true; for (var kq = 0; kq < st.en.length; kq++) if (st.en[kq].alive && st.en[kq].t === 3 && st.en[kq].sh === 2 && st.en[kq].dir === (g.d || 1)) return true; return false;
     case 'tile': return tileAt(st, g.c, g.r) === T.AIR && (g.x2 === undefined || st.p.x + st.p.w <= g.x2);   // x2: the hero must still stand in front of the wall (he has to pass the hole afterwards)
+    case 'band': return st.p.ground && Math.abs(st.p.y + 7 - g.y) < 10 && st.p.x + 6 >= g.x && st.p.x + 6 <= g.x2;   // standing on the ground at that height anywhere in an x window
     case 'at': return st.p.ground && Math.abs(st.p.x + 6 - g.x) < 20 && Math.abs(st.p.y + 7 - g.y) < 10;
     case 'xge': return st.p.x >= g.x && (g.x2 === undefined || (st.p.x <= g.x2 && st.p.ground));   // x2: the stage ends in a window on the ground (so the next segment starts from its own seam, not from somewhere beyond its pickups)
     case 'goal': return st.p.won;

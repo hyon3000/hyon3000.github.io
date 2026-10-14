@@ -766,8 +766,8 @@ Sim.prototype.ropeLinksAt = function (x, y, tol) {      // the nearest segment o
 };
 Sim.prototype.projectRopes = function () {     // rope length is invariant: after each step every joint touching a rope link is pulled shut again (mass-weighted position projection)
   var js = [], j, it, i, MCAP = 1e9;
-  var VLINK = 0.2, mOf = function (b) { return b.__hl !== undefined ? VLINK : b.getMass(); };   // ropes are weightless for the physics, but the length projection weighs a link like a light plank so it can still pull loads
-  MCAP = VLINK * 30;       // heavy loads count as at most 30 rope links so the projection can actually pull them
+  var mOf = function (b) { return b.getMass(); };
+  for (var l0 = this.ropes.length - 1; l0 >= 0 && MCAP === 1e9; l0--) { var lb = this.ropes[l0].links.filter(Boolean)[0]; if (lb) MCAP = lb.getMass() * 30; }       // heavy loads count as at most 30 rope links so the projection can actually pull them
   for (j = this.world.getJointList(); j; j = j.getNext()) {
     if (j.getType() !== 'revolute-joint') continue;
     var ba = j.getBodyA(), bb = j.getBodyB();
