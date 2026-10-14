@@ -26,7 +26,7 @@ function groundBelow(st) {
   return false;
 }
 function evaluate(st0, c, traj) {
-  st0.share = true; var st = PF.clone(st0), p = st.p, big0 = st0.p.big, k, sc, lastGround = p.ground, land = -1, jumped = false;
+  st0.share = true; var st = PF.clone(st0); st0.share = false; var p = st.p, big0 = st0.p.big, k, sc, lastGround = p.ground, land = -1, jumped = false;
   for (k = 0; k < H; k++) {
     PF.step(st, inputAt(c, k));
     if (traj && (k & 1) === 0) traj.push({ x: p.x + p.w / 2, y: p.y + p.h });
@@ -58,7 +58,7 @@ function makePlanner() {
   }
   pl.search = function (st, noise) { var ps = newSearch(st, noise); return work(ps, ps.list.length); };
   function makeScript(best) { var len = best.cand.l ? 12 : SL, sc = []; for (var k = 0; k < len; k++) sc.push(inputAt(best.cand, k)); return sc; }
-  function predict(st, script) { st.share = true; var q = PF.clone(st); for (var k = 0; k < script.length; k++) PF.step(q, script[k]); return q; }
+  function predict(st, script) { st.share = true; var q = PF.clone(st); st.share = false; for (var k = 0; k < script.length; k++) PF.step(q, script[k]); return q; }
   function same(a, b) { return Math.abs(a.p.x - b.p.x) < 0.01 && Math.abs(a.p.y - b.p.y) < 0.01 && a.p.dead === b.p.dead && Math.abs(a.p.vx - b.p.vx) < 0.01 && Math.abs(a.p.vy - b.p.vy) < 0.01; }
   pl.decide = function (st) {
     var p = st.p, t0 = now();
@@ -154,15 +154,48 @@ function makeHint(st, pl) {
 // plans each route stage (key, door, teleport, switch, exit ...) from the live state; the look-ahead planner only drives while airborne or when no plan is found
 // the plan may only end where the hero can stand still afterwards (an 'at' waypoint reached while sliding into a spike is a dead end)
 function settles(s) { var q = PF.clone(s); for (var k = 0; k < 24; k++) { PF.step(q, 0); if (q.p.dead) return false; } return q.p.ground; }
+
+// armoured boss (only kicked shells hurt it): stomp a beetle, stand LEFT of the shell and walk into it so it rolls at the boss; the look-ahead planner dodges when the boss is close
+function best0(st, boss) { for (var i = 0; i < st.en.length; i++) { var e = st.en[i]; if (e.alive && e.t === 3 && e.x >= boss.x - 520 && e.x <= boss.x + 200) return e; } return null; }
+function shellBossMask(st, boss, fb) {
+  var IN = PF.IN, p = st.p, hx = p.x + p.w / 2, bd = boss.x + boss.w / 2 - hx, best = null, bs = 1e9, i, e, rolling = null;
+  for (i = 0; i < st.en.length; i++) { e = st.en[i]; if (!e.alive || e.t !== 3 || e.x < boss.x - 520 || e.x > boss.x + 200) continue; if (e.sh === 2 && Math.abs(e.x - hx) < 240 && Math.abs(e.vx || 0) > 1) rolling = e; var d = Math.abs(e.x + e.w / 2 - hx) + (e.sh === 1 ? 0 : 30); if (d < bs) { bs = d; best = e; } }
+  if (Math.abs(bd) < 96 && p.ground) return fb.decide(st);                                  // boss next to us: dodge / jump over like the normal arena
+  if (!best0(st, boss)) return fb.decide(st);
+  if (rolling) {                                                                              // a shell is rolling: keep away from it, it can hurt us on the way back
+    var rx = rolling.x + rolling.w / 2 - hx;
+    if (Math.abs(rx) < 70 && (rx > 0) === (rolling.dir < 0) && p.ground) return IN.J | (rx > 0 ? IN.L : IN.R);
+    return 0;
+  }
+  if (!best) return fb.decide(st);
+  var sx = best.x + best.w / 2, dx = sx - hx;
+  if (best.sh === 1) {                                                                        // an idle shell: get to its left side, then walk right into it
+    if (dx > 6) return IN.R | IN.RUN;
+    if (dx > -22) return p.ground ? (IN.J | IN.L) : IN.L;                                     // right of it, too close: hop back left over it
+    return IN.L;
+  }
+  if (Math.abs(dx) > 26) return (dx > 0 ? IN.R : IN.L) | IN.RUN;                              // a walking beetle: close in and stomp
+  if (p.ground && Math.abs(dx) < 22) return IN.J | (dx > 0 ? IN.R : IN.L);
+  return dx > 0 ? IN.R : IN.L;
+}
 function makeNavigator() {
   var fb = makePlanner(), nv = { fb: fb, seq: null, i: 0, stage: -1, wait: 0, st: { plans: 0, fails: 0, ms: 0 } };
-  nv.reset = function () { fb.reset(); nv.job = null; nv.busy = false; nv.seq = null; nv.i = 0; nv.stage = -1; nv.wait = 0; };
+  nv.reset = function () { fb.reset(); nv.planBad = false; nv.job = null; nv.busy = false; nv.seq = null; nv.i = 0; nv.stage = -1; nv.wait = 0; };
   // decide(st, budgetMs): with a budget the search is spread over several calls and null is returned while it is still thinking (the game does not step then)
   nv.job = null; nv.busy = false;
   nv.decide = function (st, budgetMs) {
     var L = st.L;
+    // the generator's own plan (trajectory-first stages): follow the recorded inputs while the hero is exactly where the plan expects him; otherwise the normal search takes over
+    if (L.plan && !nv.planBad && st.f < L.plan.length) {
+      var ex = L.planPos[st.f];
+      if (ex && Math.abs(ex[0] - st.p.x) < 0.6 && Math.abs(ex[1] - st.p.y) < 0.6) return L.plan[st.f];
+      nv.planBad = true;
+    }
     if (!L.route || !PF.searchIter) return fb.decide(st);
-    if (st.boss > 0 && (bossNear(st) || nv.job === null && L.kind === 'bossrush')) { nv.seq = null; nv.job = null; return fb.decide(st); }   // boss arenas: the reactive look-ahead planner dodges and stomps
+    var shellBoss = null;
+    if (st.boss > 0) for (var bi = 0; bi < st.en.length; bi++) { var be = st.en[bi]; if (be.t === 8 && be.alive && be.imm && be.immKind === 'shell' && be.x - st.p.x < 480 && st.p.x - be.x < 300) shellBoss = be; }   // armoured boss: from the arena entrance on
+    if (shellBoss) return shellBossMask(st, shellBoss, fb);   // armoured boss: only kicked shells hurt it
+    if (st.boss > 0 && (bossNear(st) || nv.job === null && L.kind === 'bossrush')) { nv.seq = null; nv.job = null; return fb.decide(st); }   // boss arenas: the reactive look-ahead planner dodges and stomps   // boss arenas: the reactive look-ahead planner dodges and stomps
     if (nv.seq && nv.i < nv.seq.length && nv.stage === st.stage) return nv.seq[nv.i++];
     nv.seq = null;
     if (!nv.job) {

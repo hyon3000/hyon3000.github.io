@@ -55,9 +55,9 @@ SFX.pop = function () { tone(1200, 800, 0.05, 'sine', 0.05); };
 
 // ---------------------------------------------------------------- input: every source goes through press(); the auto player uses the same function
 var held = { human: {}, touch: {}, auto: {} };
-// two crosses: left = move (arrows / WASD), right = actions (I jump, J run, L spin, K act); Z/Space, X/Shift, C/V stay as aliases.  value = [input key, on-screen button id]
+// two crosses: left = move (arrows / WASD), right = the DS face-button diamond: A (right, L key) jump, B (bottom, K) run, Y (left, J) spin, X (top, I) act / up; X/Space, Z/Shift, C/V are aliases.  value = [input key, on-screen button id]
 var KEYMAP = { ArrowLeft: ['left', 'L'], a: ['left', 'L'], A: ['left', 'L'], ArrowRight: ['right', 'R'], d: ['right', 'R'], D: ['right', 'R'], ArrowUp: ['up', 'U'], w: ['up', 'U'], W: ['up', 'U'], ArrowDown: ['down', 'D'], s: ['down', 'D'], S: ['down', 'D'],
-  i: ['jump', 'J'], I: ['jump', 'J'], z: ['jump', 'J'], Z: ['jump', 'J'], ' ': ['jump', 'J'], j: ['run', 'RUN'], J: ['run', 'RUN'], x: ['run', 'RUN'], X: ['run', 'RUN'], Shift: ['run', 'RUN'], l: ['spin', 'SPIN'], L: ['spin', 'SPIN'], c: ['spin', 'SPIN'], C: ['spin', 'SPIN'], v: ['spin', 'SPIN'], V: ['spin', 'SPIN'], k: ['up', 'ACT'], K: ['up', 'ACT'] };
+  l: ['jump', 'J'], L: ['jump', 'J'], x: ['jump', 'J'], X: ['jump', 'J'], ' ': ['jump', 'J'], k: ['run', 'RUN'], K: ['run', 'RUN'], z: ['run', 'RUN'], Z: ['run', 'RUN'], Shift: ['run', 'RUN'], j: ['spin', 'SPIN'], J: ['spin', 'SPIN'], c: ['spin', 'SPIN'], C: ['spin', 'SPIN'], v: ['spin', 'SPIN'], V: ['spin', 'SPIN'], i: ['up', 'ACT'], I: ['up', 'ACT'] };
 var PADBTN = {};   // button id -> element
 var padCount = {}; // button id -> number of sources currently pressing it
 function padLight(id, on) { var c = (padCount[id] || 0) + (on ? 1 : -1); if (c < 0) c = 0; padCount[id] = c; var el = PADBTN[id]; if (el) el.classList.toggle('on', c > 0); }
@@ -121,7 +121,7 @@ function crossIds(el, e) {
   var r = el.getBoundingClientRect(), dx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2), dy = (e.clientY - (r.top + r.height / 2)) / (r.height / 2), ids = [], isMv = el.id === 'crossL', th = 0.32;
   if (Math.abs(dx) < 0.18 && Math.abs(dy) < 0.18) return ids;
   if (dy < -th) ids.push('U'); if (dy > th) ids.push('D'); if (dx < -th) ids.push('L'); if (dx > th) ids.push('R');
-  if (!isMv) ids = ids.map(function (i2) { return { U: 'J', D: 'ACT', L: 'RUN', R: 'SPIN' }[i2]; });
+  if (!isMv) ids = ids.map(function (i2) { return { U: 'ACT', D: 'RUN', L: 'SPIN', R: 'J' }[i2]; });
   return ids;
 }
 function setPtr(el, e) { var old = touchPtr[e.pointerId], ids = crossIds(el, e); if (old) old.ids.forEach(function (b) { if (ids.indexOf(b) < 0) padLight(b, false); }); ids.forEach(function (b) { if (!old || old.ids.indexOf(b) < 0) { padLight(b, true); if (ACTKEY[b]) onPress(ACTKEY[b]); } }); touchPtr[e.pointerId] = { ids: ids }; touchRefresh(); }

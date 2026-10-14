@@ -3,8 +3,8 @@
 (function (root) {
 'use strict';
 var TS = 16, ROWS = 14, VW = 400, VH = 224;
-var T = { AIR: 0, SOLID: 1, BRICK: 2, QC: 3, QP: 4, USED: 5, SPIKE: 6, VINE: 7, SPRING: 8, WATER: 9, CONVL: 10, CONVR: 11, SLR: 12, SLL: 13, LAVA: 14, CANL: 15, CANR: 16, STUMP: 17, PSW: 18, RING: 19, QS: 20, QM: 21, CURL: 22, CURR: 23, CURU: 24, GATE: 25, BRIDGE: 26, SWITCH: 27, SWUSED: 28, WLEVEL: 29, DOOR: 30, TELE: 31, LAUNCH: 32, ICE: 33, MUD: 34, FIRE: 35 };
-var SOL = [0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0];
+var T = { AIR: 0, SOLID: 1, BRICK: 2, QC: 3, QP: 4, USED: 5, SPIKE: 6, VINE: 7, SPRING: 8, WATER: 9, CONVL: 10, CONVR: 11, SLR: 12, SLL: 13, LAVA: 14, CANL: 15, CANR: 16, STUMP: 17, PSW: 18, RING: 19, QS: 20, QM: 21, CURL: 22, CURR: 23, CURU: 24, GATE: 25, BRIDGE: 26, SWITCH: 27, SWUSED: 28, WLEVEL: 29, DOOR: 30, TELE: 31, LAUNCH: 32, ICE: 33, MUD: 34, FIRE: 35, NARROW: 36, CRACK: 37, POUND: 38 };   // POUND: a heavy slab that only a big hero's ground pound (Down in the air) breaks   // NARROW: a mouse-hole wall, open only while the hero is mini; CRACK: a cracked wall that a kicked shell or a fireball breaks
+var SOL = [0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1];
 function isW(t) { return t === 9 || (t >= 22 && t <= 24); }
 function fireOn(f, c) { return ((f + c * 17) % 130) < 55; }   // timed fire jet / laser at column c
 var IN = { L: 1, R: 2, J: 4, RUN: 8, DN: 16, UP: 32, SPIN: 64 };
@@ -48,8 +48,10 @@ function newState(L, o) {
     p: { x: s.x, y: s.y, vx: 0, vy: 0, w: P.PW, h: P.SH, big: false, pw: 0, ground: true, coy: 0, jbuf: 0, jheld: false, sprev: false, rprev: true, face: 1, inv: 0, dead: false, won: false, mv: -1, anim: 0, why: '',
       pm: 0, spin: 0, star: 0, mount: 0, mini: 0, fin: 0, wing: 0, climb: false, carry: -1, swim: false, fbc: 0, air: AIRMAX, wasW: false, dtick: 0, tcd: 0 },
     en: [], it: [], fb: [], ep: [], cg: new Uint8Array(L.coins.length), sg: new Uint8Array((L.special || []).length), pk: new Uint8Array((L.pockets || []).length), mo: [], sb: 0, kb: 0, kg: new Uint8Array((L.keys || []).length), dg: new Uint8Array((L.doors || []).length), sg2: new Uint8Array((L.switches || []).length), tc: 0, stage: 0, cr: 0 };
+  if (L.items) for (var ii = 0; ii < L.items.length; ii++) st.it.push({ k: L.items[ii].k, x: L.items[ii].x, y: L.items[ii].y, w: 12, h: 12, vx: 0, vy: 0, em: 0, alive: true, ground: false });
   if (L.egg && !o.mount) st.it.push({ k: 4, x: L.egg.x, y: L.egg.y, w: 12, h: 12, vx: 0, vy: 0, em: 0, alive: true, ground: false });
   if (o.pw) { setPw(st.p, o.pw); } if (o.mount) st.p.mount = 1;
+  if (L.entry === 'mini') setMini(st.p); else if (L.entry === 'big') setPw(st.p, 1); else if (L.entry === 'fire') setPw(st.p, 2);   // validation only: the power the hero carries into a segment
   for (var i = 0; i < L.movers.length; i++) st.mo.push({ off: L.movers[i].off0 || 0, vy: 0, s: 0, t: 0, ox: L.movers[i].ox0 || 0 });
   if (!o.noEn) for (i = 0; i < L.enemies.length; i++) { var d = L.enemies[i];
     if (o.cp && d.t !== E.BOSS && d.x < L.cp.x + 120 && d.x > L.cp.x - 120) continue;
@@ -87,6 +89,7 @@ function tileRaw(st, c, r) {
 }
 function tileAt(st, c, r) {
   var t = tileRaw(st, c, r); if (t === T.BRICK && st.sw > 0) return T.AIR;
+  if (t === T.NARROW) return st.p && st.p.mini ? T.AIR : t;
   if (t >= 25 && t <= 29) { var g = st.L.grp ? st.L.grp[c * (st.L.rows || ROWS) + r] : 0, on = (st.sb >> g) & 1; if (t === T.GATE) return on ? 0 : T.GATE; if (t === T.BRIDGE) return on ? T.BRIDGE : 0; if (t === T.WLEVEL) return on ? T.WATER : 0; }
   return t;
 }
@@ -95,7 +98,7 @@ function boxHit(st, x, y, w, h) {
   for (var c = c0; c <= c1; c++) for (var r = r0; r <= r1; r++) if (SOL[tileAt(st, c, r)]) return true;
   return false;
 }
-function setTile(st, c, r, t) { if (st.mod === EMPTY) st.mod = new Map(); st.mod.set(c * (st.L.rows || ROWS) + r, t); }
+function setTile(st, c, r, t) { st.mod = new Map(st.mod); st.mod.set(c * (st.L.rows || ROWS) + r, t); }   // copy on write: clones (the planner / validator branches) share the map until one of them changes a tile
 function isSolidTile(t) { return SOL[t] === 1; }
 function slopeY(t, c, r, x) { return t === T.SLR ? (r + 1) * TS - (x - c * TS) : r * TS + (x - c * TS); }
 
@@ -181,8 +184,8 @@ function updEnemy(st, e, f) {
       if (e.t === 3 && e.carried) return;
       if (e.t === 3 && e.sh === 2) {
         e.vx = e.dir * 3.4; if (e.kg > 0) e.kg--;
-        hw = moveEnt(st, e); if (hw) e.dir = -e.dir;
-        for (i = 0; i < st.en.length; i++) { var o = st.en[i]; if (o !== e && o.alive && o.t !== E.BOSS && o.t !== E.CRUSH && overlap(e, o) && !(o.t === 3 && o.sh === 1 && false)) { killEnemy(st, o, 200); } }
+        hw = moveEnt(st, e); if (hw) { crackWall(st, e.dir > 0 ? e.x + e.w + 1 : e.x - 1, e.y, e.h); e.dir = -e.dir; }
+        for (i = 0; i < st.en.length; i++) { var o = st.en[i]; if (o !== e && o.alive && o.t === E.BOSS && overlap(e, o)) { if (hitBoss(st, o, 1)) e.dir = -e.dir; continue; } if (o !== e && o.alive && o.t !== E.BOSS && o.t !== E.CRUSH && !(o.t === 3 && st.L.shellPass) && overlap(e, o) && !(o.t === 3 && o.sh === 1 && false)) { killEnemy(st, o, 200); } }
         if (e.y > (st.L.rows || ROWS) * TS + 40) e.alive = false; return;
       }
       e.vx = e.dir * e.spd; hw = moveEnt(st, e);
@@ -240,6 +243,20 @@ function updBoss(st, e, f) {
     if (e.s !== 1) moveEnt(st, e, 0.5);
   }
 }
+// a cracked wall (T.CRACK) breaks along its whole column when a kicked shell runs into it or a fireball hits it
+function crackWall(st, x, y, h) {
+  var c = Math.floor(x / TS), r0 = Math.floor(y / TS), r1 = Math.floor((y + h - 1e-4) / TS), hit = false, rr;
+  for (rr = r0; rr <= r1; rr++) if (tileAt(st, c, rr) === T.CRACK) hit = true;
+  if (!hit) return false;
+  for (rr = 0; rr < (st.L.rows || ROWS); rr++) if (tileAt(st, c, rr) === T.CRACK) { setTile(st, c, rr, T.AIR); ev(st, 'brick', c * TS + 8, rr * TS + 8); }
+  st.score += 200; return true;
+}
+// ground pound: a big hero holding Down in the air drops fast and smashes the bricks / heavy slabs it lands on, falling on through the hole
+function poundBreak(st, p, row) {
+  var c0 = Math.floor(p.x / TS), c1 = Math.floor((p.x + p.w - 1e-4) / TS), hit = false, c, t;
+  for (c = c0; c <= c1; c++) { t = tileAt(st, c, row); if (t === T.POUND || t === T.BRICK) { setTile(st, c, row, T.AIR); hit = true; ev(st, 'brick', c * TS + 8, row * TS + 8); } }
+  if (hit) st.score += 100; return hit;
+}
 function hitBoss(st, e, dmg) {
   if (e.inv > 0) return false;
   e.hp -= dmg; e.inv = 55; ev(st, 'bosshit', e.x + e.w / 2, e.y);
@@ -253,6 +270,9 @@ function stageDone(st, g) {
     case 'sw': return ((st.sb >> g.g) & 1) === 1;
     case 'door': return st.dg[g.i] === 1;
     case 'tele': return st.tc >= g.n;
+    case 'pw': return g.v === 'notmini' ? !st.p.mini : g.v === 'big' ? st.p.big : g.v === 'mini' ? !!st.p.mini : g.v === 'fire' ? st.p.pw === 2 : true;
+    case 'kick': if (st.p.pw === 2) return true; for (var kq = 0; kq < st.en.length; kq++) if (st.en[kq].alive && st.en[kq].t === 3 && st.en[kq].sh === 2 && st.en[kq].dir === (g.d || 1)) return true; return false;
+    case 'tile': return tileAt(st, g.c, g.r) === T.AIR;
     case 'at': return st.p.ground && Math.abs(st.p.x + 6 - g.x) < 20 && Math.abs(st.p.y + 7 - g.y) < 10;
     case 'xge': return st.p.x >= g.x;
     case 'goal': return st.p.won;
@@ -355,11 +375,15 @@ function step(st, inp) {
     if (stepY !== null) { p.x = nx; p.y = stepY; }
     else if (boxHit(st, nx, p.y, p.w, p.h)) { if (p.vx + carried > 0) p.x = Math.floor((nx + p.w - 1e-4) / TS) * TS - p.w; else p.x = (Math.floor(nx / TS) + 1) * TS; if (carried === 0 || (p.vx + carried) * p.vx <= 0) p.vx = 0; else p.vx = 0; }
     else { p.x = nx; if (p.x < 0) { p.x = 0; p.vx = 0; } }
+    // --- ground pound
+    if (!p.ground && p.big && down && !p.climb && !p.swim && !p.mount && p.vy > -1 && !p.pound) { p.pound = 1; p.vx = 0; ev(st, 'pound', p.x, p.y); }
+    if (p.pound) { if (p.ground || p.swim || p.climb) p.pound = 0; else { p.vx = 0; p.vy = Math.max(p.vy, 8.5); } }
     // --- move y
     var ny = p.y + p.vy, wasGround = p.ground, prevB = p.y + p.h; p.ground = false; p.mv = -1;
     if (p.vy >= 0) {
-      if (boxHit(st, p.x, ny, p.w, p.h)) {
-        var rr0 = Math.floor((ny + p.h - 1e-4) / TS); p.y = rr0 * TS - p.h; p.ground = true;
+      if (p.pound && boxHit(st, p.x, ny, p.w, p.h) && poundBreak(st, p, Math.floor((ny + p.h - 1e-4) / TS)) && !boxHit(st, p.x, ny, p.w, p.h)) { p.y = ny; }
+      else if (boxHit(st, p.x, ny, p.w, p.h)) {
+        var rr0 = Math.floor((ny + p.h - 1e-4) / TS); p.y = rr0 * TS - p.h; p.ground = true; if (p.pound) { p.pound = 0; ev(st, 'thud', p.x + p.w / 2, p.y + p.h); }
         if (tileAt(st, Math.floor((p.x + p.w / 2) / TS), rr0) === T.SPRING && p.vy > 1) { p.vy = jump ? -11.8 : -8.8; p.ground = false; ev(st, 'spring', p.x, p.y + p.h); } else p.vy = 0;
       } else if (p.mini && !down && miniSurface(st, p, ny)) {
         var rrw = Math.floor((ny + p.h - 1e-4) / TS); p.y = rrw * TS - p.h; p.ground = true; p.vy = 0;
@@ -392,7 +416,7 @@ function step(st, inp) {
   if (p.pw === 2 && run && !p.rprev && st.fb.length < 2 && !p.climb) { st.fb.push({ x: p.x + p.w / 2 + p.face * 6, y: p.y + 9, vx: p.face * 3.4, vy: 0, life: 150 }); ev(st, 'fire', p.x, p.y); }
   p.rprev = !!run;
   for (i = st.fb.length - 1; i >= 0; i--) { var b = st.fb[i]; b.vy += 0.32; b.x += b.vx;
-    if (boxHit(st, b.x - 3, b.y - 3, 6, 6)) { st.fb.splice(i, 1); continue; }
+    if (boxHit(st, b.x - 3, b.y - 3, 6, 6)) { crackWall(st, b.x + (b.vx > 0 ? 4 : -4), b.y - 2, 4); st.fb.splice(i, 1); continue; }
     b.y += b.vy; if (boxHit(st, b.x - 3, b.y - 3, 6, 6)) { b.y -= b.vy; b.vy = -3.2; }
     if (--b.life <= 0 || Math.abs(b.x - p.x) > 300 || b.y > (L.rows || ROWS) * TS + 10) { st.fb.splice(i, 1); continue; }
     for (var j = 0; j < st.en.length; j++) { var o = st.en[j]; if (!o.alive || (o.t === 7 && o.hid)) continue;
@@ -463,7 +487,7 @@ function step(st, inp) {
     if (e.t === 3 && e.sh === 2 && e.kg > 0) continue;
     if (stomping && p.mini) { p.vy = jump ? -7.6 : -4.6; p.y = Math.min(p.y, e.y - p.h); p.coy = 0; ev(st, 'bump', e.x + e.w / 2, e.y); continue; }
     if (stomping) {
-      if (e.t === 8) { if (hitBoss(st, e, 1)) { p.vy = -6.2; } continue; }
+      if (e.t === 8) { if (e.imm) { p.vy = -6.2; p.coy = 0; ev(st, 'bump', e.x + e.w / 2, e.y); } else if (hitBoss(st, e, 1)) { p.vy = -6.2; } continue; }   // imm: armoured top, only shells and fireballs hurt it
       if (e.t === 3) { if (e.sh === 2) { e.sh = 1; e.vx = 0; } else { e.sh = 1; e.y += 4; e.h = 9; e.vx = 0; } p.vy = jump ? -6.8 : -4.2; st.score += 100; ev(st, 'stomp', e.x + e.w / 2, e.y); p.coy = 0; continue; }
       e.alive = false; e.dt = 30; dropLoot(st, e); p.vy = jump ? -7.2 : -4.2; p.coy = 0; st.score += 100; ev(st, 'stomp', e.x + e.w / 2, e.y); if (e.t === 1) ev(st, 'spinkill', e.x, e.y); continue;
     }

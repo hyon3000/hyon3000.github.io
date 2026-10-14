@@ -17,6 +17,7 @@ canvas{position:absolute;left:0;top:0;touch-action:none;outline:none;background:
 .cross{position:relative;height:100%;aspect-ratio:1/1;max-width:44vw;touch-action:none;display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr 1fr;gap:4px}
 .cross b{display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:10px;font:bold calc(var(--cs,150px)/12) / 1.05 system-ui,sans-serif;color:#fff;background:#4a3a9a;border:2px solid #9a8aff;border-bottom-width:4px;pointer-events:none;box-sizing:border-box;min-width:0;overflow:hidden}
 .cross b small{font-size:calc(var(--cs,150px)/18);font-weight:600;opacity:.75;margin-top:1px;letter-spacing:.5px}
+.cross b em{display:block;font-style:normal;font-size:calc(var(--cs,150px)/21);font-weight:600;opacity:.9;letter-spacing:.3px}
 .cross b.on{filter:brightness(1.7);transform:translateY(2px)}
 .cross .u{grid-area:1/2}.cross .l{grid-area:2/1}.cross .r{grid-area:2/3}.cross .d{grid-area:3/2}
 .cross .hub{grid-area:2/2;border-radius:50%;background:#1c1646;border:2px solid #2b2470;margin:18%}
@@ -29,7 +30,7 @@ canvas{position:absolute;left:0;top:0;touch-action:none;outline:none;background:
 <div id="pad">
   <div class="cross mv" id="crossL"><b class="u" data-id="U">&#9650;<small>W</small></b><b class="l" data-id="L">&#9664;<small>A</small></b><i class="hub"></i><b class="r" data-id="R">&#9654;<small>D</small></b><b class="d" data-id="D">&#9660;<small>S</small></b></div>
   <div id="padmid"><b id="bMap">MAP<small>&#9003;</small></b><b id="bSup">WORLD<small>N</small></b><b id="bSel">STAGE<small>T</small></b></div>
-  <div class="cross act" id="crossR"><b class="u" data-id="J">JUMP<small>I</small></b><b class="l" data-id="RUN">RUN<small>J</small></b><i class="hub"></i><b class="r" data-id="SPIN">SPIN<small>L</small></b><b class="d" data-id="ACT">ACT<small>K</small></b></div>
+  <div class="cross act" id="crossR"><b class="u" data-id="ACT">X<em>ACT</em><small>I</small></b><b class="l" data-id="SPIN">Y<em>SPIN</em><small>J</small></b><i class="hub"></i><b class="r" data-id="J">A<em>JUMP</em><small>L</small></b><b class="d" data-id="RUN">B<em>RUN</em><small>K</small></b></div>
 </div>
 <script src="sim.js"></script>
 <script src="gen.js"></script>
