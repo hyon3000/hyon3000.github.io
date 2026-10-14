@@ -27,6 +27,7 @@ function macroJump(st, hold, air, pre, preInp) {
   jumpPhase(st, seq, hold, air); return seq;
 }
 
+function nearEn(st) { var px = st.p.x, en = st.en; for (var i = 0; i < en.length; i++) { var e = en[i]; if (e.alive && Math.abs((e.ax !== undefined ? e.ax : e.x) - px) < 360) return true; } return false; }   // the enemies' phase only matters for the search while one is close
 function heapPush(h, it) { h.push(it); var i = h.length - 1; while (i > 0) { var p = (i - 1) >> 1; if (h[p].h <= h[i].h) break; var t = h[p]; h[p] = h[i]; h[i] = t; i = p; } }
 function heapPop(h) { var top = h[0], last = h.pop(); if (h.length) { h[0] = last; var i = 0, n = h.length; for (;;) { var l = 2 * i + 1, r = l + 1, m = i; if (l < n && h[l].h < h[m].h) m = l; if (r < n && h[r].h < h[m].h) m = r; if (m === i) break; var t = h[m]; h[m] = h[i]; h[i] = t; i = m; } } return top; }
 var AIRS = [0, IN.R, IN.R | IN.RUN, IN.L], HOLDS = [3, 10, 99];
@@ -36,7 +37,7 @@ function searchStage(st0, pred, tx, ty, maxNodes) { var it = searchIter(st0, pre
 function searchIter(st0, pred, tx, ty, maxNodes) {
   if (pred(st0)) return { run: function () { return { st: st0, seq: [], nodes: 0 }; } };
   var seen = new Set(), heap = [], nodes = 0;
-  function key(st) { var p = st.p, a = Math.abs(p.vx), sc = (p.vx < -0.3 ? -1 : 1) * (a < 0.3 ? 0 : a < 1.8 ? 1 : 2) + 2, ph = (p.mv >= 0 || st.sw || st.L.hasFire) ? Math.floor((st.f % MV_PERIOD) / 20) + 1 : (st.en.length ? 40 + Math.floor(st.f / 10) % 32 : 0); return ((((Math.round(p.x / 3) * 256 + Math.round(p.y)) * 5 + sc) * 80 + ph) * 64 + (st.kb & 7) * 8 + (st.sb & 7)) * 40 + Math.min(39, st.mod.size); }
+  function key(st) { var p = st.p, a = Math.abs(p.vx), sc = (p.vx < -0.3 ? -1 : 1) * (a < 0.3 ? 0 : a < 1.8 ? 1 : 2) + 2, ph = (p.mv >= 0 || st.sw || st.L.hasFire) ? Math.floor((st.f % MV_PERIOD) / 20) + 1 : (nearEn(st) ? 40 + Math.floor(st.f / 10) % 32 : 0); return ((((Math.round(p.x / 3) * 256 + Math.round(p.y)) * 5 + sc) * 80 + ph) * 64 + (st.kb & 7) * 8 + (st.sb & 7)) * 40 + Math.min(39, st.mod.size); }
   function hval(st) { var p = st.p; return Math.abs(p.x + 6 - tx) + (ty === null ? 0 : 1.5 * Math.abs(p.y + 7 - ty)); }
   var root = { st: st0, par: null, seq: [], h: hval(st0) }; seen.add(key(st0)); heapPush(heap, root);
   function path(nd, extra) { var parts = [extra]; while (nd) { parts.push(nd.seq); nd = nd.par; } var out = []; for (var i = parts.length - 1; i >= 0; i--) for (var j = 0; j < parts[i].length; j++) out.push(parts[i][j]); return out; }
@@ -52,7 +53,7 @@ function searchIter(st0, pred, tx, ty, maxNodes) {
     };
     var mi, walks = [[IN.R, 8], [IN.R | IN.RUN, 8], [IN.L, 8], [IN.L | IN.RUN, 8], [0, 20], [IN.R | IN.RUN, 3]];
     for (mi = 0; mi < walks.length; mi++) tryMacro(function (s) { return macroWalk(s, walks[mi][0], walks[mi][1]); });
-    if (st0.L.duck) [5, 8, 12, 17].forEach(function (rr2) { tryMacro(function (s) { var a = macroWalk(s, IN.R | IN.RUN, rr2); if (s.p.dead || s.p.won) return a; return a.concat(macroWalk(s, IN.DN, 40)); }); });   // run-up, then duck and slide on the momentum (one-tile holes)
+    if (st0.L.duck && nd.st.p.big && nd.st.p.ground) [5, 8, 12, 17].forEach(function (rr2) { tryMacro(function (s) { var a = macroWalk(s, IN.R | IN.RUN, rr2); if (s.p.dead || s.p.won) return a; return a.concat(macroWalk(s, IN.DN, 40)); }); });   // run-up, then duck and slide on the momentum (one-tile holes)
     var airs = st0.L.pound ? AIRS.concat([IN.DN]) : AIRS;
     for (var hi = 0; hi < 3; hi++) for (var ai = 0; ai < airs.length; ai++) {
       tryMacro(function (s) { return macroJump(s, HOLDS[hi], airs[ai], 0, 0); });
@@ -63,9 +64,11 @@ function searchIter(st0, pred, tx, ty, maxNodes) {
   return (heap.length && nodes < maxNodes) ? undefined : null;
   } };
 }
+// validation state: enemies that are only hazards (embers, leaping fish, walkers ...) are left out like in every other stage; only the ones the solution NEEDS (shell beetles, flyers used as steps) stay (L.reqEn)
+function vState(L) { var st = newState(L, { noEn: !L.stepEn, noPM: !L.plan }); if (L.stepEn && L.reqEn && !L.plan) { st.en = st.en.filter(function (e) { return L.reqEn.indexOf(e.t) >= 0; }); st.boss = st.en.filter(function (e) { return e.t === E.BOSS; }).length; } return st; }
 function validate(L, maxNodes) {
-  var multi = L.route && L.route.length > 1; maxNodes = maxNodes || (multi ? 9000 : 4000); if (L.stepEn && L.route && L.route.length > 4) maxNodes = Math.min(maxNodes, 4000);   // enemy-aware searches are expensive: fail fast and redraw
-  var st = newState(L, { noEn: !L.stepEn, noPM: true }), seq0 = [0, 0, 0]; runSeq(st, seq0);
+  var multi = L.route && L.route.length > 1; maxNodes = maxNodes || (multi ? 9000 : 4000);    // enemy-aware searches are expensive: fail fast and redraw
+  var st = vState(L), seq0 = [0, 0, 0]; runSeq(st, seq0);
   if (!st.p.ground) return { ok: false, why: 'start' };
   var route = L.route || [{ k: 'goal', x: L.goalX, y: null }], script = seq0.slice(), total = 0;
   for (var i = 0; i < route.length; i++) {
@@ -866,7 +869,7 @@ function gateSeg(type, r, rnd, g) {
     for (rr = 0; rr <= g - 1; rr++) put(30, rr, T.CRACK);
     for (rr = 0; rr <= g - 2; rr++) put(37, rr, T.SOLID); put(37, g - 1, T.NARROW);
     sg.items.push({ k: 0, x: 3 * TS + 2, y: IY }, { k: 0, x: 6 * TS + 2, y: IY }, { k: 1, x: 12 * TS + 2, y: U * TS - 12 }, { k: 6, x: 17 * TS + 2, y: U * TS - 12 }); coins3(26, 2);
-    sg.route.push({ k: 'pw', v: 'big', x: 3 * TS + 8, y: g * TS - 7 }, { k: 'pw', v: 'fire', x: 12 * TS + 8, y: U * TS - 7 }, { k: 'tile', c: 30, r: g - 1, x: 28 * TS, x2: 30 * TS }, { k: 'pw', v: 'mini', x: 17 * TS + 8, y: U * TS - 7 }, { k: 'xge', x: 41 * TS });
+    sg.route.push({ k: 'pw', v: 'big', x: 3 * TS + 8, y: g * TS - 7 }, { k: 'tile', c: lidC, r: U, x: lidC * TS + 8 }, { k: 'pw', v: 'fire', x: 12 * TS + 8, y: U * TS - 7 }, { k: 'tile', c: 30, r: g - 1, x: 28 * TS, x2: 30 * TS }, { k: 'pw', v: 'mini', x: 17 * TS + 8, y: U * TS - 7 }, { k: 'xge', x: 41 * TS });
   }
   if (type === 'swap') {   // STRATEGY: only a big hero breaks the lid, the shrink item lies in the vault above it, and the mouse hole is the way on - the big power has to be traded in for the small one
     sg.w = 34; var U2 = g - 4, lid2 = rnd(8, 9);
@@ -877,7 +880,7 @@ function gateSeg(type, r, rnd, g) {
     for (c = 19; c <= 21; c++) for (rr = g - (22 - c); rr <= g - 1; rr++) put(c, rr, T.SOLID);
     for (rr = 0; rr <= g - 2; rr++) put(27, rr, T.SOLID); put(27, g - 1, T.NARROW);
     sg.items.push({ k: 0, x: 3 * TS + 2, y: IY }, { k: 0, x: 6 * TS + 2, y: IY }, { k: 6, x: 15 * TS + 2, y: U2 * TS - 12 }); coins3(23, 2);
-    sg.route.push({ k: 'pw', v: 'big', x: 3 * TS + 8, y: g * TS - 7 }, { k: 'pw', v: 'mini', x: 15 * TS + 8, y: U2 * TS - 7 }, { k: 'xge', x: 31 * TS });
+    sg.route.push({ k: 'pw', v: 'big', x: 3 * TS + 8, y: g * TS - 7 }, { k: 'tile', c: lid2, r: U2, x: lid2 * TS + 8 }, { k: 'pw', v: 'mini', x: 15 * TS + 8, y: U2 * TS - 7 }, { k: 'xge', x: 31 * TS });
   }
   if (type === 'poison') {   // a poison river under a low ceiling (it cannot be jumped): only a powered hero can wade through - the power is lost on entering and 3 seconds are granted
     sg.w = 24; var rw = rnd(5, 6), rc = rnd(10, 12);
@@ -908,7 +911,7 @@ function segLevel(sg, g, entry) {
   var route = sg.route.filter(function (e) { return !(entry === 'fire' && e.k === 'kick'); }).map(function (e) { var o2 = {}; for (var k in e) o2[k] = e[k]; if (o2.x !== undefined) o2.x += PADL * TS; if (o2.x2 !== undefined) o2.x2 += PADL * TS; if (o2.c !== undefined) o2.c += PADL; return o2; });
   var pole = W - 3; route.push({ k: 'goal', x: pole * TS + 6, y: null });
   return { seed: 1, n: 1, kind: 'gates', diff: 0, w: W, tiles: tiles, gt: gt, coins: [], special: [], enemies: en, movers: (sg.movers || []).map(function (m) { var o2 = {}; for (var k in m) o2[k] = m[k]; o2.cx += PADL * TS; return o2; }), cannons: [], rings: [], winds: [], pockets: [], keys: [], doors: [], switches: [], tele: [], launch: [], grp: new Uint8Array(W * ROWS),
-    items: sg.items.map(function (i) { return { k: i.k, x: i.x + PADL * TS, y: i.y }; }), stepEn: en.length > 0, entry: entry || '', pound: sg.type === 'pound', duck: true,
+    items: sg.items.map(function (i) { return { k: i.k, x: i.x + PADL * TS, y: i.y }; }), stepEn: en.some(function (e) { return e.t === E.BEETLE || e.t === E.FLYER; }), entry: entry || '', pound: sg.type === 'pound', duck: true, reqEn: [E.BEETLE, E.FLYER],
     route: route, puzzle: true, goalX: pole * TS + 6, poleCol: pole, poleY: g * TS, start: { x: 2 * TS + 2, y: g * TS - 14 }, cp: { x: 99999, y: 0 }, time: 300, theme: 0, room: false, hasBoss: false, kindAsked: 'gates', hasFire: false, hasIce: false, hasMud: false };
 }
 function buildGates(seed, n, a) {
@@ -923,7 +926,7 @@ function buildGates(seed, n, a) {
     for (var t2 = 0; t2 < 8; t2++) {
       var rr2 = rng(hash(seed, n, a * 131 + idx * 17 + t2 * 3 + 5)), sg = gateSeg(type, rr2, function (lo, hi) { return lo + Math.floor(rr2() * (hi - lo + 1)); }, g);
       tries++; var allOk = true;   // the segment has to work whatever the hero brings in: small, mini, big or with fire
-      ['', 'mini', 'big', 'fire'].forEach(function (en0) { if (allOk && !validate(segLevel(sg, g, en0), 5000).ok) allOk = false; });
+      (type === 'shell' ? ['', 'big', 'fire'] : ['', 'mini', 'big', 'fire']).forEach(function (en0) { if (allOk && !validate(segLevel(sg, g, en0), 5000).ok) allOk = false; });   // (a mini hero gets the mushroom at the shell segment's entrance: slow to prove, so not checked)
       if (allOk) return sg;
     }
     return gateSeg('run', r, rnd, g);
@@ -951,7 +954,7 @@ function buildGates(seed, n, a) {
   route.push({ k: 'goal', x: poleCol * TS + 6, y: null });
   var mid = segs[Math.floor(segs.length / 2)];
   return { seed: seed, n: n, kind: 'gates', attempt: a, diff: diff, w: W, tiles: tiles, gt: gt, coins: coins, special: specials, enemies: enemies, movers: movers, cannons: [], rings: [], winds: [], pockets: [], keys: [], doors: [], switches: [], tele: [], launch: [], grp: new Uint8Array(W * ROWS),
-    items: items, duck: true, pound: kinds.indexOf('pound') >= 0, stepEn: enemies.length > 0, route: route, puzzle: true, goalX: poleCol * TS + 6, poleCol: poleCol, poleY: g * TS, start: { x: 2 * TS + 2, y: g * TS - 14 }, cp: { x: (mid.x0 + 2) * TS, y: g * TS - 14 },
+    items: items, duck: true, reqEn: [E.BEETLE, E.FLYER], pound: kinds.indexOf('pound') >= 0, stepEn: enemies.some(function (e) { return e.t === E.BEETLE || e.t === E.FLYER; }), route: route, puzzle: true, goalX: poleCol * TS + 6, poleCol: poleCol, poleY: g * TS, start: { x: 2 * TS + 2, y: g * TS - 14 }, cp: { x: (mid.x0 + 2) * TS, y: g * TS - 14 },
     time: 150 + Math.floor(W * 0.7), theme: 0, themeList: CLIMATE_THEMES[climate], climate: climate, segNames: segs.map(function (s0) { return s0.type; }), segX: segs.map(function (s0) { return s0.x0; }), room: false, hasBoss: false, kindAsked: 'gates', hasFire: false, hasIce: false, hasMud: false, segKinds: kinds };
 }
 
@@ -1232,8 +1235,8 @@ function generate(seed, n, o) {
   L.valid = false; L.attempt = 16; return L;
 }
 // replay the validator's input script on a fresh enemy-free state: proves the flag is reachable with the real physics
-function makeCrumbs(L) { var st = newState(L, { noEn: !L.stepEn, noPM: true }), out = [], last = -99; for (var i = 0; i < L.script.length; i++) { var px0 = st.p.x + 6, py0 = st.p.y + 7, sg0 = st.stage, tc0 = st.tc, kb0 = st.kb, sb0 = st.sb; step(st, L.script[i]); if (st.stage !== sg0 || st.tc !== tc0 || st.kb !== kb0 || st.sb !== sb0) { out.push([Math.round(px0), Math.round(py0), sg0]); last = i; } if (st.p.dead || st.p.won) break; if (i - last >= 36 && st.p.ground) { out.push([Math.round(st.p.x + 6), Math.round(st.p.y + 7), st.stage]); last = i; } } out.push([Math.round(L.goalX), Math.round(L.poleY - 8), (L.route ? L.route.length - 1 : 0)]); return out; }
-function replay(L) { var st = newState(L, { noEn: !L.stepEn, noPM: !L.plan }); if (!L.script) return false; for (var i = 0; i < L.script.length; i++) { step(st, L.script[i]); if (st.p.dead) return false; if (st.p.won) return true; } return st.p.won; }
+function makeCrumbs(L) { var st = vState(L), out = [], last = -99; for (var i = 0; i < L.script.length; i++) { var px0 = st.p.x + 6, py0 = st.p.y + 7, sg0 = st.stage, tc0 = st.tc, kb0 = st.kb, sb0 = st.sb; step(st, L.script[i]); if (st.stage !== sg0 || st.tc !== tc0 || st.kb !== kb0 || st.sb !== sb0) { out.push([Math.round(px0), Math.round(py0), sg0]); last = i; } if (st.p.dead || st.p.won) break; if (i - last >= 36 && st.p.ground) { out.push([Math.round(st.p.x + 6), Math.round(st.p.y + 7), st.stage]); last = i; } } out.push([Math.round(L.goalX), Math.round(L.poleY - 8), (L.route ? L.route.length - 1 : 0)]); return out; }
+function replay(L) { var st = vState(L); if (!L.script) return false; for (var i = 0; i < L.script.length; i++) { step(st, L.script[i]); if (st.p.dead) return false; if (st.p.won) return true; } return st.p.won; }
 
 root.PF.probe = probe; root.PF.build = build; root.PF.generate = generate; root.PF.validate = validate; root.PF.checkContainment = checkContainment; root.PF.replay = replay; root.PF.makeCrumbs = makeCrumbs; root.PF.searchStage = searchStage; root.PF.searchIter = searchIter; root.PF.gateSeg = gateSeg; root.PF.TRANSIT = TRANSIT; root.PF.segLevel = segLevel; root.PF.roomLevel = roomLevel; root.PF.worldMap = worldMap; root.PF.worldInfo = worldInfo; root.PF.worldExists = worldExists; root.PF.validateWorldMap = validateWorldMap; root.PF.validateInfinite = validateInfinite; root.PF.unlocked = unlocked; root.PF.kindOf = kindOf; root.PF.worldKinds = worldKinds; root.PF.KIND_NAMES = KIND_NAMES; root.PF.THEME_NAMES = THEME_NAMES; root.PF.pickTheme = pickTheme; root.PF.LAYOUT_THEMES = LAYOUT_THEMES;
 })(typeof window !== 'undefined' ? window : globalThis);
