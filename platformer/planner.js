@@ -4,7 +4,7 @@
 (function (root) {
 'use strict';
 var IN = PF.IN, N = 0, R = IN.R, RR = IN.R | IN.RUN, Lf = IN.L;
-var H = 64, REPLAN = 8;
+var IN_R = PF.IN.R, IN_L = PF.IN.L, H = 64, REPLAN = 8;
 var CANDS = (function () {
   var c = [], dirs = [RR, R, N], s, a, b, h;
   [0, 8, 20, 40].forEach(function (s) { dirs.forEach(function (a) { dirs.forEach(function (b) { if (s === 0 && a !== b) return; c.push({ a: a, b: b, s: s, h: -1 }); }); }); });
@@ -37,9 +37,19 @@ function evaluate(st0, c, traj) {
     if (p.dead) return { sc: -1e5 + k * 30, dead: true, k: k };
     if (p.won) return { sc: 1e6 - k, won: true, k: k };
   }
-  if (st0.L.puzzle && st0.L.crumbs) { var cbs = st.L.crumbs, tg = cbs[Math.min(cbs.length - 1, st.cr + 1)], tg2 = cbs[Math.min(cbs.length - 1, st.cr + 2)]; sc = st.cr * 500 + (st.stage - st0.stage) * 3000 - (Math.abs(p.x + 6 - tg[0]) + 1.5 * Math.abs(p.y + 7 - tg[1])) * 2.5 - (Math.abs(p.x + 6 - tg2[0]) + 1.5 * Math.abs(p.y + 7 - tg2[1])) * 0.5 + (st.score - st0.score) * 0.1; if (!p.ground) sc -= 15; return { sc: sc, dead: false, land: land, k: k }; }
+  if (st0.L.puzzle && st0.L.crumbs && !(st0.boss > 0 && bossNear(st0))) { var cbs = st.L.crumbs, tg = cbs[Math.min(cbs.length - 1, st.cr + 1)], tg2 = cbs[Math.min(cbs.length - 1, st.cr + 2)]; sc = st.cr * 500 + (st.stage - st0.stage) * 3000 - (Math.abs(p.x + 6 - tg[0]) + 1.5 * Math.abs(p.y + 7 - tg[1])) * 2.5 - (Math.abs(p.x + 6 - tg2[0]) + 1.5 * Math.abs(p.y + 7 - tg2[1])) * 0.5 + (st.score - st0.score) * 0.1; if (!p.ground) sc -= 15; return { sc: sc, dead: false, land: land, k: k }; }
   var bi = -1, bd = 1e9; if (st0.boss > 0) { for (var q = 0; q < st0.en.length; q++) { var be = st0.en[q]; if (be.t === 8 && be.alive) { var dd = Math.abs(p.x - be.x); if (dd < bd) { bd = dd; bi = q; } } } }
-  if (bi >= 0) { var b1 = st.en[bi], b0 = st0.en[bi]; sc = -Math.abs(p.x + 6 - (b1.x + b1.w / 2)) * 3 + (b0.hp - b1.hp) * 900 + (st.score - st0.score) * 0.25; if (!b1.alive) sc += 3000; }
+  if (bi >= 0 && st0.en[bi].imm && st0.en[bi].immKind === 'shell') {   // armoured boss: pick up a shell, carry it at the boss and throw it while the boss stands on the ground
+    var b1 = st.en[bi], b0 = st0.en[bi], bx = b1.x + b1.w / 2, hx1 = p.x + 6, nd = 1e9, rd = 1e9, wd = 1e9, q2;
+    sc = (b0.hp - b1.hp) * 4000 + (st.score - st0.score) * 0.25; if (!b1.alive) sc += 6000;
+    for (q2 = 0; q2 < st.en.length; q2++) { var se = st.en[q2]; if (!se.alive || se.t !== 3 || se.x < b1.mn - 40 || (se.carried && p.carry < 0)) continue; if (se.sh === 2 && Math.abs(se.vx || 0) > 1) rd = Math.min(rd, Math.abs(se.x + se.w / 2 - bx)); else if (se.sh === 1 && !se.carried) nd = Math.min(nd, Math.abs(se.x + se.w / 2 - hx1)); else if (se.sh === 0) wd = Math.min(wd, Math.abs(se.x + se.w / 2 - hx1)); }
+    if (p.carry >= 0) sc += 300 - Math.abs(bx - hx1) * 0.8 + (p.face === (bx > hx1 ? 1 : -1) ? 40 : 0);
+    else if (nd < 1e9) sc -= nd * 1.2 + (rd < 1e9 ? 0 : 60);
+    else if (wd < 1e9) sc -= wd * 1.0 + 30;   // no shell yet: stomp a walking cube-bug to make one
+    else sc -= Math.abs(bx - hx1) * 0.6;
+    if (rd < 1e9) sc -= rd * 0.6;
+  }
+  else if (bi >= 0) { var b1 = st.en[bi], b0 = st0.en[bi]; sc = -Math.abs(p.x + 6 - (b1.x + b1.w / 2)) * 3 + (b0.hp - b1.hp) * 900 + (st.score - st0.score) * 0.25; if (!b1.alive) sc += 3000; }
   else sc = p.x * 3 + (st.score - st0.score) * 0.25;
   if (big0 && !p.big) sc -= 400;
   if (!p.ground) { sc -= 25; if (!groundBelow(st)) sc -= 3000; }
@@ -68,8 +78,14 @@ function makePlanner() {
     if (p.x > pl.bestX + 4) { pl.bestX = p.x; pl.bestF = st.f; }
     if (!pl.script || pl.i >= pl.script.length) {
       var best = null;
+      var hps = 0; if (st.boss > 0) for (var hi = 0; hi < st.en.length; hi++) if (st.en[hi].t === 8 && st.en[hi].alive) hps += st.en[hi].hp;
+      if (hps !== pl.hps) { pl.hps = hps; pl.hpF = st.f; }
+      if (st.boss > 0 && bossNear(st) && st.f - (pl.hpF || 0) > 240) { pl.bossNoise = 40; pl.hpF = st.f - 120; }   // fight stalemate (standing still while the boss circles): try something random for a while
+      if (pl.bossNoise > 0) pl.next = null;
       if (pl.next && pl.next.pred && same(pl.next.pred, st)) { var ps = pl.next.ps; best = ps.done || work(ps, ps.list.length); }
-      else { if (st.f - pl.bestF > 300) { pl.explore = 40; pl.bestF = st.f - 100; } best = pl.search(st, pl.explore > 0 ? 25 : 0); if (pl.explore > 0) pl.explore -= SL; pl.stats.sync++; }
+      else {
+        if (st.f - pl.bestF > 300) { pl.explore = 40; pl.bestF = st.f - 100; }
+        best = pl.search(st, pl.bossNoise > 0 ? 400 : (pl.explore > 0 ? 25 : 0)); if (pl.bossNoise > 0) pl.bossNoise -= SL; if (pl.explore > 0) pl.explore -= SL; pl.stats.sync++; }
       pl.next = null; pl.stats.plans++;
       pl.last = best; pl.script = makeScript(best); pl.i = 0;
       var pred = predict(st, pl.script); pl.next = { pred: pred, ps: newSearch(pred, pl.explore > 0 ? 25 : 0) };
@@ -160,23 +176,37 @@ function settles(s) { var q = PF.clone(s); for (var k = 0; k < 24; k++) { PF.ste
 
 // armoured boss (only kicked shells hurt it): stomp a beetle, stand LEFT of the shell and walk into it so it rolls at the boss; the look-ahead planner dodges when the boss is close
 function best0(st, boss) { for (var i = 0; i < st.en.length; i++) { var e = st.en[i]; if (e.alive && e.t === 3 && e.x >= boss.x - 520 && e.x <= boss.x + 200) return e; } return null; }
-function shellBossMask(st, boss, fb) {
+function shellBossMask(st, boss, fb) {   // + hop over ledges / cannons in the way
+  return fb.decide(st);   // in the arena the look-ahead planner (shell-aware score) does the fight
+  var m = shellBossMask0(st, boss, fb), p = st.p;
+  if (p.ground && (m & (IN_R | IN_L))) { var dir = (m & IN_R) ? 1 : -1, c = Math.floor((dir > 0 ? p.x + p.w + 3 : p.x - 3) / PF.TS), r = Math.floor((p.y + p.h - 5) / PF.TS), t = PF.tileAt(st, c, r); if (PF.SOL[t] || t === 15 || t === 16) m |= PF.IN.J; }
+  function react(q) { if (!q.p.ground) return 0; var hx = q.p.x + q.p.w / 2; for (var i = 0; i < q.en.length; i++) { var e = q.en[i]; if (e.alive && e.t === 3 && e.sh === 2 && Math.abs(e.vx || 0) > 1) { var rx = e.x + e.w / 2 - hx; if (Math.abs(rx) < 52 && (rx > 0) === (e.dir < 0)) return PF.IN.J; } } return 0; }
+  function lives(mm) { st.share = true; var q = PF.clone(st); st.share = false; for (var k = 0; k < 70; k++) { PF.step(q, k < 10 ? mm : (k < 16 ? (mm & ~PF.IN.J) : react(q))); if (q.p.dead) return false; } return true; }
+  if (!lives(m)) {   // the scripted approach would run into a beetle / the boss: take the first safe variant, else let the look-ahead planner dodge
+    var alts = [m | PF.IN.J, m & ~(IN_R | IN_L), (m & ~(IN_R | IN_L)) | PF.IN.J, PF.IN.L | PF.IN.RUN, PF.IN.R | PF.IN.RUN, PF.IN.L | PF.IN.J, PF.IN.R | PF.IN.J], i;
+    for (i = 0; i < alts.length; i++) if (lives(alts[i])) return alts[i];
+    return fb.decide(st);
+  }
+  return m;
+}
+function shellBossMask0(st, boss, fb) {
   var IN = PF.IN, p = st.p, hx = p.x + p.w / 2, bd = boss.x + boss.w / 2 - hx, best = null, bs = 1e9, i, e, rolling = null;
   for (i = 0; i < st.en.length; i++) { e = st.en[i]; if (!e.alive || e.t !== 3 || e.x < boss.x - 520 || e.x > boss.x + 200) continue; if (e.sh === 2 && Math.abs(e.x - hx) < 240 && Math.abs(e.vx || 0) > 1) rolling = e; var d = Math.abs(e.x + e.w / 2 - hx) + (e.sh === 1 ? 0 : 30); if (d < bs) { bs = d; best = e; } }
+  if (p.carry >= 0) {                                                                          // carrying a shell: walk at the boss, let go (Run released) once it stands within throwing range and we face it
+    var cs = bd > 0 ? 1 : -1, CT = cs > 0 ? IN.R : IN.L;
+    if (p.face === cs && Math.abs(bd) < 200 && Math.abs(bd) > 40 && boss.ground) return CT;
+    return CT | IN.RUN;
+  }
   if (Math.abs(bd) < 96 && p.ground) return fb.decide(st);                                  // boss next to us: dodge / jump over like the normal arena
   if (!best0(st, boss)) return fb.decide(st);
   if (rolling) {                                                                              // a shell is rolling: keep away from it, it can hurt us on the way back
     var rx = rolling.x + rolling.w / 2 - hx;
-    if (Math.abs(rx) < 70 && (rx > 0) === (rolling.dir < 0) && p.ground) return IN.J | (rx > 0 ? IN.L : IN.R);
+    if (Math.abs(rx) < 90 && (rx > 0) === (rolling.dir < 0)) return p.ground ? IN.J : 0;   // it is faster than us: hop straight up and let it run under
     return 0;
   }
   if (!best) return fb.decide(st);
   var sx = best.x + best.w / 2, dx = sx - hx;
-  if (best.sh === 1) {                                                                        // an idle shell: get to its left side, then walk right into it
-    if (dx > 6) return IN.R | IN.RUN;
-    if (dx > -22) return p.ground ? (IN.J | IN.L) : IN.L;                                     // right of it, too close: hop back left over it
-    return IN.L;
-  }
+  if (best.sh === 1) return (dx > 0 ? IN.R : IN.L) | IN.RUN;                                // an idle shell: walk into it holding Run = pick it up
   if (Math.abs(dx) > 26) return (dx > 0 ? IN.R : IN.L) | IN.RUN;                              // a walking beetle: close in and stomp
   if (p.ground && Math.abs(dx) < 22) return IN.J | (dx > 0 ? IN.R : IN.L);
   return dx > 0 ? IN.R : IN.L;
@@ -194,17 +224,20 @@ function makeNavigator() {
       if (ex && Math.abs(ex[0] - st.p.x) < 0.6 && Math.abs(ex[1] - st.p.y) < 0.6) return L.plan[st.f];
       nv.planBad = true;
     }
+    if (st.boss > 0 && st.p.mini) for (var mi = 0; mi < st.it.length; mi++) { var mu = st.it[mi]; if (mu.alive && mu.k === 0 && mu.x > st.p.x - 90 && mu.x < st.p.x + 110 && Math.abs(mu.y - st.p.y) < 24 && st.p.ground) { nv.seq = null; nv.job = null; var mdx = mu.x + 6 - (st.p.x + st.p.w / 2); if (Math.abs(mdx) < 2) return 0; var mdir = mdx > 0 ? PF.IN.R : PF.IN.L, mc = Math.floor((mdx > 0 ? st.p.x + st.p.w + 2 : st.p.x - 2) / PF.TS), mr = Math.floor((st.p.y + st.p.h - 4) / PF.TS), mt = PF.tileAt(st, mc, mr); return mdir | (PF.SOL[mt] || PF.tileAt(st, mc, mr - 1) === 0 && PF.SOL[PF.tileAt(st, mc, mr + 1)] && false ? PF.IN.J : 0) | (Math.abs(mdx) > 24 ? PF.IN.RUN : 0); } }   // a shrunken hero must grow back before an arena fight: the mushroom at the entrance
     if (!L.route || !PF.searchIter) return fb.decide(st);
     var shellBoss = null;
-    if (st.boss > 0) for (var bi = 0; bi < st.en.length; bi++) { var be = st.en[bi]; if (be.t === 8 && be.alive && be.imm && be.immKind === 'shell' && be.x - st.p.x < 480 && st.p.x - be.x < 300) shellBoss = be; }   // armoured boss: from the arena entrance on
+    if (st.boss > 0) for (var bi = 0; bi < st.en.length; bi++) { var be = st.en[bi]; if (be.t === 8 && be.alive && be.imm && be.immKind === 'shell' && (L.arena ? st.p.x >= L.arena.c0 * PF.TS - 30 : be.x - st.p.x < 340) && st.p.x - be.x < 300) shellBoss = be; }
+    nv.sb = !!shellBoss;   // armoured boss: from the arena entrance on
     if (shellBoss) return shellBossMask(st, shellBoss, fb);   // armoured boss: only kicked shells hurt it
     if (st.boss > 0 && (bossNear(st) || nv.job === null && L.kind === 'bossrush')) { nv.seq = null; nv.job = null; return fb.decide(st); }   // boss arenas: the reactive look-ahead planner dodges and stomps   // boss arenas: the reactive look-ahead planner dodges and stomps
     if (nv.seq && nv.i < nv.seq.length && nv.stage === st.stage) return nv.seq[nv.i++];
     nv.seq = null;
     if (!nv.job) {
       if (nv.wait > 0 || !st.p.ground) { if (nv.wait > 0) nv.wait--; return fb.decide(st); }
-      var g = L.route[Math.min(st.stage, L.route.length - 1)], tx = g.x === undefined ? L.goalX : g.x, ty = g.y === undefined ? null : g.y;
-      var strict = function (s) { return PF.stageDone(s, g) && !(s.p.pois > 0) && (g.k === 'goal' || settles(s)); }, loose = function (s) { return PF.stageDone(s, g) && !(s.p.pois > 0); };
+      var g = L.route[Math.min(st.stage, L.route.length - 1)]; if (g.k === 'goal' && L.arena && st.boss > 0 && st.p.x < L.arena.c0 * PF.TS - 40) g = { k: 'xge', x: L.arena.c0 * PF.TS - 24, y: g.y, door: 1 };   // long castle: first reach the arena door, the fight itself is the reactive planner's job
+      var tx = g.x === undefined ? L.goalX : g.x, ty = g.y === undefined ? null : g.y;
+      var strict = function (s) { return PF.stageDone(s, g) && !(s.p.pois > 0) && (g.k === 'goal' || g.door || settles(s)); }, loose = function (s) { return PF.stageDone(s, g) && !(s.p.pois > 0); };
       var c2 = PF.clone(st); c2.en = []; c2.noEn = true;
       // tiers: with enemies and a safe stop, with a smaller budget, without the safe stop; last resort: as if the enemies were not there (a hit beats standing still)
       var tiers = [[PF.clone(st), strict, 3000], [PF.clone(st), strict, 8000], [PF.clone(st), loose, 3000], [c2, strict, 4000]];

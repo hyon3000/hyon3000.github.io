@@ -462,18 +462,20 @@ function buildRaw(seed, n, a, o) {
       var ba = basin(g, 4, 22); arenaC0 = ba.c0; flat(5, g); bx = (arenaC0 + 14) * TS;
       bossDef = { t: E.BOSS, v: 3, x: bx, y: (g + 1.3) * TS, w: 30, h: 18, spd: 0, mn: (arenaC0 + 1) * TS, mx: (arenaC0 + 22) * TS, ax: (arenaC0 + 12) * TS, ay: (g + 1.3) * TS, dir: -1 };
       pockets.push({ x: (arenaC0 + 6) * TS, y: (g + 1.5) * TS }); pockets.push({ x: (arenaC0 + 16) * TS, y: (g + 1.5) * TS });
+      bossItems.push({ k: 0, x: (arenaC0 - 3) * TS + 2, y: g * TS - 12 });   // a shrunken hero floats on the water and cannot reach the boss: a mushroom at the basin's edge makes him normal again
       poleCol = gt.length - 3; goalCol = poleCol;
     } else {
       flat(6, g); var AL = isRush ? 44 : 26; arenaC0 = flat(AL, g); flat(3, g); bx = (arenaC0 + 16) * TS;
       function mkBoss(v2, bxx) { var b2 = { t: E.BOSS, v: v2, x: bxx, y: g * TS - 26, w: 28, h: 26, spd: 0, mn: (arenaC0 + 1) * TS, mx: (arenaC0 + AL - 1) * TS, ax: bxx - 2 * TS, ay: (g - 4) * TS - 6, dir: -1 }; if (v2 === 4) { b2.w = 28; b2.h = 22; b2.ay = (g - 5) * TS; b2.y = b2.ay; } return b2; }
       bossDef = mkBoss(bv === 3 ? 0 : bv, bx); if (isRush) bossDef2 = mkBoss([0, 1, 2, 4][(bv + 2) % 4] === bossDef.v ? [0, 1, 2, 4][(bv + 3) % 4] : [0, 1, 2, 4][(bv + 2) % 4], (arenaC0 + 30) * TS);
       // armoured boss: stomping only bounces, it has to be hit by a kicked shell (beetles waiting at the arena entrance) or by fireballs (flowers waiting before it)
+      if (!isRush) bossItems.push({ k: 0, x: (arenaC0 - 3) * TS + 2, y: g * TS - 12 });   // a shrunken hero grows back here before the fight
       var imm = o.bossimm !== undefined ? o.bossimm : (!isRush && (n + hash(seed, n, 9)) % 3 === 0 ? (hash(seed, n, 10) % 2 ? 'shell' : 'fire') : '');
       if (imm === 'shell' && bossDef.v !== 0) imm = 'fire';
       if (imm && !isRush) {
         bossDef.imm = 1; bossDef.immKind = imm;
         if (imm === 'shell') { shellPassF = true; for (var bq = 0; bq < 4; bq++) enemiesX.push({ t: E.BEETLE, x: (arenaC0 + 1 + bq * 2) * TS, y: g * TS - 13, w: 12, h: 13, spd: 0.4, dir: bq % 2 ? -1 : 1, mn: arenaC0 * TS, mx: (arenaC0 + 9) * TS }); }
-        else { bossItems.push({ k: 1, x: (arenaC0 - 4) * TS + 2, y: g * TS - 12 }); bossItems.push({ k: 1, x: (arenaC0 + 1) * TS + 2, y: g * TS - 12 }); }
+        else { bossItems.push({ k: 1, x: (arenaC0 - 4) * TS + 2, y: g * TS - 12 }); bossItems.push({ k: 1, x: (arenaC0 + 1) * TS + 2, y: g * TS - 12 }); bossItems.push({ k: 1, x: (arenaC0 + 9) * TS + 2, y: g * TS - 12 }); bossItems.push({ k: 1, x: (arenaC0 + 17) * TS + 2, y: g * TS - 12 }); }   // spare flowers inside the arena: a hit that costs the power must not lock the fight
       }
       poleCol = arenaC0 + AL - 2; goalCol = poleCol;
     }

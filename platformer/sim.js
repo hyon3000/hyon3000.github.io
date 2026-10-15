@@ -323,7 +323,7 @@ function step(st, inp) {
   // --- duck: a big hero holding Down on the ground crouches to the small height and slides on with its momentum (cannot steer): the way through a one-tile hole without losing the power
   if (p.big && !p.mini && !p.climb) {
     if (!p.duck && p.ground && down && !inW) { p.duck = 1; p.y += p.h - P.SH; p.h = P.SH; }
-    else if (p.duck && (!down || !p.ground) && !boxHit(st, p.x, p.y - (P.BH - P.SH), p.w, P.BH)) { p.y -= P.BH - P.SH; p.h = P.BH; p.duck = 0; }
+    else if (p.duck && (!down || !p.ground) && !boxHit(st, p.x, p.y + p.h - P.BH, p.w, P.BH)) { p.y -= P.BH - P.SH; p.h = P.BH; p.duck = 0; }
   } else if (p.duck) p.duck = 0;
   var carried = 0;
   if (!p.climb) {
@@ -445,9 +445,9 @@ function step(st, inp) {
     if (e.y > (L.rows || ROWS) * TS + 40) { e.alive = false; continue; }
     if (overlap(p, e)) {
       e.alive = false;
-      if (e.k === 0) { if (p.pw === 0 && !boxHit(st, p.x, p.y - (P.BH - P.SH), p.w, P.BH)) { setPw(p, 1); st.score += 200; ev(st, 'grow', p.x, p.y); } else { st.score += 300; ev(st, 'pow2', p.x, p.y); } }
-      else if (e.k === 1) { if (p.pw !== 2) { if (p.pw === 0 && boxHit(st, p.x, p.y - (P.BH - P.SH), p.w, P.BH)) st.score += 200; else setPw(p, 2); } st.score += 500; ev(st, 'grow', p.x, p.y); }
-      else if (e.k === 2) { if (p.pw !== 3) { if (p.pw === 0 && boxHit(st, p.x, p.y - (P.BH - P.SH), p.w, P.BH)) st.score += 200; else setPw(p, 3); } st.score += 500; ev(st, 'grow', p.x, p.y); }
+      if (e.k === 0) { if (p.pw === 0 && !boxHit(st, p.x, p.y + p.h - P.BH, p.w, P.BH)) { setPw(p, 1); st.score += 200; ev(st, 'grow', p.x, p.y); } else { st.score += 300; ev(st, 'pow2', p.x, p.y); } }
+      else if (e.k === 1) { if (p.pw !== 2) { if (p.pw === 0 && boxHit(st, p.x, p.y + p.h - P.BH, p.w, P.BH)) st.score += 200; else setPw(p, 2); } st.score += 500; ev(st, 'grow', p.x, p.y); }
+      else if (e.k === 2) { if (p.pw !== 3) { if (p.pw === 0 && boxHit(st, p.x, p.y + p.h - P.BH, p.w, P.BH)) st.score += 200; else setPw(p, 3); } st.score += 500; ev(st, 'grow', p.x, p.y); }
       else if (e.k === 3) { p.star = P.STAR; st.score += 1000; ev(st, 'star', p.x, p.y); }
       else if (e.k === 5) { st.coins += 5; st.score += 500; ev(st, 'treasure', p.x, p.y); }
       else if (e.k === 6) { if (!p.mini) setMini(p); st.score += 500; ev(st, 'shrink', p.x, p.y); }
@@ -493,7 +493,7 @@ function step(st, inp) {
       else { e.sh = 2; e.dir = (p.x + p.w / 2 > e.x + e.w / 2) ? -1 : 1; e.kg = 14; ev(st, 'kick', e.x, e.y); }
       continue; }
     if (e.t === 3 && e.sh === 2 && e.kg > 0) continue;
-    if (stomping && p.mini) { p.vy = jump ? -7.6 : -4.6; p.y = Math.min(p.y, e.y - p.h); p.coy = 0; ev(st, 'bump', e.x + e.w / 2, e.y); continue; }
+    if (stomping && p.mini && e.t !== 8) { p.vy = jump ? -7.6 : -4.6; p.y = Math.min(p.y, e.y - p.h); p.coy = 0; ev(st, 'bump', e.x + e.w / 2, e.y); continue; }
     if (stomping) {
       if (e.t === 8) { if (e.imm) { p.vy = -6.2; p.coy = 0; ev(st, 'bump', e.x + e.w / 2, e.y); } else if (hitBoss(st, e, 1)) { p.vy = -6.2; } continue; }   // imm: armoured top, only shells and fireballs hurt it
       if (e.t === 3) { if (e.sh === 2) { e.sh = 1; e.vx = 0; } else { e.sh = 1; e.y += 4; e.h = 9; e.vx = 0; } p.vy = jump ? -6.8 : -4.2; st.score += 100; ev(st, 'stomp', e.x + e.w / 2, e.y); p.coy = 0; continue; }
