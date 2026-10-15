@@ -274,7 +274,7 @@ function selectPick(si) {
 }
 function carryOf(p) { return (p.pw > 0 || p.mini || p.fin > 0 || p.wing > 0 || p.mount) ? { pw: p.pw | 0, mini: p.mini ? 1 : 0, fin: Math.max(0, p.fin | 0), wing: Math.max(0, p.wing | 0), mount: p.mount ? 1 : 0 } : null; }   // what the hero keeps from one stage to the next
 function levelInit(cp) {
-  var node = G.curNode, cy = (!cp && G.carry) || null; G.st = PF.newState(G.L, { rec: true, cp: !!cp, pw: cy ? cy.pw : 0, mini: cy ? cy.mini : 0, fin: cy ? cy.fin : 0, wing: cy ? cy.wing : 0, mount: cy ? cy.mount : 0 }); aiReset(); setAuto(0); G.roomK = undefined; G.parts = []; G.pops = []; G.bumps = []; G.hint = null; G.cam = Math.max(0, Math.min(G.L.w * TS - VW, G.st.p.x - VW * 0.4)); G.camY = Math.max(0, Math.min((G.L.rows || PF.ROWS) * TS - VH, G.st.p.y - VH * 0.55)); G.mode = 'play'; G.secretExit = false;
+  var node = G.curNode, cy = (!cp && G.carry) || null; G.st = PF.newState(G.L, { rec: true, cp: !!cp, pw: cy ? cy.pw : 0, mini: cy ? cy.mini : 0, fin: cy ? cy.fin : 0, wing: cy ? cy.wing : 0, mount: cy ? cy.mount : 0 }); aiReset(); setAuto(0); G.roomK = undefined; G.zoneK = undefined; G.parts = []; G.pops = []; G.bumps = []; G.hint = null; G.cam = Math.max(0, Math.min(G.L.w * TS - VW, G.st.p.x - VW * 0.4)); G.camY = Math.max(0, Math.min((G.L.rows || PF.ROWS) * TS - VH, G.st.p.y - VH * 0.55)); G.mode = 'play'; G.secretExit = false;
 }
 function enterLevel(i, force) {
   var node = nodeById(i); if (!node || G.mode === 'loading') return; if (!force && !isOpen(node)) return;
@@ -406,7 +406,12 @@ function fixedStep() {
   }
   if (G.st) { var p2 = G.st.p, tx = Math.max(0, Math.min(G.L.w * TS - VW, p2.x + 6 - VW * 0.42 + p2.vx * 14)); G.cam += (tx - G.cam) * 0.12;
     if (G.L.roomPx) { var rk = Math.floor((p2.x + 6) / G.L.roomPx); tx = rk * G.L.roomPx + (G.L.roomPx - VW) / 2 + TS / 2; G.cam = (G.roomK === rk) ? G.cam + (tx - G.cam) * 0.2 : tx; G.roomK = rk; }   // door mazes: the camera stays on the current room (never shows the next room over the wall)
-    var RW = G.L.rows || PF.ROWS, ty = Math.max(0, Math.min(RW * TS - VH, p2.y + p2.h / 2 - VH * 0.55 + p2.vy * 6)); G.camY = (G.camY === undefined || RW === PF.ROWS) ? ty : G.camY + (ty - G.camY) * 0.14; }
+    var RW = G.L.rows || PF.ROWS, ty = Math.max(0, Math.min(RW * TS - VH, p2.y + p2.h / 2 - VH * 0.55 + p2.vy * 6)); G.camY = (G.camY === undefined || RW === PF.ROWS) ? ty : G.camY + (ty - G.camY) * 0.14;
+    if (G.L.zones) {   // winding journey: the camera never leaves the cell the hero is in, so two looks are never on screen together; entering a cell with another look cuts to it
+      var Lz = G.L, zx = Math.max(0, Math.min(Lz.zoneGX - 1, Math.floor((p2.x + 6) / (Lz.zoneCW * TS)))), zy = Math.max(0, Math.floor((p2.y + p2.h / 2) / (Lz.zoneCH * TS))), zk = zy * Lz.zoneGX + zx;
+      var x0 = zx * Lz.zoneCW * TS, y0 = zy * Lz.zoneCH * TS, cx = Math.max(x0, Math.min(x0 + Lz.zoneCW * TS - VW, tx)), cy = Math.max(y0, Math.min(y0 + Lz.zoneCH * TS - VH, ty));
+      if (G.zoneK !== zk && (G.zoneK === undefined || Lz.zones[G.zoneK] !== Lz.zones[zk])) { G.cam = cx; G.camY = cy; } else { G.cam = Math.max(x0, Math.min(x0 + Lz.zoneCW * TS - VW, G.cam)); G.camY = Math.max(y0, Math.min(y0 + Lz.zoneCH * TS - VH, G.camY + (cy - G.camY) * 0.14)); }
+      G.zoneK = zk; } }
 }
 
 var last = 0, acc = 0;
