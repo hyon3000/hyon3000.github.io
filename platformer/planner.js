@@ -14,10 +14,12 @@ var CANDS = (function () {
   [20, 40].forEach(function (l) { [12, 22, 32].forEach(function (s) { [99, 12].forEach(function (h) { c.push({ a: RR, b: RR, s: s, h: h, l: l }); }); }); c.push({ a: RR, b: RR, s: 30, h: -1, l: l }); });
   return c;
 })();
-var BOSS_EXTRA = (function () { var c = []; [RR, R, N, Lf].forEach(function (d) { [1, 2, 4, 5, 7, 8, 9, 11, 12, 13, 14, 16, 18, 20, 24, 26].forEach(function (s) { [99, 12].forEach(function (h) { c.push({ a: d, b: d, s: s, h: h }); }); }); }); return c; })();
+var BOSS_EXTRA = (function () { var c = []; [RR, R, N, Lf].forEach(function (d) { for (var s = 1; s <= 40; s++) [99, 12].forEach(function (h) { c.push({ a: d, b: d, s: s, h: h }); }); });
+  [RR, Lf | IN.RUN].forEach(function (a) { [4, 8, 14, 20].forEach(function (s) { [6, 12, 18, 24, 30, 38].forEach(function (w) { [99, 12].forEach(function (h) { c.push({ a: a, b: N, s: s, w: w, h: h }); }); }); }); });
+  return c; })();
 var LEFT_EXTRA = (function () { var c = []; var LL = Lf | IN.RUN; [Lf, LL].forEach(function (a) { [a, N].forEach(function (b) { [0, 4, 8, 12, 16, 20, 26, 32].forEach(function (s) { c.push({ a: a, b: b, s: s, h: -1 }); [99, 12].forEach(function (h) { c.push({ a: a, b: b, s: s, h: h }); }); }); }); }); return c; })();
 function bossNear(st) { if (st.boss <= 0) return false; for (var i = 0; i < st.en.length; i++) { var e = st.en[i]; if (e.t === 8 && e.alive && Math.abs(e.x - st.p.x) < 260) return true; } return false; }
-function inputAt(c, k) { if (c.l) { if (k < c.l) return Lf; k -= c.l; } var m = k < c.s ? c.a : (c.t !== undefined && k >= c.s + c.t ? c.c : c.b); if (c.h > 0 && k >= c.s && k < c.s + c.h) m |= IN.J; return m; }
+function inputAt(c, k) { if (c.l) { if (k < c.l) return Lf; k -= c.l; } var m = k < c.s ? c.a : (c.t !== undefined && k >= c.s + c.t ? c.c : c.b); var s0 = c.s + (c.w || 0); if (c.h > 0 && k >= s0 && k < s0 + c.h) m |= IN.J; return m; }
 
 function groundBelow(st) {
   var p = st.p, c0 = Math.floor(p.x / PF.TS), c1 = Math.floor((p.x + p.w - 1e-4) / PF.TS), r0 = Math.floor((p.y + p.h) / PF.TS);
@@ -26,8 +28,9 @@ function groundBelow(st) {
   return false;
 }
 function evaluate(st0, c, traj) {
+  var HH = st0.boss > 0 && bossNear(st0) ? 90 : H;
   st0.share = true; var st = PF.clone(st0); st0.share = false; var p = st.p, big0 = st0.p.big, k, sc, lastGround = p.ground, land = -1, jumped = false;
-  for (k = 0; k < H; k++) {
+  for (k = 0; k < HH; k++) {
     PF.step(st, inputAt(c, k));
     if (traj && (k & 1) === 0) traj.push({ x: p.x + p.w / 2, y: p.y + p.h });
     if (traj && land < 0) { if (!p.ground) jumped = true; else if (jumped) land = traj.length - 1; }
