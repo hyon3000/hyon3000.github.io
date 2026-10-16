@@ -460,7 +460,9 @@ function buildRaw(seed, n, a, o) {
     if (bv === 3 && !isRush) {   // flooded arena: a deep basin whose walls are the ledges, exit steps lead to the gate
       while (g > 9) { g--; flat(2, g); } flat(6, g);
       var ba = basin(g, 4, 22); arenaC0 = ba.c0; flat(5, g); bx = (arenaC0 + 14) * TS;
-      bossDef = { t: E.BOSS, v: 3, x: bx, y: (g + 1.3) * TS, w: 30, h: 18, spd: 0, mn: (arenaC0 + 1) * TS, mx: (arenaC0 + 22) * TS, ax: (arenaC0 + 12) * TS, ay: (g + 1.3) * TS, dir: -1 };
+      // stepping islands on the water surface: the hero stands on one, drops onto the swimmer passing right under it, bounces and lands back on ground
+      [[2, 3], [8, 3], [14, 3], [20, 2]].forEach(function (pl) { for (var pc2 = arenaC0 + pl[0]; pc2 < arenaC0 + pl[0] + pl[1]; pc2++) { for (var ti = tl.length - 1; ti >= 0; ti--) if (tl[ti][0] === pc2 && tl[ti][1] === g) tl.splice(ti, 1); tl.push([pc2, g, T.SOLID]); } });
+      bossDef = { t: E.BOSS, v: 3, x: bx, y: (g + 1.8) * TS, w: 30, h: 18, spd: 0, mn: (arenaC0 + 1) * TS, mx: (arenaC0 + 22) * TS, ax: (arenaC0 + 12) * TS, ay: (g + 1.8) * TS, dir: -1 };
       pockets.push({ x: (arenaC0 + 6) * TS, y: (g + 1.5) * TS }); pockets.push({ x: (arenaC0 + 16) * TS, y: (g + 1.5) * TS });
       bossItems.push({ k: 0, x: (arenaC0 - 3) * TS + 2, y: g * TS - 12 });   // a shrunken hero floats on the water and cannot reach the boss: a mushroom at the basin's edge makes him normal again
       poleCol = gt.length - 3; goalCol = poleCol;

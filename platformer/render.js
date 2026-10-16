@@ -138,7 +138,13 @@ function drawTile(t, x, y, th, above, bumpDy, c, r, st) {
     case T.CONVL: case T.CONVR: { rect(x, y, TS, TS, '#2a2450'); rect(x, y, TS, 5, '#16122e'); var dd = t === T.CONVR ? 1 : -1, ph = ((F * 0.6 * dd) % 8 + 8) % 8; ctx.save(); ctx.beginPath(); ctx.rect(x, y, TS, 5); ctx.clip(); for (var k = -1; k < 3; k++) poly(dd > 0 ? [x + k * 8 + ph, y + 0.5, x + k * 8 + ph + 4, y + 2.5, x + k * 8 + ph, y + 4.5] : [x + k * 8 + ph + 4, y + 0.5, x + k * 8 + ph, y + 2.5, x + k * 8 + ph + 4, y + 4.5], '#2ee6d6'); ctx.restore(); rect(x + 2, y + 9, 12, 2, '#3a3270'); break; }
     case T.SLR: poly([x, y + 16, x + 16, y + 16, x + 16, y], th.str[1]); line(x, y + 16, x + 16, y, th.edge, 2); break;
     case T.SLL: poly([x, y + 16, x + 16, y + 16, x, y], th.str[1]); line(x + 16, y + 16, x, y, th.edge, 2); break;
-    case T.LAVA: { rect(x, y + 3, TS, TS - 3, '#ff3a6a'); for (var q = 0; q < 3; q++) poly([x + q * 5.5, y + 3, x + q * 5.5 + 2.7, y - 1 + Math.sin(F * 0.15 + q * 2 + c) * 1.5, x + q * 5.5 + 5.4, y + 3], '#ff9a4a'); rect(x + 4, y + 9, 3, 3, '#ffe0a0'); break; }
+    case T.LAVA: {
+      if (above === T.LAVA) {   // deep lava: dark molten body with slow embers, no surface waves
+        rect(x, y, TS, TS, '#e02a58'); rect(x, y, TS, TS, 'rgba(120,10,40,0.35)');
+        for (var q2 = 0; q2 < 2; q2++) { var ex = x + ((c * 7 + q2 * 9) % 13) + 1, ey = y + ((r * 5 + q2 * 6 + Math.floor(F * 0.03 + c)) % 12) + 1; rect(ex, ey, 3, 2, q2 ? '#ff7a3a' : '#ffb060'); }
+        break;
+      }
+      rect(x, y + 3, TS, TS - 3, '#ff3a6a'); for (var q = 0; q < 3; q++) poly([x + q * 5.5, y + 3, x + q * 5.5 + 2.7, y - 1 + Math.sin(F * 0.15 + q * 2 + c) * 1.5, x + q * 5.5 + 5.4, y + 3], '#ff9a4a'); rect(x + 4, y + 9, 3, 3, '#ffe0a0'); break; }
     case T.CANL: case T.CANR: { var dr = t === T.CANR ? 1 : -1; poly([x + 1, y + 16, x + 15, y + 16, x + 12, y + 9, x + 4, y + 9], '#2a2450'); hex(x + 8, y + 7, 7, '#4a3f86', 0.5); hex(x + 8, y + 7, 5, '#2a2450', 0.5); poly([x + 8 + dr * 6, y + 7, x + 8 + dr * 1, y + 3, x + 8 + dr * 1, y + 11], '#ff8a3a'); break; }
     case T.STUMP: poly([x + 2, y + 16, x + 14, y + 16, x + 12, y + 10, x + 4, y + 10], '#4a3f86'); poly([x + 4, y + 10, x + 12, y + 10, x + 11, y + 5, x + 5, y + 5], '#5a4ea0'); poly([x + 5, y + 5, x + 11, y + 5, x + 8, y + 1], '#6a5cc0'); line(x + 8, y + 3, x + 8, y + 15, '#2ee6d6', 1); break;
     case T.PSW: hex(x + 8, y + 8, 8.2, '#3a2a8a', Math.PI / 6); hex(x + 8, y + 8, 6.4, '#6a52e0', Math.PI / 6); poly([x + 9, y + 3, x + 5, y + 9, x + 8, y + 9, x + 7, y + 13, x + 11, y + 7, x + 8, y + 7], '#ffe8a0'); break;
