@@ -187,6 +187,10 @@ function drawTile(t, x, y, th, above, bumpDy, c, r, st) {
     // Conveyor belts (left / right) with moving chevrons.
     case T.CONVL: case T.CONVR: { rect(x, y, TS, TS, '#2a2450'); rect(x, y, TS, 5, '#16122e'); var dd = t === T.CONVR ? 1 : -1, ph = ((F * 0.6 * dd) % 8 + 8) % 8; ctx.save(); ctx.beginPath(); ctx.rect(x, y, TS, 5); ctx.clip(); for (var k = -1; k < 3; k++) poly(dd > 0 ? [x + k * 8 + ph, y + 0.5, x + k * 8 + ph + 4, y + 2.5, x + k * 8 + ph, y + 4.5] : [x + k * 8 + ph + 4, y + 0.5, x + k * 8 + ph, y + 2.5, x + k * 8 + ph + 4, y + 4.5], '#2ee6d6'); ctx.restore(); rect(x + 2, y + 9, 12, 2, '#3a3270'); break; }
     // Slopes (rising right / rising left).
+    case T.SLP: { var sgm = st && st.L.slp && st.L.slp[c * (st.L.rows || ROWS) + r]; if (!sgm) break;   // a free-angle slope cell: fill under the surface segment, edge line along it
+      var yl = sgm[0] > 0 ? sgm[1] : sgm[1], yr = sgm[3];
+      poly([x, y + 16, x, y + yl, x + sgm[0], y + sgm[1], x + sgm[2], y + sgm[3], x + 16, y + yr, x + 16, y + 16], th.str[1]);
+      line(x + sgm[0], y + sgm[1], x + sgm[2], y + sgm[3], th.edge, 2); break; }
     case T.SLR: poly([x, y + 16, x + 16, y + 16, x + 16, y], th.str[1]); line(x, y + 16, x + 16, y, th.edge, 2); break;
     case T.SLL: poly([x, y + 16, x + 16, y + 16, x, y], th.str[1]); line(x + 16, y + 16, x, y, th.edge, 2); break;
     // Lava with an animated surface.
@@ -387,7 +391,9 @@ function drawEnemy(e) {
     case E.FLYER: { var fl = Math.sin(f * 0.4) * 4;   // kite: coral diamond with a ribbon tail and flapping fins
       line(cx - dir * 6, cy, cx - dir * 11, cy + 4 + Math.sin(f * 0.3) * 2, '#ff9ab0', 1.5); line(cx - dir * 11, cy + 4 + Math.sin(f * 0.3) * 2, cx - dir * 15, cy + 1, '#ff9ab0', 1.5);
       poly([cx, cy - 2, cx - 11, cy - 7 - fl, cx - 6, cy + 1], '#ffd0dc', '#a02a50'); poly([cx, cy - 2, cx + 11, cy - 7 - fl, cx + 6, cy + 1], '#ffd0dc', '#a02a50');
-      diamond(cx, cy, 6.5, 7, '#ff5a7a', '#6a0a2a'); circ(cx + dir * 0.8, cy - 0.5, 2.6, '#fff'); circ(cx + dir * 1.6, cy - 0.3, 1.2, '#2a0a1a'); break; }
+      diamond(cx, cy, 6.5, 7, '#ff5a7a', '#6a0a2a'); circ(cx + dir * 0.8, cy - 0.5, 2.6, '#fff'); circ(cx + dir * 1.6, cy - 0.3, 1.2, '#2a0a1a');
+      if (e.spk) { poly([cx - 4, cy - 5, cx - 2, cy - 11, cx, cy - 6], '#c8d0e0', '#2a3048'); poly([cx, cy - 6, cx + 2, cy - 12, cx + 4, cy - 5], '#c8d0e0', '#2a3048'); }   // spiked flyer: cannot be stomped, only frozen
+      break; }
     case E.BEETLE: {   // cube-bug: a boxy bug; when stomped it leaves a glowing cube that can be kicked or carried
       if (e.sh && e.bomb) { circ(cx, by - 5, 6, e.sh === 2 ? '#ff7a4a' : '#2a2a3a'); circ(cx - 1.5, by - 6.5, 1.8, 'rgba(255,255,255,.3)'); line(cx, by - 10, cx + 2, by - 14, '#8a6a3a', 1.5); circ(cx + 2, by - 14.5, 1.6 + Math.sin(f * 0.8), '#ffd24a'); break; }
       if (e.sh) { var ec = e.sh === 2 ? 'hsl(' + (F * 20 % 360) + ',80%,60%)' : '#ffb04a'; crystalBox(cx, by - 5, 8, ec); if (e.sh === 2) { ctx.globalAlpha = 0.45; poly([cx - e.dir * 8, by - 8, cx - e.dir * 17, by - 5, cx - e.dir * 8, by - 2], '#ffe0a0'); ctx.globalAlpha = 1; } break; }
@@ -507,7 +513,7 @@ function drawEnemy(e) {
       if (e.imm) { ctx.globalAlpha = 1; for (var sp = 0; sp < 4; sp++) poly([e.x + 2 + sp * (e.w - 4) / 4, e.y + 1, e.x + 2 + sp * (e.w - 4) / 4 + (e.w - 4) / 8, e.y - 7, e.x + 2 + (sp + 1) * (e.w - 4) / 4, e.y + 1], '#c8d0e0', '#2a3048'); }   // spiked armour: stomping bounces off
       ctx.globalAlpha = 1; for (var hp = 0; hp < 3; hp++) diamond(cx - 8 + hp * 8, e.y - 15, 3.4, 4.4, hp < e.hp ? '#ff4a7a' : '#4a4060'); break; }
   }
-  if (e.frz > 0 && e.alive) { var thaw2 = e.frz < 40 && (Math.floor(e.frz / 4) % 2); ctx.globalAlpha = thaw2 ? 0.4 : 0.75; rrect(e.x - 2, e.y - 2, e.w + 4, e.h + 4, 3, '#bfefff'); ctx.globalAlpha = 0.9; rect(e.x, e.y, 3, e.h - 3, '#ffffff'); ctx.globalAlpha = 1; }   // frozen by a snowball: an ice block
+  if (e.frz > 0 && e.alive) { var thaw2 = e.frz < 70 && (Math.floor(e.frz / (e.frz < 35 ? 3 : 6)) % 2); ctx.globalAlpha = thaw2 ? 0.4 : 0.75; rrect(e.x - 2, e.y - 2, e.w + 4, e.h + 4, 3, '#bfefff'); ctx.globalAlpha = 0.9; rect(e.x, e.y, 3, e.h - 3, '#ffffff'); ctx.globalAlpha = 1; }   // frozen by a snowball: an ice block
 }
 // Crystal-shaped box (used for items inside blocks / cube remains).
 function crystalBox(cx, cy, r, col) { poly([cx - r, cy - r * 0.5, cx, cy - r, cx + r, cy - r * 0.5, cx + r, cy + r * 0.6, cx, cy + r, cx - r, cy + r * 0.6], col, '#5a3a10'); poly([cx - r, cy - r * 0.5, cx, cy - r, cx, cy, cx - r * 0.0, cy], 'rgba(255,255,255,.5)'); line(cx, cy, cx, cy + r, 'rgba(90,58,16,.6)'); line(cx, cy, cx + r, cy - r * 0.5, 'rgba(90,58,16,.6)'); }
@@ -574,7 +580,7 @@ function drawEndCannon(L, st) {   // the big end-of-stage cannon: the hero climb
 }
 // Big exit button on a pedestal.
 function drawExitButton(L, st, locked) {   // a big round button on a pedestal: pressing it (touching it) ends the stage
-  var x = L.goalRect.x + L.goalRect.w / 2, y = L.poleY, down = st.p.won ? 4 : 0, pulse = 0.5 + 0.5 * Math.sin(st.f * 0.12), col = locked ? '#7a3a4a' : (st.p.won ? '#5affb0' : '#ff4a5a'), lt = locked ? '#a05a6a' : (st.p.won ? '#c8ffe0' : '#ff9a9a');
+  var x = L.goalRect.x + L.goalRect.w / 2, y = L.poleY, down = st.p.won ? 4 : 0, pulse = 0.5 + 0.5 * Math.sin(st.f * 0.12), sec = L.exitKind === 'secret', col = locked ? '#7a3a4a' : (st.p.won ? '#5affb0' : sec ? '#b04aff' : '#ff4a5a'), lt = locked ? '#a05a6a' : (st.p.won ? '#c8ffe0' : sec ? '#e0b0ff' : '#ff9a9a');   // the secret exit's button is violet, the normal one red
   rect(x - 15, y - 5, 30, 5, '#2a2450'); rect(x - 13, y - 9, 26, 5, '#4a3f86'); rect(x - 13, y - 9, 26, 1.5, '#6a5cc0');
   ctx.fillStyle = '#1a1030'; ctx.beginPath(); ctx.ellipse(x, y - 9, 12, 4, 0, 0, 6.2832); ctx.fill();
   ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(x, y - 11 + down, 10, 4.5, 0, 0, 6.2832); ctx.fill(); rect(x - 10, y - 15 + down, 20, 4, col); ctx.fillStyle = lt; ctx.beginPath(); ctx.ellipse(x, y - 15 + down, 10, 4, 0, 0, 6.2832); ctx.fill();
@@ -586,7 +592,7 @@ function drawGoal(L, st, locked) {
   if (L.exitBtn) { drawExitButton(L, st, locked); return; }   // castles have no flag: the fight is the ending
   if (L.endCannon) { drawEndCannon(L, st); return; }   // beacon gate: two tapered obelisks and an energy beam
   // finish flag: two poles with waving pennants and a tape that sweeps up and down between them (touching the tape is the bonus)
-  var gx = L.goalX, base = L.poleY, top = base - 9 * TS, tx = gx + 14, pole = locked ? '#8a6a72' : '#e8e4f0', fc = locked ? '#7a3a4a' : '#ff4a5a', fc2 = locked ? '#7a3a4a' : '#ffd24a', wv = Math.sin(st.f * 0.12) * 2;
+  var gx = L.goalX, base = L.poleY, top = base - 9 * TS, tx = gx + 14, pole = locked ? '#8a6a72' : '#e8e4f0', fc = locked ? '#7a3a4a' : L.exitKind === 'secret' ? '#b04aff' : '#ff4a5a', fc2 = locked ? '#7a3a4a' : L.exitKind === 'secret' ? '#4af0e0' : '#ffd24a',   /* violet and teal pennants mark the secret exit */  wv = Math.sin(st.f * 0.12) * 2;
   rect(gx + 2, top, 2, base - top, pole); circ(gx + 3, top - 2, 3, locked ? '#d04a4a' : '#ffd24a');
   poly([gx + 4, top + 1, gx + 17 + wv, top + 5, gx + 4, top + 11], fc, '#7a0a1a'); poly([gx + 4, top + 1, gx + 11 + wv * 0.5, top + 3, gx + 4, top + 6], 'rgba(255,255,255,.35)');
   rect(tx + 2, top + 2 * TS, 2, base - top - 2 * TS, pole); circ(tx + 3, top + 2 * TS - 2, 2.4, locked ? '#d04a4a' : '#ffd24a');
@@ -597,6 +603,23 @@ function drawGoal(L, st, locked) {
 // stages made of zones (odyssey) have a look per zone (cell); the others one look
 function zoneTheme(L, c, r, def) { if (!L.zones) return def; var zi = Math.floor(r / L.zoneCH) * L.zoneGX + Math.floor(c / L.zoneCW), z = L.zones[zi]; return z >= 0 && THEMES[z] ? THEMES[z] : def; }
 // Draws a whole level for state st with theme th: scrolls by camera, then tiles in view, then level objects, enemies, hero, effects and the hint overlay.
+// Rope swings (jungle): a branch stub at the pivot, a thick vine with leaf tufts, a knot at the end; the held rope follows the swing angle, idle ones sway; a faint pulsing arrow shows where to grab.
+function drawRopes(st) {
+  var L = st.L, cam = G.cam, p = st.p, i, k;
+  for (i = 0; i < L.ropes.length; i++) {
+    var r = L.ropes[i]; if (r.px < cam - r.len - 40 || r.px > cam + VW + r.len + 40) continue;
+    var held = p.rope && p.rope.i === i, a = held ? p.rope.th : PF.ropeAng0(r, st.f), sx = Math.sin(a), cy = Math.cos(a), ex = r.px + r.len * sx, ey = r.py + r.len * cy;
+    ctx.save(); ctx.lineCap = 'round';
+    line(r.px, r.py - 70, r.px, r.py - 3, 'rgba(46,92,30,.55)', 2);   // liana up into the canopy
+    rect(r.px - 14, r.py - 5, 28, 5, '#5a3d20'); rect(r.px - 14, r.py - 5, 28, 2, '#7a5a30'); circ(r.px - 14, r.py - 2.5, 2.6, '#4b3219'); circ(r.px + 14, r.py - 2.5, 2.6, '#4b3219');
+    ell(r.px - 9, r.py - 6, 5, 2.4, '#3f8a2a', -0.4); ell(r.px + 8, r.py - 6, 5, 2.4, '#4aa032', 0.4); ell(r.px, r.py - 7, 4, 2, '#2f7a22', 0);
+    line(r.px, r.py, ex, ey, '#1f4a14', 4.4); line(r.px, r.py, ex, ey, '#3f8a2a', 3); line(r.px - 0.6, r.py, ex - 0.6, ey, '#6cc04a', 1);
+    for (k = 1; k <= 5; k++) { var t = k / 5.4, lx = r.px + r.len * t * sx, ly = r.py + r.len * t * cy, sd = k % 2 ? 1 : -1; ell(lx + sd * 4, ly + 1, 4.2, 1.9, k % 2 ? '#4aa032' : '#2f7a22', sd * 0.7 + a); }
+    circ(ex, ey, 2.8, '#6b4a24'); circ(ex - 0.8, ey - 0.8, 1, '#9a7240');
+    if (!held && !p.rope && Math.abs(p.x - r.px) < 200) { var pu = 0.3 + 0.2 * Math.sin(st.f * 0.12 + i); ctx.globalAlpha = pu; circ(ex, ey, 7 + 1.5 * Math.sin(st.f * 0.12), 'rgba(255,255,160,.35)'); poly([ex, ey - 16, ex - 5, ey - 9, ex + 5, ey - 9], '#fffbb0'); ctx.globalAlpha = 1; }
+    ctx.restore();
+  }
+}
 function drawLevel(st, th) {
   var L = st.L, cam = G.cam, c0 = Math.max(0, Math.floor(cam / TS)), c1 = Math.min(L.w - 1, Math.floor((cam + VW) / TS) + 1), c, r, i;
   ctx.save(); ctx.translate(-Math.round(cam), -Math.round(G.camY || 0));
@@ -611,6 +634,7 @@ function drawLevel(st, th) {
     drawTile(t, c * TS, r * TS, L.zones ? zoneTheme(L, c, r, th) : th, r > 0 ? PF.tileAt(st, c, r - 1) : 0, bd, c, r, st);
     if (t === T.SOLID && r > 0 && PF.isW(PF.tileAt(st, c, r - 1))) drawSeabed(c, r);
   }
+  if (L.secretZone && !G.main) { var zz = L.secretZone, gl4 = 0.1 + 0.1 * Math.sin(F * 0.06 + zz.x); ctx.globalAlpha = gl4; spark4(zz.x + zz.w / 2 + Math.sin(F * 0.03) * zz.w * 0.25, zz.y + zz.h * 0.55, 2.6, '#fff8c0'); ctx.globalAlpha = 1; }   // the faintest glimmer over a secret entrance
   if (L.keys) for (i = 0; i < L.keys.length; i++) if (!st.kg[i]) drawKey(L.keys[i].x, L.keys[i].y, L.keys[i].c, false);
   if (L.winds) for (i = 0; i < L.winds.length; i++) { var wzd = L.winds[i]; if (wzd.gust) drawGust(wzd, st.f, cam); else if (wzd.bub) drawBubbleJet(wzd, st.f); else drawWind(wzd); }
   if (L.whirls) for (i = 0; i < L.whirls.length; i++) drawWhirl(L.whirls[i], st.f);
@@ -618,6 +642,7 @@ function drawLevel(st, th) {
   if (L.pockets) for (i = 0; i < L.pockets.length; i++) if (!st.pk[i]) drawPocket(L.pockets[i]);
   drawGoal(L, st, st.boss > 0);
   for (i = 0; i < L.movers.length; i++) drawMover(L.movers[i], PF.movPos(st, i, st.f), st, i);
+  if (L.ropes) drawRopes(st);
   if (L.maces) for (i = 0; i < L.maces.length; i++) drawMace(L.maces[i], st.f);
   if (L.chase && st.cw !== undefined) { var cwx = st.cw, gw = ctx.createLinearGradient(cwx - 60, 0, cwx, 0); gw.addColorStop(0, 'rgba(255,60,20,0)'); gw.addColorStop(1, 'rgba(255,90,30,.85)'); ctx.fillStyle = gw; ctx.fillRect(cwx - 60, -2000, 60, 6000); rect(cwx - 6, -2000, 6, 6000, '#ffd24a'); }
   if (st.lv !== undefined) { var ly = st.lv, gl2 = ctx.createLinearGradient(0, ly - 14, 0, ly + 40); gl2.addColorStop(0, 'rgba(255,200,60,.95)'); gl2.addColorStop(0.2, '#ff6a1a'); gl2.addColorStop(1, '#8a1a08'); ctx.fillStyle = gl2; ctx.fillRect(-50, ly, L.w * TS + 100, 4000); for (var lx = 0; lx < L.w * TS; lx += 18) circ(lx + (st.f * 0.4 % 18), ly + Math.sin((lx + st.f * 2) * 0.05) * 2, 5, '#ffb04a'); }
@@ -660,7 +685,7 @@ function panel(x, y, w, h) { ctx.fillStyle = 'rgba(10,8,34,.88)'; ctx.fillRect(x
 // Zero-pads a score to 6 digits.
 function pad6(n) { var s = String(Math.max(0, n | 0)); while (s.length < 6) s = '0' + s; return s; }
 // Text for the level pill, e.g. world-stage, or STAR ROAD for bonus levels (n >= 1000).
-function levelLabel(G) { var n = G.n; if (n >= 2000) return TT('도박집', 'GAMBLE HOUSE'); if (n >= 1000) return TT('별길', 'STAR ROAD'); var w = Math.floor((n - 1) / 5) + 1, i = (n - 1) % 5 + 1; return w + '·' + i; }
+function levelLabel(G) { var n = G.n; if (n >= 2000) return TT('도박집', 'GAMBLE HOUSE'); if (n >= 1000) return TT('별길', 'STAR ROAD'); var so = PF.stageOf(n); return (so.depth + 1) + '·' + (so.index + 1); }
 // Small hero diamond used for lives.
 function heroIcon(x, y, s) { poly([x, y - 5 * s, x + 5 * s, y, x, y + 5 * s, x - 5 * s, y], '#ff8a3d'); poly([x, y - 5 * s, x - 5 * s, y, x, y], '#ffc08a'); circ(x, y, 2 * s, '#fff'); circ(x + 0.6 * s, y, 1 * s, '#2a1456'); }
 // In-level HUD: score, gems, level label, lives, power-up and timer bar.
@@ -698,10 +723,11 @@ function drawMap() {
   for (i = 0; i < 9; i++) { var ix = 20 + r() * 360, iy = 40 + r() * 150, rr = 14 + r() * 30; hex(ix, iy, rr, 'rgba(255,255,255,.07)', r() * 1.5); hex(ix, iy, rr * 0.7, 'rgba(255,255,255,.07)', r() * 1.5); }
   var nodes = wm.nodes, fn = G.fn; ctx.lineCap = 'round';
   function nd2(id) { for (var q = 0; q < nodes.length; q++) if (nodes[q].i === id) return nodes[q]; return null; }
-  wm.edges.forEach(function (e) { var A = nd2(e.a), B = nd2(e.b); if (!fn.isVisible(A) || !fn.isVisible(B)) return; var ok = fn.edgeOpen(e); if (e.secret) { ctx.setLineDash([1, 4]); line(A.x, A.y, B.x, B.y, ok ? '#ffe08a' : 'rgba(255,255,255,.0)', 2.5); } else { ctx.setLineDash([2, 5]); line(A.x, A.y, B.x, B.y, fn.isDone(e.a) ? '#7affe0' : 'rgba(255,255,255,.35)', 3); } ctx.setLineDash([]); });
+  wm.edges.forEach(function (e) { var A = nd2(e.a), B = nd2(e.b); if (!fn.isVisible(A) || !fn.isVisible(B)) return; var ok = fn.edgeOpen(e), clr = !!G.prog.wcl[wm.wid], shw = ok || clr; if (e.secret && !e.house) { if (shw) { var mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2, bl = (22 + Math.abs(B.x - A.x) * 0.5) * (my > 115 ? -1 : 1); ctx.setLineDash([3, 4]); ctx.strokeStyle = '#ffe08a'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.quadraticCurveTo(mx, my + bl, B.x, B.y); ctx.stroke(); } }
+    else if (e.secret) { ctx.setLineDash([4, 4]); line(A.x, A.y, B.x, B.y, shw ? '#ffe08a' : 'rgba(255,255,255,.0)', 2.5); } else { ctx.setLineDash([]); line(A.x, A.y, B.x, B.y, fn.isDone(e.a) ? '#7affe0' : 'rgba(255,255,255,.35)', 3); } ctx.setLineDash([]); });
   var all = nodes.filter(fn.isVisible);
   for (i = 0; i < all.length; i++) { var nd = all[i], done = fn.isDone(nd.i), open = fn.isOpen(nd), sel = G.sel === nd.i;
-    var col = open ? NODE_COL[nd.kind] : '#5a5a7a';
+    var col = open ? (NODE_COL[nd.kind] || '#8a7ae0') : '#5a5a7a';
     if (nd.kind === 'castle') { poly([nd.x - 9, nd.y + 8, nd.x - 9, nd.y - 3, nd.x - 4, nd.y - 9, nd.x, nd.y - 3, nd.x + 4, nd.y - 9, nd.x + 9, nd.y - 3, nd.x + 9, nd.y + 8], col, '#1a0a20'); }
     else if (nd.kind === 'cannon') { circ(nd.x - 3, nd.y + 5, 5, '#1a1030'); circ(nd.x - 3, nd.y + 5, 3.4, col); ctx.save(); ctx.translate(nd.x, nd.y); ctx.rotate(-0.6); rrect(-4, -5, 16, 9, 3, '#1a1030'); rrect(-3, -4, 14, 7, 2.5, col); ctx.restore(); }
     else if (nd.kind === 'bonus') spark8(nd.x, nd.y, 9, col, F * 0.03);
@@ -709,13 +735,13 @@ function drawMap() {
     else { hex(nd.x, nd.y, 9, '#10082a', Math.PI / 6); hex(nd.x, nd.y, 7.3, col, Math.PI / 6); }
     if (done) { diamond(nd.x + 8, nd.y - 8, 4, 5, '#fff'); ctx.strokeStyle = '#18a070'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(nd.x + 6, nd.y - 8); ctx.lineTo(nd.x + 7.8, nd.y - 6); ctx.lineTo(nd.x + 10.5, nd.y - 10); ctx.stroke(); }
     if (sel) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(nd.x, nd.y, 13 + Math.sin(F * 0.2) * 1.5, 0, 6.3); ctx.stroke(); }
-    if (nd.kind !== 'house') text(nd.kind === 'bonus' ? '★' : String(nd.ending ? 5 : nd.i + 1), nd.x, nd.y + 0.5, 8, '#fff', 'center'); }
+    if (nd.kind !== 'house') text(nd.kind === 'bonus' ? '★' : String(nd.num || nd.i + 1), nd.x, nd.y + 0.5, 8, '#fff', 'center'); }
   var cur = all.filter(function (n) { return n.i === G.sel; })[0] || nodes[0];
   drawHero({ x: cur.x - 6, y: cur.y - 30 + Math.sin(F * 0.1) * 2, w: 12, h: 14, pw: 0, big: false, face: 1, ground: false, anim: 0, vx: 0, inv: 0, star: 0, spin: 0 }, false, 0, false);
   rrect(3, 3, 90, 14, 7, 'rgba(10,8,34,.62)'); text(TT('월드 ', 'WORLD ') + G.worldName(wm.wid), 10, 10.5, 9, '#ffd0a0');
   rrect(100, 3, 110, 14, 7, 'rgba(10,8,34,.62)'); diamond(110, 10, 4, 5, '#2ee6d6'); text(pad6(G.base), 118, 10.5, 8.5, '#fff');
   rrect(VW - 76, 3, 73, 14, 7, 'rgba(10,8,34,.62)'); for (i = 0; i < Math.min(G.lives, 5); i++) heroIcon(VW - 66 + i * 11, 10, 0.9);
-  var sn = all.filter(function (n) { return n.i === G.sel; })[0]; if (sn) { var kn = PF.KIND_NAMES[sn.kind]; rrect(70, VH - 26, 260, 18, 9, 'rgba(10,8,34,.72)'); text((sn.kind === 'bonus' || sn.kind === 'house' ? '★ ' : G.worldName(wm.wid) + '·' + (sn.ending ? 5 : sn.i + 1) + '  ') + (KO ? kn[0] : kn[1]), VW / 2, VH - 17, 9, '#fff', 'center', false); }
+  var sn = all.filter(function (n) { return n.i === G.sel; })[0]; if (sn) { var kn = PF.KIND_NAMES[sn.kind]; rrect(70, VH - 26, 260, 18, 9, 'rgba(10,8,34,.72)'); text((sn.kind === 'bonus' || sn.kind === 'house' ? '★ ' : G.worldName(wm.wid) + '·' + (sn.num || sn.i + 1) + '  ') + (KO ? kn[0] : kn[1]), VW / 2, VH - 17, 9, '#fff', 'center', false); }
   if (G.auto) { var w2 = 128; rrect(VW / 2 - w2 / 2, 20, w2, 14, 4, 'rgba(255,138,61,.95)'); text(TT('자동 플레이 (F3 끄기)', 'AUTO PLAY (F3 to stop)'), VW / 2, 27, 8, '#2a1000', 'center', false); }
   if (G.msgT > 0 && G.msg) { var tw = Math.min(VW - 16, 8 + G.msg.length * (KO ? 7.4 : 4.9)); rrect(VW / 2 - tw / 2, 40, tw, 15, 4, 'rgba(10,8,34,.78)'); text(G.msg, VW / 2, 47.5, 8, '#fff', 'center', false); }
   text(TT('← → ↑ ↓ 선택   점프/Enter 시작', 'Arrows select   Jump/Enter start'), VW / 2, VH - 38, 7.5, '#cfe', 'center');
@@ -772,14 +798,14 @@ function drawSelect() {
     rrect(14, y - 1, 120, 15, 5, sel ? (G.selCol === 0 ? 'rgba(46,230,214,.35)' : 'rgba(255,255,255,.14)') : 'rgba(255,255,255,.06)'); var cl = G.prog.wcl[w.id];
     text(TT('월드 ', 'World ') + G.worldName(w.id), 20, y + 6.5, 8.5, w.id === G.wid ? '#ffd0a0' : '#fff', 'left', false); if (cl) text((cl === 'castle' ? 'C' : 'K') + ' ✓', 128, y + 6.5, 8, '#7affe0', 'right', false); else if (w.id === G.wid) text(TT('현재', 'now'), 128, y + 6.5, 7, '#ffd0a0', 'right', false); }
   var w2 = ws[G.selWi], m = G.selMapObj; text(TT('스테이지 · 월드 ', 'STAGES · world ') + G.worldName(w2.id), 150, 34, 8, '#9ab', 'left', false);
-  var nodes = m.nodes.slice().sort(function (a, b) { return (a.main ? 0 : 1) - (b.main ? 0 : 1) || a.i - b.i; });
+  var nodes = m.nodes.slice().sort(function (a, b) { return (a.main ? 0 : 1) - (b.main ? 0 : 1) || a.i - b.i; }), rh = Math.min(16, Math.floor((VH - 56) / (nodes.length + 1)));   // up to 10 levels + castle + cannon + house: shrink the rows to fit
   nodes.forEach(function (nd, k) {
-    var gi = m.nodes.indexOf(nd), st = G.selStageState(w2.id, m, nd), sel = G.selCol === 1 && G.selSi === gi, kn = PF.KIND_NAMES[nd.kind]; y = 40 + k * 16; G.selRects.push({ x: 148, y: y - 1, w: 240, h: 15, kind: 'stage', idx: gi });
-    rrect(148, y - 1, 240, 15, 5, sel ? 'rgba(46,230,214,.35)' : 'rgba(255,255,255,.06)'); var dim = st === 'locked';
-    text((nd.kind === 'bonus' || nd.kind === 'house' ? '★' : G.worldName(w2.id) + '·' + (nd.ending ? 5 : nd.i + 1)) + '  ' + (KO ? kn[0] : kn[1]) + (nd.ending ? (nd.ending === 'castle' ? TT('  (성채 끝)', '  (castle ending)') : TT('  (대포 끝)', '  (cannon ending)')) : '') + (nd.main ? '' : nd.kind === 'house' ? TT('  [1회]', '  [once]') : TT('  [비밀 길]', '  [secret route]')), 154, y + 6.5, 8.5, dim ? '#6a6a88' : '#fff', 'left', false);
-    if (st === 'done') text('✓', 382, y + 6.5, 9, '#7affe0', 'right', false); else if (st === 'locked') text(TT('잠김', 'locked'), 382, y + 6.5, 7, '#6a6a88', 'right', false); else text('▶', 382, y + 6.5, 8, '#ffd0a0', 'right', false);
+    var gi = m.nodes.indexOf(nd), st = G.selStageState(w2.id, m, nd), sel = G.selCol === 1 && G.selSi === gi, kn = PF.KIND_NAMES[nd.kind]; y = 40 + k * rh; G.selRects.push({ x: 148, y: y - 1, w: 240, h: rh - 1, kind: 'stage', idx: gi });
+    rrect(148, y - 1, 240, rh - 1, 5, sel ? 'rgba(46,230,214,.35)' : 'rgba(255,255,255,.06)'); var dim = st === 'locked';
+    text((nd.kind === 'bonus' || nd.kind === 'house' ? '★' : G.worldName(w2.id) + '·' + (nd.num || nd.i + 1)) + '  ' + (KO ? kn[0] : kn[1]) + (nd.ending ? (nd.ending === 'castle' ? TT('  (성채 끝)', '  (castle ending)') : TT('  (대포 끝)', '  (cannon ending)')) : '') + (nd.main ? '' : nd.kind === 'house' ? TT('  [1회]', '  [once]') : TT('  [비밀 길]', '  [secret route]')), 154, y + rh / 2 - 1, 8.5, dim ? '#6a6a88' : '#fff', 'left', false);
+    if (st === 'done') text('✓', 382, y + rh / 2 - 1, 9, '#7affe0', 'right', false); else if (st === 'locked') text(TT('잠김', 'locked'), 382, y + rh / 2 - 1, 7, '#6a6a88', 'right', false); else text('▶', 382, y + rh / 2 - 1, 8, '#ffd0a0', 'right', false);
   });
-  if (G.prog.wcl[w2.id]) text(TT('월드 클리어: 모든 스테이지를 고를 수 있어요', 'World cleared: every stage is selectable'), 150, 40 + nodes.length * 16 + 8, 7.5, '#7affe0', 'left', false);
+  if (G.prog.wcl[w2.id]) text(TT('월드 클리어: 모든 스테이지를 고를 수 있어요', 'World cleared: every stage is selectable'), 150, 40 + nodes.length * rh + 8, 7.5, '#7affe0', 'left', false);
 }
 
 // Entry point called from game.js each frame: sets context and frame counter, then draws by G.mode (super / end / select / map / play ...).

@@ -35,7 +35,7 @@ function inputAt(c, k) { if (c.l) { if (k < c.l) return Lf; k -= c.l; } var m = 
 // True if a landing spot (solid, platform, liquid/safe tile or a mover) exists below the hero; false means a free fall into a pit.
 function groundBelow(st) {
   var p = st.p, c0 = Math.floor(p.x / PF.TS), c1 = Math.floor((p.x + p.w - 1e-4) / PF.TS), r0 = Math.floor((p.y + p.h) / PF.TS);
-  for (var c = c0; c <= c1; c++) for (var r = r0; r < (st.L.rows || PF.ROWS); r++) { var t = PF.tileAt(st, c, r); if (PF.SOL[t] || t === 12 || t === 13 || t === 9 || t === 7) return true; }
+  for (var c = c0; c <= c1; c++) for (var r = r0; r < (st.L.rows || PF.ROWS); r++) { var t = PF.tileAt(st, c, r); if (PF.SOL[t] || t === 12 || t === 13 || t === 40 || t === 9 || t === 7) return true; }
   var L = st.L; for (var i = 0; i < L.movers.length; i++) { var m = L.movers[i], mq = PF.movPos(st, i, st.f); if (p.x + p.w > mq.x - 20 && p.x < mq.x + m.w + 20 && p.y + p.h <= mq.y + 30) return true; }
   return false;
 }
@@ -235,6 +235,7 @@ var MSG = {
   rsw: ['바닥 스위치를 밟으세요', 'Step on the switch pad'],
   rtele: ['빛나는 패드를 밟으면 순간이동해요', 'Step on the glowing pad to teleport'],
   rxge: ['열린 통로로 계속 가세요', 'Go on through the opening'],
+  rropeDone: ['점프하며 위 키를 눌러 밧줄을 잡고, 좌우를 리듬에 맞춰 눌러 흔든 뒤 점프로 놓으세요', 'Jump and hold Up to grab the rope, push Left/Right in rhythm with the swing, then release with Jump'],
   rnear: ['물길을 따라 계속 헤엄치세요', 'Keep swimming along the water passage'],
   wait: ['잠깐 기다리세요', 'Wait a moment here'],
   go: ['오른쪽으로 계속 가세요', 'Keep going right'],
@@ -327,7 +328,10 @@ function makeNavigator() {
       nv.planBad = true;
     }
     // Mushroom attraction: a shrunken hero walks to a nearby mushroom pickup (hopping obstacles, running when far) before a boss fight.
-    if (st.boss > 0 && st.p.mini) for (var mi = 0; mi < st.it.length; mi++) { var mu = st.it[mi]; if (mu.alive && mu.k === 0 && mu.x > st.p.x - 90 && mu.x < st.p.x + 110 && Math.abs(mu.y - st.p.y) < 24 && st.p.ground) { nv.seq = null; nv.job = null; var mdx = mu.x + 6 - (st.p.x + st.p.w / 2); if (Math.abs(mdx) < 2) return 0; var mdir = mdx > 0 ? PF.IN.R : PF.IN.L, mc = Math.floor((mdx > 0 ? st.p.x + st.p.w + 2 : st.p.x - 2) / PF.TS), mr = Math.floor((st.p.y + st.p.h - 4) / PF.TS), mt = PF.tileAt(st, mc, mr); return mdir | (PF.SOL[mt] || PF.tileAt(st, mc, mr - 1) === 0 && PF.SOL[PF.tileAt(st, mc, mr + 1)] && false ? PF.IN.J : 0) | (Math.abs(mdx) > 24 ? PF.IN.RUN : 0); } }   // a shrunken hero must grow back before an arena fight: the mushroom at the entrance
+    // (and a hero who lost his flame walks back to a spare flower when a fire-armoured boss is near: only fireballs hurt it)
+    var wantK = st.p.mini ? 0 : -1;
+    if (wantK < 0 && st.boss > 0 && st.p.pw !== 2) for (var fbi = 0; fbi < st.en.length; fbi++) { var fbe = st.en[fbi]; if (fbe.t === 8 && fbe.alive && fbe.imm && fbe.immKind === 'fire' && Math.abs(fbe.x - st.p.x) < 420) wantK = 1; }
+    if (st.boss > 0 && wantK >= 0) for (var mi = 0; mi < st.it.length; mi++) { var mu = st.it[mi]; if (mu.alive && mu.k === wantK && mu.x > st.p.x - (wantK === 1 ? 260 : 90) && mu.x < st.p.x + (wantK === 1 ? 260 : 110) && Math.abs(mu.y - st.p.y) < (wantK === 1 ? 44 : 24) && st.p.ground) { nv.seq = null; nv.job = null; var mdx = mu.x + 6 - (st.p.x + st.p.w / 2); if (Math.abs(mdx) < 2) return 0; var mdir = mdx > 0 ? PF.IN.R : PF.IN.L, mc = Math.floor((mdx > 0 ? st.p.x + st.p.w + 2 : st.p.x - 2) / PF.TS), mr = Math.floor((st.p.y + st.p.h - 4) / PF.TS), mt = PF.tileAt(st, mc, mr); return mdir | (PF.SOL[mt] || PF.tileAt(st, mc, mr - 1) === 0 && PF.SOL[PF.tileAt(st, mc, mr + 1)] && false ? PF.IN.J : 0) | (Math.abs(mdx) > 24 ? PF.IN.RUN : 0); } }   // a shrunken hero must grow back before an arena fight: the mushroom at the entrance
     // No route data: only the reactive planner can drive.
     if (!L.route || !PF.searchIter) return fb.decide(st);
     // Find an armoured boss that is close enough (or inside the arena) to switch to the shell-boss controller.
@@ -338,8 +342,17 @@ function makeNavigator() {
     // Boss arenas (and boss-rush levels): drop any macro plan, the reactive planner handles the fight.
     if (st.boss > 0 && (bossNear(st) || nv.job === null && L.kind === 'bossrush')) { nv.seq = null; nv.job = null; return fb.decide(st); }   // boss arenas: the reactive look-ahead planner dodges and stomps   // boss arenas: the reactive look-ahead planner dodges and stomps
     // Keep playing the macro sequence found for the current stage.
-    if (nv.seq && nv.i < nv.seq.length && nv.stage === st.stage) return nv.seq[nv.i++];
+    if (nv.seq && nv.i < nv.seq.length && (nv.stage === st.stage || (L.snow && !st.p.ground))) return nv.seq[nv.i++];   // frost levels: a stage that completes in mid-air (the ice forms during the jump) does not cut the jump short
     nv.seq = null;
+    // Rope gap: the pumping controller (PF.ropeSolve: jump, grab with Up, pump with the swing, release when a look-ahead lands on the far ledge) plans the whole crossing on a clone of the live state.
+    var rg0 = L.route[Math.min(st.stage, L.route.length - 1)];
+    if (rg0.k === 'ropeDone' && PF.ropeSolve && (st.p.ground || st.p.rope)) {
+      nv.job = null; var rsl = PF.ropeSolve(st, rg0, 220, 5);
+      if (!rsl && st.p.ground && (nv.rw = (nv.rw | 0) + 1) < 10) { nv.seq = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]; nv.i = 0; nv.stage = st.stage; return 0; }   // falling coconuts / creatures spoil every crossing right now: wait for a quieter moment
+      if (!rsl) { var rcq = PF.clone(st); rcq.en = []; rcq.noEn = true; rsl = PF.ropeSolve(rcq, rg0, 220); }   // creatures in the way: still try the crossing as if they were not there
+      if (rsl && rsl.seq.length) { nv.rw = 0; nv.st.plans++; nv.seq = rsl.seq; nv.i = 0; nv.stage = st.stage; return nv.seq[nv.i++]; }
+      nv.st.fails++; nv.seq = []; for (var rk = 0; rk < 14; rk++) nv.seq.push(rk < 10 ? PF.IN.L : 0); nv.i = 0; nv.stage = st.stage; return nv.seq[nv.i++];   // no crossing from here: step back a little and try again
+    }
     // Start a new stage search; while waiting (nv.wait) or airborne the reactive planner drives instead.
     if (!nv.job) {
       if (nv.wait > 0 || !(st.p.ground || (L.swimNodes && PF.isW(PF.tileAt(st, Math.floor((st.p.x + st.p.w / 2) / PF.TS), Math.floor((st.p.y + st.p.h / 2) / PF.TS)))))) { if (nv.wait > 0) nv.wait--; return fb.decide(st); }   // swim levels (L.swimNodes) also plan while afloat

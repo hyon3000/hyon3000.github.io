@@ -175,7 +175,18 @@ function autoMask(st) {
     if (G.fbUntil > st.f) { G.usingFallback = true; return G.planner.decide(st); }
     G.usingFallback = false; return G.ai.decide(st);
   }
-  G.usingFallback = true; return G.planner.decide(st, 9);
+  if (st.skipSec === undefined && G.curNode && !G.main && !st.L.room) st.skipSec = (PF.hash(G.seed, G.wid, 900 + G.curNode.i) % 100) >= 30;   // the auto player aims for the normal exit 70% of the time, the secret exit 30%
+  G.usingFallback = true; var am = G.planner.decide(st, 9); if (am === null || am === undefined) return am;
+  return am | autoUp(st);   // the planner only drives left / right / run / jump: the Up key is added here where it matters
+}
+// The Up key for the auto player: it presses Up while passing a bonus ring (the warp into a bonus room). Secret exits are hidden zones and need no key.
+function autoUp(st) {
+  var L = st.L, p = st.p;
+  if (G.main || !L.rings || L.room || L.exitKind) return 0;
+  var c = Math.floor((p.x + p.w / 2) / PF.TS), r = Math.floor((p.y + p.h / 2) / PF.TS);
+  if (PF.tileAt(st, c, r) !== PF.T.RING) return 0;
+  for (var i = 0; i < L.rings.length; i++) if (L.rings[i].c === c && !L.rings[i].secret) return PF.IN.UP;   // a bonus ring: the auto player takes it (Up warps into the bonus room)
+  return 0;
 }
 // Show a message toast for some frames.
 function say(t, frames) { G.msg = t; G.msgT = frames || 150; }
@@ -324,13 +335,13 @@ window.toggleAuto = function () {
   return G.auto;
 };
 window.giveHint = function () {
-  if (G.mode === 'map') { var nd = nextTarget(); say(nd ? TT('다음 레벨: ' + worldName(G.wid) + '·' + (nd.ending ? 5 : nd.i + 1) + ' (' + PF.KIND_NAMES[nd.kind][0] + ')', 'Next level: ' + worldName(G.wid) + '·' + (nd.ending ? 5 : nd.i + 1) + ' (' + PF.KIND_NAMES[nd.kind][1] + ')') : TT('이 월드를 모두 깼어요', 'World cleared'), 150); return; }
+  if (G.mode === 'map') { var nd = nextTarget(); say(nd ? TT('다음 레벨: ' + worldName(G.wid) + '·' + (nd.num || nd.i + 1) + ' (' + PF.KIND_NAMES[nd.kind][0] + ')', 'Next level: ' + worldName(G.wid) + '·' + (nd.num || nd.i + 1) + ' (' + PF.KIND_NAMES[nd.kind][1] + ')') : TT('이 월드를 모두 깼어요', 'World cleared'), 150); return; }
   if (G.mode !== 'play') { say(TT('게임 중에만 힌트를 볼 수 있어요', 'Hints are available while playing'), 90); return; }
   var h = PFPlanner.hint(G.st, G.planner); G.hint = h; G.hintT = 220; G.hintF = G.frame; say(TT(h.ko, h.en), 220); sfx('hint');
 };
 window.toggleSound = function () { G.snd = !G.snd; try { localStorage.setItem(SND_KEY, G.snd ? '1' : '0'); } catch (e) {} reportSound(); if (G.snd) sfx('coin'); return G.snd; };
 window.isSound = function () { return G.snd; };
-window.__pfGo = function (n) { startGame(true); var si = (n - 1) % 5; G.prog.done[G.wid] = {}; for (var q = 0; q < Math.min(si, 4); q++) G.prog.done[G.wid][q] = 1; setWorld(G.wid); G.sel = Math.min(si, 4); enterLevel(G.sel, true); };
+window.__pfGo = function (n) { startGame(true); var so = PF.stageOf(n), si = so.index; if (so.depth > 0) G.wid = so.depth * 3; G.prog.done[G.wid] = {}; for (var q = 0; q < Math.min(si, so.S - 1); q++) G.prog.done[G.wid][q] = 1; setWorld(G.wid); G.sel = Math.min(si, so.S - 1); enterLevel(G.sel, true); };
 window.addEventListener('pagehide', saveProg); window.addEventListener('beforeunload', saveProg); document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') saveProg(); });
 reportSound(); try { if (window.parent !== window && window.parent.setPadMark) window.parent.setPadMark(padOn); } catch (e) {}
 
@@ -398,6 +409,7 @@ function fixedStep() {
   if (G.mode === 'play' && G.L && G.frame % 150 === 0) { var pt = (PF.THEME_PITCH && PF.THEME_PITCH[G.L.theme]) || 1, nt = [0, 7, 3, 10][(G.frame / 150 | 0) % 4]; tone(110 * pt * Math.pow(2, nt / 12), 110 * pt * Math.pow(2, nt / 12), 2.2, 'sine', 0.018); }
   if (G.msgT > 0 && G.mode !== 'pause') G.msgT--;
   var st = G.st, i;
+  if (G.mode === 'play' && st && G.L && G.L.ropes && !G.ropeHint && !G.auto) for (i = 0; i < G.L.ropes.length; i++) if (Math.abs(st.p.x - G.L.ropes[i].px) < 170) { G.ropeHint = 1; say(TT('밧줄: 공중에서 위(↑)로 잡고, 좌우 키를 흔들리는 박자에 맞춰 눌러 크게 흔든 뒤 점프로 놓으세요', 'Rope: hold Up in the air to grab it, push Left/Right in rhythm with the swing to build height, Jump to let go'), 300); break; }   // once: the rope controls
   for (i = G.parts.length - 1; i >= 0; i--) { var q = G.parts[i]; q.x += q.vx; q.y += q.vy; q.vy += q.g; if (--q.life <= 0) G.parts.splice(i, 1); }
   for (i = G.pops.length - 1; i >= 0; i--) { var pp = G.pops[i]; pp.y -= 0.5; if (--pp.life <= 0) G.pops.splice(i, 1); }
   for (i = G.bumps.length - 1; i >= 0; i--) if (++G.bumps[i].t > 10) G.bumps.splice(i, 1);
@@ -416,7 +428,7 @@ function fixedStep() {
     if (G.auto) { var am = autoMask(st); if (am === null || am === undefined) { G.thinking = true; return; } setAuto(am); }   // null: the route search is still running (spread over frames), the game waits
     PF.step(st, mask());
     handleEvents(st);
-    if (G.pendingWarp !== undefined) { var wi = G.pendingWarp; G.pendingWarp = undefined; if (!G.auto) enterRoom(wi); }
+    if (G.pendingWarp !== undefined) { var wi = G.pendingWarp; G.pendingWarp = undefined; var wrg = G.L && G.L.rings && G.L.rings[wi]; if (!G.auto || !wrg || !wrg.secret || !G.st.skipSec) enterRoom(wi); }
     if (G.hint && G.hintT > 0) { G.hintT--; if (G.hintT <= 0) G.hint = null; else if ((G.frame - G.hintF) % 20 === 0) { G.hint = PFPlanner.hint(G.st, G.planner); } }
     st = G.st; var tc = totalCoins(); if (tc >= G.nextLife) { G.nextLife += 50; G.lives++; sfx('life'); say(TT('코인 50개! 목숨 +1', '50 coins! Extra life'), 120); }
     var p = st.p;

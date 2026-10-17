@@ -10,9 +10,9 @@
 // Tile size in px, default row count, and the visible viewport in px.
 var TS = 16, ROWS = 14, VW = 400, VH = 224;
 // Tile ids used in L.tiles (one number per cell, column-major: c * rows + r).
-var T = { AIR: 0, SOLID: 1, BRICK: 2, QC: 3, QP: 4, USED: 5, SPIKE: 6, VINE: 7, SPRING: 8, WATER: 9, CONVL: 10, CONVR: 11, SLR: 12, SLL: 13, LAVA: 14, CANL: 15, CANR: 16, STUMP: 17, PSW: 18, RING: 19, QS: 20, QM: 21, CURL: 22, CURR: 23, CURU: 24, GATE: 25, BRIDGE: 26, SWITCH: 27, SWUSED: 28, WLEVEL: 29, DOOR: 30, TELE: 31, LAUNCH: 32, ICE: 33, MUD: 34, FIRE: 35, NARROW: 36, CRACK: 37, POUND: 38, POISON: 39 };   // POISON: purple water - a powered hero loses the power and survives 3 seconds in it (a star: until the star ends), an unpowered one dies at once   // POUND: a heavy slab that only a big hero's ground pound (Down in the air) breaks   // NARROW: a mouse-hole wall, open only while the hero is mini; CRACK: a cracked wall that a kicked shell or a fireball breaks
+var T = { AIR: 0, SOLID: 1, BRICK: 2, QC: 3, QP: 4, USED: 5, SPIKE: 6, VINE: 7, SPRING: 8, WATER: 9, CONVL: 10, CONVR: 11, SLR: 12, SLL: 13, LAVA: 14, CANL: 15, CANR: 16, STUMP: 17, PSW: 18, RING: 19, QS: 20, QM: 21, CURL: 22, CURR: 23, CURU: 24, GATE: 25, BRIDGE: 26, SWITCH: 27, SWUSED: 28, WLEVEL: 29, DOOR: 30, TELE: 31, LAUNCH: 32, ICE: 33, MUD: 34, FIRE: 35, NARROW: 36, CRACK: 37, POUND: 38, POISON: 39, SLP: 40 };   // SLP: a free-angle slope cell (30 / 15 / 60 / 75 degrees): its surface segment lives in L.slp[c * rows + r] = [xa, ya, xb, yb] in cell pixels   // POISON: purple water - a powered hero loses the power and survives 3 seconds in it (a star: until the star ends), an unpowered one dies at once   // POUND: a heavy slab that only a big hero's ground pound (Down in the air) breaks   // NARROW: a mouse-hole wall, open only while the hero is mini; CRACK: a cracked wall that a kicked shell or a fireball breaks
 // Solid lookup indexed by tile id: 1 = blocks the hero and enemies. Slopes, water, vines, spikes, lava are NOT solid (handled separately).
-var SOL = [0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0];
+var SOL = [0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0];
 // Water-like tiles (water, poison-type water, currents): swimming physics and the air meter apply inside them.
 function isW(t) { return t === 9 || t === 39 || (t >= 22 && t <= 24); }
 // Fire jets / lasers blink on a fixed period; the per-column offset (c * 17) desynchronises neighbouring jets.
@@ -75,13 +75,13 @@ function newState(L, o) {
   var s = o.cp ? L.cp : L.start;
   var st = { L: L, f: 0, mod: EMPTY, score: 0, coins: 0, t: Math.round(L.time * 60), cp: o.cp ? 1 : 0, ev: o.rec ? [] : null, noEn: !!o.noEn, noPM: !!o.noPM, sw: 0, sc: 0, boss: 0, tape: 0,
     p: { x: s.x, y: s.y, vx: 0, vy: 0, w: P.PW, h: P.SH, big: false, pw: 0, ground: true, coy: 0, jbuf: 0, jheld: false, sprev: false, rprev: true, face: 1, inv: 0, dead: false, won: false, mv: -1, anim: 0, why: '',
-      pm: 0, spin: 0, star: 0, mount: 0, mini: 0, fin: 0, wing: 0, climb: false, carry: -1, swim: false, fbc: 0, air: AIRMAX, wasW: false, dtick: 0, tcd: 0 },
+      pm: 0, spin: 0, star: 0, mount: 0, mini: 0, fin: 0, wing: 0, climb: false, carry: -1, swim: false, fbc: 0, air: AIRMAX, wasW: false, dtick: 0, tcd: 0, rope: null, rcd: 0, rci: -1 },
     en: [], it: [], fb: [], ep: [], hz: [], cg: new Uint8Array(L.coins.length), sg: new Uint8Array((L.special || []).length), pk: new Uint8Array((L.pockets || []).length), mo: [], sb: 0, kb: 0, kg: new Uint8Array((L.keys || []).length), dg: new Uint8Array((L.doors || []).length), sg2: new Uint8Array((L.switches || []).length), tc: 0, stage: 0, cr: 0 };
   if (L.items) for (var ii = 0; ii < L.items.length; ii++) st.it.push({ k: L.items[ii].k, x: L.items[ii].x, y: L.items[ii].y, w: 12, h: 12, vx: 0, vy: 0, em: 0, alive: true, ground: false });
   if (L.egg && !o.mount) st.it.push({ k: 4, x: L.egg.x, y: L.egg.y, w: 12, h: 12, vx: 0, vy: 0, em: 0, alive: true, ground: false });
   if (o.pw) { setPw(st.p, o.pw); } if (o.mount) st.p.mount = 1;
   if (o.mini) setMini(st.p); if (o.fin) st.p.fin = o.fin; if (o.wing) st.p.wing = o.wing;
-  if (L.entry === 'mini') setMini(st.p); else if (L.entry === 'big') setPw(st.p, 1); else if (L.entry === 'fire') setPw(st.p, 2);   // validation only: the power the hero carries into a segment
+  if (L.entry === 'mini') setMini(st.p); else if (L.entry === 'big') setPw(st.p, 1); else if (L.entry === 'fire') setPw(st.p, 2); else if (L.entry === 'snow') setPw(st.p, 5);   // validation only: the power the hero carries into a segment
   for (var i = 0; i < L.movers.length; i++) st.mo.push({ off: L.movers[i].off0 || 0, vy: 0, s: 0, t: 0, ox: L.movers[i].ox0 || 0 });
   if (!o.noEn) for (i = 0; i < L.enemies.length; i++) { var d = L.enemies[i];
     if (o.cp && d.t !== E.BOSS && d.x < L.cp.x + 120 && d.x > L.cp.x - 120) continue;
@@ -92,10 +92,94 @@ function newState(L, o) {
   if (L.house) st.boss = 1;   // gamble house: the exit stays locked until one box is opened
   return st;
 }
+// ---- rope swings (jungle look): a rope hangs from a pivot above a wide pit; the hero grabs it in the air (Up), swings as a damped pendulum and releases with Jump / Down.
+// th'' = -(G/len) sin th - C w + PUSH dir / len: the natural frequency depends on the length, so only pumping (Left/Right) in rhythm with the swing builds amplitude.
+var ROPE = { G: 0.25, C: 0.003, PUSH: 0.02, GRAB: 9, CD: 20, MAXTH: 1.5, HAND: 4 };
+function ropeAng0(r, f) { return 0.12 * Math.sin(f * Math.sqrt(ROPE.G / r.len)); }   // an idle rope sways gently (grab test + drawing)
+function ropeRelease(st, p, jump) {
+  var r = p.rope; p.vx = Math.max(-7, Math.min(7, r.L * r.w * Math.cos(r.th))); p.vy = Math.max(-7, Math.min(7.5, -r.L * r.w * Math.sin(r.th) - 1));
+  p.rci = r.i; p.rcd = ROPE.CD; p.rope = null; p.ground = false; p.mv = -1; p.coy = 0; p.jbuf = 0; p.jheld = !!jump; if (Math.abs(p.vx) > 0.3) p.face = p.vx > 0 ? 1 : -1;
+}
+// one frame of rope logic: returns true while the hero hangs on a rope (the normal movement is skipped then)
+function ropeStep(st, p, up, down, dir, jEdge, jump) {
+  var rs = st.L.ropes, r, i;
+  if (p.rcd > 0) p.rcd--;
+  if (p.rope) {
+    r = p.rope; var rp = rs[r.i];
+    if (jEdge || down) { ropeRelease(st, p, jump); return false; }
+    r.w += -(ROPE.G / r.L) * Math.sin(r.th) - ROPE.C * r.w + ROPE.PUSH * dir / r.L; r.th += r.w;
+    if (r.th > ROPE.MAXTH) { r.th = ROPE.MAXTH; if (r.w > 0) r.w = 0; } else if (r.th < -ROPE.MAXTH) { r.th = -ROPE.MAXTH; if (r.w < 0) r.w = 0; }
+    var nx = rp.px + r.L * Math.sin(r.th) - p.w / 2, ny = rp.py + r.L * Math.cos(r.th) - ROPE.HAND;
+    if (boxHit(st, nx, ny, p.w, p.h)) { ropeRelease(st, p, jump); return false; }
+    p.x = nx; p.y = ny; p.vx = r.L * r.w * Math.cos(r.th); p.vy = -r.L * r.w * Math.sin(r.th); p.ground = false; p.mv = -1; p.jheld = !!jump;
+    if (r.w > 0.003) p.face = 1; else if (r.w < -0.003) p.face = -1;
+    p.anim += 0.05; return true;
+  }
+  if (!up || p.ground || p.climb || p.dead || p.won) return false;
+  var hx = p.x + p.w / 2, hy = p.y + ROPE.HAND;
+  for (i = 0; i < rs.length; i++) {
+    rp = rs[i]; if (p.rcd > 0 && p.rci === i) continue;
+    var dx = hx - rp.px, dy = hy - rp.py; if (dy < 20 || dy > rp.len + 10 || Math.abs(dx) > rp.len + 12) continue;
+    var a0 = ropeAng0(rp, st.f), d = Math.sqrt(dx * dx + dy * dy);
+    if (Math.abs(dx * Math.cos(a0) - dy * Math.sin(a0)) > ROPE.GRAB) continue;
+    var Lr = Math.max(24, Math.min(rp.len, d)), th = Math.atan2(dx, dy), w = (p.vx * Math.cos(th) - p.vy * Math.sin(th)) / Lr;
+    p.rope = { i: i, L: Lr, th: th, w: Math.max(-0.09, Math.min(0.09, w)) }; p.climb = false; p.vx = p.vy = 0; p.pound = 0; p.glide = false; p.jheld = !!jump;
+    var nx2 = rp.px + Lr * Math.sin(th) - p.w / 2, ny2 = rp.py + Lr * Math.cos(th) - ROPE.HAND;
+    if (!boxHit(st, nx2, ny2, p.w, p.h)) { p.x = nx2; p.y = ny2; }
+    ev(st, 'grab', p.x, p.y); return true;
+  }
+  return false;
+}
+// controller for the rope gap whose stage g = { i0, n, x } (ropes i0 .. i0+n-1 left to right, x = far ledge): pre-run frames c.a, jump (held c.h frames) with Up held,
+// then pump with the sign of the angular velocity (resonance); releases when a clone says the flight reaches the next rope / lands on the far ledge
+function ropeNew(g, a, run, h) { return { g: g, a: a, run: run, h: h, k: 0, k0: -1, held: 0, bad: false, look: true, rel: false }; }
+function ropeGoal(q, c) {   // look-ahead verdict on a clone that was released: 1 success, -1 failure, 0 undecided
+  var p = q.p; if (p.dead) return -1;
+  if (p.rope) { var last = c.g.i0 + c.g.n - 1; return p.rope.i > c.i && p.rope.i <= last ? 1 : -1; }
+  if (p.ground) return p.x + p.w / 2 >= c.g.x && c.i === c.g.i0 + c.g.n - 1 ? 1 : -1;
+  if (p.y > q.L.rows * TS + 20) return -1;
+  return 0;
+}
+function ropeInput(st, c) {
+  var p = st.p, k = c.k++, dm = IN.R | (c.run ? IN.RUN : 0);
+  if (!p.rope) {
+    if (c.k0 < 0) { if (k < c.a) return dm; c.k0 = k; }
+    return dm | IN.UP | (k - c.k0 < c.h && !c.hold0 ? IN.J : 0);
+  }
+  c.i = p.rope.i; c.hold0 = true; var r = p.rope; c.held++;
+  if (c.rel) { c.rel = false; return IN.J | IN.R | IN.UP; }
+  if (c.held > 720) { c.bad = true; return IN.R; }
+  var dir = r.w > 0.004 ? 1 : r.w < -0.004 ? -1 : 1;
+  if (c.look && r.w > 0.012 && r.L * r.w > 1.2 && r.th > -0.5 && (c.held & 1) === 0) {   // forward half-swing with some speed: would a release now work?
+    var q = clone(st), cc = { g: c.g, a: 0, run: c.run, h: 0, k: 0, k0: 0, held: 0, look: false, rel: true, hold0: true, i: c.i }, n = 0, v = 0;
+    while (n++ < 130) { step(q, ropeInput(q, cc)); v = ropeGoal(q, cc); if (v) break; }
+    if (v === 1 && q.p.ground) { for (var z = 0; z < 8 && !q.p.dead; z++) step(q, 0); if (q.p.dead) v = -1; }
+    if (v === 1) { c.rel = false; return IN.J | IN.R | IN.UP; }
+  }
+  return (dir > 0 ? IN.R : IN.L);
+}
+// search the controller parameters on clones of st0 with the real physics; returns { st, seq } (the final state and the exact inputs) or null
+function ropeSolve(st0, g, maxCombos, nBest) {
+  var best = null, nOk = 0, as = [0, 4, 8, 12, 16, 20, 25, 30, 36, 42, 50, 60, 2, 6, 10, 14, 18, 22, 28, 33, 39, 46, 55], hs = [16, 26, 40], tried = 0;
+  for (var ai = 0; ai < as.length; ai++) for (var ru = 1; ru >= 0; ru--) for (var hi = 0; hi < hs.length; hi++) {
+    if (++tried > (maxCombos || 200)) return best;
+    var q = clone(st0), c = ropeNew(g, as[ai], ru, hs[hi]), seq = [], n = 0, grabbed = false;
+    while (n < 900) {
+      var m = ropeInput(q, c); seq.push(m); step(q, m); n++;
+      if (q.p.dead || q.p.won) break; if (q.p.rope) grabbed = true;
+      if (!grabbed && (n > c.a + c.h + 70 || (q.p.ground && c.k0 >= 0 && n > c.a + 8))) break;
+      if (c.bad) break;
+      if (grabbed && !q.p.rope && q.p.ground) break;
+      if (grabbed && !q.p.rope && q.p.vy > 0 && q.p.y > q.L.rows * TS + 30) break;
+    }
+    if (!q.p.dead && q.p.ground && !q.p.rope && q.p.x + q.p.w / 2 >= g.x && grabbed) { for (var z = 0; z < 12; z++) { step(q, 0); seq.push(0); } if (!q.p.dead) { if (!nBest) return { st: q, seq: seq, nodes: tried }; nOk++; if (!best || seq.length < best.seq.length) best = { st: q, seq: seq, nodes: tried }; if (nOk >= nBest) return best; } }
+  }
+  return best;
+}
 // Copy a state for branching. Mutable arrays/objects are copied; the level L and tile modifications (st.mod, copy-on-write Map) are shared.
 function clone(st) {
   var c = {}, k; for (k in st) c[k] = st[k];
-  c.p = {}; for (k in st.p) c.p[k] = st.p[k];
+  c.p = {}; for (k in st.p) c.p[k] = st.p[k]; if (c.p.rope) c.p.rope = { i: c.p.rope.i, L: c.p.rope.L, th: c.p.rope.th, w: c.p.rope.w };
   var en = new Array(st.en.length), i, px = st.p.x; for (i = 0; i < en.length; i++) { var s = st.en[i]; if (st.share && Math.abs(s.x - px) > 600) { en[i] = s; continue; } var e = {}; for (k in s) e[k] = s[k]; en[i] = e; } c.en = en;
   c.it = st.it.length ? st.it.map(function (s) { var e = {}; for (var k in s) e[k] = s[k]; return e; }) : [];
   c.fb = st.fb.length ? st.fb.map(function (s) { return { x: s.x, y: s.y, vx: s.vx, vy: s.vy, life: s.life, k: s.k }; }) : [];
@@ -141,7 +225,12 @@ function boxHit(st, x, y, w, h) {
 function setTile(st, c, r, t) { st.mod = new Map(st.mod); st.mod.set(c * (st.L.rows || ROWS) + r, t); }   // copy on write: clones (the planner / validator branches) share the map until one of them changes a tile
 function isSolidTile(t) { return SOL[t] === 1; }
 // Surface height of a slope tile at world x (SLR rises to the right, SLL to the left).
-function slopeY(t, c, r, x) { return t === T.SLR ? (r + 1) * TS - (x - c * TS) : r * TS + (x - c * TS); }
+function isSl(t) { return t === T.SLR || t === T.SLL || t === T.SLP; }
+// surface height at pixel x inside slope cell (c, r); a free-angle cell clamps outside its segment (left of it / right of it the surface is the end value: cell bottom = air, cell top = solid)
+function slopeY(t, c, r, x, st) {
+  if (t === T.SLP) { var sg = st.L.slp[c * (st.L.rows || ROWS) + r], lx = x - c * TS; if (!sg) return r * TS + TS; var yy = lx <= sg[0] ? sg[1] : lx >= sg[2] ? sg[3] : sg[1] + (sg[3] - sg[1]) * (lx - sg[0]) / Math.max(1e-6, sg[2] - sg[0]); return r * TS + yy; }
+  return t === T.SLR ? (r + 1) * TS - (x - c * TS) : r * TS + (x - c * TS);
+}
 
 // ------------------------------------------------------------------ bumping blocks from below
 // Hero's head hits block row r from below: pick the tile closest to the hero's centre, then break / open it
@@ -209,9 +298,24 @@ function dieNow(st, why) { var p = st.p; if (p.dead) return; p.dead = true; p.wh
 function overlap(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
 
 // Per-frame AI for one enemy, by type (switch on e.t). Far-away enemies of the newer types are frozen to save work.
+// Buoyancy of a frozen enemy: an ice block inside water rises (slowly at first, then 0.9 px/frame) until its top is at the water surface, then bobs there. Currents and bubble jets do not move it.
+function iceFloat(st, e) {
+  var cx = Math.floor((e.x + e.w / 2) / TS), r0 = Math.floor((e.y + e.h / 2) / TS);
+  if (!isW(tileAt(st, cx, r0))) { e.wet = 0; return; }
+  while (r0 > 0 && isW(tileAt(st, cx, r0 - 1))) r0--;
+  var surf = r0 * TS, v;
+  e.rise = (e.rise | 0) + 1; e.wet = 1; v = Math.min(0.9, 0.01 * e.rise);
+  if (e.y - v > surf + 1) e.y -= v; else e.y = surf + 0.5 + 0.5 * Math.sin(e.rise * 0.1);
+}
+// A frozen enemy is solid on top: a hero falling onto it lands and stands there while the ice lasts (sides and underside stay harmless). Always returns true.
+function frzPlat(st, e) {
+  var p = st.p;
+  if (p.vy >= 0 && !p.dead && p.x < e.x + e.w && p.x + p.w > e.x && p.y < e.y + e.h && p.y + p.h > e.y && (p.y + p.h) - e.y <= (e.wet ? e.h + 10 : 10) + Math.max(0, p.vy)) { p.y = e.y - p.h; p.vy = 0; p.ground = true; p.mv = -1; p.coy = P.COY; }   // (a floating ice block scoops up a swimmer beside it)
+  return true;
+}
 function updEnemy(st, e, f) {
   var p = st.p, i, hw;
-  if (e.frz > 0) { e.frz--; return; }   // frozen by a snowball
+  if (e.frz > 0) { e.frz--; if (e.frz > 0) iceFloat(st, e); else e.rise = 0; return; }   // frozen by a snowball (an ice block in water floats up)
   if (e.t === E.BOSS && e.alive && e.y > (st.L.rows || ROWS) * TS + 30) { e.hp = 0; e.alive = false; e.dt = 70; st.boss--; st.score += 3000; ev(st, 'bossdead', e.x + e.w / 2, e.y); return; }   // a boss that ends up in the void counts as beaten
   if (e.t >= 9) { var anc = e.ax !== undefined ? e.ax : e.x; if (Math.abs(anc - p.x) > P.ACTIVE + 100) return; }
   switch (e.t) {
@@ -276,7 +380,7 @@ function updEnemy(st, e, f) {
       }
       e.vx = e.dir * e.spd; hw = moveEnt(st, e);
       if (hw) e.dir = -e.dir;
-      else if (e.ground && !e.blind) { var ax = e.vx > 0 ? e.x + e.w + 1 : e.x - 1, c = Math.floor(ax / TS), rr = Math.floor((e.y + e.h + 2) / TS), tt = tileAt(st, c, rr); if (!SOL[tt] && tt !== T.SLR && tt !== T.SLL) e.dir = -e.dir; }
+      else if (e.ground && !e.blind) { var ax = e.vx > 0 ? e.x + e.w + 1 : e.x - 1, c = Math.floor(ax / TS), rr = Math.floor((e.y + e.h + 2) / TS), tt = tileAt(st, c, rr); if (!SOL[tt] && !isSl(tt)) e.dir = -e.dir; }
       if (!e.blind) { if (e.x < e.mn) { e.x = e.mn; e.dir = 1; } else if (e.x + e.w > e.mx) { e.x = e.mx - e.w; e.dir = -1; } }
       if (e.y > (st.L.rows || ROWS) * TS + 40) e.alive = false; return;
     case 4:   // bullet
@@ -302,12 +406,12 @@ function updEnemy(st, e, f) {
     case 23: { e.vx = e.dir * e.spd; hw = moveEnt(st, e); e.rot = (e.rot || 0) + e.vx * 0.18; if (hw || ++e.tm > 900 || e.y > (st.L.rows || ROWS) * TS + 20) { e.alive = false; e.dt = 12; ev(st, 'burst', e.x + e.w / 2, e.y + e.h / 2); } e.ax = e.x; return; }   // rolling snowball / boulder / tumbleweed
     case 29: { var thx = p.x + p.w / 2 - e.x - e.w / 2, thy = p.y + p.h / 2 - e.y - e.h / 2, sgn = thx > 0 ? 1 : -1;   // thrower: a ground walker (or hovering flyer) that lobs wrenches / flames / snowballs at the hero
       if (e.fly) { e.x = e.ax0 + 36 * Math.sin(f * 0.02 + e.ph); e.y = e.ay0 + 8 * Math.sin(f * 0.05 + e.ph); e.ax = e.ax0; }
-      else { e.vx = e.dir * e.spd; hw = moveEnt(st, e); if (hw) e.dir = -e.dir; else if (e.ground && !e.blind) { var tx3 = e.vx > 0 ? e.x + e.w + 1 : e.x - 1, tt3 = tileAt(st, Math.floor(tx3 / TS), Math.floor((e.y + e.h + 2) / TS)); if (!SOL[tt3] && tt3 !== T.SLR && tt3 !== T.SLL) e.dir = -e.dir; } if (!e.blind) { if (e.x < e.mn) { e.x = e.mn; e.dir = 1; } else if (e.x + e.w > e.mx) { e.x = e.mx - e.w; e.dir = -1; } } e.ax = e.x; }
+      else { e.vx = e.dir * e.spd; hw = moveEnt(st, e); if (hw) e.dir = -e.dir; else if (e.ground && !e.blind) { var tx3 = e.vx > 0 ? e.x + e.w + 1 : e.x - 1, tt3 = tileAt(st, Math.floor(tx3 / TS), Math.floor((e.y + e.h + 2) / TS)); if (!SOL[tt3] && !isSl(tt3)) e.dir = -e.dir; } if (!e.blind) { if (e.x < e.mn) { e.x = e.mn; e.dir = 1; } else if (e.x + e.w > e.mx) { e.x = e.mx - e.w; e.dir = -1; } } e.ax = e.x; }
       if (Math.abs(thx) < 230 && Math.abs(thy) < 160 && (f + e.pho) % e.per === 0 && !st.noEn) { e.dir = sgn; var sk = e.skin;
         st.hz.push({ k: 'proj', skin: sk, mode: sk === 'snow' ? 'freeze' : 'hurt', x: e.x + e.w / 2, y: e.y + 2, vx: sgn * (sk === 'fire' ? 1.7 : sk === 'snow' ? 1.4 : 1.3), vy: sk === 'fire' ? -0.6 : sk === 'snow' ? -2.8 : -3.4, g: sk === 'fire' ? 0.04 : sk === 'snow' ? 0.13 : 0.17, life: 220, sz: 5 }); ev(st, 'spit', e.x, e.y); }
       return; }
     case 32: { var pdx = p.x + p.w / 2 - e.x - e.w / 2, pdy = p.y - e.y;   // pillbug: patrols, curls up when the hero is in line (a short warning) and then rolls at him; a rolling one cannot be stomped
-      if (e.s === 0) { e.vx = e.dir * e.spd; hw = moveEnt(st, e); if (hw) e.dir = -e.dir; else if (e.ground && !e.blind) { var px32 = e.vx > 0 ? e.x + e.w + 1 : e.x - 1, pt32 = tileAt(st, Math.floor(px32 / TS), Math.floor((e.y + e.h + 2) / TS)); if (!SOL[pt32] && pt32 !== T.SLR && pt32 !== T.SLL) e.dir = -e.dir; } if (!e.blind) { if (e.x < e.mn) { e.x = e.mn; e.dir = 1; } else if (e.x + e.w > e.mx) { e.x = e.mx - e.w; e.dir = -1; } }
+      if (e.s === 0) { e.vx = e.dir * e.spd; hw = moveEnt(st, e); if (hw) e.dir = -e.dir; else if (e.ground && !e.blind) { var px32 = e.vx > 0 ? e.x + e.w + 1 : e.x - 1, pt32 = tileAt(st, Math.floor(px32 / TS), Math.floor((e.y + e.h + 2) / TS)); if (!SOL[pt32] && !isSl(pt32)) e.dir = -e.dir; } if (!e.blind) { if (e.x < e.mn) { e.x = e.mn; e.dir = 1; } else if (e.x + e.w > e.mx) { e.x = e.mx - e.w; e.dir = -1; } }
         if (!st.noEn && Math.abs(pdy) < 34 && Math.abs(pdx) < 150 && (pdx > 0 ? e.dir > 0 : e.dir < 0)) { e.s = 1; e.tm = 0; } }
       else if (e.s === 1) { e.vx = 0; moveEnt(st, e); if (++e.tm > 28) { e.s = 2; e.tm = 0; e.dir = pdx > 0 ? 1 : -1; } }
       else { e.vx = e.dir * 3.2; hw = moveEnt(st, e); if (hw) { e.dir = -e.dir; e.tm += 20; } e.rot = (e.rot || 0) + e.vx * 0.2; if (++e.tm > 90) { e.s = 0; e.tm = 0; } }
@@ -320,7 +424,7 @@ function updEnemy(st, e, f) {
       else if (e.s === 2) { e.hid = false; e.up = Math.min(1, e.up + 0.12); if (++e.tm > 80) e.s = 3; }
       else { e.up = Math.max(0, e.up - 0.1); if (e.up <= 0) { e.hid = true; e.s = 0; e.cd = 90; } }
       e.y = e.y0 + 14 * (1 - e.up); return; }
-    case 35: { e.vx = e.dir * e.spd; hw = moveEnt(st, e); if (hw) e.dir = -e.dir; else if (e.ground && !e.blind) { var sx35 = e.vx > 0 ? e.x + e.w + 1 : e.x - 1, st35 = tileAt(st, Math.floor(sx35 / TS), Math.floor((e.y + e.h + 2) / TS)); if (!SOL[st35] && st35 !== T.SLR && st35 !== T.SLL) e.dir = -e.dir; } if (!e.blind) { if (e.x < e.mn) { e.x = e.mn; e.dir = 1; } else if (e.x + e.w > e.mx) { e.x = e.mx - e.w; e.dir = -1; } } e.ax = e.x; return; }   // shield bearer: a walker whose shield stops fireballs, wrenches and snowballs from the front
+    case 35: { e.vx = e.dir * e.spd; hw = moveEnt(st, e); if (hw) e.dir = -e.dir; else if (e.ground && !e.blind) { var sx35 = e.vx > 0 ? e.x + e.w + 1 : e.x - 1, st35 = tileAt(st, Math.floor(sx35 / TS), Math.floor((e.y + e.h + 2) / TS)); if (!SOL[st35] && !isSl(st35)) e.dir = -e.dir; } if (!e.blind) { if (e.x < e.mn) { e.x = e.mn; e.dir = 1; } else if (e.x + e.w > e.mx) { e.x = e.mx - e.w; e.dir = -1; } } e.ax = e.x; return; }   // shield bearer: a walker whose shield stops fireballs, wrenches and snowballs from the front
     case 36: { var bdx = p.x + p.w / 2 - e.x - e.w / 2, bdy = p.y + p.h / 2 - e.y - e.h / 2;   // bomb bug: creeps toward the hero, and when close its fuse burns for about a second and it blows up (stomping it first leaves a bomb that can be kicked)
       if (e.s === 0) { e.vx = e.dir * e.spd; if (Math.abs(bdx) < 130 && Math.abs(bdy) < 40) { e.dir = bdx > 0 ? 1 : -1; e.vx = e.dir * 0.55; } hw = moveEnt(st, e); if (hw) e.dir = -e.dir; if (e.ground && e.vx) { var bx36 = e.vx > 0 ? e.x + e.w + 1 : e.x - 1, bt36 = tileAt(st, Math.floor(bx36 / TS), Math.floor((e.y + e.h + 2) / TS)); if (!SOL[bt36]) { e.x -= e.vx; e.dir = -e.dir; } } if (e.x < e.mn) { e.x = e.mn; e.dir = 1; } if (e.x + e.w > e.mx) { e.x = e.mx - e.w; e.dir = -1; } if (!st.noEn && Math.abs(bdx) < 34 && Math.abs(bdy) < 30) { e.s = 1; e.tm = 0; } }
       else { e.vx = 0; moveEnt(st, e); if (++e.tm >= 48) { e.alive = false; e.dt = 18; ev(st, 'burst', e.x + e.w / 2, e.y + e.h / 2); if (!p.dead && Math.abs(bdx) < 40 && Math.abs(bdy) < 36) hurt(st, 'bomb'); crackWall(st, e.x - 10, e.y, e.h, true); crackWall(st, e.x + e.w + 10, e.y, e.h, true); } }
@@ -383,6 +487,15 @@ function groundY(st, x, y0) { var c = Math.floor(x / TS), R = st.L.rows || ROWS,
 // Encase the hero in ice for 80 frames; refused during the cooldown, as a star or when dead.
 function freezeHero(st) { var p = st.p; if (p.frz > 0 || p.frzcd > 0 || p.star > 0 || p.dead) return false; p.frz = 80; p.vx = 0; ev(st, 'freeze', p.x, p.y); return true; }
 // What a theme hazard does on contact: freeze, instant kill (never through a star), or ordinary damage.
+// immunities: some enemies shrug off flames (stone, fire things, armour, big things, anything swimming in liquid: the water puts the fire out), more of them shrug off snowballs (machines, ghosts, electric, fire, stone, shells, big things); water creatures can be frozen but not burnt, flying machines can be burnt but not frozen
+var FIRE_PROOF = { 5: 1, 12: 1, 14: 1, 22: 1, 27: 1, 28: 1, 32: 1 }, FREEZE_PROOF = { 4: 1, 5: 1, 6: 1, 8: 1, 11: 1, 12: 1, 14: 1, 18: 1, 20: 1, 22: 1, 27: 1, 28: 1, 38: 1, 40: 1 };
+function fireProof(st, e) {
+  if (e.spk) return true;   // spiked flyers: only ice stops them
+  if (FIRE_PROOF[e.t] || (e.t === 23 && e.skin !== 'weed') || (e.t === 29 && e.skin === 'fire')) return true;
+  if (e.t === 35) return false;   // the shield bearer's shield is handled by the fireball's direction
+  return isW(tileAt(st, Math.floor((e.x + e.w / 2) / TS), Math.floor((e.y + e.h / 2) / TS)));
+}
+function freezeProof(e) { return !!FREEZE_PROOF[e.t] || (e.t === 23 && e.skin !== 'snowball') || (e.t === 29 && e.skin === 'fire'); }
 function hzEffect(st, o) {
   var p = st.p;
   if (o.mode === 'slow') { if (p.star <= 0) p.slow = 200; return; }   // a spider's web: half speed for a while
@@ -499,20 +612,24 @@ function hitBoss(st, e, dmg) {
 
 // Route tracking for the planner / validator: has the current stage goal been reached (key, switch, door, teleport, power-up, kick, tile change, position)?
 function stageDone(st, g) {
+  if (g.sec && st.skipSec) return true;   // the auto player that aims for the normal exit skips the stages that lead to a secret entrance
   switch (g.k) {
     case 'key': return ((st.kb >> g.g) & 1) === 1;
     case 'sw': return ((st.sb >> g.g) & 1) === 1;
     case 'door': return st.dg[g.i] === 1;
     case 'tele': return st.tc >= g.n;
-    case 'pw': return g.v === 'notmini' ? !st.p.mini : g.v === 'big' ? st.p.big : g.v === 'mini' ? !!st.p.mini : g.v === 'fire' ? st.p.pw === 2 : true;
+    case 'pw': return g.v === 'notmini' ? !st.p.mini : g.v === 'big' ? st.p.big : g.v === 'mini' ? !!st.p.mini : g.v === 'fire' ? st.p.pw === 2 : g.v === 'snow' ? st.p.pw === 5 : true;
+    case 'frozen': for (var fz = 0; fz < st.en.length; fz++) { var fe = st.en[fz]; if (fe.alive && fe.frz > 0 && Math.abs(fe.x + fe.w / 2 - g.x) < 24) return true; } return false;   // the enemy standing at x is frozen (it is about to become a platform)
     case 'kick': if (st.p.pw === 2) return true; for (var kq = 0; kq < st.en.length; kq++) if (st.en[kq].alive && st.en[kq].t === 3 && st.en[kq].sh === 2 && st.en[kq].dir === (g.d || 1)) return true; return false;
     case 'tile': return tileAt(st, g.c, g.r) === T.AIR && (g.x2 === undefined || st.p.x + st.p.w <= g.x2);   // x2: the hero must still stand in front of the wall (he has to pass the hole afterwards)
     case 'band': return st.p.ground && Math.abs(st.p.y + 7 - g.y) < 10 && st.p.x + 6 >= g.x && st.p.x + 6 <= g.x2;   // standing on the ground at that height anywhere in an x window
     case 'at': return st.p.ground && Math.abs(st.p.x + 6 - g.x) < 20 && Math.abs(st.p.y + 7 - g.y) < 10;
+    case 'perch': if (!(st.p.ground && Math.abs(st.p.vx) < 0.7 && Math.abs(st.p.x + 6 - g.x) < 8 && Math.abs(st.p.y + 7 - g.y) < 10)) return false; for (var pq = 0; pq < st.en.length; pq++) { var pe = st.en[pq]; if (pe.alive && pe.frz > 0 && Math.abs(pe.x + pe.w / 2 - g.x) < 24) return true; } return false;   
     case 'xge': return st.p.x >= g.x && (g.x2 === undefined || (st.p.x <= g.x2 && st.p.ground));   // x2: the stage ends in a window on the ground (so the next segment starts from its own seam, not from somewhere beyond its pickups)
     case 'got': if (!st.picked) return false; for (var gq = 0; gq < st.it.length; gq++) if (st.it[gq].alive) return false; return true;   // the box's item has been collected
     case 'used': return tileAt(st, g.c, g.r) === T.USED;   // a box was opened
     case 'goal': return st.p.won;
+    case 'ropeDone': return st.p.ground && !st.p.rope && st.p.x + st.p.w / 2 >= g.x;   // rope gap crossed: standing on the far ledge
     case 'near': return Math.abs(st.p.x + 6 - g.x) < (g.r || 20) && Math.abs(st.p.y + 7 - g.y) < (g.r || 20);   // swim waypoint: hero centre within r px (any state, used by underwater stages)
   }
   return true;
@@ -563,7 +680,7 @@ function step(st, inp) {
   // jump pressed this frame (edge), used for the jump buffer and swim strokes
   var jEdge = jump && !p.jheld;
   // --- vines
-  if (!p.climb && up && cell === T.VINE) { p.climb = true; p.vx = 0; p.vy = 0; p.ground = false; p.mv = -1; }
+  if (!p.climb && !p.rope && up && cell === T.VINE) { p.climb = true; p.vx = 0; p.vy = 0; p.ground = false; p.mv = -1; }
   if (p.climb) {
     if (cell !== T.VINE && !(tileAt(st, Math.floor(cx0 / TS), Math.floor((p.y + p.h - 1) / TS)) === T.VINE)) p.climb = false;
     else if (jEdge) { p.climb = false; p.vy = P.JUMP * 0.85; p.vx = dir * 1.6; }
@@ -573,14 +690,15 @@ function step(st, inp) {
       p.vx = 0; p.vy = 0; p.jheld = !!jump; p.anim += 0.1; if (p.y + p.h < 0) p.climb = false;
     }
   }
+  var ropeHeld = (st.L.ropes || p.rope) ? ropeStep(st, p, up, down, dir, jEdge, jump) : false;   // rope swing: hanging on a rope skips the normal movement
   // --- duck: a big hero holding Down on the ground crouches to the small height and slides on with its momentum (cannot steer): the way through a one-tile hole without losing the power
-  if (p.big && !p.mini && !p.climb) {
+  if (p.big && !p.mini && !p.climb && !ropeHeld) {
     if (!p.duck && p.ground && down && !inW) { p.duck = 1; p.y += p.h - P.SH; p.h = P.SH; }
     else if (p.duck && (!down || !p.ground) && !boxHit(st, p.x, p.y + p.h - P.BH, p.w, P.BH)) { p.y -= P.BH - P.SH; p.h = P.BH; p.duck = 0; }
   } else if (p.duck) p.duck = 0;
   // 'carried' = horizontal movement inherited from conveyors / platforms below; skipped entirely while climbing a vine
   var carried = 0;
-  if (!p.climb) {
+  if (!p.climb && !ropeHeld) {
     if (p.duck) dir = 0;
     // --- run / P-meter
     var maxv = run ? P.RUN : P.WALK, onIce = false, inMud = false;
@@ -626,13 +744,13 @@ function step(st, inp) {
     var nx = p.x + p.vx + carried;
     var stepY = null;
     var onSl = false;
-    if (p.ground) { var bb0 = p.y + p.h; for (var xo = 0; xo < 2 && !onSl; xo++) { var co = Math.floor((xo ? p.x + p.w - 1 : p.x + 1) / TS), ro = Math.floor((bb0 - 0.01) / TS); for (var dro = 0; dro < 2; dro++) { var to = tileAt(st, co, ro + dro); if (to === T.SLR || to === T.SLL) onSl = true; } } }
+    if (p.ground) { var bb0 = p.y + p.h; for (var xo = 0; xo < 2 && !onSl; xo++) { var co = Math.floor((xo ? p.x + p.w - 1 : p.x + 1) / TS), ro = Math.floor((bb0 - 0.01) / TS); for (var dro = 0; dro < 2; dro++) { var to = tileAt(st, co, ro + dro); if (isSl(to)) onSl = true; } } }
     if (p.ground && boxHit(st, nx, p.y, p.w, p.h)) {         // walking into the foot of a slope: lift the hero onto it instead of treating its fill as a wall
       for (var lift = 1; lift <= TS && stepY === null; lift++) {
         var ny0 = p.y - lift; if (boxHit(st, nx, ny0, p.w, p.h)) continue;
         var bot0 = ny0 + p.h, sup = false, xs0 = [nx + 1, nx + p.w - 1];
         for (var xq = 0; xq < 2 && !sup; xq++) { var cq = Math.floor(xs0[xq] / TS), rq = Math.floor((bot0 - 0.01) / TS);
-          for (var dq = 0; dq < 2 && !sup; dq++) { var tq = tileAt(st, cq, rq + dq); if (tq === T.SLR || tq === T.SLL) { var sq = slopeY(tq, cq, rq + dq, xs0[xq]); if (sq >= bot0 - 1.5 && sq <= bot0 + TS) sup = true; } } }
+          for (var dq = 0; dq < 2 && !sup; dq++) { var tq = tileAt(st, cq, rq + dq); if (isSl(tq)) { var sq = slopeY(tq, cq, rq + dq, xs0[xq], st); if (sq >= bot0 - 1.5 && sq <= bot0 + TS) sup = true; } } }
         if (!sup && onSl && boxHit(st, nx, ny0 + 1, p.w, p.h)) sup = true;      // the top of a ramp: step onto the flat that continues it
         if (sup) stepY = ny0; else break;                     // free above but nothing slanted to stand on: it is a real wall
       }
@@ -665,7 +783,7 @@ function step(st, inp) {
     if (p.vy >= 0 || p.ground) {
       var bot = p.y + p.h, best = 1e9, xs = [p.x + 1, p.x + p.w - 1];
       for (var xi = 0; xi < 2; xi++) { var cc = Math.floor(xs[xi] / TS), r0 = Math.floor((bot - 0.01) / TS);
-        for (var dr = 0; dr < 2; dr++) { var tt = tileAt(st, cc, r0 + dr); if (tt === T.SLR || tt === T.SLL) { var sy = slopeY(tt, cc, r0 + dr, xs[xi]); if (bot >= sy - (wasGround ? 5 : 0) && bot <= sy + TS && sy < best) best = sy; } } }
+        for (var dr = 0; dr < 2; dr++) { var tt = tileAt(st, cc, r0 + dr); if (isSl(tt)) { var sy = slopeY(tt, cc, r0 + dr, xs[xi], st); if (bot >= sy - (wasGround ? (tt === T.SLP ? 12 : 5) : 0) && bot <= sy + TS && sy < best) best = sy; } } }
       if (best < 1e8 && !(p.vy < 0)) { p.y = best - p.h; p.vy = 0; p.ground = true; }
     }
     if (p.ground && !wasGround) ev(st, 'land', p.x, p.y + p.h);
@@ -686,7 +804,7 @@ function step(st, inp) {
     b.y += b.vy; if (boxHit(st, b.x - 3, b.y - 3, 6, 6)) { if (b.k === 4) { st.fb.splice(i, 1); continue; } b.y -= b.vy; b.vy = b.k === 5 ? -2.6 : -3.2; }
     if (--b.life <= 0 || Math.abs(b.x - p.x) > 300 || b.y > (L.rows || ROWS) * TS + 10) { st.fb.splice(i, 1); continue; }
     for (var j = 0; j < st.en.length; j++) { var o = st.en[j]; if (!o.alive || o.hid) continue;
-      if (b.x > o.x - 3 && b.x < o.x + o.w + 3 && b.y > o.y - 3 && b.y < o.y + o.h + 3) { if (o.t === 36) { o.frz = 260; st.fb.splice(i, 1); ev(st, 'fireburst', b.x, b.y); break; } if (o.t === 35 && (b.vx > 0 ? o.dir < 0 : o.dir > 0)) { st.fb.splice(i, 1); ev(st, 'bump', b.x, b.y); break; } if (b.k === 5) { if (o.t !== 8 && o.t !== 5 && o.t !== 22 && o.t !== E.BIGBALL) o.frz = 300; } else if (o.t === 8) hitBoss(st, o, 1); else if (o.t !== 5 && o.t !== 22 && o.t !== E.BIGBALL) killEnemy(st, o, 100); st.fb.splice(i, 1); ev(st, 'fireburst', b.x, b.y); break; } } }   // a snowball freezes an enemy for 5 seconds (it neither moves nor hurts); wrenches and flames kill
+      if (b.x > o.x - 3 && b.x < o.x + o.w + 3 && b.y > o.y - 3 && b.y < o.y + o.h + 3) { if (o.t === 36) { o.frz = 260; st.fb.splice(i, 1); ev(st, 'fireburst', b.x, b.y); break; } if (o.t === 35 && (b.vx > 0 ? o.dir < 0 : o.dir > 0)) { st.fb.splice(i, 1); ev(st, 'bump', b.x, b.y); break; } if (b.k === 5) { if (o.t !== 8 && !freezeProof(o)) o.frz = 360; else ev(st, 'bump', b.x, b.y); } else if (o.t === 8) hitBoss(st, o, 1); else if (b.k === 4 ? (o.t !== 5 && o.t !== 22 && o.t !== E.BIGBALL && o.t !== 12) : !fireProof(st, o)) killEnemy(st, o, 100); else ev(st, 'bump', b.x, b.y); st.fb.splice(i, 1); ev(st, 'fireburst', b.x, b.y); break; } } }   // a snowball freezes an enemy for 5 seconds (it neither moves nor hurts); wrenches and flames kill
   // --- cannons
   if (L.cannons) for (i = 0; i < L.cannons.length; i++) { var cn = L.cannons[i];
     if (Math.abs(cn.x - p.x) < 250 && (f + cn.ph) % cn.per === 0) { var nb = 0; for (j = 0; j < st.en.length; j++) if (st.en[j].t === 4 && st.en[j].alive) nb++;
@@ -747,7 +865,7 @@ function step(st, inp) {
   if (L.launch && p.tcd === 0) for (i = 0; i < L.launch.length; i++) { var lb = L.launch[i]; if (pcx > lb.c * TS && pcx < lb.c * TS + TS && pcy > lb.r * TS - 2 && pcy < lb.r * TS + TS + 2) { p.vx = lb.vx; p.vy = lb.vy; p.ground = false; p.mv = -1; p.tcd = 30; ev(st, 'launch', lb.c * TS, lb.r * TS); break; } }
   if (L.route) { while (st.stage < L.route.length - 1 && stageDone(st, L.route[st.stage])) st.stage++; }
   // --- enemy contact
-  for (i = 0; i < st.en.length; i++) { e = st.en[i]; if (!e.alive || e.hid || e.carried || (e.frz > 0 && e.t !== 36) || e.deco) continue;   // deco: harmless decoration (poison dwellers)
+  for (i = 0; i < st.en.length; i++) { e = st.en[i]; if (!e.alive || e.hid || e.carried || (e.frz > 0 && e.t !== 36 && frzPlat(st, e)) || e.deco) continue;   // frozen: harmless, but solid on top (frzPlat). deco: harmless decoration (poison dwellers)
     // per-type hitbox shaping: whale hurts only on its head, jelly has a bell and a tentacle, clam only when open, type 27 only when active
     var ov;
     if (e.t === 12) ov = overlap(p, { x: e.dir > 0 ? e.x + e.w - 12 : e.x, y: e.y, w: 12, h: e.h });
@@ -768,7 +886,7 @@ function step(st, inp) {
       else hurt(st, 'bigball');
       continue;
     }
-    var stompable = e.t === 0 || e.t === 2 || e.t === 3 || e.t === 4 || e.t === 8 || e.t === 9 || e.t === 10 || e.t === 15 || e.t === 16 || e.t === 18 || e.t === 19 || e.t === 21 || e.t === 25 || e.t === 29 || e.t === 30 || e.t === 31 || e.t === 33 || e.t === 34 || e.t === 35 || e.t === 36 || e.t === 37 || e.t === 39 || e.t === 40 || (e.t === 32 && e.s !== 2) || (e.t === 23 && e.skin === 'snowball') || (e.t === 1 && p.spin > 0);
+    var stompable = e.t === 0 || (e.t === 2 && !e.spk) || e.t === 3 || e.t === 4 || e.t === 8 || e.t === 9 || e.t === 10 || e.t === 15 || e.t === 16 || e.t === 18 || e.t === 19 || e.t === 21 || e.t === 25 || e.t === 29 || e.t === 30 || e.t === 31 || e.t === 33 || e.t === 34 || e.t === 35 || e.t === 36 || e.t === 37 || e.t === 39 || e.t === 40 || (e.t === 32 && e.s !== 2) || (e.t === 23 && e.skin === 'snowball') || (e.t === 1 && p.spin > 0);
     var stomping = stompable && p.vy > 0 && (p.y + p.h) - e.y <= 9 + p.vy;
     // a star hero kills everything it touches except the boss
     if (p.star > 0 && e.t !== 8) { killEnemy(st, e, 200); continue; }
@@ -793,6 +911,7 @@ function step(st, inp) {
     if (p.mount && e.t !== 8 && e.t !== 5 && e.t !== 7 && e.t !== 11 && e.t !== 12 && e.t !== 13 && e.t !== 14 && e.t !== 17 && e.t !== 20 && !(e.t === 3 && e.sh === 2) && !(e.t === 1)) { killEnemy(st, e, 100); ev(st, 'eat', e.x, e.y); continue; }
     hurt(st, e.t === 5 ? 'crush' : e.t === 13 ? 'jelly' : e.t === 14 ? 'clam' : 'enemy');
   }
+  if (L.route && L.snow) { while (st.stage < L.route.length - 1 && stageDone(st, L.route[st.stage])) st.stage++; }   // frost levels: standing on a frozen enemy is settled in the contact loop, so check the route stages again
   // --- lava geysers: a pillar of fire shoots up out of the lava on a timer (a glow warns first); touching it hurts
   if (L.geysers && !p.dead) for (i = 0; i < L.geysers.length; i++) { var gz = L.geysers[i], gph = (f + gz.ph) % gz.per; if (gph < gz.on && p.x + p.w > gz.x && p.x < gz.x + gz.w && p.y < gz.y && p.y + p.h > gz.y - gz.h) { hurt(st, 'geyser'); if (!p.dead) p.vy = Math.min(p.vy, -4.5); } }
   // --- spikes / lava
@@ -817,6 +936,8 @@ function step(st, inp) {
   // rising lava and the chasing wall: both advance after a start delay; being below/behind the front kills
   if (L.rise) { if (st.lv === undefined) st.lv = L.rise.y0; if (f > L.rise.delay) st.lv -= L.rise.v; if (!p.dead && p.y + p.h > st.lv) { p.dead = true; p.why = 'lava'; ev(st, 'die', p.x, p.y); } }
   if (L.chase) { if (st.cw === undefined) st.cw = L.chase.x0; if (f > L.chase.delay) st.cw += L.chase.v; if (!p.dead && p.x + p.w < st.cw) { p.dead = true; p.why = 'chased'; ev(st, 'die', p.x, p.y); } }
+  // --- hidden secret entrance: an invisible zone in the terrain (see gen.js 'ring' template); touching it warps into the secret room
+  if (L.secretZone && !p.dead && !p.won) { var sz = L.secretZone; if (p.x + p.w > sz.x && p.x < sz.x + sz.w && p.y + p.h > sz.y && p.y < sz.y + sz.h) ev(st, 'warp', sz.x, sz.y, sz.ring); }
   // --- pit / timer / goal / checkpoint
   // rotating mace / fire-bar balls hurt on touch (skipped when enemies are disabled)
   if (L.maces && !st.noEn) for (i = 0; i < L.maces.length; i++) { var mc = L.maces[i], balls = maceBalls(mc, f); for (var bi = 0; bi < balls.length; bi++) { var bb = balls[bi]; if (bb.x + bb.r > p.x && bb.x - bb.r < p.x + p.w && bb.y + bb.r > p.y && bb.y - bb.r < p.y + p.h) hurt(st, 'mace'); } }
@@ -839,5 +960,5 @@ function step(st, inp) {
 
 // Public API for the game, planner, validator and tests.
 root.PF = { setMini: setMini, maceBalls: maceBalls, fireOn: fireOn, stageDone: stageDone, movOn: movOn, isW: isW, AIRMAX: AIRMAX, TS: TS, ROWS: ROWS, VW: VW, VH: VH, T: T, SOL: SOL, IN: IN, P: P, E: E, MV_PERIOD: MV_PERIOD, rng: rng, hash: hash, tri: tri, newState: newState, clone: clone, step: step, tileAt: tileAt, boxHit: boxHit, movPos: movPos,
-  setPw: setPw, slopeY: slopeY, hurt: hurt };
+  setPw: setPw, slopeY: slopeY, hurt: hurt, ROPE: ROPE, ropeAng0: ropeAng0, ropeInput: ropeInput, ropeNew: ropeNew, ropeSolve: ropeSolve };
 })(typeof window !== 'undefined' ? window : globalThis);
