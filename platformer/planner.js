@@ -59,7 +59,7 @@ function evaluate(st0, c, traj) {
 function endScore(st0, st, c, k, land, big0) {
   var p = st.p, sc;
   // Puzzle levels outside boss fights: reward crumbs (waypoints) collected and stages finished, and pull toward the next two crumbs (weights 2.5 and 0.5, y counted 1.5x); small penalty for being airborne.
-  if (st0.L.puzzle && st0.L.crumbs && !(st0.boss > 0 && bossNear(st0))) { var cbs = st.L.crumbs, tg = cbs[Math.min(cbs.length - 1, st.cr + 1)], tg2 = cbs[Math.min(cbs.length - 1, st.cr + 2)]; sc = st.cr * 500 + (st.stage - st0.stage) * 3000 - (Math.abs(p.x + 6 - tg[0]) + 1.5 * Math.abs(p.y + 7 - tg[1])) * 2.5 - (Math.abs(p.x + 6 - tg2[0]) + 1.5 * Math.abs(p.y + 7 - tg2[1])) * 0.5 + (st.score - st0.score) * 0.1; if (!p.ground) sc -= 15; return { sc: sc, dead: false, land: land, k: k }; }
+  if (st0.L.puzzle && st0.L.crumbs && !(st0.boss > 0 && (bossNear(st0) || (st0.L.vgoal && PF.inArena(st0))))) { var cbs = st.L.crumbs, tg = cbs[Math.min(cbs.length - 1, st.cr + 1)], tg2 = cbs[Math.min(cbs.length - 1, st.cr + 2)]; sc = st.cr * 500 + (st.stage - st0.stage) * 3000 - (Math.abs(p.x + 6 - tg[0]) + 1.5 * Math.abs(p.y + 7 - tg[1])) * 2.5 - (Math.abs(p.x + 6 - tg2[0]) + 1.5 * Math.abs(p.y + 7 - tg2[1])) * 0.5 + (st.score - st0.score) * 0.1; if (!p.ground) sc -= 15; return { sc: sc, dead: false, land: land, k: k }; }
   // Find the nearest living boss (index bi); only the boss branches below use it.
   var bi = -1, bd = 1e9; if (st0.boss > 0) { for (var q = 0; q < st0.en.length; q++) { var be = st0.en[q]; if (be.t === 8 && be.alive) { var dd = Math.abs(p.x - be.x); if (dd < bd) { bd = dd; bi = q; } } } }
   // Armoured boss: only kicked/thrown shells hurt it, so score boss HP lost (and a kill bonus) plus guidance toward getting a shell to the boss.

@@ -599,6 +599,7 @@ function updBoss(st, e, f) {
     else if (e.s === 1) { e.vx = e.dir * 2.5; if (moveEnt(st, e, 0.5)) { e.s = 2; e.tm = 0; ev(st, 'thud', e.x + e.w / 2, e.y + e.h); } }
     else { e.vx = 0; moveEnt(st, e, 0.5); if (e.tm > 60) { e.s = 0; e.tm = 0; } }
     if (e.s !== 1) moveEnt(st, e, 0.5);
+    if (st.L.vgoal) { if (e.x < e.mn) e.x = e.mn; if (e.x + e.w > e.mx) e.x = e.mx - e.w; }   // chain castles: the arena has open ends, the charger stays inside
   }
 }
 // a cracked wall (T.CRACK) breaks along its whole column when a kicked shell runs into it or a fireball hits it

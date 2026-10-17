@@ -2291,9 +2291,8 @@ function buildCastleChain(seed, n, a, o, shape) {
   function stepLedge(P, dy, bounce) {
     for (var t = 0; t < 14; t++) {
       var len = rnd(4, 7), g = rnd(1, gapFor(dy)), dd = bounce ? bd : hx, cc = dd > 0 ? P.c + P.len + g : P.c - g - len;
-      if (bounce && (cc < bandX0 || cc + len > bandX1)) { bd = -bd; dd = bd; cc = dd > 0 ? P.c + P.len + g : P.c - g - len; if (cc < bandX0 || cc + len > bandX1) { root.PF.cw3 = (root.PF.cw3 || 0) + 1; continue; } }
+      if (bounce && (cc < bandX0 || cc + len > bandX1)) { bd = -bd; dd = bd; cc = dd > 0 ? P.c + P.len + g : P.c - g - len; if (cc < bandX0 || cc + len > bandX1) continue; }
       var row = P.row + dy; if (fits(cc, len, row)) return addLedge(cc, len, row, dd);
-      root.PF.cw4 = (root.PF.cw4 || 0) + 1; root.PF.dbg = { P: JSON.stringify(P), L: JSON.stringify(ledges.slice(-4)), dy: dy, cc: cc, len: len, row: row, bd: bd, b0: bandX0, b1: bandX1, hit: (function () { for (var q1 = cc - 1; q1 <= cc + len; q1++) for (var q2 = row - 3; q2 <= row + 3; q2++) if (occ[q1 + ',' + q2]) return q1 + ',' + q2; })() };
       if (t % 3 === 2) dy = dy < 0 ? -rnd(2, maxRise) : dy > 0 ? rnd(2, 4) : dy;
     }
     return null;
@@ -2338,13 +2337,13 @@ function buildCastleChain(seed, n, a, o, shape) {
         var B = null, pSpec = 0.1 + 0.25 * diff + 0.1 * sc, last = (li === legs.length - 1);
         if (!last && step >= 2 && k < lg0[2] - 1 && (r() < pSpec || step - lastSpec >= 6)) { B = special(cur, bounce, dir < 0); if (B) lastSpec = step; }
         if (!B) { var dy = dir < 0 ? -rnd(2, maxRise) : dir > 0 ? rnd(2, 4) : [0, 0, 0, -1, 1][rnd(0, 4)]; if (shape === 'left' && dy !== 0) dy = r() < 0.5 ? 0 : dy; B = stepLedge(cur, dy, bounce); }
-        if (!B) { root.PF.cw = root.PF.cw || {}; root.PF.cw['leg' + li + '_' + k] = (root.PF.cw['leg' + li + '_' + k] || 0) + 1; return null; } cur = B; step++;
+        if (!B) return null; cur = B; step++;
       }
     }
     // the arena: a flat floor continuing from the last ledge in the running direction, with a run-up before it
     var E = cur, fl0, fl1, ac0;
     if (hx > 0) { fl0 = E.c + E.len; ac0 = fl0 + 6; fl1 = ac0 + AL + 1; } else { fl1 = E.c - 1; ac0 = fl1 - 6 - AL; fl0 = ac0 - 2; }
-    if (!isFree(fl0, fl1, E.row - 13, E.row + 4)) { root.PF.cw = root.PF.cw || {}; root.PF.cw.arena = (root.PF.cw.arena || 0) + 1; return null; }
+    if (!isFree(fl0, fl1, E.row - 13, E.row + 4)) return null;
     return { S: S, E: E, fl0: fl0, fl1: fl1, ac0: ac0, steps: step };
   }
   var lay = null; for (var att = 0; att < 150 && !lay; att++) lay = layout(att);
@@ -2362,6 +2361,7 @@ function buildCastleChain(seed, n, a, o, shape) {
   var fl0 = lay.fl0 + dX, fl1 = lay.fl1 + dX, ac0 = lay.ac0 + dX, rE = EL.row;
   for (rr = 0; rr < rows; rr++) { put(0, rr, T.SOLID); put(W - 1, rr, T.SOLID); }
   ledges.forEach(function (lg) { var th = lg.floor ? rows - lg.row : 2; for (c = lg.c; c < lg.c + lg.len; c++) for (rr = lg.row; rr < Math.min(rows, lg.row + th); rr++) put(c, rr, T.SOLID); });
+  for (rr = 0; rr < rows; rr++) put(hx > 0 ? fl1 + 1 : fl0 - 1, rr, T.SOLID);   // the far end of the arena is closed by a wall
   var underLedge = ledges.some(function (lg) { return lg !== EL && lg.row > rE && lg.c <= fl1 && lg.c + lg.len > fl0; }), arD = underLedge ? 3 : rows;   // a deep block under the arena unless the tower climbs past below it
   for (c = fl0; c <= fl1; c++) for (rr = rE; rr < Math.min(rows, rE + arD); rr++) put(c, rr, T.SOLID);
   // ---- the boss, its arena items (same rules as the side-scrolling castle) and the entrance
@@ -2382,7 +2382,7 @@ function buildCastleChain(seed, n, a, o, shape) {
   ledges.forEach(function (lg, k) {
     var wx = lg.dd > 0 ? lg.c + 1.5 : lg.c + lg.len - 1.5;
     if (k > 0) route.push({ k: 'at', x: wx * TS, y: lg.row * TS - 7, li: k });
-    if (k < 2 || lg.floor) return;
+    if (k < 2 || lg.floor || k >= ledges.length - 2) return;   // no hazards on the first ledges and none next to the arena
     var wantCan = lg.len >= 6 && r() < 0.18 + 0.25 * diff + 0.1 * sc;
     if (wantCan) { var cc2 = lg.dd > 0 ? lg.c + lg.len - 3 : lg.c + 2, cdir = lg.dd > 0 ? -1 : 1; put(cc2, lg.row - 1, cdir < 0 ? T.CANL : T.CANR); cannons.push({ x: cc2 * TS, y: (lg.row - 1) * TS, dir: cdir, per: 170 + rnd(0, 50), ph: rnd(0, 120) }); }
     else if (lg.len >= 6 && r() < 0.25 + 0.4 * diff) put(lg.c + Math.floor(lg.len / 2), lg.row - 1, T.SPIKE);
@@ -2420,7 +2420,7 @@ function buildCastleChain(seed, n, a, o, shape) {
   }
   enemies.push(boss);
   // ---- collectibles, checkpoint (a ledge at about 55% of the route) and the level record
-  var specials = [], goalPx = bx, ci = Math.max(1, Math.round(ledges.length * 0.55)), cl = ledges[Math.min(ledges.length - 2, ci)], cpIdx = route.findIndex(function (w) { return w.li === ledges.indexOf(cl); });
+  var specials = [], goalPx = (hx > 0 ? ac0 + AL - 2 : ac0 + 2) * TS + 6, ci = Math.max(1, Math.round(ledges.length * 0.55)), cl = ledges[Math.min(ledges.length - 2, ci)], cpIdx = route.findIndex(function (w) { return w.li === ledges.indexOf(cl); });
   for (i = 0; i < 5; i++) { var pl = ledges[Math.min(ledges.length - 1, 1 + Math.floor((i + 0.5) * (ledges.length - 1) / 5))]; specials.push({ x: (pl.c + pl.len / 2) * TS, y: (pl.row - 3) * TS }); }
   var vdoor = hx > 0 ? ac0 * TS + 3 * TS : (ac0 + AL) * TS - 3 * TS;
   var L = { items: bossItems, shellPass: shellPassF, egg: null, seed: seed, n: n, kind: 'castle', attempt: a, diff: diff, w: W, rows: rows, tiles: tiles, gt: new Array(W).fill(rows - 2), coins: coins, special: specials, enemies: enemies, movers: movers, cannons: cannons, rings: [], winds: [], pockets: [], keys: [], doors: [], switches: [], tele: [], launch: [], grp: new Uint8Array(W * rows),
