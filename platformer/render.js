@@ -705,7 +705,7 @@ function drawHUD(st) {
   if (st.sw > 0) text(TT('스위치 ', 'SWITCH ') + Math.ceil(st.sw / 60), 6, VH - 34, 8, '#9ac8ff');
   if (G.auto) { var w = 150; rrect(VW / 2 - w / 2, 20, w, 14, 4, 'rgba(255,138,61,.95)'); text(G.useRL && !G.usingFallback ? TT('자동 플레이 · RL (F3 끄기)', 'AUTO PLAY \u00b7 RL (F3 to stop)') : TT('자동 플레이 (F3 끄기)', 'AUTO PLAY (F3 to stop)'), VW / 2, 27, 8, '#2a1000', 'center', false); }
   if (G.msgT > 0 && G.msg) { var tw = Math.min(VW - 16, 8 + G.msg.length * (KO ? 7.4 : 4.9)); rrect(VW / 2 - tw / 2, VH - 22, tw, 15, 4, 'rgba(10,8,34,.78)'); text(G.msg, VW / 2, VH - 14.5, 8, '#fff', 'center', false); }
-  if (st.boss > 0 && st.L.arena && st.p.x > st.L.arena.c0 * TS - 100) text(TT('보스를 쓰러뜨려야 관문이 열려요!', 'Defeat the boss to open the gate!'), VW / 2, 42, 8, '#ff8aa8', 'center');
+  if (st.boss > 0 && st.L.arena && (st.L.arena.dir !== undefined ? PF.inArena(st) : st.p.x > st.L.arena.c0 * TS - 100)) text(TT('보스를 쓰러뜨려야 관문이 열려요!', 'Defeat the boss to open the gate!'), VW / 2, 42, 8, '#ff8aa8', 'center');
 }
 // Centered message box with a title and lines (last line highlighted).
 function overlay(title, lines) {
@@ -749,21 +749,22 @@ function drawMap() {
 
 // ---------------------------------------------------------------- super map: the graph of worlds (castle exit solid, cannon exit dashed)
 // Lays out the super map: the worlds of four consecutive depths as a graph with positions.
-function superLayout(base) {
+function superLayout(base) {   // four depth columns starting at base
   var out = [], d, s, wd;
   for (d = base; d < base + 4; d++) { wd = d === 0 ? 1 : d === 1 ? 2 : 3; for (s = 0; s < wd; s++) { var id = d * 3 + s, info = PF.worldInfo(G.seed, id); out.push({ id: id, depth: d, slot: s, info: info, x: 46 + (d - base) * 104, y: Math.round(112 + (s - (wd - 1) / 2) * 62) }); } }
   return out;
 }
+window.__superLayout = superLayout;
 // Super map: graph of worlds with their cleared / current / reachable states; also used while browsing and for the end screen.
 function drawSuper() {
   var g = ctx.createLinearGradient(0, 0, 0, VH); g.addColorStop(0, '#0a0624'); g.addColorStop(1, '#26125a'); ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
   var rs = PF.rng(21), i; for (i = 0; i < 50; i++) spark4(rs() * VW, rs() * VH, 0.8 + rs() * 1.4, 'rgba(255,255,255,.3)');
-  var curD = PF.worldInfo(G.seed, G.mode === 'super' && G.superFrom !== undefined ? G.superFrom : G.wid).depth, base = Math.max(0, curD - 1), lay = superLayout(base), byId = {}; lay.forEach(function (w) { byId[w.id] = w; });
+  var curD = PF.worldInfo(G.seed, G.superBrowse && G.sbSel !== undefined ? G.sbSel : (G.mode === 'super' && G.superFrom !== undefined ? G.superFrom : G.wid)).depth, base = Math.max(0, curD - 1), lay = superLayout(base), byId = {}; lay.forEach(function (w) { byId[w.id] = w; });
   G.sLay = lay; ctx.lineCap = 'round';
   lay.forEach(function (w) { ['castle', 'cannon'].forEach(function (k) { var t = byId[w.info.next[k]]; if (!t) { var ex = w.x + 62, ey = w.y + (k === 'castle' ? -10 : 10); ctx.setLineDash([2, 4]); line(w.x, w.y, ex, ey, 'rgba(255,255,255,.18)', 1.2); ctx.setLineDash([]); return; }
     var taken = G.prog.wcl[w.id] === (k === 'castle' ? 'castle' : 'cannon'), seen = G.prog.wcl[w.id] !== undefined || w.id === G.wid; ctx.setLineDash(k === 'castle' ? [] : [4, 4]); line(w.x, w.y, t.x, t.y, taken ? (k === 'castle' ? '#ff8a9a' : '#ffc060') : (seen ? 'rgba(255,255,255,.28)' : 'rgba(255,255,255,.12)'), taken ? 3 : 1.6); ctx.setLineDash([]); }); });
   G.sRects = [];
-  lay.forEach(function (w) { var cl = G.prog.wcl[w.id] !== undefined, cur = w.id === G.wid, tgt = G.mode === 'super' && w.id === G.superTo, pick = G.superBrowse && G.sbSel === w.id, ok = cl || cur || w.id === (G.prog.front || 0), col = cl ? '#7affe0' : (cur ? '#ffd0a0' : (ok ? '#a898ff' : '#5a5a7a'));
+  lay.forEach(function (w) { var cl = G.prog.wcl[w.id] !== undefined, cur = w.id === G.wid, tgt = G.mode === 'super' && w.id === G.superTo, pick = G.superBrowse && G.sbSel === w.id, ok = cl || cur || w.id === (G.prog.front || 0) || (G.worldOpen && G.worldOpen(w.id)), col = cl ? '#7affe0' : (cur ? '#ffd0a0' : (ok ? '#a898ff' : '#5a5a7a'));
     hex(w.x, w.y, 14, '#0c0820', Math.PI / 6); hex(w.x, w.y, 11.6, col, Math.PI / 6);
     text(G.worldName(w.id), w.x, w.y + 0.5, 9, '#10082a', 'center', false);
     if (cur || tgt || pick) { ctx.strokeStyle = pick ? '#ffe08a' : '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(w.x, w.y, 19 + Math.sin(F * 0.2) * 1.5, 0, 6.3); ctx.stroke(); }

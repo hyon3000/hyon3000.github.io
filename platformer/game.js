@@ -279,17 +279,25 @@ window.openSuper = function () {
   G.mode = 'sbrowse'; G.superBrowse = true; G.sbSel = G.wid; G.sbT = 0; G.superFrom = undefined; return true;
 };
 function sbMove(dir) {
-  var cur = null, lay = G.sLay || []; lay.forEach(function (w) { if (w.id === G.sbSel) cur = w; }); if (!cur) return;
+  var cur = null, lay = window.__superLayout ? window.__superLayout(Math.max(0, PF.worldInfo(G.seed, G.sbSel).depth - 1)) : (G.sLay || []); lay.forEach(function (w) { if (w.id === G.sbSel) cur = w; }); if (!cur) return;   // the layout around the cursor: arrows keep moving along the chain of worlds, not only among the four visible columns
   var vx = dir === 'right' ? 1 : dir === 'left' ? -1 : 0, vy = dir === 'down' ? 1 : dir === 'up' ? -1 : 0, best = null, bs = 1e9;
   lay.forEach(function (w) { if (w.id === cur.id) return; var dx = w.x - cur.x, dy = w.y - cur.y; if (dx * vx + dy * vy <= 2) return; var sc = Math.hypot(dx, dy) + Math.abs(dx * vy - dy * vx) * 0.7; if (sc < bs) { bs = sc; best = w; } });
   if (best) { G.sbSel = best.id; sfx('pop'); }
 }
+// a world can be entered when it is cleared, current, the frontier, already started (any stage done: two worlds can be in progress at once) or reached through the ending of a cleared world
+function worldOpen(id) {
+  if (worldCleared(id) || id === G.wid || id === (G.prog.front || 0)) return true;
+  var d = G.prog.done[id]; if (d) for (var k in d) if (d[k]) return true;
+  for (var w in G.prog.wcl) { var inf = PF.worldInfo(G.seed, +w); if (inf && inf.next && inf.next[G.prog.wcl[w]] === id) return true; }
+  return false;
+}
+G.worldOpen = worldOpen;
 function sbPick(id) {
-  var ok = worldCleared(id) || id === G.wid || id === (G.prog.front || 0); if (!ok) { sfx('bump'); return; }
+  var ok = worldOpen(id); if (!ok) { sfx('bump'); return; }
   closeSuper(); if (id !== G.wid) { setWorld(id); saveProg(); say(TT('월드 ' + worldName(id), 'World ' + worldName(id)), 120); }
 }
 // Stage-select dialog (worlds cleared + current, stages with state done/open/locked).
-function selectableWorlds() { var ids = {}; Object.keys(G.prog.wcl).forEach(function (k) { ids[k] = 1; }); ids[G.wid] = 1; ids[G.prog.front || 0] = 1; return Object.keys(ids).map(Number).sort(function (a, b) { return a - b; }).map(function (id) { return PF.worldInfo(G.seed, id); }); }
+function selectableWorlds() { var ids = {}; Object.keys(G.prog.wcl).forEach(function (k) { ids[k] = 1; var inf = PF.worldInfo(G.seed, +k); if (inf && inf.next && inf.next[G.prog.wcl[k]] !== undefined) ids[inf.next[G.prog.wcl[k]]] = 1; }); Object.keys(G.prog.done).forEach(function (k) { ids[k] = 1; }); ids[G.wid] = 1; ids[G.prog.front || 0] = 1; return Object.keys(ids).map(Number).filter(function (id) { return worldOpen(id); }).sort(function (a, b) { return a - b; }).map(function (id) { return PF.worldInfo(G.seed, id); }); }
 function selMapOf(wid) { var w = PF.worldInfo(G.seed, wid); return wid === G.wid ? G.map : PF.worldMap(G.seed, wid, w.depth, w.mainEnd); }
 function stageState(wid, map, nd) { if (isDoneW(wid, nd.i)) return 'done'; if (isOpenW(wid, map, nd)) return 'open'; return 'locked'; }
 window.openSelect = function () {

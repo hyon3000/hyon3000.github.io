@@ -81,14 +81,16 @@ function newState(L, o) {
   if (L.egg && !o.mount) st.it.push({ k: 4, x: L.egg.x, y: L.egg.y, w: 12, h: 12, vx: 0, vy: 0, em: 0, alive: true, ground: false });
   if (o.pw) { setPw(st.p, o.pw); } if (o.mount) st.p.mount = 1;
   if (o.mini) setMini(st.p); if (o.fin) st.p.fin = o.fin; if (o.wing) st.p.wing = o.wing;
+  if ((st.p.wing || st.p.fin || st.p.mount) && st.p.pw === 0) setPw(st.p, 1);   // flying / swimming / riding heroes are never small
   if (L.entry === 'mini') setMini(st.p); else if (L.entry === 'big') setPw(st.p, 1); else if (L.entry === 'fire') setPw(st.p, 2); else if (L.entry === 'snow') setPw(st.p, 5);   // validation only: the power the hero carries into a segment
   for (var i = 0; i < L.movers.length; i++) st.mo.push({ off: L.movers[i].off0 || 0, vy: 0, s: 0, t: 0, ox: L.movers[i].ox0 || 0 });
   if (!o.noEn) for (i = 0; i < L.enemies.length; i++) { var d = L.enemies[i];
-    if (o.cp && d.t !== E.BOSS && d.x < L.cp.x + 120 && d.x > L.cp.x - 120) continue;
+    if (o.cp && d.t !== E.BOSS && d.x < L.cp.x + 120 && d.x > L.cp.x - 120 && (L.cp.stage === undefined || Math.abs(d.y - L.cp.y) < 140)) continue;
     var e = {}; for (var k in d) e[k] = d[k];
     e.vx = 0; e.vy = 0; e.alive = true; e.dt = 0; e.ground = false; e.sh = 0; e.kg = 0; e.s = 0; e.tm = 0; e.inv = 0; if (e.dir === undefined) e.dir = -1;
     if (e.t === E.BOSS) { e.hp = 3; st.boss++; }
     st.en.push(e); }
+  if (o.cp && L.cp.stage !== undefined) { st.stage = L.cp.stage; st.cr = L.cp.cr | 0; }   // chain castles: resume the route at the checkpoint ledge
   if (L.house) st.boss = 1;   // gamble house: the exit stays locked until one box is opened
   return st;
 }
@@ -180,7 +182,7 @@ function ropeSolve(st0, g, maxCombos, nBest) {
 function clone(st) {
   var c = {}, k; for (k in st) c[k] = st[k];
   c.p = {}; for (k in st.p) c.p[k] = st.p[k]; if (c.p.rope) c.p.rope = { i: c.p.rope.i, L: c.p.rope.L, th: c.p.rope.th, w: c.p.rope.w };
-  var en = new Array(st.en.length), i, px = st.p.x; for (i = 0; i < en.length; i++) { var s = st.en[i]; if (st.share && Math.abs(s.x - px) > 600) { en[i] = s; continue; } var e = {}; for (k in s) e[k] = s[k]; en[i] = e; } c.en = en;
+  var en = new Array(st.en.length), i, px = st.p.x; for (i = 0; i < en.length; i++) { var s = st.en[i]; if (st.share && (st.L.vgoal ? (Math.abs(s.x - px) > 450 || Math.abs(s.y - st.p.y) > 320) : Math.abs(s.x - px) > 600)) { en[i] = s; continue; } var e = {}; for (k in s) e[k] = s[k]; en[i] = e; } c.en = en;
   c.it = st.it.length ? st.it.map(function (s) { var e = {}; for (var k in s) e[k] = s[k]; return e; }) : [];
   c.fb = st.fb.length ? st.fb.map(function (s) { return { x: s.x, y: s.y, vx: s.vx, vy: s.vy, life: s.life, k: s.k }; }) : [];
   c.ep = st.ep.length ? st.ep.map(function (s) { return { x: s.x, y: s.y, vx: s.vx, vy: s.vy, life: s.life }; }) : [];
@@ -191,6 +193,14 @@ function clone(st) {
 // Record a sound / particle event (only when recording is on; the simulation never reads events back).
 function ev(st, k, x, y, a) { if (st.ev) st.ev.push({ k: k, x: x, y: y, a: a }); }
 // Change power level (0 small, 1 big, 2 fire, 3 ...): resizes the hero keeping its feet on the same spot.
+// special items are mutually exclusive (only a plain mushroom growth combines with them): taking one drops the others - flame / leaf / wrench / snow power, wings, fins, a mount, the shrink
+function exclusive(p, keep) {
+  if (keep !== 'wing') p.wing = 0; if (keep !== 'fin') p.fin = 0; if (keep !== 'mount') p.mount = 0;
+  if (keep !== 'pw' && p.pw > 1) setPw(p, 1);
+  if (keep !== 'mini' && p.mini) setPw(p, 0);
+}
+// wings / fins / a mount, like flowers, contain the mushroom: a small hero grows first (stays small only when a block blocks the headroom)
+function growFor(st, p) { if (p.pw === 0 && !boxHit(st, p.x, p.y + p.h - P.BH, p.w, P.BH)) setPw(p, 1); }
 function setPw(p, v) { p.duck = 0; if (p.mini) { p.mini = 0; p.x -= (P.PW - p.w) / 2; p.w = P.PW; } var nh = v > 0 ? P.BH : P.SH; p.y += p.h - nh; p.h = nh; p.pw = v; p.big = v > 0; }
 function miniSurface(st, p, ny) {   // the shrunk hero stands on the water surface; a star hero walks on any liquid surface, poison included (a mini hero sinks into poison and dies)
   var rr = Math.floor((ny + p.h - 1e-4) / TS), cx = Math.floor((p.x + p.w / 2) / TS), t = tileAt(st, cx, rr);
@@ -253,7 +263,9 @@ function bump(st, r) {
     setTile(st, best, r, T.USED);
     var k = t2 === T.QS ? 3 : t2 === T.QM ? (p.mount ? 0 : 4) : (p.pw === 0 ? 0 : p.pw === 1 ? ((best + r) & 1 ? 1 : 2) : ((best + r) & 1 ? 3 : 1));
     if (t2 === T.QP && st.L.qpk && p.pw >= 1 && ((best * 3 + r * 5) % 3 === 0)) k = st.L.qpk[(best + r) % st.L.qpk.length];   // themed power-ups (wrench belt / snow flower)
-    if (t2 === T.QP && ((best * 7 + r * 13) % 5 === 0)) k = 6 + ((best + r * 3) % 4);
+    if (t2 === T.QP && ((best * 7 + r * 13) % 5 === 0)) { k = 6 + ((best + r * 3) % 4); if (k === 8 && (best * 11 + r * 7) % 7 !== 0) k = 9; }   // wings are very rare (a clock instead)
+    if (st.L.fixedBox && st.L.fixedBox[best + ',' + r] !== undefined) k = st.L.fixedBox[best + ',' + r];   // a loose pickup that was moved into a block
+    if (p.pw === 0 && k !== 3 && k !== 6) k = 0;   // a small hero always gets the mushroom first (only a star may come out of a block)
     st.it.push({ k: k, x: best * TS + 2, y: y, w: 12, h: 12, vx: k === 1 || k === 2 ? 0 : 0.7, vy: 0, em: 14, alive: true, ground: false });
     ev(st, 'item', x, y - 4);
   }
@@ -564,7 +576,7 @@ function hzStep(st, f) {
 function updBoss(st, e, f) {
   var p = st.p; if (e.inv > 0) e.inv--;
   var dx = p.x + p.w / 2 - e.x - e.w / 2;
-  if (!e.awake) { if (Math.abs(dx) < 190) e.awake = true; else return; }
+  if (!e.awake) { if (Math.abs(dx) < 190 && (!st.L.arena || st.L.arena.y0 === undefined || Math.abs(p.y - e.y) < 200)) e.awake = true; else return; }
   if (e.v === 0) {         // leaper
     e.tm++;
     if (e.ground) { e.vx = 0.0; if (e.tm > 80) { e.vy = -7.2; e.vx = (dx > 0 ? 1 : -1) * 1.5; e.tm = 0; } else e.vx = (dx > 0 ? 0.35 : -0.35); }
@@ -625,6 +637,7 @@ function stageDone(st, g) {
     case 'band': return st.p.ground && Math.abs(st.p.y + 7 - g.y) < 10 && st.p.x + 6 >= g.x && st.p.x + 6 <= g.x2;   // standing on the ground at that height anywhere in an x window
     case 'at': return st.p.ground && Math.abs(st.p.x + 6 - g.x) < 20 && Math.abs(st.p.y + 7 - g.y) < 10;
     case 'perch': if (!(st.p.ground && Math.abs(st.p.vx) < 0.7 && Math.abs(st.p.x + 6 - g.x) < 8 && Math.abs(st.p.y + 7 - g.y) < 10)) return false; for (var pq = 0; pq < st.en.length; pq++) { var pe = st.en[pq]; if (pe.alive && pe.frz > 0 && Math.abs(pe.x + pe.w / 2 - g.x) < 24) return true; } return false;   
+    case 'xle': return st.p.x <= g.x;   // chain castles that run left: the arena door
     case 'xge': return st.p.x >= g.x && (g.x2 === undefined || (st.p.x <= g.x2 && st.p.ground));   // x2: the stage ends in a window on the ground (so the next segment starts from its own seam, not from somewhere beyond its pickups)
     case 'got': if (!st.picked) return false; for (var gq = 0; gq < st.it.length; gq++) if (st.it[gq].alive) return false; return true;   // the box's item has been collected
     case 'used': return tileAt(st, g.c, g.r) === T.USED;   // a box was opened
@@ -823,16 +836,16 @@ function step(st, inp) {
     if (overlap(p, e)) {
       e.alive = false;
       if (e.k === 0) { if (p.pw === 0 && !boxHit(st, p.x, p.y + p.h - P.BH, p.w, P.BH)) { setPw(p, 1); st.score += 200; ev(st, 'grow', p.x, p.y); } else { st.score += 300; ev(st, 'pow2', p.x, p.y); } }
-      else if (e.k === 1) { if (p.pw !== 2) { if (p.pw === 0 && boxHit(st, p.x, p.y + p.h - P.BH, p.w, P.BH)) st.score += 200; else setPw(p, 2); } st.score += 500; ev(st, 'grow', p.x, p.y); }
-      else if (e.k === 10 || e.k === 11) { var npw = e.k === 10 ? 4 : 5; if (p.pw !== npw) { if (p.pw === 0 && boxHit(st, p.x, p.y + p.h - P.BH, p.w, P.BH)) st.score += 200; else setPw(p, npw); } st.score += 500; ev(st, 'grow', p.x, p.y); }   // wrench belt / snow flower
-      else if (e.k === 2) { if (p.pw !== 3) { if (p.pw === 0 && boxHit(st, p.x, p.y + p.h - P.BH, p.w, P.BH)) st.score += 200; else setPw(p, 3); } st.score += 500; ev(st, 'grow', p.x, p.y); }
+      else if (e.k === 1) { exclusive(p, 'pw'); if (p.pw !== 2) { if (p.pw === 0 && boxHit(st, p.x, p.y + p.h - P.BH, p.w, P.BH)) st.score += 200; else setPw(p, 2); } st.score += 500; ev(st, 'grow', p.x, p.y); }
+      else if (e.k === 10 || e.k === 11) { exclusive(p, 'pw'); var npw = e.k === 10 ? 4 : 5; if (p.pw !== npw) { if (p.pw === 0 && boxHit(st, p.x, p.y + p.h - P.BH, p.w, P.BH)) st.score += 200; else setPw(p, npw); } st.score += 500; ev(st, 'grow', p.x, p.y); }   // wrench belt / snow flower
+      else if (e.k === 2) { exclusive(p, 'pw'); if (p.pw !== 3) { if (p.pw === 0 && boxHit(st, p.x, p.y + p.h - P.BH, p.w, P.BH)) st.score += 200; else setPw(p, 3); } st.score += 500; ev(st, 'grow', p.x, p.y); }
       else if (e.k === 3) { p.star = P.STAR; st.score += 1000; ev(st, 'star', p.x, p.y); }
       else if (e.k === 5) { st.coins += 5; st.score += 500; ev(st, 'treasure', p.x, p.y); }
-      else if (e.k === 6) { if (!p.mini) setMini(p); st.score += 500; ev(st, 'shrink', p.x, p.y); }
-      else if (e.k === 7) { p.fin = 1800; st.score += 500; ev(st, 'item', p.x, p.y); }
-      else if (e.k === 8) { p.wing = 900; st.score += 500; ev(st, 'item', p.x, p.y); }
+      else if (e.k === 6) { exclusive(p, 'mini'); if (!p.mini) setMini(p); st.score += 500; ev(st, 'shrink', p.x, p.y); }
+      else if (e.k === 7) { exclusive(p, 'fin'); growFor(st, p); p.fin = 1800; st.score += 500; ev(st, 'item', p.x, p.y); }
+      else if (e.k === 8) { exclusive(p, 'wing'); growFor(st, p); p.wing = 900; st.score += 500; ev(st, 'item', p.x, p.y); }
       else if (e.k === 9) { st.t += 20 * 60; st.score += 300; ev(st, 'item', p.x, p.y); }
-      else if (e.k === 4) { if (!p.mount) { p.mount = 1; ev(st, 'mount', p.x, p.y); } st.score += 500; }
+      else if (e.k === 4) { exclusive(p, 'mount'); growFor(st, p); if (!p.mount) { p.mount = 1; ev(st, 'mount', p.x, p.y); } st.score += 500; }
     } }
   // --- carried shell follows the hero
   if (p.carry >= 0) { e = st.en[p.carry]; if (!e || !e.alive) p.carry = -1; else if (!run) { e.carried = false; e.sh = 2; e.dir = p.face; e.kg = 14; e.x = p.x + p.face * 12 + (p.face < 0 ? -2 : 0); e.y = p.y + p.h - e.h; p.carry = -1; ev(st, 'kick', e.x, e.y); } else { e.x = p.x + (p.face > 0 ? p.w - 1 : -e.w + 1); e.y = p.y + p.h - e.h - 3; e.vx = 0; e.vy = 0; } }
@@ -954,11 +967,13 @@ function step(st, inp) {
     p.won = true; var ty = L.poleY - 18 - (0.5 + 0.5 * Math.sin(f * 0.045)) * 90, hit = Math.abs(ty - (p.y + p.h / 2)) < 13; if (hit) { st.score += 3000; st.tape = 1; }
     ev(st, 'goal', L.goalX, p.y, hit ? 1 : 0); }
   // passing the checkpoint x sets the flag used by respawn (newState with o.cp)
-  if (!st.cp && p.x >= L.cp.x) st.cp = 1;
+  if (!st.cp && (L.cp.stage !== undefined ? st.stage >= L.cp.stage : p.x >= L.cp.x)) st.cp = 1;
   st.f = f + 1;
 }
 
 // Public API for the game, planner, validator and tests.
-root.PF = { setMini: setMini, maceBalls: maceBalls, fireOn: fireOn, stageDone: stageDone, movOn: movOn, isW: isW, AIRMAX: AIRMAX, TS: TS, ROWS: ROWS, VW: VW, VH: VH, T: T, SOL: SOL, IN: IN, P: P, E: E, MV_PERIOD: MV_PERIOD, rng: rng, hash: hash, tri: tri, newState: newState, clone: clone, step: step, tileAt: tileAt, boxHit: boxHit, movPos: movPos,
+// is the hero in (or at the door of) the boss arena? x test for side-scrolling castles, plus a box in y for the chain castles
+function inArena(st) { var A = st.L.arena, p = st.p; if (!A) return false; if (A.y0 !== undefined && (p.y < A.y0 || p.y > A.y1)) return false; return A.dir < 0 ? p.x <= A.c1 * TS + 40 : p.x >= A.c0 * TS - 40; }
+root.PF = { setMini: setMini, inArena: inArena, maceBalls: maceBalls, fireOn: fireOn, stageDone: stageDone, movOn: movOn, isW: isW, AIRMAX: AIRMAX, TS: TS, ROWS: ROWS, VW: VW, VH: VH, T: T, SOL: SOL, IN: IN, P: P, E: E, MV_PERIOD: MV_PERIOD, rng: rng, hash: hash, tri: tri, newState: newState, clone: clone, step: step, tileAt: tileAt, boxHit: boxHit, movPos: movPos,
   setPw: setPw, slopeY: slopeY, hurt: hurt, ROPE: ROPE, ropeAng0: ropeAng0, ropeInput: ropeInput, ropeNew: ropeNew, ropeSolve: ropeSolve };
 })(typeof window !== 'undefined' ? window : globalThis);

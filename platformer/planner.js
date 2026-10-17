@@ -28,7 +28,7 @@ var BOSS_EXTRA = (function () { var c = []; [RR, R, N, Lf].forEach(function (d) 
 // Extra candidates that start by going left; only added on puzzle levels where the route may need backtracking.
 var LEFT_EXTRA = (function () { var c = []; var LL = Lf | IN.RUN; [Lf, LL].forEach(function (a) { [a, N].forEach(function (b) { [0, 4, 8, 12, 16, 20, 26, 32].forEach(function (s) { c.push({ a: a, b: b, s: s, h: -1 }); [99, 12].forEach(function (h) { c.push({ a: a, b: b, s: s, h: h }); }); }); }); }); return c; })();
 // True when a living boss (enemy type 8) is within 260 px of the hero: switches to the longer horizon and the boss-fight scoring.
-function bossNear(st) { if (st.boss <= 0) return false; for (var i = 0; i < st.en.length; i++) { var e = st.en[i]; if (e.t === 8 && e.alive && Math.abs(e.x - st.p.x) < 260) return true; } return false; }
+function bossNear(st) { if (st.boss <= 0) return false; for (var i = 0; i < st.en.length; i++) { var e = st.en[i]; if (e.t === 8 && e.alive && Math.abs(e.x - st.p.x) < 260 && (!st.L.vgoal || Math.abs(e.y - st.p.y) < 200)) return true; } return false; }
 // Key mask of candidate c at frame k: optional left lead-in (l), then a until s, then b (or c after t), with Jump OR-ed in during the hold window.
 function inputAt(c, k) { if (c.l) { if (k < c.l) return Lf; k -= c.l; } var m = k < c.s ? c.a : (c.t !== undefined && k >= c.s + c.t ? c.c : c.b); var s0 = c.s + (c.w || 0); if (c.h > 0 && k >= s0 && k < s0 + c.h) m |= IN.J; return m; }
 
@@ -86,7 +86,7 @@ function endScore(st0, st, c, k, land, big0) {
   // Hazard penalty for ending under a telegraphed strike zone (smaller while it is still warming up).
   if (st.hz.length) for (var hq = 0; hq < st.hz.length; hq++) { var ho = st.hz[hq]; if (Math.abs(p.x + p.w / 2 - ho.x) < 26 && p.y < ho.gy + 4) sc -= (ho.wt > 0 ? 90 : 160); }   // standing under a marked strike zone
   // Airborne at the end is slightly bad; airborne with nothing below (see groundBelow) is a near-death.
-  if (!p.ground) { sc -= 25; if (!groundBelow(st)) sc -= 3000; }
+  if (!p.ground) { sc -= (p.wing > 0 ? 2 : 25); if (!(p.wing > 0) && !groundBelow(st)) sc -= 3000; }   // winged: flying over a pit is fine
   // Drowning: reward gaining air when it is low to begin with, and punish ending with less than 200 air.
   if (st0.p.air < 700) sc += (p.air - st0.p.air) * 0.3; if (p.air < 200) sc -= (200 - p.air) * 3;
   // Tie-breakers: prefer scripts that jump late and short, and avoid walking left unless it is needed.
@@ -327,20 +327,25 @@ function makeNavigator() {
       if (ex && Math.abs(ex[0] - st.p.x) < 0.6 && Math.abs(ex[1] - st.p.y) < 0.6) return L.plan[st.f];
       nv.planBad = true;
     }
+    // Chain castles: after a fall to a lower ledge the route resumes from that ledge (the stage counter would otherwise point at a waypoint far above)
+    if (L.vgoal && st.p.ground && st.stage > 0) { var rgs = L.route[Math.min(st.stage, L.route.length - 1)], hxs = st.p.x + 6, hys = st.p.y + 7;
+      if (Math.abs(rgs.x - hxs) + Math.abs(rgs.y - hys) > 260) for (var rj = st.stage - 1; rj >= 0; rj--) { var rw = L.route[rj]; if (Math.abs(rw.y - hys) < 10 && Math.abs(rw.x - hxs) < 70) { if (rj < st.stage - 1) { st.stage = rj; nv.seq = null; nv.job = null; } break; } } }
     // Mushroom attraction: a shrunken hero walks to a nearby mushroom pickup (hopping obstacles, running when far) before a boss fight.
     // (and a hero who lost his flame walks back to a spare flower when a fire-armoured boss is near: only fireballs hurt it)
     var wantK = st.p.mini ? 0 : -1;
     if (wantK < 0 && st.boss > 0 && st.p.pw !== 2) for (var fbi = 0; fbi < st.en.length; fbi++) { var fbe = st.en[fbi]; if (fbe.t === 8 && fbe.alive && fbe.imm && fbe.immKind === 'fire' && Math.abs(fbe.x - st.p.x) < 420) wantK = 1; }
     if (st.boss > 0 && wantK >= 0) for (var mi = 0; mi < st.it.length; mi++) { var mu = st.it[mi]; if (mu.alive && mu.k === wantK && mu.x > st.p.x - (wantK === 1 ? 260 : 90) && mu.x < st.p.x + (wantK === 1 ? 260 : 110) && Math.abs(mu.y - st.p.y) < (wantK === 1 ? 44 : 24) && st.p.ground) { nv.seq = null; nv.job = null; var mdx = mu.x + 6 - (st.p.x + st.p.w / 2); if (Math.abs(mdx) < 2) return 0; var mdir = mdx > 0 ? PF.IN.R : PF.IN.L, mc = Math.floor((mdx > 0 ? st.p.x + st.p.w + 2 : st.p.x - 2) / PF.TS), mr = Math.floor((st.p.y + st.p.h - 4) / PF.TS), mt = PF.tileAt(st, mc, mr); return mdir | (PF.SOL[mt] || PF.tileAt(st, mc, mr - 1) === 0 && PF.SOL[PF.tileAt(st, mc, mr + 1)] && false ? PF.IN.J : 0) | (Math.abs(mdx) > 24 ? PF.IN.RUN : 0); } }   // a shrunken hero must grow back before an arena fight: the mushroom at the entrance
+    // Winged hero: the macro stage search explodes (a flight can last for hundreds of frames), so the reactive look-ahead planner drives alone.
+    if (st.p.wing > 0) { nv.seq = null; nv.job = null; return fb.decide(st); }
     // No route data: only the reactive planner can drive.
     if (!L.route || !PF.searchIter) return fb.decide(st);
     // Find an armoured boss that is close enough (or inside the arena) to switch to the shell-boss controller.
     var shellBoss = null;
-    if (st.boss > 0) for (var bi = 0; bi < st.en.length; bi++) { var be = st.en[bi]; if (be.t === 8 && be.alive && be.imm && be.immKind === 'shell' && (L.arena ? st.p.x >= L.arena.c0 * PF.TS - 30 : be.x - st.p.x < 340) && st.p.x - be.x < 300) shellBoss = be; }
+    if (st.boss > 0) for (var bi = 0; bi < st.en.length; bi++) { var be = st.en[bi]; if (be.t === 8 && be.alive && be.imm && be.immKind === 'shell' && (L.arena ? PF.inArena(st) : be.x - st.p.x < 340) && (L.vgoal ? Math.abs(be.x - st.p.x) < 300 : st.p.x - be.x < 300)) shellBoss = be; }
     nv.sb = !!shellBoss;   // armoured boss: from the arena entrance on
     if (shellBoss) return shellBossMask(st, shellBoss, fb);   // armoured boss: only kicked shells hurt it
     // Boss arenas (and boss-rush levels): drop any macro plan, the reactive planner handles the fight.
-    if (st.boss > 0 && (bossNear(st) || nv.job === null && L.kind === 'bossrush')) { nv.seq = null; nv.job = null; return fb.decide(st); }   // boss arenas: the reactive look-ahead planner dodges and stomps   // boss arenas: the reactive look-ahead planner dodges and stomps
+    if (st.boss > 0 && (bossNear(st) || (L.vgoal && PF.inArena(st)) || nv.job === null && L.kind === 'bossrush')) { nv.seq = null; nv.job = null; return fb.decide(st); }   // boss arenas: the reactive look-ahead planner dodges and stomps   // boss arenas: the reactive look-ahead planner dodges and stomps
     // Keep playing the macro sequence found for the current stage.
     if (nv.seq && nv.i < nv.seq.length && (nv.stage === st.stage || (L.snow && !st.p.ground))) return nv.seq[nv.i++];   // frost levels: a stage that completes in mid-air (the ice forms during the jump) does not cut the jump short
     nv.seq = null;
@@ -357,7 +362,7 @@ function makeNavigator() {
     if (!nv.job) {
       if (nv.wait > 0 || !(st.p.ground || (L.swimNodes && PF.isW(PF.tileAt(st, Math.floor((st.p.x + st.p.w / 2) / PF.TS), Math.floor((st.p.y + st.p.h / 2) / PF.TS)))))) { if (nv.wait > 0) nv.wait--; return fb.decide(st); }   // swim levels (L.swimNodes) also plan while afloat
       // Current goal waypoint g (the last one repeats); target x and y (y may be null = any height).
-      var g = L.route[Math.min(st.stage, L.route.length - 1)]; if (g.k === 'goal' && L.arena && st.boss > 0 && st.p.x < L.arena.c0 * PF.TS - 40) g = { k: 'xge', x: L.arena.c0 * PF.TS - 24, y: g.y, door: 1 };   // long castle: first reach the arena door, the fight itself is the reactive planner's job
+      var g = L.route[Math.min(st.stage, L.route.length - 1)]; if (g.k === 'goal' && L.arena && st.boss > 0 && !PF.inArena(st)) g = L.vgoal ? L.route[L.route.length - 2] : { k: 'xge', x: L.arena.c0 * PF.TS - 24, y: g.y, door: 1 };   // long castle: first reach the arena door, the fight itself is the reactive planner's job
       var tx = g.x === undefined ? L.goalX : g.x, ty = g.y === undefined ? null : g.y;
       // Stage-done tests: strict also requires no poison and a safe stop (settles) unless it is the goal or a door; loose drops the safe-stop rule.
       var nearDone = function (s) { return g.k === 'near' && s.stage > st.stage; }, strict = function (s) { return (PF.stageDone(s, g) || nearDone(s)) && !(s.p.pois > 0) && (g.k === 'goal' || g.door || settles(s)) && (!L.swimNodes || g.k === 'goal' || clearOfEn(s)); }, loose = function (s) { return (PF.stageDone(s, g) || nearDone(s)) && !(s.p.pois > 0); };
