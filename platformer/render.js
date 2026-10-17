@@ -249,7 +249,7 @@ function drawWaterOverlay(x, y, above, wt, c, r) {
 function drawHero(p, dead, spinA, mounted) {
   var h = p.h, w = p.w, x = p.x, y = p.y, face = p.face >= 0 ? 1 : -1, cx = x + w / 2, pw = p.pw | 0, cy = y + h / 2, rx = w / 2 + 3.5;
   if (p.inv > 0 && !dead && (Math.floor(p.inv / 4) % 2)) ctx.globalAlpha = 0.45;
-  var body = ['#ff8a3d', '#ff8a3d', '#ff3d8a', '#3dd6c0'][pw], light = ['#ffc08a', '#ffc08a', '#ff9ac0', '#9af0e0'][pw], dark = ['#c24a14', '#c24a14', '#a01450', '#16806e'][pw];
+  var body = ['#ff8a3d', '#ff8a3d', '#ff3d8a', '#3dd6c0', '#8a94a8', '#7ac8ff'][pw], light = ['#ffc08a', '#ffc08a', '#ff9ac0', '#9af0e0', '#c8d0e0', '#d8f0ff'][pw], dark = ['#c24a14', '#c24a14', '#a01450', '#16806e', '#4a5262', '#2a6a9a'][pw];
   if (p.star > 0) { var hue = (F * 14) % 360; body = 'hsl(' + hue + ',90%,58%)'; light = 'hsl(' + hue + ',95%,80%)'; dark = 'hsl(' + ((hue + 60) % 360) + ',80%,35%)'; }
   ctx.save(); ctx.translate(cx, cy); if (spinA) ctx.rotate(spinA); if (p.spin > 0) ctx.scale(Math.cos(p.spin * 0.7), 1); ctx.translate(-cx, -cy);
   if (mounted) { // rideable creature (original): a violet dome scarab
@@ -262,6 +262,8 @@ function drawHero(p, dead, spinA, mounted) {
   if (!mounted) { var st2 = Math.sin(p.anim * 2.2), mv = Math.abs(p.vx) > 0.2 && p.ground; if (p.ground) { circ(cx - 3 + (mv ? st2 * 2.5 : 0), y + h - 1, 2, dark); circ(cx + 3 - (mv ? st2 * 2.5 : 0), y + h - 1, 2, dark); } else { circ(cx - 3, y + h - 3, 2, dark); circ(cx + 3, y + h - 4, 2, dark); } }
   var top = by + 1, bot = by + h - 1;
   poly([cx, top, cx + rx, cy, cx, bot, cx - rx, cy], dark); poly([cx, top + 1.5, cx + rx - 2, cy, cx, bot - 1.5, cx - rx + 2, cy], body); poly([cx, top + 1.5, cx - rx + 2, cy, cx, cy], light);
+  if (pw === 4) { rect(cx - 5, top - 1, 10, 4, '#c8d0e0'); rect(cx - 5, top - 1, 10, 1.5, '#fff'); line(cx + face * 6, cy + 2, cx + face * 10, cy - 4, '#8a5a2a', 1.6); rect(cx + face * 10 - 2, cy - 7, 5, 4, '#6a6a7a'); }
+  if (pw === 5) { poly([cx - 3, top + 3, cx - 1, top - 6, cx + 1, top + 3], '#e8f8ff', '#5aa0c8'); poly([cx + 1, top + 3, cx + 4, top - 4, cx + 5, top + 3], '#bfe8ff', '#5aa0c8'); }
   if (pw === 2) { poly([cx - 3, top + 3, cx - 1, top - 5, cx + 0.5, top + 2], '#ffb02a'); poly([cx - 0.5, top + 2, cx + 2, top - 7, cx + 4, top + 3], '#ff7a1a'); }
   else if (p.big) { poly([cx - 3, top + 3, cx, top - 3, cx + 3, top + 3], '#fff0c0'); }
   poly([cx - 3, top + 3, cx - 7, top - 1, cx - 5.5, top + 6], '#8a5aff'); poly([cx + 3, top + 3, cx + 7, top - 1, cx + 5.5, top + 6], '#8a5aff');
@@ -270,7 +272,12 @@ function drawHero(p, dead, spinA, mounted) {
 }
 
 // Wall vent that blows bubbles while its jet is on.
-function drawBubbleJet(w, f) {   // bubbles blown out of a wall vent, only while the jet is on
+function drawBubbleJet(w, f) {
+  if (w.dy > 0) {   // a jet blowing down from a vent in the ceiling: bubbles stream downwards (toward the poison below)
+    var on0 = !w.per || ((f + (w.ph | 0)) % w.per) < w.on; rect(w.vx - 6, w.vy - 3, 12, 4, on0 ? '#7ad0ff' : '#3a3460'); if (!on0) return;
+    for (var jb = 0; jb < 12; jb++) { var t2 = ((f * 1.6 + jb * 19) % (w.y1 - w.y0)) / (w.y1 - w.y0), bx2 = w.x0 + 4 + ((jb * 37) % Math.max(4, w.x1 - w.x0 - 8)) + Math.sin(f * 0.2 + jb) * 2; ctx.strokeStyle = 'rgba(230,255,255,' + (0.9 - t2 * 0.5).toFixed(2) + ')'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(bx2, w.y0 + t2 * (w.y1 - w.y0), 1.5 + (jb % 3) * 0.8, 0, 6.2832); ctx.stroke(); }
+    return;
+  }   // bubbles blown out of a wall vent, only while the jet is on
   if (w.per && ((f + (w.ph | 0)) % w.per) >= w.on) { var dd0 = w.dx > 0 ? 1 : -1; rect(w.vx - (dd0 > 0 ? 2 : -2) - 3, w.y0 + 2, 6, w.y1 - w.y0 - 4, '#3a3460'); return; }
   var dd = w.dx > 0 ? 1 : -1, len = w.x1 - w.x0, i; rect(w.vx - (dd > 0 ? 3 : -3) - 3, w.y0 + 2, 6, w.y1 - w.y0 - 4, '#7ad0ff');
   for (i = 0; i < 14; i++) { var t = ((f * 1.7 + i * 23) % len) / len, xx = (dd > 0 ? w.x0 : w.x1) + dd * t * len, yy = w.y0 + 4 + ((i * 37) % Math.max(4, w.y1 - w.y0 - 8)) + Math.sin(f * 0.2 + i) * 2; ctx.strokeStyle = 'rgba(230,255,255,' + (0.9 - t * 0.6).toFixed(2) + ')'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(xx, yy, 1.5 + (i % 3) * 0.8, 0, 6.2832); ctx.stroke(); }
@@ -312,6 +319,9 @@ function drawHz(o, f) {
     case 'acorn': ell(x, y + 1, 3.6, 4.4, '#b0702a'); rect(x - 4, y - 4, 8, 3, '#6a4a1a'); break;
     case 'bomb': circ(x, y, 6.5, '#2a2a3a'); circ(x - 2, y - 2, 2, '#6a6a8a'); line(x + 2, y - 6, x + 5, y - 10, '#ffb04a', 1.5); circ(x + 5, y - 10, 1.6, '#ffe08a'); break;
     case 'bolt': spark4(x, y, 7, '#fffbb0'); circ(x, y, 2.5, '#ffffff'); break;
+    case 'hammer': ctx.save(); ctx.translate(x, y); ctx.rotate(o.rot || 0); rect(-1, -2, 2, 9, '#8a5a2a'); rect(-6, -7, 12, 6, '#7a7a8a'); rect(-6, -7, 12, 2, '#c8c8d8'); ctx.restore(); break;
+    case 'fire': circ(x, y, 5, 'rgba(255,90,20,.45)'); circ(x, y, 3.6, '#ff6a1a'); circ(x, y, 1.8, '#ffe8a0'); break;
+    case 'snow': circ(x, y, 5, '#e8f6ff'); circ(x - 1.5, y - 1.5, 2.4, '#ffffff'); circ(x + 2, y + 2, 1.6, '#bfe0f4'); break;
     default: circ(x, y, 5, '#ffd24a');
   }
 }
@@ -358,6 +368,16 @@ function drawEnemy(e) {
     case E.PLANT: { if (e.y > e.y0 - 1 && e.hid) break; var top = e.y;   // spore bud on a pylon
       line(cx, top + 8, cx, e.y0 + 6, '#3affb0', 2); spark8(cx, top + 6, 6.5, '#ff3a8a', f * 0.03); circ(cx, top + 6, 3.2, '#ffd0e4'); circ(cx, top + 6, 1.4, '#6a0a2a'); break; }
     case E.ROLL: drawRoller(e); break;
+    case E.THROWER: { var sk2 = e.skin, bobT = e.fly ? Math.sin(f * 0.2 + e.ph) * 1.5 : 0, bdy = by - 14 + bobT, tcol = sk2 === 'hammer' ? '#5a7ad0' : sk2 === 'fire' ? '#e0502a' : '#e8f4ff', tdk = sk2 === 'hammer' ? '#1a2a60' : sk2 === 'fire' ? '#6a1a04' : '#5a8ab0';   // a thrower: hammer bro (blue helmet), fire spitter (red), snowman (white)
+      if (e.fly) { poly([cx - 4, bdy + 6, cx - 14, bdy - 2 + Math.sin(f * 0.5) * 4, cx - 7, bdy + 10], '#f4f0ff', '#8a7ac0'); poly([cx + 4, bdy + 6, cx + 14, bdy - 2 + Math.sin(f * 0.5) * 4, cx + 7, bdy + 10], '#f4f0ff', '#8a7ac0'); }
+      if (sk2 === 'snow') { circ(cx, bdy + 9, 6.5, tcol); circ(cx, bdy + 2, 4.6, tcol); circ(cx + dir * 1.6, bdy + 1.2, 1, '#102030'); circ(cx - dir * 0.8, bdy + 1.2, 1, '#102030'); poly([cx + dir * 2, bdy + 3, cx + dir * 7, bdy + 4, cx + dir * 2, bdy + 4.6], '#ff8a2a'); rect(cx - 4, bdy - 3, 8, 2.4, '#3a4a8a'); }
+      else { rrect(cx - 6, bdy + 3, 12, 11, 3, tcol); rect(cx - 6, bdy + 3, 12, 3, tdk); circ(cx + dir * 2.4, bdy + 6, 2.4, '#fff'); circ(cx + dir * 3.2, bdy + 6.2, 1.1, '#101010'); if (sk2 === 'hammer') { rrect(cx - 7, bdy - 1, 14, 6, 3, tdk); rect(cx + dir * 6 - 1, bdy + 4, 2, 7, '#8a5a2a'); rect(cx + dir * 6 - 4, bdy + 1, 8, 4, '#8a8a9a'); } else { poly([cx - 3, bdy + 3, cx, bdy - 6, cx + 3, bdy + 3], '#ffb02a'); circ(cx + dir * 7, bdy + 8, 2.4 + Math.sin(f * 0.4), '#ffd24a'); } }
+      break; }
+    case E.BANZAI: { var bw = e.w, bh = e.h, bdx = e.dir >= 0 ? 1 : -1, bx0 = e.x, by0 = e.y;   // giant cannonball: a black bullet with angry eyes, fins and a flame; the flat top is the riding surface
+      ctx.globalAlpha = 0.5; poly([bx0 - bdx * 2, by0 + 6, bx0 - bdx * 16, by0 + 2 + Math.sin(F * 0.6) * 3, bx0 - bdx * 12, by0 + bh / 2, bx0 - bdx * 16, by0 + bh - 2 - Math.sin(F * 0.6) * 3, bx0 - bdx * 2, by0 + bh - 6], '#ff8a3a'); ctx.globalAlpha = 1;
+      rrect(bx0, by0, bw, bh, 12, '#1a1a2a'); rect(bx0 + 4, by0, bw - 12, 3, '#4a4a6a'); ell(bx0 + (bdx > 0 ? bw - 8 : 8), by0 + bh / 2, 10, 13, '#22223a');
+      circ(bx0 + (bdx > 0 ? bw - 12 : 12), by0 + 12, 4, '#fff'); circ(bx0 + (bdx > 0 ? bw - 12 : 12) + bdx * 1.2, by0 + 12.5, 2, '#d02020'); line(bx0 + (bdx > 0 ? bw - 18 : 18), by0 + 6, bx0 + (bdx > 0 ? bw - 8 : 8), by0 + 9, '#fff', 2);
+      rect(bx0 + (bdx > 0 ? 6 : bw - 14), by0 + bh - 8, 8, 4, '#c8c8d8'); break; }
     // Underwater enemies: squid, strider, puffer, eel, swimmers.
     case E.SQUID: { var sq = e.s === 1, pu2 = sq ? 3 : 0, tw = Math.sin(f * 0.3 + e.id) * 1.5; ctx.fillStyle = sq ? '#ff7ab0' : '#e0509a'; ctx.beginPath(); ctx.ellipse(cx, cy - 2, 6 - pu2 * 0.4, 8 + pu2 * 0.6, 0, 0, 6.2832); ctx.fill(); poly([cx - 6, cy - 5, cx, cy - 15, cx + 6, cy - 5], '#c03a80');
       for (var tq = -2; tq <= 2; tq++) { ctx.strokeStyle = '#ff9ac8'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(cx + tq * 2.2, cy + 5); ctx.lineTo(cx + tq * 2.6 + tw * (tq % 2 ? 1 : -1), cy + 10 + (sq ? 3 : 0)); ctx.stroke(); }
@@ -371,7 +391,7 @@ function drawEnemy(e) {
       ctx.strokeStyle = zap ? '#fff27a' : chg ? '#c8f0a0' : '#5a7a4a'; ctx.lineWidth = 2.2; ctx.beginPath(); for (var ek2 = 0; ek2 <= 12; ek2++) { var ex2 = e.x + ek2 * bl / 12, ey2 = cy + Math.sin(f * 0.15 + ek2 * 0.7) * 2.5; if (ek2) ctx.lineTo(ex2, ey2); else ctx.moveTo(ex2, ey2); } ctx.stroke();
       circ(e.x + 2, cy, 4.2, '#3a4a3a'); circ(e.x + 1, cy - 1, 1.6, '#fff'); circ(e.x + 1, cy - 1, 0.7, '#102010');
       if (zap || chg) for (var zk = 0; zk < (zap ? 9 : 3); zk++) { var zx = e.x + ((zk * 41 + f * 5) % bl); spark4(zx, cy + ((zk * 7 + f) % 9) - 4, zap ? 5 : 3, zap ? '#fff27a' : '#c8f0a0'); } break; }
-    case E.SWIM: { var big = e.sz === 1, wag = Math.sin(f * 0.3 + e.x * 0.1) * 2.5, bw = big ? 11 : 6, bh = big ? 6 : 4;
+    case E.SWIM: { if (e.pz) { ctx.globalAlpha = 0.9; circ(cx, cy, 9, 'rgba(176,74,255,.35)'); ctx.globalAlpha = 1; } var big = e.sz === 1, wag = Math.sin(f * 0.3 + e.x * 0.1) * 2.5, bw = big ? 11 : 6, bh = big ? 6 : 4;
       poly([cx - dir * bw * 0.8, cy, cx - dir * (bw + 6), cy - 4 - wag, cx - dir * (bw + 6), cy + 4 - wag], big ? '#2a3ac0' : '#4a6aff'); ell(cx, cy, bw, bh, big ? '#3a4ae0' : '#5a7aff'); ell(cx, cy + bh * 0.3, bw * 0.8, bh * 0.5, 'rgba(255,255,255,.25)');
       if (big) { poly([cx - 3, cy - bh, cx + 1, cy - bh - 4, cx + 4, cy - bh], '#9ab0ff'); line(cx - dir * 2, cy - bh + 1, cx - dir * 2, cy + bh - 1, 'rgba(255,255,255,.35)'); }
       circ(cx + dir * bw * 0.5, cy - 0.5, big ? 2.6 : 2, '#fff'); circ(cx + dir * bw * 0.6, cy - 0.5, big ? 1.2 : 1, '#0a1040'); break; }
@@ -408,6 +428,7 @@ function drawEnemy(e) {
       if (e.imm) { ctx.globalAlpha = 1; for (var sp = 0; sp < 4; sp++) poly([e.x + 2 + sp * (e.w - 4) / 4, e.y + 1, e.x + 2 + sp * (e.w - 4) / 4 + (e.w - 4) / 8, e.y - 7, e.x + 2 + (sp + 1) * (e.w - 4) / 4, e.y + 1], '#c8d0e0', '#2a3048'); }   // spiked armour: stomping bounces off
       ctx.globalAlpha = 1; for (var hp = 0; hp < 3; hp++) diamond(cx - 8 + hp * 8, e.y - 15, 3.4, 4.4, hp < e.hp ? '#ff4a7a' : '#4a4060'); break; }
   }
+  if (e.frz > 0 && e.alive) { var thaw2 = e.frz < 40 && (Math.floor(e.frz / 4) % 2); ctx.globalAlpha = thaw2 ? 0.4 : 0.75; rrect(e.x - 2, e.y - 2, e.w + 4, e.h + 4, 3, '#bfefff'); ctx.globalAlpha = 0.9; rect(e.x, e.y, 3, e.h - 3, '#ffffff'); ctx.globalAlpha = 1; }   // frozen by a snowball: an ice block
 }
 // Crystal-shaped box (used for items inside blocks / cube remains).
 function crystalBox(cx, cy, r, col) { poly([cx - r, cy - r * 0.5, cx, cy - r, cx + r, cy - r * 0.5, cx + r, cy + r * 0.6, cx, cy + r, cx - r, cy + r * 0.6], col, '#5a3a10'); poly([cx - r, cy - r * 0.5, cx, cy - r, cx, cy, cx - r * 0.0, cy], 'rgba(255,255,255,.5)'); line(cx, cy, cx, cy + r, 'rgba(90,58,16,.6)'); line(cx, cy, cx + r, cy - r * 0.5, 'rgba(90,58,16,.6)'); }
@@ -416,6 +437,8 @@ function drawItem(e) {
   var cx = e.x + 6, cy = e.y + 6 + Math.sin(F * 0.15) * 0.7;
   if (e.k === 0) { circ(cx, cy, 6.5, '#1aa860'); circ(cx, cy, 5.2, '#4aff9a'); circ(cx - 1.6, cy - 1.8, 1.8, '#d8ffe8'); ctx.strokeStyle = '#0a5a30'; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(cx, cy, 6.5, 2.4, 0.4, 0, 6.2832); ctx.stroke(); }
   else if (e.k === 1) { poly([cx - 6, cy + 6, cx - 5, cy - 2, cx - 2.5, cy + 0.5, cx, cy - 8, cx + 2.5, cy + 0.5, cx + 5, cy - 3, cx + 6, cy + 6], '#ff7a1a', '#7a2a04'); poly([cx - 3, cy + 6, cx, cy - 1, cx + 3, cy + 6], '#ffe08a'); }
+  else if (e.k === 10) { rect(cx - 1.5, cy - 2, 3, 9, '#8a5a2a'); rect(cx - 6, cy - 7, 12, 6, '#8a8a9a'); rect(cx - 6, cy - 7, 12, 2, '#d8d8e8'); }
+  else if (e.k === 11) { for (var ar = 0; ar < 6; ar++) { var aa = ar * 1.0472 + F * 0.03; line(cx, cy, cx + Math.cos(aa) * 7, cy + Math.sin(aa) * 7, '#bfe8ff', 1.6); } circ(cx, cy, 2.4, '#ffffff'); }
   else if (e.k === 2) { poly([cx - 6, cy + 5, cx - 1, cy - 7, cx + 6, cy - 5, cx + 1, cy + 7], '#d8ff6a', '#4a7a08'); line(cx - 3, cy + 4, cx + 3, cy - 4, '#4a7a08'); }
   else if (e.k === 3) spark8(cx, cy, 7, 'hsl(' + (F * 12 % 360) + ',95%,62%)', F * 0.08);
   else if (e.k === 5) { rect(cx - 6, cy - 3, 12, 9, '#c8902a'); rect(cx - 6, cy - 3, 12, 3, '#f0c04a'); rect(cx - 1.5, cy - 1, 3, 4, '#5a3a0a'); }
@@ -516,7 +539,10 @@ function drawLevel(st, th) {
   for (i = 0; i < st.en.length; i++) { var e = st.en[i]; if (e.x > cam - 40 && e.x < cam + VW + 40) drawEnemy(e); }
   for (i = 0; i < st.hz.length; i++) drawHz(st.hz[i], st.f);
   for (i = 0; i < st.ep.length; i++) { diamond(st.ep[i].x, st.ep[i].y, 4, 5.5, '#ff4ad8'); circ(st.ep[i].x, st.ep[i].y, 1.5, '#fff'); }
-  for (i = 0; i < st.fb.length; i++) { circ(st.fb[i].x, st.fb[i].y, 3.6, '#ff5a1a'); circ(st.fb[i].x, st.fb[i].y, 1.8, '#ffe8a0'); }
+  for (i = 0; i < st.fb.length; i++) { var fbi = st.fb[i];
+    if (fbi.k === 4) { ctx.save(); ctx.translate(fbi.x, fbi.y); ctx.rotate(F * 0.5 * (fbi.vx > 0 ? 1 : -1)); rect(-1, -2, 2, 8, '#8a5a2a'); rect(-5, -6, 10, 5, '#9a9aaa'); ctx.restore(); }
+    else if (fbi.k === 5) { circ(fbi.x, fbi.y, 3.8, '#e8f6ff'); circ(fbi.x - 1, fbi.y - 1, 1.6, '#ffffff'); }
+    else { circ(fbi.x, fbi.y, 3.6, '#ff5a1a'); circ(fbi.x, fbi.y, 1.8, '#ffe8a0'); } }
   if (L.cp) { var kx = L.cp.x + 6, ky = L.cp.y + 14; poly([kx - 2, ky, kx + 3, ky, kx + 2, ky - 14, kx - 1, ky - 14], '#6a5ab0'); diamond(kx + 0.5, ky - 19, 4, 6, st.cp ? '#3affb0' : '#7a6ab0'); }
   if (G.hint) {
     var h = G.hint, k; for (k = 0; k < h.traj.length; k++) circ(h.traj[k].x, h.traj[k].y - 2, 1.3, 'rgba(255,240,90,.9)');

@@ -53,6 +53,11 @@ function evaluate(st0, c, traj) {
     if (p.dead) return { sc: -1e5 + k * 30, dead: true, k: k };
     if (p.won) return { sc: 1e6 - k, won: true, k: k };
   }
+  return endScore(st0, st, c, k, land, big0);
+}
+// Rate the state st reached after the rollout of candidate c (k frames); shared by evaluate() and the prefix-sharing search (evalTrie).
+function endScore(st0, st, c, k, land, big0) {
+  var p = st.p, sc;
   // Puzzle levels outside boss fights: reward crumbs (waypoints) collected and stages finished, and pull toward the next two crumbs (weights 2.5 and 0.5, y counted 1.5x); small penalty for being airborne.
   if (st0.L.puzzle && st0.L.crumbs && !(st0.boss > 0 && bossNear(st0))) { var cbs = st.L.crumbs, tg = cbs[Math.min(cbs.length - 1, st.cr + 1)], tg2 = cbs[Math.min(cbs.length - 1, st.cr + 2)]; sc = st.cr * 500 + (st.stage - st0.stage) * 3000 - (Math.abs(p.x + 6 - tg[0]) + 1.5 * Math.abs(p.y + 7 - tg[1])) * 2.5 - (Math.abs(p.x + 6 - tg2[0]) + 1.5 * Math.abs(p.y + 7 - tg2[1])) * 0.5 + (st.score - st0.score) * 0.1; if (!p.ground) sc -= 15; return { sc: sc, dead: false, land: land, k: k }; }
   // Find the nearest living boss (index bi); only the boss branches below use it.
@@ -89,6 +94,34 @@ function evaluate(st0, c, traj) {
   if (c.a === Lf || c.l) sc -= 30;
   return { sc: sc, dead: false, land: land, k: k };
 }
+// Prefix-sharing rollouts: candidates whose key sequences are equal for the first frames are simulated together (one PF.step per shared frame,
+// the state is cloned only where the sequences diverge). Results are identical to evaluate() candidate by candidate, but ~3x fewer steps.
+var TRIES = {};
+function buildTrie(list, HH) {
+  var seqs = list.map(function (c) { var a = new Uint8Array(HH); for (var k = 0; k < HH; k++) a[k] = inputAt(c, k); return a; });
+  function mk(idxs, k0) {
+    var k = k0; while (k < HH) { var v = seqs[idxs[0]][k], same = true; for (var j = 1; j < idxs.length; j++) if (seqs[idxs[j]][k] !== v) { same = false; break; } if (!same) break; k++; }
+    var nd = { run: Array.prototype.slice.call(seqs[idxs[0]], k0, k), all: idxs, kids: null };
+    if (k < HH) { var by = {}, order = []; idxs.forEach(function (i) { var v = seqs[i][k]; if (!by[v]) { by[v] = []; order.push(v); } by[v].push(i); }); nd.kids = order.map(function (v) { return mk(by[v], k); }); }
+    return nd;
+  }
+  var all = list.map(function (c, i) { return i; }), root = mk(all, 0);
+  return { root: root, units: root.run.length === 0 && root.kids ? root.kids : [root] };
+}
+// Simulate trie node nd (its run, then its children) from state st (consumed); frame k0 = depth where the run starts. Fills res[idx].
+function runTrie(nd, st, k0, ps, res) {
+  var p = st.p, run = nd.run, k = k0, i, j;
+  for (i = 0; i < run.length; i++, k++) {
+    PF.step(st, run[i]);
+    if (p.dead) { for (j = 0; j < nd.all.length; j++) res[nd.all[j]] = { sc: -1e5 + k * 30, dead: true, k: k }; return; }
+    if (p.won) { for (j = 0; j < nd.all.length; j++) res[nd.all[j]] = { sc: 1e6 - k, won: true, k: k }; return; }
+  }
+  if (!nd.kids) { for (j = 0; j < nd.all.length; j++) res[nd.all[j]] = endScore(ps.st, st, ps.list[nd.all[j]], k, -1, ps.big0); return; }
+  for (j = 0; j < nd.kids.length; j++) {
+    if (j === nd.kids.length - 1) runTrie(nd.kids[j], st, k, ps, res);
+    else runTrie(nd.kids[j], PF.clone(st), k, ps, res);
+  }
+}
 // Reactive planner. decide(st) returns one key mask per frame from a short script (SL frames) re-planned when the script ends.
 function makePlanner() {
   var SL = 8;
@@ -97,12 +130,19 @@ function makePlanner() {
   // Forget the current script, the pre-computed next search and the stall / explore timers (new level or restart).
   pl.reset = function () { pl.script = null; pl.i = 0; pl.bestX = 0; pl.bestF = 0; pl.explore = 0; pl.pend = null; pl.next = null; };
   // A resumable search over the candidate list; noise adds random jitter to scores, rising marks a jump already in flight.
-  function newSearch(st, noise) { return { st: st, i: 0, best: null, bi: -1, noise: noise, rising: st.p.jheld && !st.p.ground && st.p.vy < 0, list: (bossNear(st) ? CANDS.concat(BOSS_EXTRA) : CANDS).concat(st.L.puzzle ? LEFT_EXTRA : []) }; }
-  // Evaluate up to n more candidates of search ps and keep the best; returns the result once the whole list is done, else null. A rising jump keeps its small bonus for jump-now candidates.
+  // The list and its prefix trie are cached per variant (boss near / puzzle level); ps.res collects the rollout results by candidate index.
+  function newSearch(st, noise) {
+    var bn = bossNear(st), key = (bn ? 1 : 0) + (st.L.puzzle ? 2 : 0), tr = TRIES[key];
+    if (!tr) { var list = (bn ? CANDS.concat(BOSS_EXTRA) : CANDS).concat(st.L.puzzle ? LEFT_EXTRA : []); tr = TRIES[key] = buildTrie(list, bn && st.boss > 0 ? 90 : H); tr.list = list; }
+    return { st: st, i: 0, ui: 0, best: null, bi: -1, noise: noise, rising: st.p.jheld && !st.p.ground && st.p.vy < 0, list: tr.list, tr: tr, res: new Array(tr.list.length), big0: st.p.big };
+  }
+  // Evaluate trie units until at least n more candidates are done; once the whole list is done pick the best in list order (keeps the old tie / noise order). A rising jump keeps its small bonus for jump-now candidates. Returns the result when finished, else null.
   function work(ps, n) {
-    var end = Math.min(ps.list.length, ps.i + n);
-    for (; ps.i < end; ps.i++) { var c = ps.list[ps.i], r = evaluate(ps.st, c, null); if (ps.rising && c.s === 0 && c.h > 0 && !c.l) r.sc += 8; var sc = r.sc + (ps.noise ? pl.rnd() * ps.noise : 0); if (ps.best === null || sc > ps.best.sc) { ps.best = r; ps.best.sc = sc; ps.bi = ps.i; } }
-    if (ps.i >= ps.list.length) { ps.best.cand = ps.list[ps.bi]; return ps.best; } return null;
+    var units = ps.tr.units, goal = ps.i + n;
+    while (ps.ui < units.length && ps.i < goal) { var u = units[ps.ui++]; ps.st.share = true; var q = PF.clone(ps.st); ps.st.share = false; q.share = false; runTrie(u, q, 0, ps, ps.res); ps.i += u.all.length; }   // far enemies are shared with the real state only for this first clone
+    if (ps.ui < units.length) return null;
+    for (var i = 0; i < ps.list.length; i++) { var c = ps.list[i], r = ps.res[i]; if (ps.rising && c.s === 0 && c.h > 0 && !c.l) r.sc += 8; var sc = r.sc + (ps.noise ? pl.rnd() * ps.noise : 0); if (ps.best === null || sc > ps.best.sc) { ps.best = r; ps.best.sc = sc; ps.bi = i; } }
+    ps.best.cand = ps.list[ps.bi]; return ps.best;
   }
   // Synchronous full search (also used by the hint).
   pl.search = function (st, noise) { var ps = newSearch(st, noise); return work(ps, ps.list.length); };
@@ -195,6 +235,7 @@ var MSG = {
   rsw: ['바닥 스위치를 밟으세요', 'Step on the switch pad'],
   rtele: ['빛나는 패드를 밟으면 순간이동해요', 'Step on the glowing pad to teleport'],
   rxge: ['열린 통로로 계속 가세요', 'Go on through the opening'],
+  rnear: ['물길을 따라 계속 헤엄치세요', 'Keep swimming along the water passage'],
   wait: ['잠깐 기다리세요', 'Wait a moment here'],
   go: ['오른쪽으로 계속 가세요', 'Keep going right'],
   jump: ['지금 점프하세요', 'Jump now']
@@ -225,6 +266,8 @@ function makeHint(st, pl) {
 // plans each route stage (key, door, teleport, switch, exit ...) from the live state; the look-ahead planner only drives while airborne or when no plan is found
 // the plan may only end where the hero can stand still afterwards (an 'at' waypoint reached while sliding into a spike is a dead end)
 // True if the hero can stand still for 24 frames without dying and ends on the ground.
+// swim stages end with a margin to every live creature (a plan that stops beside a fish has no way out)
+function clearOfEn(s) { var p = s.p, px = p.x + p.w / 2, py = p.y + p.h / 2; for (var i = 0; i < s.en.length; i++) { var e = s.en[i]; if (e.alive && Math.abs(e.x + e.w / 2 - px) < e.w / 2 + 34 && Math.abs(e.y + e.h / 2 - py) < e.h / 2 + 34) return false; } return true; }
 function settles(s) { var q = PF.clone(s); for (var k = 0; k < 24; k++) { PF.step(q, 0); if (q.p.dead) return false; } return q.p.ground; }
 
 // armoured boss (only kicked shells hurt it): stomp a beetle, stand LEFT of the shell and walk into it so it rolls at the boss; the look-ahead planner dodges when the boss is close
@@ -299,12 +342,12 @@ function makeNavigator() {
     nv.seq = null;
     // Start a new stage search; while waiting (nv.wait) or airborne the reactive planner drives instead.
     if (!nv.job) {
-      if (nv.wait > 0 || !st.p.ground) { if (nv.wait > 0) nv.wait--; return fb.decide(st); }
+      if (nv.wait > 0 || !(st.p.ground || (L.swimNodes && PF.isW(PF.tileAt(st, Math.floor((st.p.x + st.p.w / 2) / PF.TS), Math.floor((st.p.y + st.p.h / 2) / PF.TS)))))) { if (nv.wait > 0) nv.wait--; return fb.decide(st); }   // swim levels (L.swimNodes) also plan while afloat
       // Current goal waypoint g (the last one repeats); target x and y (y may be null = any height).
       var g = L.route[Math.min(st.stage, L.route.length - 1)]; if (g.k === 'goal' && L.arena && st.boss > 0 && st.p.x < L.arena.c0 * PF.TS - 40) g = { k: 'xge', x: L.arena.c0 * PF.TS - 24, y: g.y, door: 1 };   // long castle: first reach the arena door, the fight itself is the reactive planner's job
       var tx = g.x === undefined ? L.goalX : g.x, ty = g.y === undefined ? null : g.y;
       // Stage-done tests: strict also requires no poison and a safe stop (settles) unless it is the goal or a door; loose drops the safe-stop rule.
-      var strict = function (s) { return PF.stageDone(s, g) && !(s.p.pois > 0) && (g.k === 'goal' || g.door || settles(s)); }, loose = function (s) { return PF.stageDone(s, g) && !(s.p.pois > 0); };
+      var nearDone = function (s) { return g.k === 'near' && s.stage > st.stage; }, strict = function (s) { return (PF.stageDone(s, g) || nearDone(s)) && !(s.p.pois > 0) && (g.k === 'goal' || g.door || settles(s)) && (!L.swimNodes || g.k === 'goal' || clearOfEn(s)); }, loose = function (s) { return (PF.stageDone(s, g) || nearDone(s)) && !(s.p.pois > 0); };
       var c2 = PF.clone(st); c2.en = []; c2.noEn = true;
       // tiers: with enemies and a safe stop, with a smaller budget, without the safe stop; last resort: as if the enemies were not there (a hit beats standing still)
       // Search tiers, tried in order until one finds a plan: [state, done-test, node budget].

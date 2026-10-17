@@ -23,7 +23,7 @@ var IN = { L: 1, R: 2, J: 4, RUN: 8, DN: 16, UP: 32, SPIN: 64 };
 var P = { WALK: 1.4, RUN: 2.2, PRUN: 2.75, PMAX: 64, ACCG: 0.12, ACCA: 0.07, FRIC: 0.14, JUMP: -6.3, JRUN: 0.5, GUP: 0.28, GCUT: 0.7, GDN: 0.55, MAXFALL: 7.5,
           COY: 5, JBUF: 6, PW: 12, SH: 14, BH: 24, INV: 100, ACTIVE: 340, STAR: 600, POIS: 180 };
 // Enemy type ids (e.t). Types >= 9 are only simulated near the hero (see P.ACTIVE in updEnemy).
-var E = { WALKER: 0, SPIKY: 1, FLYER: 2, BEETLE: 3, BULLET: 4, CRUSH: 5, GHOST: 6, PLANT: 7, BOSS: 8, SWIM: 9, CHASER: 10, FMINE: 11, WHALE: 12, JELLY: 13, CLAM: 14, SWOOP: 15, FLOCK: 16, BALLOON: 17, SHOOTER: 18, BIRD: 19, SPARK: 20, LEAPFISH: 21, EMBER: 22, ROLL: 23, SQUID: 24, STRIDER: 25, PUFFER: 26, EEL: 27 };   // LEAPFISH: leaps out of water / poison (killable); EMBER: leaps out of lava (fire-proof, cannot be stomped)
+var E = { WALKER: 0, SPIKY: 1, FLYER: 2, BEETLE: 3, BULLET: 4, CRUSH: 5, GHOST: 6, PLANT: 7, BOSS: 8, SWIM: 9, CHASER: 10, FMINE: 11, WHALE: 12, JELLY: 13, CLAM: 14, SWOOP: 15, FLOCK: 16, BALLOON: 17, SHOOTER: 18, BIRD: 19, SPARK: 20, LEAPFISH: 21, EMBER: 22, ROLL: 23, SQUID: 24, STRIDER: 25, PUFFER: 26, EEL: 27, BANZAI: 28, THROWER: 29 };   // LEAPFISH: leaps out of water / poison (killable); EMBER: leaps out of lava (fire-proof, cannot be stomped)
 // Air meter (frames) while swimming; when it runs out the hero takes drown damage periodically.
 var AIRMAX = 900;
 // Common period (frames) after which every periodic mover pattern repeats.
@@ -90,7 +90,7 @@ function clone(st) {
   c.p = {}; for (k in st.p) c.p[k] = st.p[k];
   var en = new Array(st.en.length), i, px = st.p.x; for (i = 0; i < en.length; i++) { var s = st.en[i]; if (st.share && Math.abs(s.x - px) > 600) { en[i] = s; continue; } var e = {}; for (k in s) e[k] = s[k]; en[i] = e; } c.en = en;
   c.it = st.it.length ? st.it.map(function (s) { var e = {}; for (var k in s) e[k] = s[k]; return e; }) : [];
-  c.fb = st.fb.length ? st.fb.map(function (s) { return { x: s.x, y: s.y, vx: s.vx, vy: s.vy, life: s.life }; }) : [];
+  c.fb = st.fb.length ? st.fb.map(function (s) { return { x: s.x, y: s.y, vx: s.vx, vy: s.vy, life: s.life, k: s.k }; }) : [];
   c.ep = st.ep.length ? st.ep.map(function (s) { return { x: s.x, y: s.y, vx: s.vx, vy: s.vy, life: s.life }; }) : [];
   c.hz = st.hz.length ? st.hz.map(function (s) { var e = {}; for (var k in s) e[k] = s[k]; return e; }) : [];
   c.mo = st.mo.map(function (s) { return { off: s.off, vy: s.vy, s: s.s, t: s.t, ox: s.ox }; });
@@ -148,6 +148,7 @@ function bump(st, r) {
   else if (t2 === T.QP || t2 === T.QS || t2 === T.QM) {
     setTile(st, best, r, T.USED);
     var k = t2 === T.QS ? 3 : t2 === T.QM ? (p.mount ? 0 : 4) : (p.pw === 0 ? 0 : p.pw === 1 ? ((best + r) & 1 ? 1 : 2) : ((best + r) & 1 ? 3 : 1));
+    if (t2 === T.QP && st.L.qpk && p.pw >= 1 && ((best * 3 + r * 5) % 3 === 0)) k = st.L.qpk[(best + r) % st.L.qpk.length];   // themed power-ups (hammer suit / snow flower)
     if (t2 === T.QP && ((best * 7 + r * 13) % 5 === 0)) k = 6 + ((best + r * 3) % 4);
     st.it.push({ k: k, x: best * TS + 2, y: y, w: 12, h: 12, vx: k === 1 || k === 2 ? 0 : 0.7, vy: 0, em: 14, alive: true, ground: false });
     ev(st, 'item', x, y - 4);
@@ -195,10 +196,11 @@ function overlap(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y 
 // Per-frame AI for one enemy, by type (switch on e.t). Far-away enemies of the newer types are frozen to save work.
 function updEnemy(st, e, f) {
   var p = st.p, i, hw;
+  if (e.frz > 0) { e.frz--; return; }   // frozen by a snowball
   if (e.t === E.BOSS && e.alive && e.y > (st.L.rows || ROWS) * TS + 30) { e.hp = 0; e.alive = false; e.dt = 70; st.boss--; st.score += 3000; ev(st, 'bossdead', e.x + e.w / 2, e.y); return; }   // a boss that ends up in the void counts as beaten
   if (e.t >= 9) { var anc = e.ax !== undefined ? e.ax : e.x; if (Math.abs(anc - p.x) > P.ACTIVE + 100) return; }
   switch (e.t) {
-    case 9: e.x = e.ax + e.rg * tri(f * e.sp + e.ph); e.y = e.ay + Math.sin(f * 0.07 + e.ph * 6.283) * e.am; e.dir = tri((f + 1) * e.sp + e.ph) > tri(f * e.sp + e.ph) ? 1 : -1; return;
+    case 9: e.x = e.ax + e.rg * tri(f * e.sp + e.ph); e.y = e.ay + Math.sin(f * 0.07 + e.ph * 6.283) * e.am; if (e.dip) e.pz = tileAt(st, Math.floor((e.x + e.w / 2) / TS), Math.floor((e.y + e.h / 2) / TS)) === T.POISON; e.dir = tri((f + 1) * e.sp + e.ph) > tri(f * e.sp + e.ph) ? 1 : -1; return;
     case 10: { var cdx = p.x + p.w / 2 - e.x - e.w / 2, cdy = p.y + p.h / 2 - e.y - e.h / 2, cd = Math.max(1, Math.sqrt(cdx * cdx + cdy * cdy)), vx, vy;
       if (cd < 115 && isW(tileAt(st, Math.floor((p.x + 6) / TS), Math.floor((p.y + 7) / TS)))) { vx = cdx / cd * 0.95; vy = cdy / cd * 0.95; e.s = 1; }
       else { var hx = e.ax - e.x, hy = e.ay - e.y, hd = Math.max(1, Math.sqrt(hx * hx + hy * hy)); vx = hd < 2 ? 0 : hx / hd * 0.45; vy = hd < 2 ? 0 : hy / hd * 0.45; e.s = 0; }
@@ -259,6 +261,13 @@ function updEnemy(st, e, f) {
       e.up = up; e.y = e.y0 - up * 18; e.hid = up < 0.25; return; }
     case 8: updBoss(st, e, f); return;
     case 23: { e.vx = e.dir * e.spd; hw = moveEnt(st, e); e.rot = (e.rot || 0) + e.vx * 0.18; if (hw || ++e.tm > 900 || e.y > (st.L.rows || ROWS) * TS + 20) { e.alive = false; e.dt = 12; ev(st, 'burst', e.x + e.w / 2, e.y + e.h / 2); } e.ax = e.x; return; }   // rolling snowball / boulder / tumbleweed
+    case 29: { var thx = p.x + p.w / 2 - e.x - e.w / 2, thy = p.y + p.h / 2 - e.y - e.h / 2, sgn = thx > 0 ? 1 : -1;   // thrower: a ground walker (or hovering flyer) that lobs hammers / flames / snowballs at the hero
+      if (e.fly) { e.x = e.ax0 + 36 * Math.sin(f * 0.02 + e.ph); e.y = e.ay0 + 8 * Math.sin(f * 0.05 + e.ph); e.ax = e.ax0; }
+      else { e.vx = e.dir * e.spd; hw = moveEnt(st, e); if (hw) e.dir = -e.dir; else if (e.ground) { var tx3 = e.vx > 0 ? e.x + e.w + 1 : e.x - 1, tt3 = tileAt(st, Math.floor(tx3 / TS), Math.floor((e.y + e.h + 2) / TS)); if (!SOL[tt3] && tt3 !== T.SLR && tt3 !== T.SLL) e.dir = -e.dir; } if (e.x < e.mn) { e.x = e.mn; e.dir = 1; } else if (e.x + e.w > e.mx) { e.x = e.mx - e.w; e.dir = -1; } e.ax = e.x; }
+      if (Math.abs(thx) < 230 && Math.abs(thy) < 160 && (f + e.pho) % e.per === 0 && !st.noEn) { e.dir = sgn; var sk = e.skin;
+        st.hz.push({ k: 'proj', skin: sk, mode: sk === 'snow' ? 'freeze' : 'hurt', x: e.x + e.w / 2, y: e.y + 2, vx: sgn * (sk === 'fire' ? 1.7 : sk === 'snow' ? 1.4 : 1.3), vy: sk === 'fire' ? -0.6 : sk === 'snow' ? -2.8 : -3.4, g: sk === 'fire' ? 0.04 : sk === 'snow' ? 0.13 : 0.17, life: 220, sz: 5 }); ev(st, 'spit', e.x, e.y); }
+      return; }
+    case 28: { e.x += e.vx; e.ax = e.x; if (++e.tm > 1200 || e.x > p.x + 520 || e.x < p.x - 560) { e.alive = false; e.dt = 10; } return; }   // giant cannonball: flies straight through everything, can be ridden
     case 24: { e.tm++; var sc0 = e.cnt | 0;   // squid: rests, then jets off in a random direction (the choice is a hash of its own counter, so every run of the sim is identical)
       if (e.s === 0) { e.vx *= 0.9; e.vy *= 0.9; if (e.tm > e.wait) { var ha = hash(e.id | 0, sc0, 31), an = (ha % 6283) / 1000; e.dvx = Math.cos(an) * 2.3; e.dvy = Math.sin(an) * 1.7; e.cnt = sc0 + 1; e.s = 1; e.tm = 0; if (hash(e.id | 0, sc0, 32) % 3 === 0) { var tdx = p.x - e.x, tdy = p.y - e.y, td = Math.max(1, Math.sqrt(tdx * tdx + tdy * tdy)); if (td < 130) { e.dvx = tdx / td * 2.3; e.dvy = tdy / td * 1.7; } } } }
       else { var kk = 1 - e.tm / 26; e.vx = e.dvx * kk; e.vy = e.dvy * kk; if (e.tm > 26) { e.s = 0; e.tm = 0; e.wait = 24 + hash(e.id | 0, sc0, 33) % 50; } }
@@ -313,6 +322,15 @@ function hzStep(st, f) {
     } else if (d.k === 'bolt') {
       var bx = Math.max(14, Math.min(L.w * TS - 14, pcx + p.face * (d.lead || 0) + jit * 2 * (d.spread || 40)));
       st.hz.push({ k: 'bolt', skin: d.skin, mode: d.mode, x: bx, gy: groundY(st, bx, Math.max(0, p.y - 60)), wt: d.warn, sk: 0, y: 0, sz: 0 });
+    } else if (d.k === 'shot') {   // a free-flying cannonball coming in from off-screen at about the hero's height
+      var sdir = d.dir || -1, sx = pcx + (sdir < 0 ? 270 : -270), sy = Math.max(10, Math.min((L.rows || ROWS) * TS - 20, p.y + p.h - 8 + jit * 2 * (d.spread || 30))), nb = 0;
+      if (sx < 20 || sx > L.w * TS - 20) continue;
+      for (var e3 = 0; e3 < st.en.length; e3++) if (st.en[e3].alive && st.en[e3].t === E.BULLET && Math.abs(st.en[e3].x - pcx) < 330) nb++; if (nb >= 3) continue;
+      st.en.push({ t: E.BULLET, x: sx, y: sy, w: 12, h: 10, vx: sdir * (d.spd || 1.9), vy: 0, dir: sdir, alive: true, dt: 0, tm: 0, ground: false, sh: 0, kg: 0, s: 0, inv: 0 });
+    } else if (d.k === 'banzai') {   // a giant cannonball overtaking the hero from behind: land on top of it and it carries him forward over anything
+      var bx = pcx - 300, busy2 = false; if (bx < 30) continue;
+      for (var e4 = 0; e4 < st.en.length; e4++) if (st.en[e4].alive && st.en[e4].t === E.BANZAI) busy2 = true; if (busy2) continue;
+      st.en.push({ t: E.BANZAI, x: bx, y: p.y + p.h - 16, w: 38, h: 32, vx: d.spd || 1.7, vy: 0, dir: 1, alive: true, dt: 0, tm: 0, ground: false, sh: 0, kg: 0, s: 0, inv: 0, ax: bx });
     } else if (d.k === 'roll') {
       var rx = pcx + (d.dir < 0 ? 250 : -250), rc = Math.floor(rx / TS), rr0 = Math.max(0, Math.floor(p.y / TS) - 5), rrow = -1, busy = false;
       if (rx < 40 || rx > L.w * TS - 60) continue;
@@ -325,6 +343,10 @@ function hzStep(st, f) {
   for (i = st.hz.length - 1; i >= 0; i--) { o = st.hz[i];
     if (o.wt > 0) { o.wt--; if (o.wt === 0 && o.k === 'bolt') o.sk = 9; continue; }
     if (o.k === 'bolt') { if (o.sk > 0) { o.sk--; if (!p.dead && Math.abs(pcx - o.x) < 8 && p.y < o.gy) hzEffect(st, o); if (o.sk === 0) { ev(st, 'burst', o.x, o.gy); st.hz.splice(i, 1); } } continue; }
+    if (o.k === 'proj') { o.vy += o.g; o.x += o.vx; o.y += o.vy; o.rot = (o.rot || 0) + 0.3 * (o.vx > 0 ? 1 : -1);
+      if (!p.dead && o.x + o.sz > p.x && o.x - o.sz < p.x + p.w && o.y + o.sz > p.y && o.y - o.sz < p.y + p.h) { hzEffect(st, o); ev(st, 'burst', o.x, o.y); st.hz.splice(i, 1); continue; }
+      if (--o.life <= 0 || boxHit(st, o.x - 2, o.y - 2, 4, 4) || o.y > (L.rows || ROWS) * TS + 20) st.hz.splice(i, 1);
+      continue; }
     o.vy = Math.min(7, o.vy + 0.26); o.y += o.vy;
     if (!p.dead && o.x + o.sz > p.x && o.x - o.sz < p.x + p.w && o.y + o.sz > p.y && o.y - o.sz < p.y + p.h) { hzEffect(st, o); ev(st, 'burst', o.x, o.y); st.hz.splice(i, 1); continue; }
     if (o.y >= o.gy - o.sz || boxHit(st, o.x - 3, o.y + o.sz - 2, 6, 4)) { hzImpact(st, o); st.hz.splice(i, 1); continue; }
@@ -396,6 +418,7 @@ function stageDone(st, g) {
     case 'at': return st.p.ground && Math.abs(st.p.x + 6 - g.x) < 20 && Math.abs(st.p.y + 7 - g.y) < 10;
     case 'xge': return st.p.x >= g.x && (g.x2 === undefined || (st.p.x <= g.x2 && st.p.ground));   // x2: the stage ends in a window on the ground (so the next segment starts from its own seam, not from somewhere beyond its pickups)
     case 'goal': return st.p.won;
+    case 'near': return Math.abs(st.p.x + 6 - g.x) < (g.r || 20) && Math.abs(st.p.y + 7 - g.y) < (g.r || 20);   // swim waypoint: hero centre within r px (any state, used by underwater stages)
   }
   return true;
 }
@@ -403,6 +426,14 @@ function stageDone(st, g) {
 // Advance the world by one frame. Order matters: hero timers and platforms, water / vines / duck, hero x then y movement,
 // fireballs, cannons, enemies and hazards, items, collectibles, keys / doors / switches, enemy contact (stomp rules),
 // then environmental death checks (spikes, lava, poison, fire, scrollers, pit, timer) and the goal.
+// Perf: index of the level's coins sorted by x (ord = coin indices, xs = their x), cached on L; rebuilt if the coin array changes.
+function coinIndex(L) {
+  var cs = L.coins, ord = [], i; for (i = 0; i < cs.length; i++) ord.push(i);
+  ord.sort(function (a, b) { return cs[a].x - cs[b].x || a - b; });
+  var xs = new Float64Array(ord.length); for (i = 0; i < ord.length; i++) xs[i] = cs[ord[i]].x;
+  var ix = { a: cs, n: cs.length, ord: ord, xs: xs }; Object.defineProperty(L, 'coinIx', { value: ix, writable: true, configurable: true });   // non-enumerable: stays out of any serialisation / key scan of L
+  return ix;
+}
 function step(st, inp) {
   var L = st.L, p = st.p, f = st.f, i, e;
   if (p.dead || p.won) { st.f++; return; }
@@ -549,14 +580,15 @@ function step(st, inp) {
     var rc = Math.floor((p.x + p.w / 2) / TS); for (i = 0; i < L.rings.length; i++) if (L.rings[i].c === rc) { ev(st, 'warp', rc * TS, p.y, i); break; }
   }
   // --- fireballs (run key press while fire-powered)
+  if ((p.pw === 4 || p.pw === 5) && run && !p.rprev && st.fb.length < 2 && !p.climb) { st.fb.push({ x: p.x + p.w / 2 + p.face * 6, y: p.y + 6, vx: p.face * (p.pw === 4 ? 2.4 : 3.0), vy: p.pw === 4 ? -3.8 : -1.6, life: 150, k: p.pw }); ev(st, 'fire', p.x, p.y); }   // hammer: a high arc that kills; snowball: bounces and freezes
   if (p.pw === 2 && run && !p.rprev && st.fb.length < 2 && !p.climb) { st.fb.push({ x: p.x + p.w / 2 + p.face * 6, y: p.y + 9, vx: p.face * 3.4, vy: 0, life: 150 }); ev(st, 'fire', p.x, p.y); }
   p.rprev = !!run;
-  for (i = st.fb.length - 1; i >= 0; i--) { var b = st.fb[i]; b.vy += 0.32; b.x += b.vx;
+  for (i = st.fb.length - 1; i >= 0; i--) { var b = st.fb[i]; b.vy += (b.k === 4 ? 0.2 : 0.32); b.x += b.vx;
     if (boxHit(st, b.x - 3, b.y - 3, 6, 6)) { crackWall(st, b.x + (b.vx > 0 ? 4 : -4), b.y - 2, 4); st.fb.splice(i, 1); continue; }
-    b.y += b.vy; if (boxHit(st, b.x - 3, b.y - 3, 6, 6)) { b.y -= b.vy; b.vy = -3.2; }
+    b.y += b.vy; if (boxHit(st, b.x - 3, b.y - 3, 6, 6)) { if (b.k === 4) { st.fb.splice(i, 1); continue; } b.y -= b.vy; b.vy = b.k === 5 ? -2.6 : -3.2; }
     if (--b.life <= 0 || Math.abs(b.x - p.x) > 300 || b.y > (L.rows || ROWS) * TS + 10) { st.fb.splice(i, 1); continue; }
     for (var j = 0; j < st.en.length; j++) { var o = st.en[j]; if (!o.alive || o.hid) continue;
-      if (b.x > o.x - 3 && b.x < o.x + o.w + 3 && b.y > o.y - 3 && b.y < o.y + o.h + 3) { if (o.t === 8) hitBoss(st, o, 1); else if (o.t !== 5 && o.t !== 22) killEnemy(st, o, 100); st.fb.splice(i, 1); ev(st, 'fireburst', b.x, b.y); break; } } }
+      if (b.x > o.x - 3 && b.x < o.x + o.w + 3 && b.y > o.y - 3 && b.y < o.y + o.h + 3) { if (b.k === 5) { if (o.t !== 8 && o.t !== 5 && o.t !== 22 && o.t !== E.BANZAI) o.frz = 300; } else if (o.t === 8) hitBoss(st, o, 1); else if (o.t !== 5 && o.t !== 22 && o.t !== E.BANZAI) killEnemy(st, o, 100); st.fb.splice(i, 1); ev(st, 'fireburst', b.x, b.y); break; } } }   // a snowball freezes an enemy for 5 seconds (it neither moves nor hurts); hammers and flames kill
   // --- cannons
   if (L.cannons) for (i = 0; i < L.cannons.length; i++) { var cn = L.cannons[i];
     if (Math.abs(cn.x - p.x) < 250 && (f + cn.ph) % cn.per === 0) { var nb = 0; for (j = 0; j < st.en.length; j++) if (st.en[j].t === 4 && st.en[j].alive) nb++;
@@ -576,6 +608,7 @@ function step(st, inp) {
       e.alive = false;
       if (e.k === 0) { if (p.pw === 0 && !boxHit(st, p.x, p.y + p.h - P.BH, p.w, P.BH)) { setPw(p, 1); st.score += 200; ev(st, 'grow', p.x, p.y); } else { st.score += 300; ev(st, 'pow2', p.x, p.y); } }
       else if (e.k === 1) { if (p.pw !== 2) { if (p.pw === 0 && boxHit(st, p.x, p.y + p.h - P.BH, p.w, P.BH)) st.score += 200; else setPw(p, 2); } st.score += 500; ev(st, 'grow', p.x, p.y); }
+      else if (e.k === 10 || e.k === 11) { var npw = e.k === 10 ? 4 : 5; if (p.pw !== npw) { if (p.pw === 0 && boxHit(st, p.x, p.y + p.h - P.BH, p.w, P.BH)) st.score += 200; else setPw(p, npw); } st.score += 500; ev(st, 'grow', p.x, p.y); }   // hammer suit / snow flower
       else if (e.k === 2) { if (p.pw !== 3) { if (p.pw === 0 && boxHit(st, p.x, p.y + p.h - P.BH, p.w, P.BH)) st.score += 200; else setPw(p, 3); } st.score += 500; ev(st, 'grow', p.x, p.y); }
       else if (e.k === 3) { p.star = P.STAR; st.score += 1000; ev(st, 'star', p.x, p.y); }
       else if (e.k === 5) { st.coins += 5; st.score += 500; ev(st, 'treasure', p.x, p.y); }
@@ -588,8 +621,12 @@ function step(st, inp) {
   // --- carried shell follows the hero
   if (p.carry >= 0) { e = st.en[p.carry]; if (!e || !e.alive) p.carry = -1; else if (!run) { e.carried = false; e.sh = 2; e.dir = p.face; e.kg = 14; e.x = p.x + p.face * 12 + (p.face < 0 ? -2 : 0); e.y = p.y + p.h - e.h; p.carry = -1; ev(st, 'kick', e.x, e.y); } else { e.x = p.x + (p.face > 0 ? p.w - 1 : -e.w + 1); e.y = p.y + p.h - e.h - 3; e.vx = 0; e.vy = 0; } }
   // --- coins & collectibles
-  var cs = L.coins; for (i = 0; i < cs.length; i++) if (!st.cg[i]) { var cc2 = cs[i];
-    if (p.x < cc2.x + 6 && p.x + p.w > cc2.x - 6 && p.y < cc2.y + 7 && p.y + p.h > cc2.y - 7) { st.cg[i] = 1; var v = cc2.b ? (p.mount ? 100 : 50) : 10; st.coins += cc2.b ? 0 : 1; st.score += v; ev(st, 'coin', cc2.x, cc2.y, v); } }
+  // Perf: only coins whose x lies in the hero's x range (+-7 px) can be touched, found by binary search in a per-level index of the coins sorted by x (same results as scanning them all)
+  var cs = L.coins, cix = L.coinIx; if (!cix || cix.a !== cs || cix.n !== cs.length) cix = coinIndex(L);
+  var cxs = cix.xs, clo = 0, chi = cxs.length, cmid, cxl = p.x - 7, cxh = p.x + p.w + 7;
+  while (clo < chi) { cmid = (clo + chi) >> 1; if (cxs[cmid] < cxl) clo = cmid + 1; else chi = cmid; }
+  for (var cj = clo; cj < cxs.length && cxs[cj] <= cxh; cj++) { i = cix.ord[cj]; if (!st.cg[i]) { var cc2 = cs[i];
+    if (p.x < cc2.x + 6 && p.x + p.w > cc2.x - 6 && p.y < cc2.y + 7 && p.y + p.h > cc2.y - 7) { st.cg[i] = 1; var v = cc2.b ? (p.mount ? 100 : 50) : 10; st.coins += cc2.b ? 0 : 1; st.score += v; ev(st, 'coin', cc2.x, cc2.y, v); } } }
   var sp = L.special; if (sp) for (i = 0; i < sp.length; i++) if (!st.sg[i]) { var q = sp[i];
     if (p.x < q.x + 8 && p.x + p.w > q.x - 8 && p.y < q.y + 10 && p.y + p.h > q.y - 10) { st.sg[i] = 1; st.sc++; st.score += 200; ev(st, 'special', q.x, q.y, st.sc); } }
   var pks = L.pockets; if (pks) for (i = 0; i < pks.length; i++) if (!st.pk[i]) { var pq = pks[i]; var ddx = pq.x - (p.x + p.w / 2), ddy = pq.y - (p.y + p.h / 2); if (ddx * ddx + ddy * ddy < 15 * 15) { st.pk[i] = 1; p.air = AIRMAX; p.vy = Math.min(p.vy, -2.4); st.score += 50; ev(st, 'pocket', pq.x, pq.y); } }
@@ -612,17 +649,23 @@ function step(st, inp) {
   if (L.launch && p.tcd === 0) for (i = 0; i < L.launch.length; i++) { var lb = L.launch[i]; if (pcx > lb.c * TS && pcx < lb.c * TS + TS && pcy > lb.r * TS - 2 && pcy < lb.r * TS + TS + 2) { p.vx = lb.vx; p.vy = lb.vy; p.ground = false; p.mv = -1; p.tcd = 30; ev(st, 'launch', lb.c * TS, lb.r * TS); break; } }
   if (L.route) { while (st.stage < L.route.length - 1 && stageDone(st, L.route[st.stage])) st.stage++; }
   // --- enemy contact
-  for (i = 0; i < st.en.length; i++) { e = st.en[i]; if (!e.alive || e.hid || e.carried) continue;
+  for (i = 0; i < st.en.length; i++) { e = st.en[i]; if (!e.alive || e.hid || e.carried || e.frz > 0) continue;
     // per-type hitbox shaping: whale hurts only on its head, jelly has a bell and a tentacle, clam only when open, type 27 only when active
     var ov;
     if (e.t === 12) ov = overlap(p, { x: e.dir > 0 ? e.x + e.w - 12 : e.x, y: e.y, w: 12, h: e.h });
     else if (e.t === 13) { var jw = e.w * (0.7 + 0.3 * (e.pul || 0)); ov = overlap(p, { x: e.x + (e.w - jw) / 2, y: e.y, w: jw, h: e.h * 0.7 }) || overlap(p, { x: e.x + e.w / 2 - 2, y: e.y + e.h * 0.7, w: 4, h: 18 }); }
     else if (e.t === 14) ov = !e.s && overlap(p, e);
     else if (e.t === 27) ov = e.s === 2 && overlap(p, e);
+    else if (e.t === 28) ov = overlap(p, { x: e.x, y: e.y - 4, w: e.w, h: e.h + 4 });
     else ov = overlap(p, e);
     if (!ov) continue;
     // stomp rule: only some types can be jumped on, and the feet must be within 9 px (plus fall speed) of the enemy's top
-    var stompable = e.t === 0 || e.t === 2 || e.t === 3 || e.t === 4 || e.t === 8 || e.t === 9 || e.t === 10 || e.t === 15 || e.t === 16 || e.t === 18 || e.t === 19 || e.t === 21 || e.t === 25 || (e.t === 23 && e.skin === 'snowball') || (e.t === 1 && p.spin > 0);
+    if (e.t === 28) {   // giant cannonball: standing on top rides it (it carries the hero), touching the sides hurts
+      if (p.vy >= 0 && (p.y + p.h) - e.y <= 10 + Math.max(0, p.vy)) { p.y = e.y - p.h; p.vy = 0; p.ground = true; p.mv = -1; p.coy = P.COY; if (!boxHit(st, p.x + e.vx, p.y, p.w, p.h)) p.x += e.vx; }
+      else hurt(st, 'bigball');
+      continue;
+    }
+    var stompable = e.t === 0 || e.t === 2 || e.t === 3 || e.t === 4 || e.t === 8 || e.t === 9 || e.t === 10 || e.t === 15 || e.t === 16 || e.t === 18 || e.t === 19 || e.t === 21 || e.t === 25 || e.t === 29 || (e.t === 23 && e.skin === 'snowball') || (e.t === 1 && p.spin > 0);
     var stomping = stompable && p.vy > 0 && (p.y + p.h) - e.y <= 9 + p.vy;
     // a star hero kills everything it touches except the boss
     if (p.star > 0 && e.t !== 8) { killEnemy(st, e, 200); continue; }
