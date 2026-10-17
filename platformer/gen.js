@@ -1,5 +1,14 @@
 // Shape World - procedural level generator, world map, bonus rooms and the completability validator.
 (function (root) {
+// ======================================================================================================
+// gen.js: the level generator of Shape World. It owns three things: the level builders (one build* per level
+// kind), the world map graph (worlds -> level nodes -> endings/secret exits) and the completability proof.
+// Pipeline of generate(seed, n): build() makes a candidate level (seeded, so it is reproducible) ->
+// validate() searches a route on the REAL physics (sim.js step) with macro moves and enemy-aware stages ->
+// replay() re-runs that input script on a fresh state to prove the flag is reached -> checkContainment()
+// rejects water/lava/poison that would leak -> makeCrumbs() turns the script into a breadcrumb trail.
+// Any failure redraws with the next attempt index (a), which simplifies things (e.g. no boss arena variant).
+// ======================================================================================================
 'use strict';
 var TS = PF.TS, ROWS = PF.ROWS, T = PF.T, IN = PF.IN, P = PF.P, E = PF.E, MV_PERIOD = PF.MV_PERIOD;
 var step = PF.step, newState = PF.newState, clone = PF.clone, rng = PF.rng, hash = PF.hash;
@@ -66,6 +75,7 @@ function searchIter(st0, pred, tx, ty, maxNodes) {
 }
 // validation state: enemies that are only hazards (embers, leaping fish, walkers ...) are left out like in every other stage; only the ones the solution NEEDS (shell beetles, flyers used as steps) stay (L.reqEn)
 function vState(L) { var st = newState(L, { noEn: !L.stepEn, noPM: !L.plan }); if (L.stepEn && L.reqEn && !L.plan) { st.en = st.en.filter(function (e) { return L.reqEn.indexOf(e.t) >= 0; }); st.boss = st.en.filter(function (e) { return e.t === E.BOSS; }).length; } return st; }
+// completability proof: chains searchStage() calls over the level's waypoints (route stages) on the real physics; returns { ok, script, nodes }
 function validate(L, maxNodes) {
   var multi = L.route && L.route.length > 1; maxNodes = maxNodes || (multi ? 9000 : 4000);    // enemy-aware searches are expensive: fail fast and redraw
   var st = vState(L), seq0 = [0, 0, 0]; runSeq(st, seq0);
@@ -117,6 +127,7 @@ var HOT = [2, 4, 5, 9, 14, 15, 16, 17, 19, 20, 21], DARK = [2, 4, 5, 10, 13, 15,
 var LAYOUT_THEMES = { plain: [0, 1, 3, 6, 7, 8, 9, 10, 11, 13, 22], hills: [0, 1, 6, 7, 8, 9, 10, 11, 22], flood: WET, deep: [3, 13, 5, 7, 10, 22], sky: AIRY, cave: [5, 2, 9, 10, 13, 15, 16, 19, 22], glacier: COLD, zigzag: [2, 4, 5, 9, 12, 13, 15, 16, 17, 19, 22, 8], lavatower: HOT, crystal: [13, 5, 1, 17, 22, 8, 18], airship: [12, 1, 11, 18, 17, 0, 6], ruins: [15, 2, 5, 7, 9, 10, 19, 4], factory: [16, 17, 12, 19, 5, 20, 21, 15], volcano: HOT, ghost: [2, 15, 19, 4, 10, 5], tower: [18, 1, 0, 6, 8, 11, 22, 13, 17, 12, 15], shaft: [19, 5, 14, 15, 16, 4, 17, 2, 10, 9], chase: [20, 14, 9, 16, 17, 4, 19, 12, 11, 2, 15], gauntlet: [21, 17, 16, 12, 11, 1, 13, 18, 0, 6, 9], skymaze: AIRY.concat([12]), aircourse: AIRY.concat([12, 22]), gates: [0, 1, 6, 7, 9, 15, 16, 4, 5, 2, 22, 8], odyssey: [0], flystep: AIRY.concat([12, 22]), maze: DARK };
 function pickTheme(seed, n, kind) { var list = LAYOUT_THEMES[kind]; if (!list) return hash(seed, n, 911) % THEME_COUNT; if (n === 1 && list.indexOf(0) >= 0) return 0; return list[hash(seed, n, 911) % list.length]; }
 function unlocked(depth) { return Math.min(ROTATION.length, 6 + depth * 3); }   // new kinds are mixed in as the world index grows
+// the 5 level kinds of world w: a starter, three from the shuffled rotation unlocked so far (a tower or shaft is mixed in by world parity), a maze in one slot, then the castle
 function worldKinds(seed, w, depth) {
   depth = depth || 0; var pool = ROTATION.slice(0, unlocked(depth)), r = rng(hash(seed, w, 1357)), i, j, t;
   for (i = pool.length - 1; i > 0; i--) { j = Math.floor(r() * (i + 1)); t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
@@ -129,10 +140,12 @@ function worldInfo(seed, wid) {
   var key = seed + ':' + wid; if (_wi[key]) return _wi[key];
   var d = Math.floor(wid / 3), s = wid % 3, h = function (k) { return hash(seed, wid, 6000 + k); }, mainEnd = (h(1) % 100) < 72 ? 'castle' : 'cannon', cs, cn;
   if (d === 0) { cs = 0; cn = 1; } else if (d === 1) { cs = s; cn = s === 1 ? 2 : 1 + (h(2) % 2); } else { cs = s; cn = (s + 1 + (h(3) % 2)) % 3; }
+  // next.castle / next.cannon are the worlds the two endings lead to (depth d+1), so the paths fork and merge across slots
   var info = { id: wid, depth: d, slot: s, mainEnd: mainEnd, next: { castle: (d + 1) * 3 + cs, cannon: (d + 1) * 3 + cn } };
   if (Object.keys(_wi).length > 4000) _wi = {}; _wi[key] = info; return info;
 }
 function worldExists(wid) { var d = Math.floor(wid / 3), s = wid % 3; return wid >= 0 && (d === 0 ? s === 0 : d === 1 ? s < 2 : true); }
+// older, simpler rotation without depth, superseded by worldKinds
 function worldKindsOld(seed, w) {
   var r = rng(hash(seed, w, 4242)), pool = ['hills', 'flood', 'ghost', 'sky', 'cave'], out = [w === 0 ? 'plain' : (r() < 0.5 ? 'plain' : 'hills')];
   if (w === 0) pool = ['hills', 'flood', 'ghost', 'sky', 'cave'];
@@ -148,11 +161,13 @@ function kindOf(seed, n) { if (n >= 1000) return 'bonus'; var w = Math.floor((n 
 // the main ending is always reachable without any secret exit.
 function worldMap(seed, wid, depth, mainEnd) {
   depth = depth || 0; mainEnd = mainEnd || 'castle';
+  // nodes 0..3 are the levels; the ending is node 4 (castle) or 9 (cannon) and the other one is the alternate ending reachable only through a secret branch
   var r = rng(hash(seed, wid, 777)), kinds = worldKinds(seed, wid, depth), nodes = [], edges = [], x = 36, y = 120 + (r() - 0.5) * 40, i;
   for (i = 0; i < 4; i++) { nodes.push({ i: i, n: depth * 5 + i + 1, kind: kinds[i], x: Math.round(x), y: Math.round(y), main: true }); x += 62 + r() * 12; y = Math.max(70, Math.min(160, y + (r() - 0.5) * 80)); }
   var mainId = mainEnd === 'castle' ? 4 : 9, altId = mainEnd === 'castle' ? 9 : 4, endY = Math.max(70, Math.min(160, y));
   var mk = function (id, yy, main) { return { i: id, n: id === 4 ? depth * 5 + 5 : depth * 5 + 4, kind: id === 4 ? ((depth >= 3 && hash(seed, wid, 8) % 3 === 0) ? 'bossrush' : 'castle') : 'cannon', x: Math.round(x), y: Math.round(yy), main: main, ending: id === 4 ? 'castle' : 'cannon' }; };
   nodes.push(mk(mainId, endY, true)); for (i = 0; i < 3; i++) edges.push({ a: i, b: i + 1, secret: false }); edges.push({ a: 3, b: mainId, secret: false });
+  // pick 1-2 levels (never the maze) to carry a secret exit and give each a bonus branch; the first leads on to the alternate ending
   var cand = [1, 2, 3].filter(function (k) { return kinds[k] !== 'maze'; });
   for (i = cand.length - 1; i > 0; i--) { var j = Math.floor(r() * (i + 1)), t = cand[i]; cand[i] = cand[j]; cand[j] = t; }
   var nb = Math.min(cand.length, 1 + (depth >= 1 && r() < 0.5 ? 1 : 0)), picked = cand.slice(0, nb).sort(), bn = 0;
@@ -172,6 +187,7 @@ function validateWorldMap(m) {
   var ids = {}, out = { ok: true, why: '' }, i; m.nodes.forEach(function (q) { ids[q.i] = q; });
   var adj = {}; m.edges.forEach(function (e) { (adj[e.a] = adj[e.a] || []).push(e); });
   function reach(allowSecret) { var seen = { 0: 1 }, st = [0]; while (st.length) { var a = st.pop(); (adj[a] || []).forEach(function (e) { if (e.secret && !allowSecret) return; if (!seen[e.b]) { seen[e.b] = 1; st.push(e.b); } }); } return seen; }
+  // with secret exits everything must be reachable; without them the main ending still must be
   var all = reach(true), plain = reach(false);
   m.nodes.forEach(function (q) { if (!all[q.i]) { out.ok = false; out.why = 'unreachable ' + q.i; } });
   if (!plain[m.endMain]) { out.ok = false; out.why = 'main ending needs secrets'; }
@@ -196,7 +212,9 @@ function validateInfinite(seed, maxDepth) {   // every world up to maxDepth exis
 // ---- theme hazards: every look has its own weather / trouble. Each pack is a list of hazard descriptors for sim.hzStep; a stage gets one pack (two once it is hard) chosen from its look
 var HZ_LAYOUTS = { plain: 1, hills: 1, flood: 1, sky: 1, cave: 1, glacier: 1, crystal: 1, airship: 1, ruins: 1, factory: 1, volcano: 1 };
 var GUST = function (dx, per, on) { return { gust: { dx: dx, per: per, on: on } }; };
+// keyed by theme id; a value is a list of packs, a pack is a list of hazard descriptors for sim.hzStep. k: 'roll' (object rolling along the floor), 'fall' (dropped from the sky, ceil:1 = from the ceiling), 'bolt' (lightning strike); mode: kill / hurt / freeze; warn = telegraph frames, per = period, spread / lead = scatter and aim-ahead, gust = a wind zone
 var HZ_PACKS = {
+  // skins follow the look: snowball / snowlump / icicle (cold), meteor / ember (fire), weed / rock / boulder (dry), coconut (jungle), glob (swamp), bolt / spark (storm, electric), stalactite / shard (caves, crystal), acorn (forest), bomb (airship), hail + gusts (sky)
   8: [[{ k: 'roll', skin: 'snowball', mode: 'freeze', per: 300, sz: 14, spd: 1.5 }], [{ k: 'fall', skin: 'snowlump', mode: 'freeze', warn: 40, per: 230, spread: 55, lead: 24 }], [GUST(0.075, 420, 150)], [{ k: 'fall', skin: 'icicle', mode: 'hurt', warn: 28, per: 190, ceil: 1, spread: 70 }, { k: 'roll', skin: 'snowball', mode: 'freeze', per: 420, sz: 12, spd: 1.2 }]],
   22: [[{ k: 'roll', skin: 'snowball', mode: 'freeze', per: 260, sz: 14, spd: 1.7 }, { k: 'fall', skin: 'icicle', mode: 'hurt', warn: 28, per: 240, ceil: 1, spread: 60 }], [GUST(-0.07, 380, 140), { k: 'fall', skin: 'snowlump', mode: 'freeze', warn: 45, per: 300, spread: 50, lead: 20 }], [{ k: 'fall', skin: 'hail', mode: 'hurt', warn: 18, per: 110, spread: 110, sz: 4 }]],
   14: [[{ k: 'fall', skin: 'meteor', mode: 'kill', crater: 1, warn: 62, per: 210, spread: 55, lead: 26, sz: 7 }], [{ k: 'fall', skin: 'ember', mode: 'hurt', warn: 22, per: 100, spread: 110, sz: 4 }], [{ k: 'fall', skin: 'meteor', mode: 'kill', crater: 1, warn: 70, per: 280, spread: 40, lead: 40, sz: 7 }, { k: 'fall', skin: 'ember', mode: 'hurt', warn: 24, per: 150, spread: 90, sz: 4 }]],
@@ -214,11 +232,15 @@ var HZ_PACKS = {
   1: [[GUST(0.09, 330, 150)], [{ k: 'fall', skin: 'hail', mode: 'hurt', warn: 18, per: 120, spread: 110, sz: 4 }]],
   0: [], 2: [], 3: [], 4: [], 18: [], 19: [], 20: [], 21: []
 };
+// picks one hazard pack from HZ_PACKS for the theme (weather / trouble of that look) and scales it by difficulty; skipped for rooms, vertical and special layouts
 function addHazards(L, seed, n) {
   var packs = HZ_PACKS[L.theme]; if (!packs || !packs.length || !HZ_LAYOUTS[L.layout] || L.vertical || L.room || L.arena || L.endCannon || L.zones || !(L.diff > 0.12)) return;
   var hard = Math.min(1, Math.max(0, (effN(n) - 19) / 50));   // keeps getting harder after the difficulty ramp (n ~ 19) is full
+  // harder stages combine two or three packs (distinct ones, picked from a seeded rotation)
   var cnt = (L.diff > 0.45 || hard > 0) && packs.length > 1 ? (hard > 0.5 && packs.length > 2 ? 3 : 2) : 1, first = hash(seed, n, 731) % packs.length, id = 0; L.hz = []; L.hzPacks = [];
+  // hazard zone: from just after the start to just before the goal; sc shortens the periods as difficulty rises
   var x0 = L.start.x + 130, x1 = L.goalX - 70, sc = 1.45 - 0.5 * L.diff - 0.3 * hard;
+  // gust descriptors become wind zones, every other descriptor becomes a hazard with a scaled period and a random time offset
   for (var q = 0; q < cnt; q++) {
     var pi = (first + q * (1 + hash(seed, n, 733) % Math.max(1, packs.length - 1))) % packs.length; if (L.hzPacks.indexOf(pi) >= 0) continue; L.hzPacks.push(pi);
     packs[pi].forEach(function (d) {
@@ -227,6 +249,7 @@ function addHazards(L, seed, n) {
     });
   }
 }
+// build one candidate: buildRaw() picks the generator by kind, then the theme is chosen, hazards are added and the ending is attached
 function build(seed, n, a, o) {
   var L = buildRaw(seed, n, a, o), o2 = o || {};
   if (o2.theme !== undefined) L.theme = o2.theme;
@@ -240,6 +263,7 @@ function build(seed, n, a, o) {
   }
   return L;
 }
+// dispatcher + the main side-scrolling builder: special kinds (maze, ghost, deep, odyssey ...) return early, the rest is composed from ground chunks below
 function buildRaw(seed, n, a, o) {
   o = o || {}; var nn = effN(n);
   // labyrinths: half the 'maze' stages are the key-and-door puzzle rooms, half the tunnel grid
@@ -259,10 +283,14 @@ function buildRaw(seed, n, a, o) {
   }
   var kk0 = o.kind || kindOf(seed, n); if ((kk0 === 'tower' || kk0 === 'shaft') && !o.room) return buildVertical(seed, n, a, kk0);
   var wantSecret = !!o.secret, kindAsked = o.kind || kindOf(seed, n);
+  // per-attempt rng: the attempt index a is hashed into the seed, so each redraw differs but stays reproducible; lim = jump limits measured on the real physics
   var lim = probe(), r = rng(hash(seed, n, a * 7919 + 1)), kind = o.kind || kindOf(seed, n), room = !!o.room, isCannon = kind === 'cannon'; if (isCannon) kind = 'sky';
+  // difficulty 0..1 from the effective stage number; later attempts get easier (a >= 3, a >= 6) so a valid level is eventually found
   var diff = Math.min(1, (nn >= 1000 ? 8 : nn - 1) / 18); if (kind === 'bonus') diff = Math.min(1, 0.4 + 0.5 * diff); if (a >= 3) diff *= 0.6; if (a >= 6) diff *= 0.3; if (a >= 8) diff = 0;
   var castle = kind === 'castle' || kind === 'bossrush', isRush = kind === 'bossrush';
+  // level width in columns: grows with the stage number, castles and cannon stages are shorter, bonus rooms are tiny
   var W = room ? 46 : isCannon ? 96 : castle ? Math.min(220, 90 + 6 * Math.min(nn, 30)) : Math.min(300, 110 + 5 * Math.min(nn, 38));
+  // per-kind template weights: a kind listed here REPLACES the default weight table in weights() (only the named templates are drawn)
   var KIND_TABLE = {
     autumn: { flat: 3, hills: 2, stairs: 1.5, hurdle: 2, spikes: 1, gap: 1.5, plant: 0.8, spring: 0.5, split: 0.8 }, jungle: { vine: 2, spring: 2.2, plant: 1.6, islands: 1.2, split: 1.2, hills: 1, gap: 1.5, hurdle: 1 },
     glacier: { ice: 6, wind: 0.6, hills: 1, spikes: 1.4, gap: 2.2, hurdle: 1.2, flat: 0.8, spring: 0.4 },
@@ -275,13 +303,16 @@ function buildRaw(seed, n, a, o) {
   var lavaPits = castle || kind === 'volcano', usedIce = false, usedMud = false, usedFire = false;
   var usedPoisonLayer = false, waterIds = 0, whirlsX = [], gt = [], flats = [], tl = [], movers = [], arcs = [], coinsX = [], specials = [], cannons = [], rings = [], enemiesX = [], winds = [], pockets = [], keysL = [], doorsL = [], switchesL = [], routeL = [], gl = [], gcount = 0, g = castle ? 11 : 12, cpCol = -1, needPow = true, spots = [], ringCount = 0;
   var rnd = function (lo, hi) { return lo + Math.floor(r() * (hi - lo + 1)); };
+  // ground profile: gt[c] is the top solid row of column c; flat() appends len columns at height gg and returns the first column
   function flat(len, gg) { var c0 = gt.length; for (var i = 0; i < len; i++) gt.push(gg); return c0; }
+  // a pit is a run of columns with no floor (row ROWS); in lava kinds it is filled with lava so falling in is deadly
   function pit(len) { var c0 = gt.length; for (var i = 0; i < len; i++) { gt.push(ROWS); if (lavaPits) { tl.push([c0 + i, ROWS - 2, T.LAVA]); tl.push([c0 + i, ROWS - 1, T.LAVA]); } } return c0; }
   // hazards on the ground (spikes, obstacles) are remembered so a gap or any jump section never starts right behind them: a safe flat run-up is always kept
   var hz = {}, tlSeen = 0;
   function markHaz() { for (; tlSeen < tl.length; tlSeen++) { var e = tl[tlSeen], cc = e[0]; if (cc >= 0 && cc < gt.length && gt[cc] < ROWS && e[1] === gt[cc] - 1 && (e[2] === T.SPIKE || e[2] === T.SOLID || e[2] === T.LAVA || e[2] === T.CANL || e[2] === T.CANR || e[2] === T.STUMP || e[2] === T.SPRING || e[2] === T.FIRE)) hz[cc] = true; } }
   function safeRunway() { var i = gt.length - 1; if (i < 0 || gt[i] >= ROWS) return 0; var gv = gt[i], k = 0; while (i >= 0 && gt[i] === gv && !hz[i]) { k++; i--; } return k; }
   function runway() { var k = 0, i = gt.length - 1; while (i >= 0 && gt[i] === gt[gt.length - 1] && gt[i] < ROWS) { k++; i--; } return k; }
+  // jump limits from probe() bound the widest gap and the highest step, so every generated jump is doable
   var gapMax = Math.max(2, Math.min(lim.gapRun - 1, Math.round(2 + diff * (lim.gapRun - 2.5))));
   var upMax = Math.max(1, Math.min(2, lim.up - 2));
   function ph1() { return r(); }
@@ -294,10 +325,13 @@ function buildRaw(seed, n, a, o) {
     for (var c = c0; c < end; c++) for (q = gTop; q < gt[c]; q++) tl.push([c, q, tileT || T.WATER]);
     return { c0: c0, inner: inner, f: f, end: end };
   }
+  // fills a water basin with creatures; pill = pillars standing in it, so swimmers are placed where they have room
   function waterLife(c0, inner, gg, D, pill) {
+    // plain swimmers first (1-3, scaled by difficulty): a sine sweep around their anchor (ax, ay)
     var ns = 1 + Math.floor(diff * 2.5 + r()), i, lo = c0 + 3, span = Math.max(1, inner - 6);
     for (i = 0; i < ns; i++) { var big = r() < 0.35, cxs = (lo + r() * span) * TS, yy = (gg + 0.4 + r() * 0.5) * TS;
       enemiesX.push({ t: E.SWIM, sz: big ? 1 : 0, x: cxs, y: yy, w: big ? 22 : 12, h: big ? 12 : 8, ax: cxs, ay: yy, rg: 18 + r() * 22, sp: 1 / (170 + r() * 120), ph: r(), am: 3 + r() * 3, spd: 0 }); }
+    // further creatures are gated by difficulty and pool size: chaser, floating mine, jellyfish, and a whale only in big pools
     if (diff > 0.25 && r() < 0.7) { var cx2 = (c0 + inner * (0.3 + 0.4 * r())) * TS, cy2 = (gg + 1.1) * TS; enemiesX.push({ t: E.CHASER, x: cx2, y: cy2, w: 12, h: 10, ax: cx2, ay: cy2, spd: 0, dir: 1 }); }
     if (diff > 0.2 && r() < 0.6) { var cx3 = (lo + 2 + r() * Math.max(1, span - 4)) * TS, cy3 = (gg + 0.9) * TS; enemiesX.push({ t: E.FMINE, x: cx3, y: cy3, w: 14, h: 14, ax: cx3, ay: cy3, am: 8, ph: r(), spd: 0 }); }
     if (diff > 0.3 && r() < 0.55) { var cx4 = (lo + 2 + r() * Math.max(1, span - 4)) * TS, cy4 = (gg + 0.2) * TS; enemiesX.push({ t: E.JELLY, x: cx4, y: cy4, w: 16, h: 18, ax: cx4, ay: cy4, ph: r(), spd: 0 }); }
@@ -309,9 +343,11 @@ function buildRaw(seed, n, a, o) {
     if (diff > 0.4 && r() < 0.4 && inner >= 14) { var elw = Math.min(88, (inner - 7) * TS), elx = (c0 + 3.5) * TS; enemiesX.push({ t: E.EEL, id: ++waterIds, x: elx, y: (gg + D * 0.5) * TS - 4, w: elw, h: 8, ax: elx, pho: Math.floor(r() * 200), s: 0, spd: 0, dir: 1 }); }
     if (diff > 0.25 && r() < 0.4 && inner >= 14 && D >= 3) whirlsX.push({ x: (c0 + inner * (0.35 + 0.3 * r())) * TS, y: (gg + D * 0.5) * TS, r: 36, dir: r() < 0.5 ? 1 : -1 });
     if (diff > 0.15 && r() < 0.4 && inner >= 12) { var jdir = r() < 0.5 ? 1 : -1, jx0 = jdir > 0 ? c0 * TS : (c0 + inner) * TS - 96; winds.push({ x0: jx0, x1: jx0 + 96, y0: (gg + 1) * TS, y1: (gg + Math.min(D, 3)) * TS, dx: jdir * 0.11, dy: 0, per: 260, on: 130, ph: Math.floor(r() * 260), bub: 1, vx: jdir > 0 ? c0 * TS : (c0 + inner) * TS }); }
+    // a clam on the floor, never on a pillar column
     if (r() < 0.6) { var cc = lo + Math.floor(r() * span); if (pill && pill[cc]) cc = -1; if (cc >= 0) enemiesX.push({ t: E.CLAM, x: cc * TS, y: (gg + D) * TS - 12, w: 16, h: 12, ax: cc * TS, pho: Math.floor(r() * 180), spd: 0, noPillar: cc }); }
   }
   function airFeature(cc, ln, gg, over) {
+    // pick one airborne kind allowed by difficulty and by the length of the stretch
     var opts = [], mid = (cc + ln / 2) * TS;
     if (diff > 0.05 || kind === 'sky') opts.push('swoop'); opts.push('bird'); if (ln >= 8) opts.push('flock'); if (diff > 0.2 || kind === 'sky') opts.push('balloon'); if (diff > 0.25) opts.push('shooter'); if (diff > 0.3 && !over) opts.push('spark');
     var k = opts[Math.floor(r() * opts.length)];
@@ -328,6 +364,7 @@ function buildRaw(seed, n, a, o) {
     var d = diff, w = { flat: 3, gap: 1.5 + 2 * d, stairs: 1.2, hurdle: 1.5 + d, spikes: nn >= 2 ? 0.5 + 1.5 * d : 0, islands: nn >= 2 ? 0.5 + d : 0, mover: nn >= 3 ? 0.4 + 1.2 * d : 0, vmover: 0, orbit: 0, falling: 0, hills: nn >= 2 ? 1.4 : 0, flood: 0, conv: 0, cannon: nn >= 4 ? 0.3 + 0.6 * d : 0, plant: nn >= 3 ? 0.3 + 0.6 * d : 0, crush: 0, ghost: 0, spring: 0.25, vine: 0.25, psw: 0.3, ring: 0.3, wind: nn >= 4 ? 0.25 : 0, updraft: nn >= 4 ? 0.2 : 0, cloud: nn >= 4 ? 0.25 : 0, keydoor: nn >= 5 ? 0.2 : 0, sgate: nn >= 5 ? 0.15 : 0, split: nn >= 2 ? 0.9 : 0 };
     if (nn >= 3 && kind !== 'flood') w.flood = 0.6;
     var KT = KIND_TABLE[kind];
+    // a KIND_TABLE entry wipes the defaults; spikes come back at low weight from stage 2 on
     if (KT) { for (var k0 in w) w[k0] = 0; w.flat = 1; for (var k1 in KT) w[k1] = KT[k1]; if (KT.spikes === undefined && nn >= 2) w.spikes = 0.4; if (kind === 'chase') { w.islands = 0; } }
     if (kind === 'hills') { w.hills = 4; w.flat = 2; }
     if (kind === 'flood') { w.flood = 4; w.hills = 0.6; w.gap = 1; w.wind = 0; w.updraft = 0; w.cloud = 0; }
@@ -343,30 +380,41 @@ function buildRaw(seed, n, a, o) {
     ['ice', 'mud', 'fire', 'lava', 'poison', 'split', 'keydoor', 'sgate', 'cloud', 'updraft', 'wind', 'ring', 'psw', 'vine', 'spring', 'ghost', 'crush', 'plant', 'cannon', 'conv', 'flood', 'hills', 'falling', 'orbit', 'vmover', 'mover'].forEach(function (nm) { if (!(w[nm] >= 0)) w[nm] = 0; });   // a missing weight used to make the whole sum NaN: every stage then picked only plain floor (and the water pools / fish vanished)
     return w;
   }
+  // every template name the loop can draw (weight 0 disables one)
   var names = ['flat', 'gap', 'stairs', 'hurdle', 'spikes', 'islands', 'mover', 'vmover', 'orbit', 'falling', 'hills', 'flood', 'conv', 'cannon', 'plant', 'crush', 'ghost', 'spring', 'vine', 'psw', 'ring', 'wind', 'updraft', 'cloud', 'keydoor', 'sgate', 'split', 'ice', 'mud', 'fire', 'lava', 'poison'];
+  // main generate loop: draw a chunk template 'ck' by weight until only the ending area (endReserve columns) is left; each branch below builds one template
   var guard = 0, endReserve = castle ? 40 : 26, prevCk = '';
   while (gt.length < W - endReserve && guard++ < 500) {
+    // the checkpoint: a flat patch once the middle of the level is reached
     if (cpCol < 0 && gt.length >= W / 2) { var cb = flat(7, g); cpCol = cb + 3; continue; }
     var wts = weights(), tot = 0, i; for (i = 0; i < names.length; i++) tot += wts[names[i]];
+    // weighted random draw of the next template ck
     var x = r() * tot, k = 0; while (k < names.length - 1 && x >= wts[names[k]]) { x -= wts[names[k]]; k++; }
     var ck = names[k];
+    // a stage with a secret exit must contain the ring (the entrance to the bonus room) once a quarter of the width is built
     if (wantSecret && ringCount === 0 && gt.length >= W * 0.25 && !castle) ck = 'ring';
+    // never start a jump section right behind a hazard: guarantee a flat run-up of 4 columns first
     markHaz(); var sr = safeRunway(); if (sr < 4) { if (gt[gt.length - 1] === g) flat(4 - sr, g); else flat(4, g); }
     var wallBefore = (ck === 'poison' && prevCk === 'flood') || (ck === 'flood' && prevCk === 'poison'); prevCk = ck;
     if (wallBefore) { var wgh = g - 2 < 7 ? g - 1 : g - 2; flat(2, g); flat(2, wgh); flat(2, g); }   // water and poison never touch: a wall always stands between them
     var c0, len, gw, dg, i2, q;
+    // templates: each branch appends columns to gt[] and adds tiles (tl), enemies, movers ...; flats[] records plain stretches where blocks and enemies are added later, noEn marks stretches that already hold their own trouble
     if (ck === 'flat') { len = rnd(6, 13); c0 = flat(len, g); flats.push({ c: c0, len: len, g: g }); }
+    // pit of width gw with a height change dg across it; arcs[] makes a coin arc over the gap
     else if (ck === 'gap') {
       gw = rnd(2, gapMax); dg = [0, 0, 0, 1, -1][rnd(0, 4)]; if (dg < 0 && g + 1 > 12) dg = 0; if (dg > 0 && g - dg < 8) dg = 0; if (dg < 0 && gw > gapMax - 1) dg = 0;
       c0 = pit(gw); arcs.push({ c: c0, w: gw, g: g, ng: g - dg });
       g -= dg; len = rnd(4, 8); var c1 = flat(len, g); flats.push({ c: c1, len: len, g: g });
     }
+    // 2-3 steps of 2 columns up or down, clamped to the allowed row band
     else if (ck === 'stairs') {
       var up = r() < 0.55, steps = rnd(2, 3); if (up && g - steps < 8) up = false; if (!up && g + steps > 12) up = true; if (up && g - steps < 8) steps = 1;
       for (i2 = 0; i2 < steps; i2++) { g += up ? -1 : 1; flat(2, g); } flat(3, g);
     }
+    // a single raised block, 1-3 tiles high (never above what the probe says can be jumped)
     else if (ck === 'hurdle') { var hh = rnd(1, Math.min(3, lim.up - 1)), ww = rnd(1, 2); if (g - hh < 6) continue; flat(ww, g - hh); }
     else if (ck === 'spikes') { var sw = rnd(1, diff > 0.5 ? 3 : 2); c0 = flat(sw, g); for (i2 = 0; i2 < sw; i2++) tl.push([c0 + i2, g - 1, T.SPIKE]); }
+    // a chain of stone islands over pits; spots[] marks where coins may float above them
     else if (ck === 'islands') {
       var cnt = rnd(2, 4), ri = g;
       for (i2 = 0; i2 < cnt; i2++) {
@@ -376,20 +424,24 @@ function buildRaw(seed, n, a, o) {
       }
       pit(rnd(2, Math.max(2, gapMax - 1))); g = ri; len = rnd(4, 7); var c3 = flat(len, g); flats.push({ c: c3, len: len, g: g });
     }
+    // a pit wider than any plain jump, so the moving platform is required (kind 0 horizontal sweep, 1 vertical)
     else if (ck === 'mover' || ck === 'vmover') {
       var pw = ck === 'mover' ? rnd(Math.max(lim.gapRun + 1, 6), Math.max(lim.gapRun + 1, 6) + 3) : 7; c0 = pit(pw);
       if (ck === 'mover') movers.push({ kind: 0, cx: (c0 + pw / 2) * TS, y: g * TS, w: 48, amp: pw * TS / 2, per: [240, 360, 480][rnd(0, 2)], ph: 0 });
       else movers.push({ kind: 1, cx: (c0 + pw / 2) * TS, y: g * TS, w: 48, amp: 22, per: [240, 360][rnd(0, 1)], ph: 0 });
       len = rnd(4, 7); var c4 = flat(len, g); flats.push({ c: c4, len: len, g: g });
     }
+    // two platforms orbiting over a pit (kind 2)
     else if (ck === 'orbit') {
       var ow = 9; c0 = pit(ow); for (i2 = 0; i2 < 2; i2++) movers.push({ kind: 2, cx: (c0 + ow * (i2 + 1) / 3) * TS, y: g * TS - 6, w: 36, amp: 18 + r() * 8, per: 300, ph: i2 * Math.PI });
       len = rnd(4, 7); var c5 = flat(len, g); flats.push({ c: c5, len: len, g: g });
     }
+    // three crumbling platforms over a pit (kind 3)
     else if (ck === 'falling') {
       var fw = 8; c0 = pit(fw); for (i2 = 0; i2 < 3; i2++) movers.push({ kind: 3, cx: (c0 + fw * (i2 + 0.5) / 3) * TS, y: g * TS, w: 32, amp: 0, per: 300, ph: 0 });
       len = rnd(4, 7); var c6 = flat(len, g); flats.push({ c: c6, len: len, g: g });
     }
+    // a plateau reached by slope tiles (SLR up, SLL down), with coins on top
     else if (ck === 'hills') {
       var hk = rnd(2, 3); if (g - hk < 6) continue; flat(1, g);
       for (i2 = 0; i2 < hk; i2++) { var cc = flat(1, g - i2); tl.push([cc, g - i2 - 1, T.SLR]); }
@@ -397,6 +449,7 @@ function buildRaw(seed, n, a, o) {
       for (i2 = 0; i2 < hk; i2++) { var cd = flat(1, g - hk + i2 + 1); tl.push([cd, g - hk + i2, T.SLL]); }
       flat(3, g);
     }
+    // a liquid river: stone steps of 2 columns between liquid gaps of gsz columns; ks steps in total
     else if (ck === 'lava' || ck === 'poison') {   // a liquid river crossed on stone steps; embers leap out of the lava (fire-proof), fish out of the poison (killable)
       var isL = ck === 'lava', ks = rnd(2, 3), gsz = rnd(2, 3), cur2 = gt.length, jl = [];
       flat(3, g); cur2 = gt.length;
@@ -407,63 +460,78 @@ function buildRaw(seed, n, a, o) {
       jl.forEach(function (cl2) { var per = rnd(110, 170), hg = rnd(34, 58); enemiesX.push(isL ? { t: E.EMBER, x: cl2 * TS + 2, y: g * TS, w: 12, h: 12, ax: cl2 * TS + 2, by: g * TS, per: per, pho: rnd(0, per), hgt: hg, up: 1, hid: true, spd: 0 } : { t: E.LEAPFISH, poison: 1, x: cl2 * TS + 2, y: g * TS, w: 14, h: 9, ax: cl2 * TS + 2, by: g * TS, per: per, pho: rnd(0, per), hgt: hg, up: 1, hid: true, spd: 0 }); });
       flat(4, g);
     }
+    // water basin template: dug below the ledge row so the neighbouring ledges are its walls; pillars, optional poison layers and life are added inside
     else if (ck === 'flood') {
       while (g > 9) { g--; flat(2, g); } flat(3, g);
       var D = Math.min(4, 13 - g), inner = rnd(12, 18), bs = basin(g, D, inner), f = bs.f, wdn = D;
       var px = bs.c0 + 3, pill = {}; while (px < bs.c0 + inner - 3) { var ph2 = rnd(1, Math.max(1, D - 2)); if (r() < 0.7) { for (q = 1; q <= ph2; q++) tl.push([px, f - q, T.SOLID]); pill[px] = 1; } else { tl.push([px, f - 1, T.SPIKE]); pill[px] = 1; } px += rnd(4, 6); }
       // heavy poison sinks: a layer of it lies on the basin floor under the clean water, or it pools in pits dug into the floor (swim above it, touching it is deadly)
+      // poison variant: below 0.35 a poison layer on the basin floor, below 0.7 puddles dug into the floor, else clean water (the first stage stays clean)
       var pvar = nn >= 2 ? r() : 1;
       if (pvar < 0.35 && D >= 3) { for (var ti = 0; ti < tl.length; ti++) { var te = tl[ti]; if (te[2] === T.WATER && te[1] === f - 1 && te[0] >= bs.c0 && te[0] < bs.c0 + inner) te[2] = T.POISON; } usedPoisonLayer = true; }
+      // puddles: 1-2 pits in the basin floor filled with poison, to be swum over
       else if (pvar < 0.7 && inner >= 12) { var pcn = rnd(1, 2); for (i2 = 0; i2 < pcn; i2++) { var pc1 = bs.c0 + 2 + Math.floor((i2 + 0.3 + r() * 0.4) * (inner - 6) / pcn); if (pill[pc1] || pill[pc1 + 1] || pill[pc1 - 1] || pill[pc1 + 2]) continue; gt[pc1] = f + 1; gt[pc1 + 1] = f + 1; tl.push([pc1, f, T.POISON]); tl.push([pc1 + 1, f, T.POISON]); } }
+      // coins along the basin, then optional side currents (CURL / CURR), then air pockets every 7 columns so the swimmer can breathe
       for (i2 = 0; i2 < 4; i2++) coinsX.push({ x: (bs.c0 + 3 + i2 * (inner - 6) / 3) * TS + 8, y: (g + 1.5) * TS });
       if (r() < 0.55 && inner >= 14) { var cs0 = bs.c0 + rnd(3, inner - 9), csl = rnd(4, 6), ct = r() < 0.5 ? T.CURL : T.CURR; for (i2 = 0; i2 < csl; i2++) for (q = g; q < f; q++) if (!pill[cs0 + i2]) tl.push([cs0 + i2, q, ct]); }
       if (r() < 0.35 && inner >= 12) { var cu0 = bs.c0 + rnd(4, inner - 6); for (i2 = 0; i2 < 2; i2++) for (q = g; q < f; q++) if (!pill[cu0 + i2]) tl.push([cu0 + i2, q, T.CURU]); }
       for (var pc = bs.c0 + 4; pc < bs.c0 + inner - 2; pc += 7) if (!pill[pc]) pockets.push({ x: pc * TS + 8, y: (g + 1.5) * TS });
+      // creatures only in real stages, not in bonus rooms
       if (!room) { waterLife(bs.c0, inner, g, D, pill); if (diff > 0.15 && r() < 0.6) { var lc = bs.c0 + rnd(4, Math.max(4, inner - 5)), lper = rnd(120, 180); enemiesX.push({ t: E.LEAPFISH, x: lc * TS + 1, y: g * TS, w: 14, h: 9, ax: lc * TS + 1, by: g * TS, per: lper, pho: rnd(0, lper), hgt: rnd(30, 50), up: 1, hid: true, spd: 0 }); } }
       flat(3, g);
     }
+    // a conveyor floor (CONVL / CONVR) that carries the hero; no enemies on it
     else if (ck === 'conv') {
       len = rnd(8, 12); c0 = flat(len, g); var cdir = r() < 0.5 ? T.CONVL : T.CONVR; for (i2 = 0; i2 < len; i2++) tl.push([c0 + i2, g, cdir]);
       flats.push({ c: c0, len: len, g: g, noEn: true });
     }
+    // a wall cannon near the right end of the floor firing left at the hero
     else if (ck === 'cannon') {
       len = rnd(9, 13); c0 = flat(len, g); var cc2 = c0 + len - 3, dirc = -1; tl.push([cc2, g - 1, T.CANL]);
       cannons.push({ x: cc2 * TS, y: (g - 1) * TS, dir: dirc, per: 170 + rnd(0, 50), ph: rnd(0, 120) }); flats.push({ c: c0, len: len, g: g, noEn: true });
     }
+    // a plant that rises out of a stump in the middle of the floor
     else if (ck === 'plant') {
       len = rnd(7, 10); c0 = flat(len, g); var pc2 = c0 + rnd(3, len - 4); tl.push([pc2, g - 1, T.STUMP]);
       enemiesX.push({ t: E.PLANT, x: pc2 * TS + 2, y: (g - 1) * TS, y0: (g - 1) * TS, w: 12, h: 18, ph: rnd(0, 200), spd: 0 }); flats.push({ c: c0, len: len, g: g, noEn: true });
     }
+    // crushers hanging from the ceiling above the stretch (a second one on long floors)
     else if (ck === 'crush') {
       len = rnd(9, 12); c0 = flat(len, g); enemiesX.push({ t: E.CRUSH, x: (c0 + len / 2) * TS - 12, y: (g - 7) * TS, y0: (g - 7) * TS, w: 24, h: 24, spd: 0 });
       if (len > 11) enemiesX.push({ t: E.CRUSH, x: (c0 + len - 3) * TS - 12, y: (g - 7) * TS, y0: (g - 7) * TS, w: 24, h: 24, spd: 0 });
       flats.push({ c: c0, len: len, g: g, noEn: true });
     }
+    // one or two ghosts floating above the floor (more at higher difficulty)
     else if (ck === 'ghost') {
       len = rnd(10, 14); c0 = flat(len, g); var ng = diff > 0.5 ? 2 : 1;
       for (i2 = 0; i2 < ng; i2++) enemiesX.push({ t: E.GHOST, x: (c0 + len * (i2 + 1) / (ng + 1)) * TS, y: (g - 4) * TS, w: 14, h: 14, spd: 0 });
       flats.push({ c: c0, len: len, g: g });
     }
+    // a spring throws the hero up to a high ledge of coin spots
     else if (ck === 'spring') {
       len = rnd(8, 10); c0 = flat(len, g); tl.push([c0 + 2, g - 1, T.SPRING]);
       for (q = 0; q < 3; q++) tl.push([c0 + 5 + q, g - 8, T.SOLID]); for (q = 0; q < 3; q++) spots.push({ x: (c0 + 5 + q) * TS + 8, y: (g - 9) * TS + 6 });
       flats.push({ c: c0, len: len, g: g, noEn: true });
     }
+    // a climbable vine up to a high ledge
     else if (ck === 'vine') {
       len = rnd(8, 10); c0 = flat(len, g); for (q = 1; q <= 7; q++) tl.push([c0 + 3, g - q, T.VINE]);
       for (q = 0; q < 4; q++) tl.push([c0 + 4 + q, g - 8, T.SOLID]); for (q = 0; q < 3; q++) spots.push({ x: (c0 + 4 + q) * TS + 8, y: (g - 9) * TS + 6 });
       flats.push({ c: c0, len: len, g: g, noEn: true });
     }
+    // a P-switch block under two rows of bricks (its effect changes the bricks)
     else if (ck === 'psw') {
       len = 11; c0 = flat(len, g); tl.push([c0 + 2, g - 4, T.PSW]); for (q = 0; q < 6; q++) tl.push([c0 + 4 + q, g - 4, T.BRICK]);
       for (q = 0; q < 6; q++) tl.push([c0 + 4 + q, g - 8, T.BRICK]);
       flats.push({ c: c0, len: len, g: g, noEn: true });
     }
+    // a ring portal; with a secret exit the first ring leads to the bonus room (rings[] records its return point)
     else if (ck === 'ring') {
       len = 7; c0 = flat(len, g); var rc = c0 + 3, secret = (wantSecret && ringCount === 0 && !castle && !room); ringCount++;
       tl.push([rc, g - 1, T.RING]); tl.push([rc, g - 2, T.RING]); rings.push({ c: rc, secret: secret, room: secret ? 1 : 0, y: g * TS });
       flats.push({ c: c0, len: len, g: g, noEn: true });
     }
+    // key and door, or switch and gate: a wall of the floor with a locked opening, the key / switch on a high ledge; routeL lists the stages the validator must follow (fetch, open, cross)
     else if (ck === 'keydoor' || ck === 'sgate') {
       len = 12; c0 = flat(len, g); var wcn = gt.length; for (q = 0; q < 3; q++) tl.push([c0 + 2 + q, g - 3, T.SOLID]); for (q = 3; q < 6; q++) tl.push([c0 + 2 + q, g - 6, T.SOLID]);
       var kx = (c0 + 6) * TS + 8, ky = (g - 7) * TS + 8; gt.push(0); gt.push(0);
@@ -473,6 +541,7 @@ function buildRaw(seed, n, a, o) {
         routeL.push({ k: 'sw', g: sb2, x: kx, y: ky }); }
       routeL.push({ k: 'xge', x: (wcn + 2) * TS, y: g * TS - 7 });
     }
+    // ICE tiles on the floor are slippery; usedIce makes the level cold-themed
     else if (ck === 'ice') {   // slippery floor with icicle spikes
       len = rnd(9, 13); c0 = flat(len, g); for (i2 = 0; i2 < len; i2++) tl.push([c0 + i2, g, T.ICE]); usedIce = true;
       for (q = 0; q < rnd(1, 2); q++) tl.push([c0 + rnd(4, len - 5), g - 1, T.SPIKE]); flats.push({ c: c0, len: len, g: g, noEn: len < 10 });
@@ -490,15 +559,18 @@ function buildRaw(seed, n, a, o) {
       for (q = 0; q < 4; q++) { coinsX.push({ x: (c0 + 2.5 + q) * TS, y: (g - 6) * TS + 8 }); coinsX.push({ x: (c0 + 8.5 + q) * TS, y: (g - 6) * TS + 8 }); }
       flats.push({ c: c0, len: len, g: g, noEn: true });
     }
+    // a gap with a sideways wind zone around it (pushes with or against the jump)
     else if (ck === 'wind') {
       gw = rnd(2, gapMax); c0 = pit(gw); var wdx = (r() < 0.5 ? 1 : -1) * (0.05 + 0.04 * diff); winds.push({ x0: (c0 - 3) * TS, x1: (c0 + gw + 3) * TS, y0: (g - 9) * TS, y1: (g + 1) * TS, dx: wdx, dy: 0 });
       arcs.push({ c: c0, w: gw, g: g, ng: g }); len = rnd(5, 8); var c7 = flat(len, g); flats.push({ c: c7, len: len, g: g });
     }
+    // a gap with an updraft column in the middle, coins stacked along it
     else if (ck === 'updraft') {
       gw = rnd(3, gapMax); c0 = pit(gw); winds.push({ x0: (c0 + gw / 2 - 1) * TS, x1: (c0 + gw / 2 + 1.2) * TS, y0: (g - 11) * TS, y1: (g + 1) * TS, dx: 0, dy: -0.85, up: 1 });
       for (q = 0; q < 4; q++) coinsX.push({ x: (c0 + gw / 2 + 0.1) * TS, y: (g - 3 - q * 1.7) * TS + 8 });
       arcs.push({ c: c0, w: gw, g: g, ng: g }); len = rnd(5, 8); var c8 = flat(len, g); flats.push({ c: c8, len: len, g: g });
     }
+    // cloud platforms (kind 4) over a pit, alternately bobbing
     else if (ck === 'cloud') {
       var cw = 9; c0 = pit(cw); var nc = 4; for (i2 = 0; i2 < nc; i2++) movers.push({ kind: 4, cx: (c0 + cw * (i2 + 0.5) / nc) * TS, y: g * TS - (i2 % 2) * 8, w: 30, amp: 0, per: 300 + (i2 % 2) * 60, ph: i2 * 1.7 });
       len = rnd(4, 7); var c9 = flat(len, g); flats.push({ c: c9, len: len, g: g });
@@ -507,38 +579,49 @@ function buildRaw(seed, n, a, o) {
   if (cpCol < 0) { cpCol = flat(7, g) + 3; }
   flat(4, g);
   var goalCol, poleCol, bossDef = null, bossDef2 = null, arenaC0 = 0; var bossItems = [], shellPassF = false;
+  // castle / boss rush ending: a flat arena (or a flooded one) with the boss, helper items before it, and the gate at the far end; non-castles just get stairs and a pole
   if (castle && !room) {
+    // boss variant bv 0..4 (forced by o.boss or hashed from seed and stage); 3 is the flooded arena, the others share the dry arena below and differ only in the boss's behaviour (v)
     var bv = o.boss !== undefined ? o.boss : (n + hash(seed, n, 5)) % 5, bx;
     if (bv === 3 && !isRush) {   // flooded arena: a deep basin whose walls are the ledges, exit steps lead to the gate
       while (g > 9) { g--; flat(2, g); } flat(6, g);
       var ba = basin(g, 4, 22); arenaC0 = ba.c0; flat(5, g); bx = (arenaC0 + 14) * TS;
       // stepping islands on the water surface: the hero stands on one, drops onto the swimmer passing right under it, bounces and lands back on ground
       [[2, 3], [8, 3], [14, 3], [20, 2]].forEach(function (pl) { for (var pc2 = arenaC0 + pl[0]; pc2 < arenaC0 + pl[0] + pl[1]; pc2++) { for (var ti = tl.length - 1; ti >= 0; ti--) if (tl[ti][0] === pc2 && tl[ti][1] === g) tl.splice(ti, 1); tl.push([pc2, g, T.SOLID]); } });
+      // tidal swimmer boss: sweeps through the water between mn and mx; the islands above let the hero stomp it from the side-line
       bossDef = { t: E.BOSS, v: 3, x: bx, y: (g + 1.8) * TS, w: 30, h: 18, spd: 0, mn: (arenaC0 + 1) * TS, mx: (arenaC0 + 22) * TS, ax: (arenaC0 + 12) * TS, ay: (g + 1.8) * TS, dir: -1 };
+      // air pockets so the hero can breathe during the flooded fight
       pockets.push({ x: (arenaC0 + 6) * TS, y: (g + 1.5) * TS }); pockets.push({ x: (arenaC0 + 16) * TS, y: (g + 1.5) * TS });
       bossItems.push({ k: 0, x: (arenaC0 - 3) * TS + 2, y: g * TS - 12 });   // a shrunken hero floats on the water and cannot reach the boss: a mushroom at the basin's edge makes him normal again
       poleCol = gt.length - 3; goalCol = poleCol;
     } else {
+      // dry arena: 26 flat columns (44 for boss rush), a run-up before it and the gate column at its end
       flat(6, g); var AL = isRush ? 44 : 26; arenaC0 = flat(AL, g); flat(3, g); bx = (arenaC0 + 16) * TS;
       function mkBoss(v2, bxx) { var b2 = { t: E.BOSS, v: v2, x: bxx, y: g * TS - 26, w: 28, h: 26, spd: 0, mn: (arenaC0 + 1) * TS, mx: (arenaC0 + AL - 1) * TS, ax: bxx - 2 * TS, ay: (g - 4) * TS - 6, dir: -1 }; if (v2 === 4) { b2.w = 28; b2.h = 22; b2.ay = (g - 5) * TS; b2.y = b2.ay; } return b2; }
+      // a dry arena cannot host the tidal boss (bv 3 falls back to boss 0); boss rush adds a second, different boss
       bossDef = mkBoss(bv === 3 ? 0 : bv, bx); if (isRush) bossDef2 = mkBoss([0, 1, 2, 4][(bv + 2) % 4] === bossDef.v ? [0, 1, 2, 4][(bv + 3) % 4] : [0, 1, 2, 4][(bv + 2) % 4], (arenaC0 + 30) * TS);
       // armoured boss: stomping only bounces, it has to be hit by a kicked shell (beetles waiting at the arena entrance) or by fireballs (flowers waiting before it)
       if (!isRush) bossItems.push({ k: 0, x: (arenaC0 - 3) * TS + 2, y: g * TS - 12 });   // a shrunken hero grows back here before the fight
+      // armoured boss (every third castle or o.bossimm): stomps only bounce, so it takes a kicked shell or fireballs
       var imm = o.bossimm !== undefined ? o.bossimm : (!isRush && (n + hash(seed, n, 9)) % 3 === 0 ? (hash(seed, n, 10) % 2 ? 'shell' : 'fire') : '');
+      // only boss 0 can be hit by a shell in this arena; the others get fireballs instead
       if (imm === 'shell' && bossDef.v !== 0) imm = 'fire';
       if (imm && !isRush) {
         bossDef.imm = 1; bossDef.immKind = imm;
+        // shell: beetles wait at the arena entrance to be kicked (shellPass lets the validator use them); fire: fire flowers lie before and inside the arena
         if (imm === 'shell') { shellPassF = true; for (var bq = 0; bq < 4; bq++) enemiesX.push({ t: E.BEETLE, x: (arenaC0 + 1 + bq * 2) * TS, y: g * TS - 13, w: 12, h: 13, spd: 0.4, dir: bq % 2 ? -1 : 1, mn: arenaC0 * TS, mx: (arenaC0 + 9) * TS }); }
         else { bossItems.push({ k: 1, x: (arenaC0 - 4) * TS + 2, y: g * TS - 12 }); bossItems.push({ k: 1, x: (arenaC0 + 1) * TS + 2, y: g * TS - 12 }); bossItems.push({ k: 1, x: (arenaC0 + 9) * TS + 2, y: g * TS - 12 }); bossItems.push({ k: 1, x: (arenaC0 + 17) * TS + 2, y: g * TS - 12 }); }   // spare flowers inside the arena: a hit that costs the power must not lock the fight
       }
       poleCol = arenaC0 + AL - 2; goalCol = poleCol;
     }
   } else {
+    // ordinary ending: four steps up to the flag pole
     for (var s2 = 0; s2 < 4; s2++) { g -= 1; flat(2, g); }
     poleCol = flat(4, g) + 1; flat(8, g);
   }
   W = gt.length;
   // ---- tiles
+  // rasterise: solid ground from gt[] downward, then the tile list tl on top (put() clips to the map); grpA holds the door / switch group ids
   var tiles = new Uint8Array(W * ROWS), c, rr, grpA = new Uint8Array(W * ROWS);
   for (c = 0; c < W; c++) for (rr = gt[c]; rr < ROWS; rr++) tiles[c * ROWS + rr] = T.SOLID;
   gl.forEach(function (e2) { if (e2[0] < W) grpA[e2[0] * ROWS + e2[1]] = e2[2]; });
@@ -550,12 +633,14 @@ function buildRaw(seed, n, a, o) {
   var hasBeetle = nn >= 3;
   flats.forEach(function (f, fi) {
     var mid = f.c + f.len / 2;
+    // per flat stretch: either a block cluster (bricks and ? blocks, one holds the needed power-up) or coins, then ground enemies scaled by difficulty
     if (!room && f.len >= 8 && !f.noEn && r() < 0.5) {   // block cluster
       var m = rnd(3, Math.min(5, f.len - 4)), bc = f.c + 2 + rnd(0, f.len - 4 - m);
       for (var j = 0; j < m; j++) { var t = r() < 0.5 ? T.BRICK : T.QC; if (needPow && j === (m >> 1)) { t = T.QP; needPow = false; } else if (r() < 0.08) t = T.QP; else if (r() < 0.03) t = T.QS; else if (r() < 0.02 && nn >= 3) t = T.QM; put(bc + j, f.g - 4, t); }
       if (r() < 0.5) for (j = 0; j < m; j++) pushCoin((bc + j) * TS + 8, (f.g - 6) * TS + 8);
     } else if (r() < 0.5) { var cn = rnd(3, 5); for (var j2 = 0; j2 < cn; j2++) { var berry = nn >= 3 && r() < 0.25; pushCoin((mid - cn / 2 + j2 + 0.5) * TS, (f.g - 2) * TS + 8 - Math.sin(Math.PI * (j2 + 0.5) / cn) * 12, berry); } }
     if (f.noEn || room) return;
+    // enemy count for this stretch (never more than one on stage 1 or in ghost houses)
     var ne = f.len >= 6 ? ((r() < 0.3 + 0.55 * diff ? 1 : 0) + (f.len >= 10 && r() < 0.8 * diff ? 1 : 0)) : 0;
     if (n === 1 && ne > 1) ne = 1;
     if (kind === 'ghost') ne = Math.min(ne, 1);
@@ -570,6 +655,7 @@ function buildRaw(seed, n, a, o) {
   });
   var ex0 = enemiesX.length;
   if (!room) {
+    // airborne enemies: chance pa per eligible flat stretch and per gap
     var pa = kind === 'sky' ? 0.5 : (castle ? 0.1 : 0.06 + 0.3 * diff);
     flats.forEach(function (f, fi) { if (f.len >= 8 && !f.noEn && fi > 0 && r() < pa) airFeature(f.c, f.len, f.g, false); });
     arcs.forEach(function (a2) { if (a2.w >= 3 && r() < pa * 0.8) airFeature(a2.c - 1, a2.w + 2, a2.g, true); });
@@ -584,13 +670,17 @@ function buildRaw(seed, n, a, o) {
   cand.sort(function (u, v) { return u.x - v.x; });
   if (!room) { for (var si = 0; si < 5 && cand.length; si++) { var pick = cand[Math.min(cand.length - 1, Math.floor((si + 0.5) * cand.length / 5))]; specials.push({ x: pick.x, y: pick.y }); } }
   var gy = function (col) { return gt[col] * TS; };
+  // a hidden egg pickup on a suitable column in the middle part of the level
   var eggC = -1; if (!room && nn >= 2) { for (var ec = Math.floor(W * 0.3); ec < W - 12 && eggC < 0; ec++) if (gt[ec] < 14 && gt[ec] === gt[ec - 1] && gt[ec] === gt[ec + 1] && gt[ec] === gt[ec + 2]) eggC = ec; }
+  // assemble the level object; these are the fields sim.js, the validator and the renderer read
   var L = { items: bossItems, shellPass: shellPassF, egg: eggC >= 0 ? { x: eggC * TS + 2, y: gt[eggC] * TS - 14 } : null, seed: seed, n: n, kind: isCannon ? 'cannon' : kind, attempt: a, diff: diff, w: W, tiles: tiles, gt: gt, coins: coins, special: specials, enemies: enemies, movers: movers, cannons: cannons, rings: rings, winds: winds, pockets: pockets, keys: keysL, doors: doorsL, switches: switchesL, tele: [], launch: [], grp: grpA, route: routeL.concat([{ k: 'goal', x: poleCol * TS + 6, y: null }]), puzzle: routeL.length > 0, goalX: poleCol * TS + 6, poleCol: poleCol, poleY: gy(poleCol),
     start: { x: 3 * TS + 2, y: gy(3) - P.SH }, cp: { x: cpCol * TS + 2, y: gy(cpCol) - P.SH }, time: (castle ? 150 : 90) + Math.floor(W * 0.6), kindAsked: kindAsked, theme: KIND_THEME[isCannon ? 'sky' : kind] | 0, hasIce: usedIce, hasMud: usedMud, hasFire: usedFire, room: room, hasBoss: !!bossDef };
   L.rings.forEach(function (rg) { rg.out = { x: rg.c * TS + 2, y: rg.y - P.SH }; });
+  // arena columns (used by the gate and the arena logic of the simulation)
   if (castle && bossDef) L.arena = { c0: arenaC0, c1: arenaC0 + 26 };
   if (whirlsX.length) L.whirls = whirlsX;
   if (isCannon) { L.endCannon = 1; L.goalRect = { x: L.goalX - 12, y: L.poleY - 34, w: 30, h: 34 }; }   // the stage ends by climbing into the big cannon at the far end: it fires the hero away, no flag
+  // 'chase' stages scroll a death wall in from the left
   if (kind === 'chase') L.chase = { x0: L.start.x - 130, v: 0.5 + 0.35 * diff, delay: 150 };
   return L;
 }
@@ -600,14 +690,18 @@ function buildMaze(seed, n, a) {
   var r = rng(hash(seed, n, a * 7919 + 3)), diff = Math.min(1, (nn - 1) / 18); if (a >= 3) diff *= 0.6; if (a >= 6) diff *= 0.3; if (a >= 9) diff = 0;
   var g = 12, rnd = function (lo, hi) { return lo + Math.floor(r() * (hi - lo + 1)); };
   var gt = [], tl = [], gl = [], coins = [], enemies = [], keys = [], doors = [], switches = [], tele = [], launch = [], movers = [], pockets = [], route = [], cannons = [];
+  // rooms are separated by one connector each: types[] mixes door / gate / rise / tele / launch (and one fork)
   var nRooms = Math.min(6, 3 + Math.floor(diff * 2.4 + r() * 1.3)), nConn = nRooms - 1, types = [], i, bit = 0, teleN = 0, doorColor = 0;
   function flat(len, gg) { var c0 = gt.length; for (var k = 0; k < len; k++) gt.push(gg); return c0; }
   // ---- choose the connector types; a "fork" (hub with teleport pads into a key side-room and a dead end) forces a door next
+  // connector kinds unlock with the stage number and difficulty (tele from stage 2, the rest later)
   for (i = 0; i < nConn; i++) { var opts = ['door', 'gate']; if (nn >= 2) opts.push('tele'); if (diff > 0.15 || nn >= 3) opts.push('launch'); types.push(opts[Math.floor(r() * opts.length)]); }
+  // a fork needs two more connectors after it: the fork itself plus the door that its key opens
   var fork = -1; if (nConn >= 3 && (diff > 0.25 || r() < 0.3)) { fork = rnd(0, nConn - 2); types[fork] = 'fork'; types[fork + 1] = 'door'; }
   // ---- side rooms to the LEFT of the start (their x is below the start, so the goal gate is never triggered inside them)
   var s1c0 = -1, s2c0 = -1, s1c1 = 0;
   if (fork >= 0) { flat(2, 0); s2c0 = flat(11, g); flat(2, 0); s1c0 = flat(13, g); s1c1 = gt.length; flat(2, 0); }
+  // room start / end columns; alc[] counts the key alcoves already built per room
   var roomS = [], roomE = [], alc = [], wallC = [];
   function floorKey(j, c, kind, grp, color) {   // alcove: two stepping platforms, the pickup on the upper one
     var rs = roomS[j], re = roomE[j], k = alc[j] || 0, a0 = rs + 3 + k * 8;
@@ -617,12 +711,15 @@ function buildMaze(seed, n, a) {
   }
   var sideKeyColor = -1;
   for (i = 0; i < nRooms; i++) {
+    // main loop: lay out room i, then build the connector to room i+1 on the columns after it
     var w = i === 0 ? 16 : rnd(15, 19); roomS[i] = flat(w, g); roomE[i] = gt.length;
     if (i >= nConn) break;
     var ty = types[i], rs = roomS[i], re = roomE[i], wc = gt.length;
+    // key or switch lies in this room, or (needBack) in an earlier one so the hero must backtrack; route[] gets its stages in order
     if (ty === 'door' || ty === 'gate' || ty === 'rise') {
       var needBack = i > 0 && r() < 0.35 + 0.4 * diff, j = needBack ? rnd(0, i - 1) : i, pos;
       var isSide = (ty === 'door' && i === fork + 1 && fork >= 0);
+      // door: a coloured key opens a 3-tile DOOR; route stages are 'key', then 'door', then 'xge' (cross the connector)
       if (ty === 'door') {
         var color = doorColor++ % 3;
         if (isSide) { pos = { x: (s1c0 + 7) * TS + 8, y: (g - 1) * TS + 8 }; }
@@ -632,6 +729,7 @@ function buildMaze(seed, n, a) {
         gt.push(0); gt.push(0); var di = doors.length; doors.push({ c: wc, r0: g - 3, r1: g - 1, g: color });
         for (var q = 1; q <= 3; q++) { tl.push([wc, g - q, T.DOOR]); gl.push([wc, g - q, color]); tl.push([wc + 1, g - q, 0]); }
         route.push({ k: 'door', i: di, x: wc * TS + 8, y: g * TS - 7 }); route.push({ k: 'xge', x: (wc + 2) * TS, y: g * TS - 7 });
+      // gate: a floor switch (bit sbit) opens the GATE wall of the same bit; the switch stands where the key would be
       } else if (ty === 'gate') {
         pos = floorKey(j); var sbit = bit++, sc2 = pos.c;
         // the switch is a floor-level pad placed under/next to the alcove: use the pickup spot but at floor level when the alcove is the fallback
@@ -649,13 +747,16 @@ function buildMaze(seed, n, a) {
         route.push({ k: 'xge', x: (wc + 2 + 5) * TS, y: g * TS - 7 });
         var nx = flat(0, g);
       }
+    // tele: a full-height wall; the pad before it teleports the hero to a pad behind it
     } else if (ty === 'tele') {
       gt.push(0); gt.push(0);
       var pc = re - 4, tc = wc + 2 + 3; tl.push([pc, g - 1, T.TELE]); tl.push([tc, g - 1, T.TELE]);
       tele.push({ c: pc, r: g - 1, tx: tc * TS + 1, ty: g * TS - 14, col: teleN % 3 }); route.push({ k: 'tele', n: ++teleN, x: pc * TS + 8, y: g * TS - 7 }); route.push({ k: 'xge', x: (wc + 2 + 5) * TS, y: g * TS - 7 });
+    // launch: a launch pad throws the hero (vx 3.2, vy -9) over a 6-column pit
     } else if (ty === 'launch') {
       var pw = 6; tl.push([re - 2, g - 1, T.LAUNCH]); launch.push({ c: re - 2, r: g - 1, vx: 3.2, vy: -9 });
       for (var q3 = 0; q3 < pw; q3++) gt.push(ROWS); route.push({ k: 'xge', x: (wc + pw + 1) * TS, y: g * TS - 7 });
+    // fork: a wall plus three pads in the room, to the key side-room S1, to a dead end S2 and onward; S1 / S2 lie left of the start so the goal is never triggered in them
     } else if (ty === 'fork') {
       gt.push(0); gt.push(0);
       var pa = re - 12, pb = re - 8, pcc = re - 4, tcn = wc + 2 + 3;   // three pads: to the key room (S1), to a dead end (S2), onwards
@@ -696,19 +797,23 @@ function buildMaze(seed, n, a) {
 
 // ------------------------------------------------------------------ containment check: every water / lava cell needs a solid-or-liquid floor and solid-or-liquid neighbours left and right
 function wetTile(t) { return t === T.POISON || t === T.WATER || (t >= 22 && t <= 24) || t === T.WLEVEL || t === T.LAVA || t === T.MUD; }
+// fails the level when any liquid cell lacks a solid-or-liquid floor or side wall (checked after replay, so a leak means a redraw)
 function checkContainment(L) {
   var bad = [], w = L.w, R = L.rows || ROWS, tiles = L.tiles, solid = PF.SOL;
   function at(c, r) { if (c < 0 || c >= w) return 1; if (r < 0) return 0; if (r >= R) return 1; return tiles[c * R + r]; }
   function ok(t) { return solid[t] === 1 || wetTile(t) || t === T.SPIKE; }   // a spike stands on the floor inside the basin
+  // every liquid cell needs a floor below and a wall (solid or liquid) on both sides; a failure here means the level is redrawn
   for (var c = 0; c < w; c++) for (var r = 0; r < R; r++) { var t = tiles[c * R + r]; if (!wetTile(t)) continue;
     if (!ok(at(c, r + 1))) bad.push(['floor', c, r]); else if (!ok(at(c - 1, r))) bad.push(['left', c, r]); else if (!ok(at(c + 1, r))) bad.push(['right', c, r]); }
   function wetAt(x, y) { return wetTile(at(Math.floor(x / TS), Math.floor(y / TS))); }
+  // swimmers must stay inside liquid over their whole sweep (extremes of ax / ay)
   (L.enemies || []).forEach(function (e) {
     var xs = [], ys = [];
     if (e.t === E.SWIM || e.t === E.WHALE) { xs = [e.ax - e.rg, e.ax + e.rg, e.ax]; ys = [e.ay - (e.am || 3), e.ay + (e.am || 3)]; if (e.t === E.WHALE) { xs = [e.ax - e.rg + 4, e.ax + e.rg + e.w - 4]; } }
     else if (e.t === E.CHASER) { xs = [e.ax]; ys = [e.ay]; } else if (e.t === E.FMINE) { xs = [e.ax]; ys = [e.ay - e.am, e.ay + e.am]; } else if (e.t === E.JELLY) { xs = [e.ax - 14, e.ax + 14]; ys = [e.ay - 8, e.ay + 8]; } else return;
     xs.forEach(function (x) { ys.forEach(function (y) { if (!wetAt(x + e.w / 2, y + e.h / 2)) bad.push(['creature', Math.floor(x / TS), Math.floor(y / TS)]); }); });
   });
+  // air pockets must sit inside water
   (L.pockets || []).forEach(function (p) { if (!wetAt(p.x, p.y)) bad.push(['pocket', Math.floor(p.x / TS), Math.floor(p.y / TS)]); });
   return { bad: bad.length, details: bad.slice(0, 6) };
 }
@@ -716,6 +821,7 @@ function checkContainment(L) {
 function buildGrid(seed, n, a, variant) {
   var nn = effN(n), r = rng(hash(seed, n, a * 7919 + 21)), diff = Math.min(1, (nn - 1) / 18); if (a >= 3) diff *= 0.6; if (a >= 6) diff *= 0.3;
   var rnd = function (lo, hi) { return lo + Math.floor(r() * (hi - lo + 1)); }, CW = 12, CH = 8;
+  // grid of GW x GH cells of CW x CH tiles each, separated by 1-tile walls; X0 / FR give a cell's left column and floor row
   var GW = 5 + Math.floor(diff * 3.2) + (variant === 'ghost' ? 1 : 0), GH = 3 + Math.floor(diff * 2.6);
   var W = GW * (CW + 1) + 1, rows = GH * (CH + 1) + 3, tiles = new Uint8Array(W * rows), i, j;
   var put = function (c, rr, t) { if (c >= 0 && c < W && rr >= 0 && rr < rows) tiles[c * rows + rr] = t; };
@@ -734,12 +840,14 @@ function buildGrid(seed, n, a, variant) {
     }
   }
   function diam() { function f(s0) { var ds = {}, q0 = [s0], l = s0; ds[s0] = 0; while (q0.length) { var u0 = q0.shift(); if (ds[u0] > ds[l]) l = u0; adj[u0].forEach(function (v) { if (ds[v] === undefined) { ds[v] = ds[u0] + 1; q0.push(v); } }); } return [l, ds[l]]; } return f(f(key(0, GH - 1))[0])[1]; }
+  // draw 12 spanning trees and keep the one with the longest path, so start and goal are far apart
   for (var tt = 0; tt < 12; tt++) { tree(); var dm = diam(); if (!bestT || dm > bestT.dm) bestT = { dm: dm, adj: adj, edges: edges }; }   // the tree with the longest route
   adj = bestT.adj; edges = bestT.edges;
   // an extra loop or two (more than one route) on bigger mazes
   var extra = Math.round(GW * GH * (0.1 + 0.12 * diff));
   for (var xt = 0; extra > 0 && xt < 200; xt++) { var ei = rnd(0, GW - 2), ej = rnd(0, GH - 1), k1 = key(ei, ej), k2 = key(ei + 1, ej); if (adj[k1].indexOf(k2) < 0) { adj[k1].push(k2); adj[k2].push(k1); edges.push([ei, ej, ei + 1, ej]); extra--; } }
   var hasUp = {}, hasDown = {}, einfo = {};
+  // carve every tree edge; hasUp / hasDown mark cells with a shaft, einfo remembers the ledge geometry for the route
   edges.forEach(function (e) {
     if (e[1] === e[3]) {   // door through the wall, three tiles high at the floor
       var wx = X0(Math.min(e[0], e[2])) + CW, fr = FR(e[1]); for (var q2 = 1; q2 <= 3; q2++) put(wx, fr - q2, 0);
@@ -767,6 +875,7 @@ function buildGrid(seed, n, a, variant) {
   var sk = bfs(key(0, GH - 1)).far, b1 = bfs(sk), far = b1.far, prev = b1.prev, dist = b1.dist;   // start and goal are the two ends of the longest route
   var path = [far]; while (path[0] !== sk) path.unshift(prev[path[0]]);
   var coins = [], enemies = [], specials = [], used = {};
+  // decorate each cell: coins everywhere, hazards only in 'safe' cells (no shaft, not start or goal), ghosts in the ghost variant
   path.forEach(function (k) { used[k] = 1; });
   Object.keys(adj).forEach(function (k) {
     var p2 = k.split(','), ci = +p2[0], cj = +p2[1], x0 = X0(ci), fr = FR(cj), onPath = !!used[k], isStart = k === sk, isGoal = k === far, special = !onPath && adj[k].length === 1;
@@ -777,6 +886,7 @@ function buildGrid(seed, n, a, variant) {
     if (safe && r() < 0.3 + 0.4 * diff) enemies.push({ t: E.WALKER, x: (x0 + 8) * TS, y: fr * TS - 12, w: 12, h: 12, spd: 0.4 + 0.3 * r(), dir: r() < 0.5 ? -1 : 1, mn: (x0 + 7) * TS, mx: (x0 + CW - 1) * TS });
     if (!isStart && !isGoal && r() < (variant === 'ghost' ? 0.55 : 0.2) + 0.2 * diff) enemies.push({ t: variant === 'ghost' ? E.GHOST : E.FLYER, x: (x0 + 6) * TS, y: (fr - 5) * TS, w: 14, h: 12, ax: (x0 + 6) * TS, ay: (fr - 5) * TS, rg: 28, sp: 1 / (200 + r() * 100), ph: r(), am: 8, spd: 0 });
   });
+  // route waypoints along the start-goal path: a shaft up adds one waypoint per stair ledge, a drop needs none
   var sp = k2c(sk), gl = k2c(far), cpk = path[Math.floor(path.length / 2)], cpc = k2c(cpk);
   function k2c(k) { var p3 = k.split(','); return { ci: +p3[0], cj: +p3[1] }; }
   var gx = (X0(gl.ci) + 6) * TS, gy = FR(gl.cj) * TS, wps = [];
@@ -802,6 +912,7 @@ function buildSkyMaze(seed, n, a, air) {
   var put = function (c, rr, t) { if (c >= 0 && c < W && rr >= 0 && rr < rows) tiles[c * rows + rr] = t; };
   var maxUp = Math.max(1, Math.min(3, lim.up - 1)), maxGap = Math.max(2, Math.min(5, lim.gapRun - 2)), coins = [], enemies = [], plats = [], specials = [];
   function plat(c, len, rw) { for (var q = 0; q < len; q++) { put(c + q, rw, T.SOLID); if (q === 0 || q === len - 1) put(c + q, rw + 1, T.SOLID); } var p = { c: c, len: len, row: rw }; plats.push(p); for (var q2 = 0; q2 < Math.min(3, len - 1); q2++) coins.push({ x: (c + 1 + q2) * TS + 8, y: (rw - 1.5) * TS, b: 0 }); return p; }
+  // main chain of platforms; forks branch off it as dead ends or decoys
   var main = plat(2, 8, 15), cur = main, forkN = 0, chain = [];
   function nextFrom(p, dir) {   // a platform reachable from p
     var len = rnd(4, 7), dy = dir === 'up' ? -rnd(1, maxUp) : dir === 'down' ? rnd(2, 6) : rnd(-maxUp, 2), rw = Math.max(6, Math.min(21, p.row + dy));
@@ -812,6 +923,7 @@ function buildSkyMaze(seed, n, a, air) {
   // a connector between platform cu and the next one: returns the next platform's placement, or null for an ordinary gap
   function connector(cu, kindSel) {
     var cE = (cu.c + cu.len) * TS, y0 = cu.row * TS, G, nx2, ids;
+    // each case builds one gap-crossing device (moving or switch-driven blocks, rings, bouncers, sinking blocks, seesaw, ice, belts) and returns the next platform
     switch (kindSel) {
       case 'fly': { var kf = rnd(1, 2 + (diff > 0.5 ? 1 : 0)); G = 4 * kf + 3 + (kf > 1 ? 0 : 1); nx2 = { c: cu.c + cu.len + G, len: rnd(3, 5), row: Math.max(7, Math.min(20, cu.row + rnd(-1, 1))) }; for (var qf = 1; qf <= kf; qf++) { var fx = cE + G * TS * qf / (kf + 1), fy = (cu.row + (nx2.row - cu.row) * qf / (kf + 1)) * TS + 2 + rnd(0, 1) * TS; enemies.push({ t: E.FLYER, x: fx, y: fy, w: 14, h: 10, ax: fx, ay: fy, rg: rnd(14, 26), sp: 1 / 320, ph: r(), am: 0, spd: 0 }); } break; }
       case 'h': { G = rnd(8, 11); nx2 = { c: cu.c + cu.len + G, len: rnd(3, 5), row: cu.row + rnd(-1, 1) }; var amH = G * TS / 2 - 22; addMover({ kind: 0, cx: cE + G * TS / 2, y: y0, w: 40, amp: amH, per: [360, 480, 720][rnd(0, 2)], ph: 0 }); break; }
@@ -828,7 +940,9 @@ function buildSkyMaze(seed, n, a, air) {
     }
     return nx2;
   }
+  // pool of special connector kinds for this variant (the air course uses only these)
   var SP = (air && root.PF.AIR_SP) ? root.PF.AIR_SP : fly ? ['fly'] : air ? ['h', 'h', 'h', 'v', 'ring', 'sink', 'seesaw', 'ctrl', 'rise', 'ice', 'bounce', 'sink'] : ['ctrl', 'ring', 'bounce', 'sink', 'seesaw', 'rise', 'ctrlv', 'belt', 'ice'];
+  // grow the chain: a special connector if allowed, else a plain platform at an up / down / flat offset, sometimes with a side fork
   while (cur.c + cur.len < W - 14) {
     var np, sp0 = null;
     if (air || (sinceSp >= 2 && r() < fancy)) { sp0 = SP[rnd(0, SP.length - 1)]; var nx3 = connector(cur, sp0); nx3.row = Math.max(5, Math.min(21, nx3.row)); if (nx3.c + nx3.len > W - 12) { movers = movers.slice(0, mvKeep(movers)); break; } np = plat(nx3.c, nx3.len, nx3.row); sinceSp = 0; }
@@ -846,6 +960,7 @@ function buildSkyMaze(seed, n, a, air) {
     cur = np; chain.push(np);
   }
   function mvKeep(m) { return m.length; }
+  // goal platform after the chain
   var goalP = plat(cur.c + cur.len + 3, 12, Math.max(8, Math.min(18, cur.row)));
   // rotating maces / fire bars over some platforms and in some gaps
   if (!fly) plats.forEach(function (p, k) { if (k > 1 && !p.pad && p.len >= 6 && r() < 0.15 + 0.35 * diff) { var kk = r(); if (kk < 0.5) maces.push({ cx: (p.c + p.len / 2) * TS, cy: p.row * TS - 62, len: 54, n: 1, swing: 1.0, per: 220 + rnd(0, 80), ph: r() * 6, w: 0 }); else if (kk < 0.8) maces.push({ cx: (p.c + p.len / 2) * TS, cy: p.row * TS - 30, len: 46, n: 5, per: 300 + rnd(0, 120), ph: r() * 6, dir: r() < 0.5 ? 1 : -1 }); else maces.push({ cx: (p.c + p.len / 2) * TS, cy: p.row * TS - 40, len: 36, n: 1, per: 200, ph: r() * 6, dir: r() < 0.5 ? 1 : -1 }); } });
@@ -858,6 +973,7 @@ function buildSkyMaze(seed, n, a, air) {
   var L = { seed: seed, n: n, kind: fly ? 'flystep' : air ? 'aircourse' : 'skymaze', attempt: a, stepEn: fly, diff: diff, w: W, rows: rows, tiles: tiles, gt: gtv, coins: coins, special: specials, enemies: enemies, movers: movers, maces: maces, cannons: [], rings: [], winds: [], pockets: [], keys: [], doors: [], switches: [], tele: [], launch: [], grp: new Uint8Array(W * rows),
     route: (air ? chain : []).map(function (p) { return { k: 'at', x: (p.c + p.len / 2) * TS, y: p.row * TS - 7 }; }).concat([{ k: 'goal', x: gx, y: gy - 10 }]), puzzle: true, vertical: true, goalRect: { x: gx - 8, y: gy - 4 * TS, w: 16, h: 4 * TS }, goalX: gx, poleCol: Math.floor(gx / TS), poleY: gy,
     start: start, cp: { x: (mp.c + 1) * TS, y: mp.row * TS - P.SH }, time: 220 + Math.floor(W * 0.8), theme: 1, room: false, hasBoss: false, kindAsked: fly ? 'flystep' : air ? 'aircourse' : 'skymaze', hasFire: false, hasIce: false, hasMud: false };
+  // the death wall chases from the left; slower on easy stages
   L.chase = { x0: start.x - 140, v: 0.35 + 0.25 * diff, delay: 240 };
   return L;
 }
@@ -891,10 +1007,12 @@ var TRANSIT_NAMES = Object.keys(TRANSIT);
 var SEG_TAG = { lavahop: 'hot', ice: 'cold', poisonhop: 'wet', poison: 'wet' };
 var CLIMATE_THEMES = { hot: [2, 4, 5, 9, 14, 15, 16, 17, 19], cold: [1, 5, 8, 11, 13, 18, 22], mild: [0, 1, 3, 6, 7, 10, 11, 12, 13] };
 function climateOK(tag, climate) { if (tag === 'hot') return climate === 'hot'; if (tag === 'cold') return climate === 'cold'; if (tag === 'wet') return climate !== 'hot'; return true; }
+// one gated segment: builds its obstacle plus everything needed to pass it (pickup, switch, key) in a local frame so it can be validated alone
 function gateSeg(type, r, rnd, g) {
   var sg = { type: type, w: 0, tiles: [], enemies: [], items: [], coins: [], route: [] }, put = function (c, rr, t) { sg.tiles.push([c, rr, t]); };
   var IY = g * TS - 12, bx = 0, c, rr;
   function coins3(c0, k) { for (var q = 0; q < k; q++) sg.coins.push({ x: (c0 + q * 2) * TS + 8, y: (g - 1.6) * TS, b: 0 }); }
+  // ordinary stretches come from the TRANSIT library; the branches below build the gated segments
   if (TRANSIT[type]) {
     TRANSIT[type](sg, r, rnd, g, put, coins3);
     sg.route.push({ k: 'xge', x: (sg.w - 2) * TS });
@@ -958,6 +1076,7 @@ function gateSeg(type, r, rnd, g) {
     sg.items.push({ k: 0, x: 1 * TS + 2, y: IY }, { k: 0, x: 9 * TS + 2, y: (g - 5) * TS - 12 }); coins3(2, 1);
     sg.route.push({ k: 'pw', v: 'big', x: 1 * TS + 8, y: g * TS - 7 }, { k: 'tile', c: ps, r: g - 5, x: ps * TS + 8 }, { k: 'xge', x: 22 * TS });
   }
+  // the last crossing stage must cover the segment up to its right end (x2)
   var lr = sg.route[sg.route.length - 1]; if (lr && lr.k === 'xge') lr.x2 = Math.max(lr.x + 4 * TS, (sg.w + 1) * TS);
   return sg;
 }
@@ -976,9 +1095,11 @@ function segLevel(sg, g, entry) {
 function buildGates(seed, n, a) {
   var nn = effN(n), r = rng(hash(seed, n, a * 7919 + 71)), diff = Math.min(1, (nn - 1) / 18), g = 11;
   var rnd = function (lo, hi) { return lo + Math.floor(r() * (hi - lo + 1)); };
+  // G gated segments, kinds drawn from a shuffled pool without repeats
   var G = 2 + Math.floor(diff * 2.4), pool = ['big', 'mini', 'shell', 'fire', 'pound', 'poison', 'forge', 'swap'], i, kinds = [];
   for (i = pool.length - 1; i > 0; i--) { var j = Math.floor(r() * (i + 1)), t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
   for (i = 0; i < G; i++) kinds.push(pool[i % pool.length]);
+  // one climate per stage (mild / hot / cold) filters which segment kinds and themes fit together
   var climate = (function () { var x = r(); return x < 0.5 ? 'mild' : x < 0.75 ? 'hot' : 'cold'; })(), segs = [], tries = 0;
   pool = pool.filter(function (k) { return climateOK(SEG_TAG[k], climate); }); kinds = []; for (i = 0; i < G; i++) kinds.push(pool[i % pool.length]);
   function seg(type, idx) {   // generate + validate one segment alone; a few redraws, then the always-valid plain run
@@ -993,12 +1114,14 @@ function buildGates(seed, n, a) {
   segs.push(gateSeg('run', r, rnd, g)); segs[0].w = 10; segs[0].tiles = []; segs[0].coins = []; segs[0].route = [];
   var lastT = 'run', sidx = 100;
   function transit(k) { var nm, guard2 = 0; do { nm = TRANSIT_NAMES[rnd(0, TRANSIT_NAMES.length - 1)]; } while ((nm === lastT || (nm === 'run' && r() < 0.6) || !climateOK(SEG_TAG[nm], climate)) && ++guard2 < 60); lastT = nm; segs.push(seg(nm, sidx++)); }
+  // 1-2 transit stretches before every gated segment and 1-2 after the last one
   kinds.forEach(function (k, idx) { var pre = rnd(1, 2); for (var q = 0; q < pre; q++) transit(); segs.push(seg(k, idx + 1)); });
   for (var q3 = 0, post = rnd(1, 2); q3 < post; q3++) transit();
   // lay the segments side by side
   var W = 0; segs.forEach(function (s0) { s0.x0 = W; W += s0.w; }); var poleCol = W + 5; W += 10;
   var tiles = new Uint8Array(W * ROWS), gt = [], c, rr, coins = [], enemies = [], items = [], route = [], specials = [], movers = [];
   for (c = 0; c < W; c++) { gt.push(g); for (rr = g; rr < ROWS; rr++) tiles[c * ROWS + rr] = T.SOLID; }
+  // merge each segment into the full level, shifting x by the segment's offset x0
   segs.forEach(function (s0, si) {
     s0.tiles.forEach(function (e) { tiles[(e[0] + s0.x0) * ROWS + e[1]] = e[2]; });
     s0.coins.forEach(function (q) { coins.push({ x: q.x + s0.x0 * TS, y: q.y, b: 0 }); });
@@ -1077,11 +1200,13 @@ function buildTrajChain(seed, n, a) {
     puzzle: true, vertical: true, goalX: 1e6, poleCol: 0, poleY: 0, start: { x: 4 * TS, y: 15 * TS - P.SH }, cp: { x: 4 * TS, y: 15 * TS - P.SH }, time: 400, theme: 1, room: false, hasBoss: false, kindAsked: 'flystep', hasFire: false, hasIce: false, hasMud: false, stepEn: true };
   for (c = 0; c < W; c++) L.gt.push(rows - 1);
   for (c = 2; c < 10; c++) { tiles[c * rows + 15] = T.SOLID; tiles[c * rows + 16] = T.SOLID; }
+  // st is advanced with the real physics while script records the inputs; islands[] are the landing platforms made so far
   var islands = [{ c0: 2, len: 8, rl: 15 }], script = [], st = newState(L, { noPM: false }), k, chains = 0, xEnd = (W - 24) * TS, fail = false;
   function idle(m) { for (var i = 0; i < m; i++) { step(st, 0); script.push(0); } }
   idle(6);
   function replayAll(sc) { var v2 = newState(L, { noPM: false }); for (var i = 0; i < sc.length; i++) { step(v2, sc[i]); if (v2.p.dead) return null; } return v2; }
   var bad = 0;
+  // one chain = a planned series of stomps and a landing; any failed step rolls back to the snapshot taken here
   while (st.p.x < xEnd && chains < 30 && !fail) {
     var snapE = L.enemies.length, snapT = L.tiles.slice(), snapI = islands.length, snapS = script.length;
     idle(rnd(2, 8));
@@ -1090,11 +1215,13 @@ function buildTrajChain(seed, n, a) {
       for (k = 0; k < kd && okd; k++) { var rd = trajStomp(L, ds, rnd, r, [IN.L, 0, IN.L | IN.RUN, IN.R]); if (rd) ds = rd.st; else okd = false; }
       if (okd && r() < 0.6) { var ld = trajLand(L, ds, rnd, r, [IN.L, 0, IN.R], rnd(3, 5)); if (ld) islands.push({ c0: ld.c0, len: ld.len, rl: ld.rl, decoy: true }); }
     }
+    // main trajectory: kk stomps in a row (each bounce starts the next flight), then a landing island
     var kk = rnd(1, 2 + Math.min(2, Math.floor(diff * 3))), seg = [], sm = st;
     for (k = 0; k < kk; k++) { var rs = trajStomp(L, sm, rnd, r, [IN.R, IN.R | IN.RUN, IN.R]); if (!rs) { fail = 'stomp' + k + '@' + Math.round(sm.p.x) + ',' + Math.round(sm.p.y) + ' g' + sm.p.ground; break; } sm = rs.st; seg = seg.concat(rs.seg); }
     if (fail) break;
     var fin = st.p.x + 400 > xEnd + 250 || sm.p.x > xEnd - 30 * TS, lnd = trajLand(L, sm, rnd, r, [IN.R, IN.R | IN.RUN, IN.R], fin ? 12 : rnd(5, 8));
     if (!lnd) { fail = 'land@' + Math.round(sm.p.x) + ',' + Math.round(sm.p.y) + ' vy' + sm.p.vy.toFixed(1); break; }
+    // replay the whole script from scratch; if it does not reproduce the landing exactly, undo this chain
     var cand = script.concat(seg, lnd.seg), chk2 = replayAll(cand);
     if (!chk2 || !chk2.p.ground || Math.abs(chk2.p.x - lnd.st.p.x) > 0.01 || Math.abs(chk2.p.y - lnd.st.p.y) > 0.01) {   // an old decoy (or tile) is in the way: undo this step and plan it again
       L.enemies.length = snapE; L.tiles.set(snapT); islands.length = snapI; script.length = snapS; st = replayAll(script); if (!st || ++bad > 12) { fail = 'verify'; break; } continue;
@@ -1105,12 +1232,14 @@ function buildTrajChain(seed, n, a) {
   var last = islands.filter(function (i) { return !i.decoy; }).pop();
   if (fail || !last || last.len < 12) { L.dbg = { chains: chains, fail: fail, x: Math.round(st.p.x), last: !!last, lastLen: last && last.len, islands: islands.length, enemies: L.enemies.length }; L.valid = false; L.kindFail = true; L.route = [{ k: 'goal', x: 1e6, y: null }]; return L; }
   var gx = (last.c0 + 9) * TS + 8, gy = last.rl * TS; L.goalX = gx; L.poleCol = last.c0 + 9; L.poleY = gy; L.goalRect = { x: gx - 8, y: gy - 4 * TS, w: 16, h: 4 * TS };
+  // finally run right into the flag
   for (k = 0; k < 160 && !st.p.won && !st.p.dead; k++) { step(st, IN.R | IN.RUN); script.push(IN.R | IN.RUN); }
   // verify on a fresh state with the real physics, recording the expected positions for the auto player
   var v = newState(L, { noPM: false }), pos = [], ok = false;
   for (k = 0; k < script.length; k++) { pos.push([v.p.x, v.p.y]); step(v, script[k]); if (v.p.dead) break; if (v.p.won) { ok = true; break; } }
   islands.forEach(function (i) { if (i.len < 4) return; for (var q = 0; q < Math.min(3, i.len - 1); q++) L.coins.push({ x: (i.c0 + 1 + q * 1.5) * TS + 8, y: (i.rl - 1.6) * TS, b: 0 }); });
   var pool = islands.filter(function (i) { return !i.decoy; }); for (k = 0; k < 5; k++) { var ip = pool[Math.min(pool.length - 1, Math.floor((k + 0.5) * pool.length / 5))]; L.special.push({ x: (ip.c0 + 2) * TS, y: (ip.rl - 3) * TS }); }
+  // a trajectory level carries its script as L.plan, so generate() trusts planOk instead of running validate()
   L.plan = script; L.planPos = pos; L.planOk = ok; L.route = [{ k: 'goal', x: gx, y: gy - 10 }];
   return L;
 }
@@ -1137,6 +1266,7 @@ function odMirror(sg) {   // flip a template left <-> right (the hero walks the 
   o.enemies = sg.enemies.map(function (e) { var q = {}; for (var k in e) q[k] = e[k]; q.x = W - e.x - e.w; if (e.ax !== undefined) q.ax = W - e.ax - e.w; if (e.mn !== undefined) { q.mn = W - e.mx; q.mx = W - e.mn; } if (e.dir !== undefined) q.dir = -e.dir; return q; });
   return o;
 }
+// random self-avoiding walk over the cell grid; its cells are the main route of the odyssey
 function odPath(GX, GY, r, minLen, bias) {
   var rnd = function (lo, hi) { return lo + Math.floor(r() * (hi - lo + 1)); };
   for (var tr = 0; tr < 400; tr++) {
@@ -1154,19 +1284,24 @@ function odPath(GX, GY, r, minLen, bias) {
   }
   return null;
 }
+// odyssey builder: route cells, biomes, templates per cell, dead-end branch rooms, then locked doors/hatches and the key chain (see header above)
 function buildOdyssey(seed, n, a) {
   var nn = effN(n), r = rng(hash(seed, n, a * 7919 + 131)), diff = Math.min(1, (nn - 1) / 18); if (a >= 3) diff *= 0.6;
   var rnd = function (lo, hi) { return lo + Math.floor(r() * (hi - lo + 1)); }, CW = OD_CW, CH = OD_CH, g = 11;
+  // layout bias: wide (horizontal journey), tall or mixed; it sets the grid size
   var bx = r(), bias = bx < 0.28 ? 'wide' : bx < 0.5 ? 'tall' : 'mixed';
   var GX = bias === 'wide' ? rnd(5, 6) : bias === 'tall' ? rnd(2, 3) : rnd(3, 4), GY = bias === 'wide' ? rnd(2, 3) : bias === 'tall' ? rnd(4, 5) : rnd(3, 4);
   var fancy = a < 6; if (fancy) { GX += 1; if (bias === 'wide') GY += 1; }   // a bigger grid: room for dead-end branches beside the route
+  // the main route; with no path the kind fails and generate() redraws
   var path = odPath(GX, GY, r, Math.min(GX * GY - 1, 8 + Math.floor(diff * 5)), bias);
   if (!path) return { kindFail: true, valid: false, route: [{ k: 'goal', x: 1e6, y: null }], w: 10, tiles: new Uint8Array(140), rows: 14, movers: [], enemies: [], coins: [], special: [], keys: [], doors: [], switches: [], tele: [], launch: [], cannons: [], rings: [], winds: [], pockets: [], grp: new Uint8Array(140), gt: [], start: { x: 0, y: 0 }, cp: { x: 0, y: 0 }, goalX: 1e6, time: 100, kind: 'odyssey' };
+  // the world starts as solid rock; cells are carved out of it below
   var W = GX * CW, rows = GY * CH, tiles = new Uint8Array(W * rows), put = function (c, rr, t) { if (c >= 0 && c < W && rr >= 0 && rr < rows) tiles[c * rows + rr] = t; }, get = function (c, rr) { return (c >= 0 && c < W && rr >= 0 && rr < rows) ? tiles[c * rows + rr] : 1; };
   for (var q0 = 0; q0 < tiles.length; q0++) tiles[q0] = T.SOLID;
   // biome mix: which looks, in which proportions (the stage's atmosphere)
   var mix = BIOME_MIXES[rnd(0, BIOME_MIXES.length - 1)].slice(), wts = [0.5 + r(), 0.3 + r() * 0.6, 0.15 + r() * 0.5];
   function compat(t1, t2) { if (!t1 || !t2 || t1 === t2) return true; return false; }
+  // cell k: grid position and pixel origin; entry / exit sides follow from its neighbours on the path, biome from the stage's mix with no hot cell next to a cold one
   var cells = path.map(function (p, k) { return { k: k, i: p.i, j: p.j, x0: p.i * CW, y0: p.j * CH }; });
   cells.forEach(function (c, k) {
     var prev = k > 0 ? cells[k - 1] : null, next = k + 1 < cells.length ? cells[k + 1] : null;
@@ -1185,6 +1320,7 @@ function buildOdyssey(seed, n, a) {
     for (var t2 = 0; t2 < 40; t2++) { var hx = rnd(4, CW - 9), ok = true; avoid.forEach(function (ax) { if (Math.abs(ax - hx) < 10) ok = false; }); if (ok) return hx; }
     return -1;
   }
+  // stacked cells share a hole x (floor hole above, ceiling hole below, far from the other holes); no fit -> retry with the next attempt
   var okHoles = true;
   for (var k2 = 0; k2 + 1 < cells.length && okHoles; k2++) {
     var A = cells[k2], B = cells[k2 + 1]; if (A.i !== B.i) continue;
@@ -1195,6 +1331,7 @@ function buildOdyssey(seed, n, a) {
   // forks: dead-end rooms beside the route (a room next to a cell, or a cellar below it); wrong turns have to be walked back. Some carry the key of a locked door further on.
   var branches = [], occ = {}; cells.forEach(function (c) { occ[c.i + ',' + c.j] = 1; });
   function freeCell(i, j) { return i >= 0 && j >= 0 && i < GX && j < GY && !occ[i + ',' + j]; }
+  // branches: for some cells add a dead-end room, either 'side' (a room next to it) or 'down' (a cellar below its floor), each holding a prize
   if (fancy) {
     var wantB = Math.min(5, 2 + Math.floor(diff * 3 + r() * 1.6)), idxs = [], bi0, sh;
     for (bi0 = 1; bi0 < cells.length - 1; bi0++) idxs.push(bi0);
@@ -1208,6 +1345,7 @@ function buildOdyssey(seed, n, a) {
       bc.x0 = bc.i * CW; bc.y0 = bc.j * CH; occ[bc.i + ',' + bc.j] = 1; branches.push(bc); (pc.br = pc.br || []).push(bc);
     }
   }
+  // main cells plus branch rooms are carved and linked together
   var all = cells.concat(branches);
   function isLinked(c1, c2) { if (!c1.branch && !c2.branch) return Math.abs(c1.k - c2.k) === 1; return (c1.branch && c1.parent === c2) || (c2.branch && c2.parent === c1); }
   // carve the cells
@@ -1219,6 +1357,7 @@ function buildOdyssey(seed, n, a) {
   var hasIce = false;
   cells.forEach(function (c) { c.rt = []; });
   cells.forEach(function (c) {
+    // per-cell fill: entryX is where the hero arrives, target is where he must be to leave (side wall, floor hole or the foot of the staircase)
     var bio = c.biome, entryX, target, side;
     entryX = c.entry === 'S' ? 3 : c.entry === 'L' ? 1 : c.entry === 'R' ? CW - 2 : c.entry === 'T' ? cells[c.k - 1].floorHole + 2 : c.floorHole + 2;
     var exitSideX = c.exit === 'R' ? CW - 2 : c.exit === 'L' ? 1 : -1;
@@ -1231,6 +1370,7 @@ function buildOdyssey(seed, n, a) {
     var lo = Math.min(entryX, target) + 2, hi = Math.max(entryX, target) - 2, avail = hi - lo;
     if (c.exit === 'U') { lo = Math.min(entryX, target) + 2; hi = Math.max(entryX, target) - 4; avail = hi - lo; }
     var tpl = null;
+    // stamp a random template of the biome into the free span (mirrored when walking left)
     if (avail >= 11) {
       for (var tr = 0; tr < 24 && !tpl; tr++) { var nm = bio.pool[rnd(0, bio.pool.length - 1)], rr2 = rng(hash(seed, n, c.k * 97 + tr * 13 + a)), sg = gateSeg(nm, rr2, function (l2, h2) { return l2 + Math.floor(rr2() * (h2 - l2 + 1)); }, g); if (sg.w <= avail) tpl = sg; }
     }
@@ -1278,9 +1418,11 @@ function buildOdyssey(seed, n, a) {
     for (var cc2 = c.x0 + 2; cc2 < c.x0 + CW - 2; cc2++) if (get(cc2, c.y0 + g) === T.AIR && get(cc2, c.y0 + g + 1) === T.AIR) { put(cc2, c.y0 + g + 1, T.SPIKE); put(cc2, c.y0 + g + 2, T.SOLID); }
     if (c.biome.ice) for (var cc3 = c.x0 + 2; cc3 < c.x0 + CW - 2; cc3++) if (get(cc3, c.y0 + g) === T.SOLID && get(cc3, c.y0 + g - 1) === T.AIR && r() < 0.8) { put(cc3, c.y0 + g, T.ICE); hasIce = true; }
   }
+  // branch rooms: a 'side' room has its prize at the far end; a cellar is entered through a hole in the parent's floor and left by a staircase; dead = no hole spot fitted
   var doors2 = [], keys2 = [], glc = [];
   branches.forEach(function (b) {
     var P0 = b.parent, ft = FT(b), li, lq;
+    // side room: entered from the wall side of the parent cell; go / back are the waypoint lists to the prize and back
     if (b.kind === 'side') {
       var fromRight = b.i < P0.i, entryX = fromRight ? CW - 2 : 1, target = fromRight ? 3 : CW - 4;
       placeTpl(b, entryX, target, Math.min(entryX, target) + 2, Math.max(entryX, target) - 2); finishCell(b);
@@ -1288,6 +1430,7 @@ function buildOdyssey(seed, n, a) {
       var wpx = (b.x0 + (fromRight ? CW - 4 : 3)) * TS + 8;
       b.go = [{ k: 'at', x: wpx, y: ft - 7 }, { k: 'at', x: b.prize.x, y: ft - 7 }]; b.back = [{ k: 'at', x: wpx, y: ft - 7 }];
     } else {
+      // cellar: find floor columns clear of the parent's entry and exit, dig a 4-wide hole there and build the staircase back up
       var pf = P0.y0 + g, runs = [], cx0, qq;
       for (cx0 = 4; cx0 <= CW - 9; cx0++) { var okr = Math.abs(cx0 + 2 - P0.entryX) > 5 && Math.abs(cx0 + 2 - P0.target) > 5; for (qq = 0; qq < 4 && okr; qq++) { var xx = P0.x0 + cx0 + qq; if (get(xx, pf) !== T.SOLID || get(xx, pf - 1) !== T.AIR || get(xx, pf - 2) !== T.AIR) okr = false; } if (okr) runs.push(cx0); }
       if (!runs.length) { b.dead = true; for (var dcx = b.x0; dcx < b.x0 + CW; dcx++) for (var dry = b.y0; dry < b.y0 + g; dry++) put(dcx, dry, T.SOLID); return; }
@@ -1309,6 +1452,7 @@ function buildOdyssey(seed, n, a) {
     if (b.dead || doors2.length >= 2 || r() < 0.25) return;
     var m = Math.min(cells.length - 2, b.parent.k + rnd(0, 2)); if (linkUsed[m] || m < b.parent.k) return;
     var A = cells[m], B2 = cells[m + 1], col = colorN++ % 3, di = doors2.length, rr3;
+    // same row: a wall door (3 DOOR tiles); different rows: a hatch of DOOR tiles in the upper cell's floor hole
     if (A.j === B2.j) {
       var bcx = A.i < B2.i ? B2.x0 : A.x0, top = A.y0 + (A.j === 0 ? 1 : 0);
       for (rr3 = top; rr3 < A.y0 + g - 3; rr3++) put(bcx, rr3, T.SOLID);
@@ -1319,6 +1463,7 @@ function buildOdyssey(seed, n, a) {
       for (var hq = 0; hq < 4; hq++) { put(up.x0 + hx0 + hq, up.y0 + g, T.DOOR); glc.push([up.x0 + hx0 + hq, up.y0 + g, col]); }
       doors2.push({ h: 1, c0: up.x0 + hx0, c1: up.x0 + hx0 + 3, r: up.y0 + g, g: col }); A.doorSt = { k: 'door', i: di, x: (up.x0 + hx0 + 2) * TS, y: (up.y0 + g) * TS - 7 }; A.doorBeforeLast = A.exit === 'U';
     }
+    // the branch's prize becomes the key; its go / back stages are spliced into the route before the door
     linkUsed[m] = 1; keys2.push({ x: b.prize.x, y: b.prize.y, c: col }); b.keyStage = { k: 'key', g: col, x: b.prize.x, y: b.prize.y };
   });
   var route = [];
@@ -1331,6 +1476,7 @@ function buildOdyssey(seed, n, a) {
   var last = cells[cells.length - 1], gc = last.x0 + (last.target || CW - 2), gx = gc * TS + 8, gy = FT(last);
   route.push({ k: 'goal', x: gx, y: gy - 10 });
   for (var sp = 0; sp < 5; sp++) { var pc = cells[Math.min(cells.length - 1, Math.floor((sp + 0.5) * cells.length / 5))]; specials.push({ x: (pc.x0 + 6 + sp * 2) * TS, y: (pc.y0 + g - 3) * TS }); }
+  // zone id per grid cell (-1 = rock) so consumers can tell which cell the hero is in
   var zones = []; for (var zi = 0; zi < GX * GY; zi++) zones.push(-1); all.forEach(function (c) { zones[c.j * GX + c.i] = c.biome.theme; });
   function odGrp() { var gp = new Uint8Array(W * rows); glc.forEach(function (e) { gp[e[0] * rows + e[1]] = e[2]; }); return gp; }
   branches.forEach(function (b, bi) { if (!b.dead && b.prize && bi < 3 && specials[bi]) specials[bi] = { x: b.prize.x, y: (b.y0 + g - 3) * TS }; });
@@ -1347,6 +1493,7 @@ function buildDeep(seed, n, a) {
   var nn = effN(n), r = rng(hash(seed, n, a * 7919 + 211)), diff = Math.min(1, (nn - 1) / 18); if (a >= 3) diff *= 0.6; if (a >= 6) diff *= 0.3;
   var rnd = function (lo, hi) { return lo + Math.floor(r() * (hi - lo + 1)); }, wl = 4, FL = 12, W = 150 + Math.round(diff * 70) + rnd(0, 20), c, i, q;
   var gt = [], tl = [], enemies = [], coins = [], winds = [], whirls = [], pockets = [], specials = [], route = [], ids = 0;
+  // layout: a dry ledge at each end, steps down into the water (wl = water line row) and a seabed in between
   var LEDGE = 10; for (c = 0; c < LEDGE; c++) gt.push(wl);
   var fb = 11; for (var sd = wl + 1; sd <= fb; sd++) { gt.push(sd); gt.push(sd); }
   var c1 = W - LEDGE - 2 * (fb - wl);
@@ -1356,6 +1503,7 @@ function buildDeep(seed, n, a) {
   for (c = 0; c < LEDGE; c++) gt.push(wl);
   W = gt.length; var base = gt.slice(), cs = LEDGE + 2 * (fb - wl) + 4, ce = W - LEDGE - 2 * (fb - wl) - 4;
   // features along the way
+  // features are placed left to right, free() keeps 2 columns between them; each pick bucket is one kind of seabed feature, current or vent
   var occ = {}; function free(c0, c2) { for (var k = c0 - 2; k <= c2 + 2; k++) if (occ[k]) return false; return true; } function take(c0, c2) { for (var k = c0; k <= c2; k++) occ[k] = 1; }
   var cx = cs + 2;
   while (cx < ce - 6) {
@@ -1390,10 +1538,12 @@ function buildDeep(seed, n, a) {
   for (cx = cs; cx < ce; cx += 3) coins.push({ x: cx * TS + 8, y: (wl + 3 + 1.5 * Math.sin(cx * 0.3)) * TS, b: 0 });
   for (cx = cs + 10; cx < ce; cx += 24) pockets.push({ x: cx * TS + 8, y: (wl + 4) * TS });
   for (i = 0; i < 5; i++) specials.push({ x: (cs + Math.floor((i + 0.5) * (ce - cs) / 5)) * TS, y: (wl + 4) * TS });
+  // a crossing stage every 24 columns gives the validator intermediate targets
   for (cx = cs + 20; cx < ce; cx += 24) route.push({ k: 'xge', x: cx * TS, y: (wl + 3) * TS });
   var poleCol = W - 6; route.push({ k: 'goal', x: poleCol * TS + 6, y: null });
   var tiles = new Uint8Array(W * ROWS), grp = new Uint8Array(W * ROWS);
   for (c = 0; c < W; c++) for (var rr = gt[c]; rr < ROWS; rr++) tiles[c * ROWS + rr] = T.SOLID;
+  // fill water from the water line down to the seabed between the ledges
   for (c = LEDGE; c < W - LEDGE; c++) for (rr = wl; rr < gt[c]; rr++) tiles[c * ROWS + rr] = T.WATER;
   tl.forEach(function (e) { if (e[0] >= 0 && e[0] < W && e[1] >= 0 && e[1] < ROWS) tiles[e[0] * ROWS + e[1]] = e[2]; });
   var mid = Math.floor(W / 2), L = { seed: seed, n: n, kind: 'deep', attempt: a, diff: diff, w: W, tiles: tiles, grp: grp, gt: gt, coins: coins, special: specials, enemies: enemies, movers: [], cannons: [], rings: [], winds: winds, pockets: pockets,
@@ -1417,13 +1567,16 @@ function buildGhostHouse(seed, n, a) {
     var extra = Math.round(R * (0.15 + 0.15 * diff)); for (tries = 0; extra > 0 && tries < 80; tries++) { var u = rnd(0, R - 1), v = rnd(0, R - 1); if (u !== v && deg[u] < 3 && deg[v] < 3 && adj[u].indexOf(v) < 0) { edges.push([u, v]); deg[u]++; deg[v]++; adj[u].push(v); adj[v].push(u); extra--; } }
   }
   function dia() { var f = function (s0) { var ds = {}, q = [s0], l = s0; ds[s0] = 0; while (q.length) { var x = q.shift(); if (ds[x] > ds[l]) l = x; adj[x].forEach(function (y) { if (ds[y] === undefined) { ds[y] = ds[x] + 1; q.push(y); } }); } return [l, ds[l]]; }; return f(f(0)[0])[1]; }
+  // draw 14 room graphs and keep the one with the longest path
   for (var gtry = 0; gtry < 14; gtry++) { mkGraph(); var dm = dia(); if (!best || dm > best.dm) best = { dm: dm, deg: deg, adj: adj, edges: edges }; }   // the door graph with the longest route
   deg = best.deg; adj = best.adj; edges = best.edges;
   function bfs(s0) { var ds = {}, q = [s0], fr = s0, pv = {}; ds[s0] = 0; while (q.length) { var x = q.shift(); if (ds[x] > ds[fr]) fr = x; adj[x].forEach(function (y) { if (ds[y] === undefined) { ds[y] = ds[x] + 1; pv[y] = x; q.push(y); } }); } return { far: fr, prev: pv }; }
+  // start and goal rooms are the two far ends of the tree; path is the solution corridor, rooms off it are decoys
   var s = bfs(0).far, bb = bfs(s), goalRoom = bb.far, path = [goalRoom]; while (path[0] !== s) path.unshift(bb.prev[path[0]]);
   // doors: slot offsets inside a room (ledge centres)
   var SL = [1, 4, 7], used = []; for (i = 0; i < R; i++) used.push(0);
   var tele = [], coins = [], enemies = [], specials = [], door = {};
+  // each edge becomes a pair of linked teleport doors on ledges (two-way); sa / sb choose one of three slots in each room
   edges.forEach(function (e, ei) {
     var sa = used[e[0]]++, sb = used[e[1]]++, xa = e[0] * RW + 1 + SL[sa], xb = e[1] * RW + 1 + SL[sb], col = ei % 3;
     function ledge(xc) { put(xc, g - 3, T.SOLID); put(xc + 1, g - 3, T.SOLID); put(xc, g - 4, T.TELE); }
@@ -1442,6 +1595,7 @@ function buildGhostHouse(seed, n, a) {
   }
   while (specials.length < 5) specials.push({ x: (rnd(1, R) * RW - 3) * TS, y: (g - 7) * TS });
   var route = [], cnt = 0;
+  // route: one door crossing per step along the path (and back-steps where a wrong door is needed)
   for (i = 0; i + 1 < path.length; i++) { var dd = door[path[i] + '>' + path[i + 1]]; var back = door[path[i + 1] + '>' + path[i]]; route.push({ k: 'at', x: (back.c + 2) * TS + 7, y: g * TS - 7 }); }   // done on landing at that very door (a tele count could be farmed by hopping one door back and forth)
   var gxr = goalRoom * RW + 1 + 9, poleCol = gxr;
   route.push({ k: 'goal', x: poleCol * TS + 6, y: null });
@@ -1458,6 +1612,7 @@ function buildSwitchback(seed, n, a) {
   var RF = function (f) { return rows - 3 - f * H; }, coins = [], enemies = [], specials = [], wps = [], maxGap = Math.max(2, Math.min(4, lim.gapWalk));
   for (var rr = 0; rr < rows; rr++) { put(0, rr, T.SOLID); put(W - 1, rr, T.SOLID); }
   for (var c = 0; c < W; c++) put(c, 0, T.SOLID);
+  // F floors stacked bottom to top; RF(f) is the row of floor f, stairs alternate between the right and left end
   var dirs = [], f, c0, holes = [];
   for (f = 0; f < F; f++) {
     var rf = RF(f), endL = 12, endR = W - 13, gaps = [];
@@ -1468,12 +1623,14 @@ function buildSwitchback(seed, n, a) {
     while (x < endR - 8) { if (r() < 0.55 + 0.3 * diff) { var gw = rnd(2, maxGap); for (var q = 0; q < gw; q++) { put(x + q, rf, 0); if (f === 0) for (rr = rf + 1; rr < rows; rr++) put(x + q, rr, 0); } gaps.push([x, gw]); x += gw; } x += rnd(7, 13); }
     var inGap = function (cc) { return gaps.some(function (g2) { return cc >= g2[0] - 1 && cc <= g2[0] + g2[1]; }); };
     for (c = endL + 3; c < endR - 2; c++) { if (inGap(c)) continue;
+      // sprinkle spikes, walkers and flyers on the floor away from the stair ends
       var rv = r(); if (rv < 0.05 + 0.08 * diff) put(c, rf - 1, T.SPIKE); else if (rv < 0.09 + 0.05 * diff && c % 3 === 0) enemies.push({ t: E.WALKER, x: c * TS, y: rf * TS - 12, w: 12, h: 12, spd: 0.4 + 0.3 * r(), dir: r() < 0.5 ? -1 : 1, mn: (c - 3) * TS, mx: (c + 4) * TS });
       else if (rv < 0.12 + 0.05 * diff && c % 7 === 0 && f > 0) enemies.push({ t: E.FLYER, x: c * TS, y: (rf - 4) * TS, w: 14, h: 10, ax: c * TS, ay: (rf - 4) * TS, rg: 30, sp: 1 / 240, ph: r(), am: 8, spd: 0 }); }
     for (c = 4; c < W - 4; c += 5) if (!inGap(c) && tiles[c * rows + rf - 1] === 0 && r() < 0.6) { coins.push({ x: c * TS + 8, y: (rf - 1.5) * TS, b: 0 }); coins.push({ x: (c + 1) * TS + 8, y: (rf - 1.5) * TS, b: 0 }); }
     if (specials.length < 5 && f > 0 && r() < 0.7) specials.push({ x: Math.floor(W / 2 + rnd(-8, 8)) * TS, y: (rf - 3) * TS });
     // stairs up to the next floor, at the right end after even floors, at the left end after odd floors
     if (f < F - 1) {
+      // stair shaft: a hole in the next floor plus ledges rising to it at the wall side
       var right = f % 2 === 0, m = right; dirs.push(right);
       var mc = function (cc) { return right ? W - 2 - cc : 1 + cc; };   // cc counts from the wall
       var ru = rf - H; holes.push([mc(1), ru], [mc(2), ru]);
@@ -1488,6 +1645,7 @@ function buildSwitchback(seed, n, a) {
   var start = { x: 3 * TS + 2, y: RF(0) * TS - P.SH };
   for (f = 0; f < F; f++) {
     var rfw = RF(f), goingRight = f % 2 === 0, lo = 14, hi = W - 15, step = 12;
+    // waypoints every 12 columns in the walking direction, nudged onto solid ground
     var seq = []; if (goingRight) for (c = lo; c <= hi; c += step) seq.push(c); else for (c = hi; c >= lo; c -= step) seq.push(c);
     seq.forEach(function (cw) { var cx = cw; for (var tries = 0; tries < 6; tries++) { var okc = tiles[cx * rows + rfw] === T.SOLID && tiles[(cx - 1) * rows + rfw] === T.SOLID && tiles[(cx + 1) * rows + rfw] === T.SOLID && tiles[cx * rows + rfw - 1] === 0; if (okc) break; cx += goingRight ? 1 : -1; } if (f === F - 1 && ((goingRight && cw >= hi - 1) || (!goingRight && cw <= lo + 1))) return; wps.push({ k: 'at', x: cx * TS + 8, y: rfw * TS - 7 }); });
     if (f < F - 1) {
@@ -1496,6 +1654,7 @@ function buildSwitchback(seed, n, a) {
       wps.push({ k: 'at', x: (mcc(6)) * TS + 8, y: RF(f + 1) * TS - 7 });
     }
   }
+  // the goal on the top floor, at the end the last stair does not use
   var topF = F - 1, gRight = topF % 2 === 0, gxc = gRight ? W - 8 : 8, gx = gxc * TS, gy = RF(topF) * TS;
   var cpf = Math.floor(F / 2), cp = { x: Math.floor(W / 2) * TS + 2, y: RF(cpf) * TS - P.SH };
   while (specials.length < 5) specials.push({ x: rnd(10, W - 10) * TS, y: (RF(rnd(0, F - 1)) - 3) * TS });
@@ -1505,6 +1664,7 @@ function buildSwitchback(seed, n, a) {
 }
 // rising-lava tower: the vertical climb with lava flooding up from below (auto-scroll upward; the pace is tuned to the solver in generate())
 function buildLavaTower(seed, n, a) {
+  // the same tower as buildVertical plus a rising lava level; generate() tunes its speed to the solver's frame count
   var L = buildVertical(seed, n, a, 'tower'); L.kind = 'lavatower'; L.kindAsked = 'lavatower'; L.rise = { y0: L.rows * TS + 40, v: 0.01, delay: 200 };
   L.time = 400; return L;
 }
@@ -1512,6 +1672,7 @@ function buildLavaTower(seed, n, a) {
 function buildVertical(seed, n, a, kind) {
   var nn = effN(n), r = rng(hash(seed, n, a * 7919 + 11)), lim = probe(), diff = Math.min(1, (nn - 1) / 18); if (a >= 3) diff *= 0.6; if (a >= 6) diff *= 0.3;
   var rnd = function (lo, hi) { return lo + Math.floor(r() * (hi - lo + 1)); }, W = 26, up = kind === 'tower';
+  // number of platforms and their row steps seq[]: a tower rises by up to the probe's jump height, a shaft drops 3-6 rows per floor
   var steps = up ? Math.round(11 + diff * 11 + r() * 3) : Math.round(7 + diff * 6 + r() * 2), maxRise = Math.max(2, Math.min(3, lim.up - 1)), seq = [], i, tot = 0;
   for (i = 0; i < steps; i++) { var d = up ? rnd(2, maxRise) : rnd(3, 6); seq.push(d); tot += d; }
   var rows = up ? tot + 12 : tot + 12, fb = rows - 3, tiles = new Uint8Array(W * rows), put = function (c, rr, t) { if (c >= 0 && c < W && rr >= 0 && rr < rows) tiles[c * rows + rr] = t; };
@@ -1524,6 +1685,7 @@ function buildVertical(seed, n, a, kind) {
     prev = { c: 1, len: W - 2, row: fb }; row = fb;
     for (i = 0; i < steps; i++) {
       row -= seq[i]; len = rnd(4, 7); var pe = prev.c + prev.len, side = r() < 0.5 ? 1 : -1, tries = 0;
+      // place each platform on alternating sides of the previous one, retrying until it fits between the walls
       for (;;) { c0 = side > 0 ? pe + rnd(-2, 2) : prev.c + rnd(-2, 2) - len; if (c0 >= 2 && c0 + len <= W - 2) break; side = -side; if (++tries > 3) { c0 = Math.max(2, Math.min(W - 2 - len, c0)); break; } }
       platform(c0, len, row); prev = { c: c0, len: len, row: row };
     }
@@ -1554,6 +1716,7 @@ function buildVertical(seed, n, a, kind) {
     if (r() < 0.6) for (var q = 0; q < 3; q++) coins.push({ x: (p.c + 1.5 + q) * TS, y: (p.row - 1.5) * TS, b: 0 });
     if (k > 2 && r() < 0.35 * (0.4 + diff)) enemies.push({ t: E.FLYER, x: (p.c + p.len / 2) * TS, y: (p.row - 4) * TS, w: 14, h: 10, ax: (p.c + p.len / 2) * TS, ay: (p.row - 4) * TS, rg: 30 + r() * 24, sp: 1 / (220 + r() * 120), ph: r(), am: 8, spd: 0 });
   });
+  // goal on the last platform (the landing pad in a shaft)
   var last = prev, gx = (last.c + Math.floor(last.len / 2)) * TS, gy = last.row * TS, specials = [];
   for (i = 0; i < 5; i++) { var pp = plats[Math.min(plats.length - 1, Math.floor((i + 0.5) * plats.length / 5))]; specials.push({ x: (pp.c + 2) * TS, y: (pp.row - 3) * TS }); }
   var start = up ? { x: 4 * TS + 2, y: fb * TS - P.SH } : { x: (plats[0].c + 2) * TS, y: plats[0].row * TS - P.SH };
@@ -1569,12 +1732,16 @@ function roomLevel(seed, n, secret) {
   for (var a = 0; a < 10; a++) { L = build(seed, n + 500 + a, a, { room: true, kind: 'plain' }); L.theme = 1; L.enemies = []; L.rings = []; L.special = []; L.cannons = []; L.exitKind = secret ? 'secret' : 'ret'; var v = validate(L); if (v.ok) { L.valid = true; L.script = v.script; return L; } }
   L.valid = false; return L;
 }
+// entry point: up to 16 build attempts, each must pass validate -> replay -> checkContainment; the time budget and the boss-less fallback keep it from stalling
 function generate(seed, n, o) {
   var L = null, v = null, t0 = Date.now();
   for (var a = 0; a < 16; a++) {
     var oo = o; if (a >= 6 || Date.now() - t0 > 2500) { oo = {}; for (var k in (o || {})) oo[k] = o[k]; oo.boss = 0; }   // fallback: simpler boss arena
+    // flystep levels carry their own verified script (L.plan) and failed kinds skip validation; everything else goes through validate()
     L = build(seed, n, a, oo); v = L.plan ? { ok: !!L.planOk, script: L.plan, nodes: 0 } : (L.kindFail ? { ok: false } : validate(L));
+    // rising-lava speed derives from the solver's frame count: the climb is possible but tight
     if (v.ok && L.rise) { var climb = L.rows * TS - 100, frames = v.script.length; L.rise.v = Math.max(0.06, Math.min(0.5, climb / (frames * 1.9))); L.rise.delay = 240; }
+    // success path: replay, then containment, then crumbs (not for planned levels); gauntlet levels get a time cap from the script length
     if (v.ok) { L.script = v.script; if (replay(L)) { var cc = checkContainment(L); if (!cc.bad) { L.valid = true; L.attempt = a; L.vnodes = v.nodes; L.crumbs = L.plan ? null : makeCrumbs(L); if (L.kindAsked === 'gauntlet') L.time = Math.min(L.time, Math.ceil(L.script.length / 60 * 1.6) + 14); return L; } } }
     if (Date.now() - t0 > (L.kindAsked === 'gates' ? 9500 : 6500)) break;   // the segment-composed stages are built piece by piece and may need a second attempt
   }
@@ -1582,6 +1749,7 @@ function generate(seed, n, o) {
 }
 // replay the validator's input script on a fresh enemy-free state: proves the flag is reachable with the real physics
 function makeCrumbs(L) { var st = vState(L), out = [], last = -99; for (var i = 0; i < L.script.length; i++) { var px0 = st.p.x + 6, py0 = st.p.y + 7, sg0 = st.stage, tc0 = st.tc, kb0 = st.kb, sb0 = st.sb; step(st, L.script[i]); if (st.stage !== sg0 || st.tc !== tc0 || st.kb !== kb0 || st.sb !== sb0) { out.push([Math.round(px0), Math.round(py0), sg0]); last = i; } if (st.p.dead || st.p.won) break; if (i - last >= 36 && st.p.ground) { out.push([Math.round(st.p.x + 6), Math.round(st.p.y + 7), st.stage]); last = i; } } out.push([Math.round(L.goalX), Math.round(L.poleY - 8), (L.route ? L.route.length - 1 : 0)]); return out; }
+// cheap boolean check of the stored script (same as makeCrumbs' replay but without recording)
 function replay(L) { var st = vState(L); if (!L.script) return false; for (var i = 0; i < L.script.length; i++) { step(st, L.script[i]); if (st.p.dead) return false; if (st.p.won) return true; } return st.p.won; }
 
 root.PF.probe = probe; root.PF.build = build; root.PF.generate = generate; root.PF.validate = validate; root.PF.checkContainment = checkContainment; root.PF.replay = replay; root.PF.makeCrumbs = makeCrumbs; root.PF.searchStage = searchStage; root.PF.searchIter = searchIter; root.PF.gateSeg = gateSeg; root.PF.buildOdyssey = buildOdyssey; root.PF.TRANSIT = TRANSIT; root.PF.segLevel = segLevel; root.PF.roomLevel = roomLevel; root.PF.worldMap = worldMap; root.PF.worldInfo = worldInfo; root.PF.worldExists = worldExists; root.PF.validateWorldMap = validateWorldMap; root.PF.validateInfinite = validateInfinite; root.PF.unlocked = unlocked; root.PF.kindOf = kindOf; root.PF.worldKinds = worldKinds; root.PF.KIND_NAMES = KIND_NAMES; root.PF.THEME_NAMES = THEME_NAMES; root.PF.pickTheme = pickTheme; root.PF.LAYOUT_THEMES = LAYOUT_THEMES;

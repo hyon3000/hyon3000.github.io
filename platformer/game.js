@@ -1,23 +1,32 @@
 // Shape World - game layer: input, loop, rendering (Canvas2D primitives only), synthesized sound, HUD.
+// File overview: the game layer. Owns the global state G, input (keyboard / touch / auto player), WebAudio sound,
+// the progress save, level flow (map -> level -> clear / die) and the fixed 60 Hz loop; drawing is delegated to render.js (PFR)
+// and the simulation to PF (core), the planner and the optional RL model.
 (function () {
 'use strict';
+// Shortcuts to the simulation constants; TT(ko, en) picks the UI language.
 var TS = PF.TS, VW = PF.VW, VH = PF.VH, T = PF.T, IN = PF.IN;
 var KO = /^ko/i.test(navigator.language || ''), TT = function (ko, en) { return KO ? ko : en; };
 var cv = document.getElementById('cv'), ctx = cv.getContext('2d'), stage = document.getElementById('stage'), pad = document.getElementById('pad');
 document.documentElement.lang = KO ? 'ko' : 'en';
 var Q = new URLSearchParams(location.search);
 var BEST_KEY = 'shapeworld.best', SND_KEY = 'shapeworld.sound';
+// G: the single global game state (also exposed for tests as window.__pf).
+// G.mode is the screen / phase: start, map, loading, play, pause, dying, clear, over, super, sbrowse (super-map browse), end, select.
+// G.L is the level, G.st its live simulation state, G.main the saved outer level while in a bonus room.
 var G = window.__pf = { mode: 'start', n: 1, seed: 1, lives: 3, base: 0, coinBase: 0, best: 0, L: null, st: null, auto: false, planner: PFPlanner.make(), hint: null, msg: null, msgT: 0, frame: 0,
   cam: 0, parts: [], pops: [], bumps: [], snd: true, dieT: 0, clearT: 0, dy: 0, dvy: 0, bonus: 0, nextLife: 50, autoWait: 0, loading: false,
   useRL: false, ai: (window.PFAI ? PFAI.makeShielded() : null), w: 0, map: null, sel: 0, prog: { done: {}, secret: {} }, main: null, curNode: null, secretExit: false, mapCool: 0 };
 try { G.best = parseInt(localStorage.getItem(BEST_KEY), 10) || 0; } catch (e) {}
 try { var sv = localStorage.getItem(SND_KEY); if (sv === '0') G.snd = false; } catch (e) {}
 var embedded = function () { try { return window.parent !== window && !!window.parent.setAutoMark; } catch (e) { return false; } };
+// Mirror the auto / sound toggles to the embedding page (the desktop shell) when there is one.
 function reportAuto() { try { if (window.parent !== window && window.parent.setAutoMark) window.parent.setAutoMark(G.auto); } catch (e) {} }
 function reportSound() { try { if (window.parent !== window && window.parent.setSoundMark) window.parent.setSoundMark(G.snd); } catch (e) {} }
 function saveBest() { try { localStorage.setItem(BEST_KEY, String(G.best)); } catch (e) {} }
 
 // ---------------------------------------------------------------- sound (WebAudio synthesis only)
+// Lazy-created AudioContext; every sound is synthesized (tone / noise), no audio files.
 var AC = null;
 function actx() { if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { AC = false; } } if (AC && AC.state === 'suspended') { try { AC.resume(); } catch (e) {} } return AC; }
 function tone(f0, f1, dur, type, vol, delay) {
@@ -32,6 +41,7 @@ function noise(dur, vol) {
   for (var i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
   var s = a.createBufferSource(), g = a.createGain(); s.buffer = b; g.gain.value = vol || 0.12; s.connect(g); g.connect(a.destination); s.start();
 }
+// SFX: named sound effects built from tone() / noise(); sfx(k) plays one and never throws.
 var SFX = {
   jump: function () { tone(280, 640, 0.14, 'square', 0.06); }, coin: function () { tone(988, 988, 0.07, 'square', 0.06); tone(1319, 1319, 0.16, 'square', 0.06, 0.07); },
   stomp: function () { tone(300, 90, 0.12, 'square', 0.09); }, bump: function () { tone(150, 100, 0.08, 'triangle', 0.12); }, brick: function () { noise(0.2, 0.14); tone(200, 60, 0.12, 'triangle', 0.1); },
@@ -54,6 +64,7 @@ SFX.swim = function () { tone(300, 500, 0.08, 'sine', 0.06); }; SFX.spring = fun
 SFX.pop = function () { tone(1200, 800, 0.05, 'sine', 0.05); };
 
 // ---------------------------------------------------------------- input: every source goes through press(); the auto player uses the same function
+// Input: three sources (human keys, touch pad, auto player) are OR-ed together by mask() into the simulation's IN bit mask.
 var held = { human: {}, touch: {}, auto: {} };
 // two crosses: left = move (arrows / WASD), right = the DS face-button diamond: A (right, L key) jump, B (bottom, K) run, Y (left, J) spin, X (top, I) act / up; X/Space, Z/Shift, C/V are aliases.  value = [input key, on-screen button id]
 var KEYMAP = { ArrowLeft: ['left', 'L'], a: ['left', 'L'], A: ['left', 'L'], ArrowRight: ['right', 'R'], d: ['right', 'R'], D: ['right', 'R'], ArrowUp: ['up', 'U'], w: ['up', 'U'], W: ['up', 'U'], ArrowDown: ['down', 'D'], s: ['down', 'D'], S: ['down', 'D'],
@@ -69,6 +80,7 @@ function mask() {
 function setAuto(m) { press('auto', 'left', m & IN.L); press('auto', 'right', m & IN.R); press('auto', 'jump', m & IN.J); press('auto', 'run', m & IN.RUN); press('auto', 'up', m & IN.UP); press('auto', 'down', m & IN.DN); press('auto', 'spin', m & IN.SPIN); }
 function clearHeld(src) { held[src] = {}; }
 var edge = { };
+// Menu / map / select navigation on key press; gameplay keys only set held state.
 function onPress(k) {          // menu / map navigation on key press (human only)
   if (G.mode === 'select') { selectMove(k); return; }
   if (G.mode === 'sbrowse') { if (k === 'jump') sbPick(G.sbSel); else sbMove(k); return; }
@@ -135,6 +147,7 @@ function setPtr(el, e) { var old = touchPtr[e.pointerId], ids = crossIds(el, e);
 
 
 // ---------------------------------------------------------------- layout
+// Canvas backing-store scale; layout() fits the canvas to the stage, keeping aspect ratio and DPR.
 var BS = 1;
 function layout() {
   var w = stage.clientWidth, h = stage.clientHeight; if (w < 10 || h < 10) return;
@@ -151,7 +164,9 @@ window.isPad = function () { return padOn; };
 layout(); setTimeout(layout, 50);
 
 // ---------------------------------------------------------------- game flow: map -> level (-> bonus room) -> map
+// Game flow: map -> level (-> bonus room) -> clear -> map. Reset planner / RL fallback bookkeeping before a level.
 function aiReset() { G.planner.reset(); if (G.ai) G.ai.reset(); G.stallF = 0; G.fbUntil = 0; G.lastProg = 0; G.lastCr = 0; G.lastStage = 0; }
+// Auto player: returns the input mask for this frame, or null/undefined while the planner is still searching (G.thinking).
 function autoMask(st) {
   // the auto player is the route navigator (planner.js: stage-by-stage search on the real simulation); the RL policy (ai-model.js) is only used when G.useRL is switched on
   if (G.useRL && G.ai && G.ai.ready()) {
@@ -162,9 +177,11 @@ function autoMask(st) {
   }
   G.usingFallback = true; return G.planner.decide(st, 9);
 }
+// Show a message toast for some frames.
 function say(t, frames) { G.msg = t; G.msgT = frames || 150; }
 function nodeById(id) { for (var k = 0; k < G.map.nodes.length; k++) if (G.map.nodes[k].i === id) return G.map.nodes[k]; return null; }
 // ---- progress (persisted per seed in localStorage, always inside try/catch)
+// ---- progress save: stored per seed in localStorage (always in try/catch)
 function saveKey(seed) { return 'shapeworld.save.' + seed; }
 function saveProg() {   // the whole resumable state: cleared stages / worlds, secret routes, current world, map position, lives, score, coins
   if (!G.sm || !G.prog) return;
@@ -185,10 +202,13 @@ function keepClearedWorlds() {
     localStorage.setItem('shapeworld.last', String(G.seed));
   } catch (e) {}
 }
+// Forget the saved run for this seed.
 function clearSave() { try { localStorage.removeItem(saveKey(G.seed)); localStorage.removeItem('shapeworld.last'); } catch (e) {} }
 function hasProgress(p) { if (!p) return false; var any = false; for (var w in p.done) for (var k in p.done[w]) any = true; for (var w2 in p.wcl) any = true; return any || (p.base || 0) > 0 || (p.cur || 0) > 0; }
+// Pack/unpack the per-world 'done' stage sets as bit masks for compact saving.
 function packMap(m) { var o = {}; for (var w in m) { var mask = 0; for (var k in m[w]) if (m[w][k]) mask |= 1 << (+k); if (mask) o[w] = mask; } return o; }
 function unpackMap(m) { var o = {}; for (var w in (m || {})) { o[w] = {}; for (var k = 0; k < 16; k++) if ((m[w] >> k) & 1) o[w][k] = 1; } return o; }
+// Load the saved progress for a seed (null when none).
 function loadProg(seed) { try { var s = localStorage.getItem(saveKey(seed)); if (s) { var o = JSON.parse(s); if (o && o.done && o.wcl) { o.done = unpackMap(o.done); o.secret = unpackMap(o.secret); return o; } } } catch (e) {} return null; }
 function lastSeed() { try { var s = parseInt(localStorage.getItem('shapeworld.last'), 10); return s > 0 ? s : 0; } catch (e) { return 0; } }
 function worldCleared(wid) { return !!G.prog.wcl[wid]; }
@@ -206,12 +226,15 @@ function isVisible(nd) { return nd.main || isOpen(nd); }
 function allNodes() { return G.map.nodes.filter(isVisible); }
 // the next level the auto player (and the hint) should take: any open, unfinished level, preferring the main route (it never needs a secret exit)
 function nextTarget() { var c = G.map.nodes.filter(function (n) { return isOpenW(G.wid, G.map, n) && !isDone(n.i) && (!worldCleared(G.wid) || n.main); }); c.sort(function (a, b) { return (a.main ? 0 : 1) - (b.main ? 0 : 1) || a.i - b.i; }); return c[0] || null; }
+// Move the map cursor to the neighbouring node in a direction.
 function moveSel(dir) {
   var cur = nodeById(G.sel) || G.map.nodes[0], vx = dir === 'right' ? 1 : dir === 'left' ? -1 : 0, vy = dir === 'down' ? 1 : dir === 'up' ? -1 : 0, best = null, bs = 1e9;
   allNodes().forEach(function (n) { if (!isOpen(n) || n.i === G.sel) return; var dx = n.x - cur.x, dy = n.y - cur.y; if (dx * vx + dy * vy <= 2) return; var sc = Math.hypot(dx, dy) + Math.abs(dx * vy - dy * vx) * 0.6; if (sc < bs) { bs = sc; best = n; } });
   if (best) { G.sel = best.i; sfx('pop'); }
 }
+// Switch the active world: builds its map and resets the cursor.
 function setWorld(wid) { var w = PF.worldInfo(G.seed, wid); G.wid = wid; G.depth = w.depth; G.map = PF.worldMap(G.seed, wid, w.depth, w.mainEnd); G.prog.cur = wid; var t = nextTarget(); G.sel = t ? t.i : 0; G.fn = { isDone: isDone, isOpen: isOpen, isVisible: isVisible, edgeOpen: edgeOpen }; }
+// Start or resume an adventure: picks the seed (URL, last used, or fresh), loads progress and goes to the map.
 function startGame(fresh) {
   if (Q.get('seed')) G.seed = parseInt(Q.get('seed'), 10) || 1; else if (!fresh && lastSeed()) G.seed = lastSeed(); else G.seed = 1 + Math.floor(Math.random() * 999999);
   G.sm = {}; G.prog = (!fresh && loadProg(G.seed)) || { done: {}, secret: {}, wcl: {}, cur: 0, front: 0 };
@@ -227,9 +250,11 @@ function endWorld(ending) {
   G.prog.wcl[G.wid] = ending; var w = PF.worldInfo(G.seed, G.wid), next = w.next[ending]; G.endingTaken = ending; saveProg();   // the world graph is endless: every ending leads to a new world
   G.superFrom = G.wid; G.superTo = next; G.superT = 0; G.mode = 'super'; sfx('life');
 }
+// Leave the super map into the world just reached.
 function leaveSuper() { var nx = G.superTo; G.prog.front = Math.max(G.prog.front || 0, nx); setWorld(nx); saveProg(); G.mode = 'map'; G.mapCool = 0; say(TT('월드 ' + worldName(nx) + ' 도착!', 'Arrived in world ' + worldName(nx) + '!'), 150); }
 // ---- stage select dialog (Game menu / T): cleared worlds + the current one, and inside a world its cleared stages + the frontier; a cleared world opens all its stages
 // ---- navigation: back to the world map at any time, and from the map up to the super map
+// Navigation: back to the world map, and from the map up to the super map; sbMove/sbPick drive the super-map cursor.
 window.toMap = function () {
   if (G.mode === 'sbrowse') { closeSuper(); return true; } if (G.mode === 'select') { closeSelect(); }
   if (G.mode === 'play' || G.mode === 'pause' || G.mode === 'dying' || G.mode === 'loading' || G.mode === 'clear') { G.mode = 'map'; G.st = null; G.L = null; G.main = null; G.hint = null; setAuto(0); aiReset(); G.mapCool = 0; saveProg(); say(TT('월드 지도로 돌아왔어요 (스테이지는 다시 처음부터)', 'Back on the world map (the stage restarts when re-entered)'), 160); return true; }
@@ -252,6 +277,7 @@ function sbPick(id) {
   var ok = worldCleared(id) || id === G.wid || id === (G.prog.front || 0); if (!ok) { sfx('bump'); return; }
   closeSuper(); if (id !== G.wid) { setWorld(id); saveProg(); say(TT('월드 ' + worldName(id), 'World ' + worldName(id)), 120); }
 }
+// Stage-select dialog (worlds cleared + current, stages with state done/open/locked).
 function selectableWorlds() { var ids = {}; Object.keys(G.prog.wcl).forEach(function (k) { ids[k] = 1; }); ids[G.wid] = 1; ids[G.prog.front || 0] = 1; return Object.keys(ids).map(Number).sort(function (a, b) { return a - b; }).map(function (id) { return PF.worldInfo(G.seed, id); }); }
 function selMapOf(wid) { var w = PF.worldInfo(G.seed, wid); return wid === G.wid ? G.map : PF.worldMap(G.seed, wid, w.depth, w.mainEnd); }
 function stageState(wid, map, nd) { if (isDoneW(wid, nd.i)) return 'done'; if (isOpenW(wid, map, nd)) return 'open'; return 'locked'; }
@@ -272,19 +298,26 @@ function selectPick(si) {
   var w = G.selList[G.selWi], nd = G.selMapObj.nodes[si]; if (!nd) return; var s = stageState(w.id, G.selMapObj, nd); if (s === 'locked') { sfx('bump'); return; }
   closeSelect(); G.mode = 'map'; if (w.id !== G.wid) setWorld(w.id); G.sel = nd.i; G.main = null; enterLevel(nd.i, true);
 }
+// Power-ups that carry over from one level to the next (lost on death).
 function carryOf(p) { return (p.pw > 0 || p.mini || p.fin > 0 || p.wing > 0 || p.mount) ? { pw: p.pw | 0, mini: p.mini ? 1 : 0, fin: Math.max(0, p.fin | 0), wing: Math.max(0, p.wing | 0), mount: p.mount ? 1 : 0 } : null; }   // what the hero keeps from one stage to the next
+// Create a fresh simulation state for the current level (optionally from the checkpoint cp) and reset camera / effects.
 function levelInit(cp) {
   var node = G.curNode, cy = (!cp && G.carry) || null; G.st = PF.newState(G.L, { rec: true, cp: !!cp, pw: cy ? cy.pw : 0, mini: cy ? cy.mini : 0, fin: cy ? cy.fin : 0, wing: cy ? cy.wing : 0, mount: cy ? cy.mount : 0 }); aiReset(); setAuto(0); G.roomK = undefined; G.zoneK = undefined; G.parts = []; G.pops = []; G.bumps = []; G.hint = null; G.cam = Math.max(0, Math.min(G.L.w * TS - VW, G.st.p.x - VW * 0.4)); G.camY = Math.max(0, Math.min((G.L.rows || PF.ROWS) * TS - VH, G.st.p.y - VH * 0.55)); G.mode = 'play'; G.secretExit = false;
 }
+// Enter a map node: generates the level (shows loading) and starts it if the node is open.
 function enterLevel(i, force) {
   var node = nodeById(i); if (!node || G.mode === 'loading') return; if (!force && !isOpen(node)) return;
   G.curNode = node; G.mode = 'loading'; G.st = null; G.hint = null; saveProg();
   setTimeout(function () { G.n = node.n; var sd = PF.hash(G.seed, G.wid, 31); G.L = PF.generate(sd, node.n, { kind: node.kind, secret: !!node.secret }); G.main = null; levelInit(false); var kn = PF.KIND_NAMES[G.L.kind]; say(PFR.levelLabel({ n: node.n }) + ' ' + (KO ? PF.THEME_NAMES[G.L.theme | 0][0] + ' ' + kn[0] : PF.THEME_NAMES[G.L.theme | 0][1] + ' ' + kn[1]), 150); G.msgIsLevel = true; }, 30);
 }
+// Run-wide coin count (banked + current level).
 function totalCoins() { return G.coinBase + (G.st ? G.st.coins : 0); }
+// Update and persist the best score.
 function finishRun() { var s = G.base + (G.st ? G.st.score : 0); if (s > G.best) { G.best = s; saveBest(); } }
+// Pause / resume play.
 function togglePause() { if (G.mode === 'play') { G.mode = 'pause'; say(TT('일시정지 (P)', 'Paused (P)'), 9999); } else if (G.mode === 'pause') { G.mode = 'play'; G.msgT = 0; } }
 window.newGame = function () { startGame(true); return true; };
+// Public hooks used by the shell UI and tests: auto play, hint, sound, new game, direct level jump.
 window.toggleAuto = function () {
   G.auto = !G.auto; setAuto(0); aiReset(); reportAuto();
   if (G.auto) { say(TT('자동 플레이 켜짐 (F3로 끄기)', 'Auto play on (F3 to stop)'), 120); if (G.mode === 'start') startGame(false); else if (G.mode === 'over') startGame(false); } else say(TT('자동 플레이 꺼짐', 'Auto play off'), 90);
@@ -301,8 +334,10 @@ window.__pfGo = function (n) { startGame(true); var si = (n - 1) % 5; G.prog.don
 window.addEventListener('pagehide', saveProg); window.addEventListener('beforeunload', saveProg); document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') saveProg(); });
 reportSound(); try { if (window.parent !== window && window.parent.setPadMark) window.parent.setPadMark(padOn); } catch (e) {}
 
+// Event feedback helpers: floating score text and particles.
 function pop(x, y, t, c) { G.pops.push({ x: x, y: y, t: t, c: c, life: 45 }); }
 function spark(x, y, c, n) { for (var i = 0; i < n; i++) G.parts.push({ x: x, y: y, vx: (Math.random() - 0.5) * 3, vy: -Math.random() * 2.5, life: 24 + Math.random() * 12, col: c, s: 2, g: 0.12 }); }
+// Consume the simulation's event list for this step: first play sound effects, then spawn score pops / particles / bumps / messages and handle warps, keys, switches and special coins.
 function handleEvents(st) {
   var ev = st.ev; if (!ev) return;
   for (var i = 0; i < ev.length; i++) { var e = ev[i];
@@ -341,6 +376,7 @@ function handleEvents(st) {
   }
   st.ev = [];
 }
+// Bonus rooms: warp into a ring's room (the outer level is stashed in G.main) and back.
 function enterRoom(ringIdx) {
   var ring = G.L.rings[ringIdx]; if (!ring || G.main) return;
   var room = PF.roomLevel(G.seed, G.L.n + ringIdx, !!ring.secret); if (!room.valid) return;
@@ -355,6 +391,7 @@ function leaveRoom() {
   p.x = m.ring.out.x; p.y = m.ring.out.y - (p.h - 14); p.vx = 0; p.vy = 0; p.inv = 40; G.cam = Math.max(0, Math.min(G.L.w * TS - VW, p.x - VW * 0.4)); aiReset(); setAuto(0);
 }
 function setWorldPw(p, v) { PF.setPw(p, v); }
+// Main update, run at a fixed 60 Hz by frame(): ambient music, effects, then per-mode logic. Auto modes advance menus on timers. In play: auto mask -> PF.step -> events -> win / death; dying and clear run their animations, then bank score and return to the map or retry. Finally the camera follows the hero.
 function fixedStep() {
   G.frame++;
   if (G.mode === 'play' && G.L && G.frame % 150 === 0) { var pt = (PF.THEME_PITCH && PF.THEME_PITCH[G.L.theme]) || 1, nt = [0, 7, 3, 10][(G.frame / 150 | 0) % 4]; tone(110 * pt * Math.pow(2, nt / 12), 110 * pt * Math.pow(2, nt / 12), 2.2, 'sine', 0.018); }
@@ -372,6 +409,7 @@ function fixedStep() {
   if (G.mode === 'select') return;
   if (G.mode === 'sbrowse') { if (G.auto && ++G.sbT > 120) closeSuper(); return; }
   if (G.mode === 'pause' || !st || G.mode === 'loading') return;
+  // Play: when the auto player is thinking (mask null) the game waits this frame.
   if (G.mode === 'play') {
     G.thinking = false;
     if (G.auto) { var am = autoMask(st); if (am === null || am === undefined) { G.thinking = true; return; } setAuto(am); }   // null: the route search is still running (spread over frames), the game waits
@@ -386,6 +424,7 @@ function fixedStep() {
       if (G.main) leaveRoom();
       else { st = G.st; G.carry = carryOf(st.p); G.mode = 'clear'; G.clearT = 0; G.bonus = 1000 + Math.floor(st.t / 60) * 5; st.score += G.bonus; setAuto(0); finishRun(); }
     }
+  // Death animation (hero hops and falls); afterwards lose a life and retry from the checkpoint, or game over.
   } else if (G.mode === 'dying') {
     G.dieT++; G.dvy += 0.32; G.dy += G.dvy;
     if (G.dieT > 100) {
@@ -394,6 +433,7 @@ function fixedStep() {
       if (G.lives <= 0) { G.mode = 'over'; G.autoWait = 0; finishRun(); keepClearedWorlds(); }
       else { saveProg(); levelInit(st.cp); say(TT('다시 도전! 남은 목숨 ' + G.lives, 'Try again! Lives left: ' + G.lives), 120); }
     }
+  // Level clear: end animation (cannon launch / pole slide), then mark the node done (secret exits give a life), return to the map or take a world ending.
   } else if (G.mode === 'clear') {
     G.clearT++; var pw = st.p;
     if (G.L.endCannon) { var ft = Math.max(0, G.clearT - 6); if (G.clearT === 6) { pw.x = G.L.goalX - 6; pw.y = G.L.poleY - 30; } if (G.clearT > 6) { pw.x += 4.2; pw.y -= 3.4 - ft * 0.012; } }   // shot out of the cannon up and away
@@ -409,9 +449,11 @@ function fixedStep() {
       saveProg();
     }
   }
+  // Camera: smooth follow with look-ahead, vertical follow for tall levels, per-room lock for door mazes, and clamp to the odyssey zone cell below.
   if (G.st) { var p2 = G.st.p, tx = Math.max(0, Math.min(G.L.w * TS - VW, p2.x + 6 - VW * 0.42 + p2.vx * 14)); G.cam += (tx - G.cam) * 0.12;
     if (G.L.roomPx) { var rk = Math.floor((p2.x + 6) / G.L.roomPx); tx = rk * G.L.roomPx + (G.L.roomPx - VW) / 2 + TS / 2; G.cam = (G.roomK === rk) ? G.cam + (tx - G.cam) * 0.2 : tx; G.roomK = rk; }   // door mazes: the camera stays on the current room (never shows the next room over the wall)
     var RW = G.L.rows || PF.ROWS, ty = Math.max(0, Math.min(RW * TS - VH, p2.y + p2.h / 2 - VH * 0.55 + p2.vy * 6)); G.camY = (G.camY === undefined || RW === PF.ROWS) ? ty : G.camY + (ty - G.camY) * 0.14;
+    // Odyssey (zoned) levels: clamp the camera to the zone cell the hero is in so two zone looks never show together; a change of look cuts instantly.
     if (G.L.zones) {   // winding journey: the camera never leaves the cell the hero is in, so two looks are never on screen together; entering a cell with another look cuts to it
       var Lz = G.L, zx = Math.max(0, Math.min(Lz.zoneGX - 1, Math.floor((p2.x + 6) / (Lz.zoneCW * TS)))), zy = Math.max(0, Math.floor((p2.y + p2.h / 2) / (Lz.zoneCH * TS))), zk = zy * Lz.zoneGX + zx;
       var x0 = zx * Lz.zoneCW * TS, y0 = zy * Lz.zoneCH * TS, cx = Math.max(x0, Math.min(x0 + Lz.zoneCW * TS - VW, tx)), cy = Math.max(y0, Math.min(y0 + Lz.zoneCH * TS - VH, ty));
@@ -419,6 +461,7 @@ function fixedStep() {
       G.zoneK = zk; } }
 }
 
+// Fixed-timestep loop: accumulate real time, run up to 6 steps of 1/60 s, then render once.
 var last = 0, acc = 0;
 function frame(t) {
   requestAnimationFrame(frame);
@@ -428,10 +471,12 @@ function frame(t) {
   try { if (G.mode === 'start') PFR.startScreen(G, ctx, BS); else PFR.render(G, ctx, BS); } catch (e) { window.__errs.push('render ' + e.message + ' ' + (e.stack || '').split('\n')[0]); }
 }
 G.seed = parseInt(Q.get('seed'), 10) || lastSeed() || 1; G.sm = {}; G.prog = loadProg(G.seed) || { done: {}, secret: {}, wcl: {}, cur: 0, front: 0 }; setWorld(PF.worldExists(G.prog.cur) ? G.prog.cur : 0); G.hasSave = hasProgress(G.prog);
+// Boot: URL params (seed, autostart, auto) for tests and the embedded shell.
 if (Q.get('autostart') === '1') startGame();
 if (Q.get('auto') === '1') window.toggleAuto();
 requestAnimationFrame(frame);
 // test hook: with auto play on, force-clear every level (the map / super-map flow is what is being tested)
+// Test hooks.
 window.__pfFastRun = function () { window.__ffIv = setInterval(function () { for (var k = 0; k < 6; k++) { if (G.mode === 'play' && G.st) { G.st.p.won = true; } else if (G.mode === 'map' || G.mode === 'super' || G.mode === 'clear' || G.mode === 'start' || G.mode === 'over' || G.mode === 'end' || G.mode === 'dying') fixedStep(); } }, 4); };
 window.__pfDebug = function () { var p = G.st ? G.st.p : null; return { mode: G.mode, n: G.n, node: G.curNode && G.curNode.n, x: p && Math.round(p.x), y: p && Math.round(p.y), lives: G.lives, score: G.base + (G.st ? G.st.score : 0), coins: totalCoins(), auto: G.auto, pw: p && p.pw, vx: p && p.vx, vy: p && p.vy, ground: p && p.ground, hint: !!G.hint, msg: G.msg, best: G.best, errs: window.__errs.length, w: G.w, sel: G.sel, kind: G.L && G.L.kind, room: !!G.main }; };
 })();

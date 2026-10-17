@@ -1,25 +1,45 @@
+// File role: the whole game rules as a pure, deterministic simulation. newState(L, opts) builds a state from a level,
+// clone(st) copies it cheaply (the planner branches a lot) and step(st, inputMask) advances exactly one 60 Hz frame.
+// Same level + same input sequence => same result: no Math.random / time here, only rng()/hash() seeded by the level.
+// Input mask bits are in IN (L R Jump Run Down Up Spin). World = tile grid (T ids, SOL = solid lookup) + movers,
+// enemies (E types, updEnemy/updBoss), items, projectiles and theme hazards (hzStep). Exported as root.PF at the bottom.
 // Shape World - deterministic simulation (physics, entities, power-ups, bosses). No DOM: the same code runs in the game,
 // in the auto-play planner, in the level validator and in the headless tests.
 (function (root) {
 'use strict';
+// Tile size in px, default row count, and the visible viewport in px.
 var TS = 16, ROWS = 14, VW = 400, VH = 224;
+// Tile ids used in L.tiles (one number per cell, column-major: c * rows + r).
 var T = { AIR: 0, SOLID: 1, BRICK: 2, QC: 3, QP: 4, USED: 5, SPIKE: 6, VINE: 7, SPRING: 8, WATER: 9, CONVL: 10, CONVR: 11, SLR: 12, SLL: 13, LAVA: 14, CANL: 15, CANR: 16, STUMP: 17, PSW: 18, RING: 19, QS: 20, QM: 21, CURL: 22, CURR: 23, CURU: 24, GATE: 25, BRIDGE: 26, SWITCH: 27, SWUSED: 28, WLEVEL: 29, DOOR: 30, TELE: 31, LAUNCH: 32, ICE: 33, MUD: 34, FIRE: 35, NARROW: 36, CRACK: 37, POUND: 38, POISON: 39 };   // POISON: purple water - a powered hero loses the power and survives 3 seconds in it (a star: until the star ends), an unpowered one dies at once   // POUND: a heavy slab that only a big hero's ground pound (Down in the air) breaks   // NARROW: a mouse-hole wall, open only while the hero is mini; CRACK: a cracked wall that a kicked shell or a fireball breaks
+// Solid lookup indexed by tile id: 1 = blocks the hero and enemies. Slopes, water, vines, spikes, lava are NOT solid (handled separately).
 var SOL = [0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0];
+// Water-like tiles (water, poison-type water, currents): swimming physics and the air meter apply inside them.
 function isW(t) { return t === 9 || t === 39 || (t >= 22 && t <= 24); }
+// Fire jets / lasers blink on a fixed period; the per-column offset (c * 17) desynchronises neighbouring jets.
 function fireOn(f, c) { return ((f + c * 17) % 130) < 55; }   // timed fire jet / laser at column c
+// Input mask bits passed to step().
 var IN = { L: 1, R: 2, J: 4, RUN: 8, DN: 16, UP: 32, SPIN: 64 };
+// Hero physics constants (px per frame, 60 fps): walk / run / P-meter speed, accelerations, jump, gravity up / cut / down, timers.
 var P = { WALK: 1.4, RUN: 2.2, PRUN: 2.75, PMAX: 64, ACCG: 0.12, ACCA: 0.07, FRIC: 0.14, JUMP: -6.3, JRUN: 0.5, GUP: 0.28, GCUT: 0.7, GDN: 0.55, MAXFALL: 7.5,
           COY: 5, JBUF: 6, PW: 12, SH: 14, BH: 24, INV: 100, ACTIVE: 340, STAR: 600, POIS: 180 };
+// Enemy type ids (e.t). Types >= 9 are only simulated near the hero (see P.ACTIVE in updEnemy).
 var E = { WALKER: 0, SPIKY: 1, FLYER: 2, BEETLE: 3, BULLET: 4, CRUSH: 5, GHOST: 6, PLANT: 7, BOSS: 8, SWIM: 9, CHASER: 10, FMINE: 11, WHALE: 12, JELLY: 13, CLAM: 14, SWOOP: 15, FLOCK: 16, BALLOON: 17, SHOOTER: 18, BIRD: 19, SPARK: 20, LEAPFISH: 21, EMBER: 22, ROLL: 23, SQUID: 24, STRIDER: 25, PUFFER: 26, EEL: 27 };   // LEAPFISH: leaps out of water / poison (killable); EMBER: leaps out of lava (fire-proof, cannot be stomped)
+// Air meter (frames) while swimming; when it runs out the hero takes drown damage periodically.
 var AIRMAX = 900;
+// Common period (frames) after which every periodic mover pattern repeats.
 var MV_PERIOD = 1440;
 
+// Small seeded PRNG (mulberry32 style) returning floats in [0, 1).
 function rng(seed) { var a = seed >>> 0; return function () { a = (a + 0x6D2B79F5) >>> 0; var t = a; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+// Stateless integer hash: lets hazards pick 'random' values from (seed, id, frame) with no mutable RNG state, so look-ahead stays deterministic.
 function hash(a, b, c) { var h = Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 1274126177); h = Math.imul(h ^ (h >>> 13), 1274126177); return (h ^ (h >>> 16)) >>> 0; }
+// Triangle wave in [-1, 1] with period 1: constant-speed back-and-forth motion (swimmers, patrols).
 function tri(u) { var q = u - Math.floor(u); return q < 0.5 ? 4 * q - 1 : 3 - 4 * q; }
 
 // ------------------------------------------------------------------ platforms (kind 0 horizontal, 1 vertical, 2 orbit, 3 falling)
+// Kind 4 (blinking) platforms are solid only during part of their cycle; every other kind is always on.
 function movOn(st, i, f) { var m = st.L.movers[i]; if (m.kind !== 4) return true; return ((f + Math.round(m.ph / 6.283185 * m.per)) % m.per) < m.per * 0.62; }
+// Platform position at frame f per kind (sine paths, orbit, rail-steered, lifts, wrapping conveyor, falling).
 function movPos(st, i, f) {
   var m = st.L.movers[i], k = m.kind | 0, a = 6.283185307 * f / m.per + m.ph;
   if (k === 0) return { x: m.cx + m.amp * Math.sin(a) - m.w / 2, y: m.y };
@@ -41,6 +61,8 @@ function maceBalls(m, f) {
   return out;
 }
 var EMPTY = new Map();
+// Build the initial state: hero (from checkpoint if o.cp), items, movers and fresh copies of the level's enemies
+// (enemies near the checkpoint are skipped when starting there; bosses are always kept). o.* are test / validation overrides.
 function newState(L, o) {
   o = o || {};
   var s = o.cp ? L.cp : L.start;
@@ -62,6 +84,7 @@ function newState(L, o) {
     st.en.push(e); }
   return st;
 }
+// Copy a state for branching. Mutable arrays/objects are copied; the level L and tile modifications (st.mod, copy-on-write Map) are shared.
 function clone(st) {
   var c = {}, k; for (k in st) c[k] = st[k];
   c.p = {}; for (k in st.p) c.p[k] = st.p[k];
@@ -73,14 +96,18 @@ function clone(st) {
   c.mo = st.mo.map(function (s) { return { off: s.off, vy: s.vy, s: s.s, t: s.t, ox: s.ox }; });
   c.cg = st.cg.slice(); c.sg = st.sg.slice(); c.pk = st.pk.slice(); c.kg = st.kg.slice(); c.dg = st.dg.slice(); c.sg2 = st.sg2.slice(); c.ev = null; return c;
 }
+// Record a sound / particle event (only when recording is on; the simulation never reads events back).
 function ev(st, k, x, y, a) { if (st.ev) st.ev.push({ k: k, x: x, y: y, a: a }); }
+// Change power level (0 small, 1 big, 2 fire, 3 ...): resizes the hero keeping its feet on the same spot.
 function setPw(p, v) { p.duck = 0; if (p.mini) { p.mini = 0; p.x -= (P.PW - p.w) / 2; p.w = P.PW; } var nh = v > 0 ? P.BH : P.SH; p.y += p.h - nh; p.h = nh; p.pw = v; p.big = v > 0; }
 function miniSurface(st, p, ny) {   // the shrunk hero stands on the water surface; a star hero walks on any liquid surface, poison included (a mini hero sinks into poison and dies)
   var rr = Math.floor((ny + p.h - 1e-4) / TS), cx = Math.floor((p.x + p.w / 2) / TS), t = tileAt(st, cx, rr);
   return (p.star > 0 ? isW(t) : (isW(t) && t !== T.POISON)) && !isW(tileAt(st, cx, rr - 1)) && p.y + p.h <= rr * TS + 3;
 }
+// Shrink the hero to the tiny form (9x10 hitbox).
 function setMini(p) { setPw(p, 0); p.mini = 1; p.x += (P.PW - 9) / 2; p.w = 9; p.y += p.h - 10; p.h = 10; }
 
+// Tile lookup ignoring switch state: out of range is air above/below, and the level's runtime edits (st.mod) override L.tiles.
 function tileRaw(st, c, r) {
   var L = st.L;
   if (c < 0 || c >= L.w) return T.SOLID;
@@ -89,22 +116,28 @@ function tileRaw(st, c, r) {
   if (st.mod.size) { var m = st.mod.get(i); if (m !== undefined) return m; }
   return L.tiles[i];
 }
+// Tile lookup as the hero sees it: while the switch timer runs, bricks act as air (they are coins).
 function tileAt(st, c, r) {
   var t = tileRaw(st, c, r); if (t === T.BRICK && st.sw > 0) return T.AIR;
   if (t === T.NARROW) return st.p && st.p.mini ? T.AIR : t;
   if (t >= 25 && t <= 29) { var g = st.L.grp ? st.L.grp[c * (st.L.rows || ROWS) + r] : 0, on = (st.sb >> g) & 1; if (t === T.GATE) return on ? 0 : T.GATE; if (t === T.BRIDGE) return on ? T.BRIDGE : 0; if (t === T.WLEVEL) return on ? T.WATER : 0; }
   return t;
 }
+// True if the box overlaps any solid tile.
 function boxHit(st, x, y, w, h) {
   var c0 = Math.floor(x / TS), c1 = Math.floor((x + w - 1e-4) / TS), r0 = Math.floor(y / TS), r1 = Math.floor((y + h - 1e-4) / TS);
   for (var c = c0; c <= c1; c++) for (var r = r0; r <= r1; r++) if (SOL[tileAt(st, c, r)]) return true;
   return false;
 }
+// Edit one tile; the Map is copied first so cloned states never see each other's changes.
 function setTile(st, c, r, t) { st.mod = new Map(st.mod); st.mod.set(c * (st.L.rows || ROWS) + r, t); }   // copy on write: clones (the planner / validator branches) share the map until one of them changes a tile
 function isSolidTile(t) { return SOL[t] === 1; }
+// Surface height of a slope tile at world x (SLR rises to the right, SLL to the left).
 function slopeY(t, c, r, x) { return t === T.SLR ? (r + 1) * TS - (x - c * TS) : r * TS + (x - c * TS); }
 
 // ------------------------------------------------------------------ bumping blocks from below
+// Hero's head hits block row r from below: pick the tile closest to the hero's centre, then break / open it
+// (contents depend on power level; question blocks become USED) and flip enemies standing on top.
 function bump(st, r) {
   var p = st.p, c0 = Math.floor(p.x / TS), c1 = Math.floor((p.x + p.w - 1e-4) / TS), best = -1, bd = 1e9, cx = p.x + p.w / 2;
   for (var c = c0; c <= c1; c++) { var t = tileAt(st, c, r); if (SOL[t]) { var d = Math.abs(c * TS + 8 - cx); if (d < bd) { bd = d; best = c; } } }
@@ -124,7 +157,9 @@ function bump(st, r) {
   // enemies standing on the bumped block get flipped over
   for (var i = 0; i < st.en.length; i++) { var e = st.en[i]; if (e.alive && e.t <= E.BEETLE && e.t !== E.SPIKY && Math.abs(e.x + e.w / 2 - x) < 12 && Math.abs(e.y + e.h - y) < 4) { killEnemy(st, e, 100); } }
 }
+// A killed bird that carried loot drops it as an item.
 function dropLoot(st, e) { if (e.t === E.BIRD && e.carry) { st.it.push({ k: 5, x: e.x, y: e.y, w: 12, h: 12, vx: 0, vy: 0, em: 0, alive: true, ground: false }); ev(st, 'drop', e.x, e.y); } }
+// Scripted kill (fireball, shell, star, mount): bosses, crushers and whales are immune; others die, drop loot and give points.
 function killEnemy(st, e, pts) {
   if (e.t === E.BOSS || e.t === E.CRUSH || e.t === E.WHALE) return;
   dropLoot(st, e);
@@ -132,6 +167,7 @@ function killEnemy(st, e, pts) {
 }
 
 // ------------------------------------------------------------------ entity movement
+// Gravity + tile collision for enemies / items / shells; returns true when a wall was hit (caller usually turns around).
 function moveEnt(st, o, g) {
   var hw = false;
   o.vy = Math.min(P.MAXFALL, o.vy + (g === undefined ? P.GDN * 0.8 : g));
@@ -141,6 +177,8 @@ function moveEnt(st, o, g) {
   if (boxHit(st, o.x, ny, o.w, o.h)) { if (o.vy > 0) { o.y = Math.floor((ny + o.h - 1e-4) / TS) * TS - o.h; o.ground = true; } else o.y = (Math.floor(ny / TS) + 1) * TS; o.vy = 0; } else o.y = ny;
   return hw;
 }
+// Damage rule: ignored while invincible / star / frozen; a carried shell is released, a mount is lost first,
+// then a power-up, and only a small unmounted hero dies. Gives P.INV frames of invincibility after a hit.
 function hurt(st, why) {
   var p = st.p;
   if (p.inv > 0 || p.dead || p.star > 0 || p.frz > 0) return;
@@ -149,9 +187,12 @@ function hurt(st, why) {
   if (p.pw > 0) { setPw(p, 0); p.inv = P.INV; ev(st, 'hurt', p.x, p.y); }
   else { p.dead = true; p.why = why; ev(st, 'die', p.x, p.y); }
 }
+// Unconditional death (lava, poison, scripted hazards): no power-up can absorb it.
 function dieNow(st, why) { var p = st.p; if (p.dead) return; p.dead = true; p.why = why; ev(st, 'die', p.x, p.y); }
+// Axis-aligned box overlap test.
 function overlap(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
 
+// Per-frame AI for one enemy, by type (switch on e.t). Far-away enemies of the newer types are frozen to save work.
 function updEnemy(st, e, f) {
   var p = st.p, i, hw;
   if (e.t === E.BOSS && e.alive && e.y > (st.L.rows || ROWS) * TS + 30) { e.hp = 0; e.alive = false; e.dt = 70; st.boss--; st.score += 3000; ev(st, 'bossdead', e.x + e.w / 2, e.y); return; }   // a boss that ends up in the void counts as beaten
@@ -237,12 +278,16 @@ function updEnemy(st, e, f) {
   }
 }
 // ------------------------------------------------------------------ theme hazards (L.hz): objects that drop from above after a warning, lightning, rolling things; all of it is a function of the frame number and the hero, so the planner's look-ahead sees it exactly
+// Y of the first solid tile at or below y0 in the column of x (where falling hazards land).
 function groundY(st, x, y0) { var c = Math.floor(x / TS), R = st.L.rows || ROWS, r = Math.max(0, Math.floor(y0 / TS)); for (; r < R; r++) if (SOL[tileAt(st, c, r)]) return r * TS; return R * TS; }
+// Encase the hero in ice for 80 frames; refused during the cooldown, as a star or when dead.
 function freezeHero(st) { var p = st.p; if (p.frz > 0 || p.frzcd > 0 || p.star > 0 || p.dead) return false; p.frz = 80; p.vx = 0; ev(st, 'freeze', p.x, p.y); return true; }
+// What a theme hazard does on contact: freeze, instant kill (never through a star), or ordinary damage.
 function hzEffect(st, o) {
   var p = st.p;
   if (o.mode === 'freeze') freezeHero(st); else if (o.mode === 'kill') { if (p.star <= 0 && !(p.frz > 0)) dieNow(st, o.skin); } else hurt(st, o.skin);
 }
+// A falling hazard hit the ground: burst, and a crater-type one smashes nearby bricks and may punch a hole in the floor.
 function hzImpact(st, o) {
   var c = Math.floor(o.x / TS), R = st.L.rows || ROWS, r = Math.floor((o.y + o.sz) / TS);
   ev(st, 'burst', o.x, o.y);
@@ -252,6 +297,8 @@ function hzImpact(st, o) {
     if (tileRaw(st, c, tr) === T.SOLID && tileRaw(st, c, tr - 1) === T.AIR && SOL[tileRaw(st, c, tr + 1)] && SOL[tileRaw(st, c, tr + 2)] && st.L.tiles[c * R + tr] === T.SOLID && Math.abs(c * TS - st.L.goalX) > 90 && c * TS > st.L.start.x + 70) { setTile(st, c, tr, T.AIR); ev(st, 'brick', c * TS + 8, tr * TS + 8); }   // a one-tile dent, never a pit
   }
 }
+// Advance theme hazards: spawn on their period (position derived from hash of seed + frame, so it is reproducible),
+// then move the falling / lightning / rolling objects and apply their effect to the hero.
 function hzStep(st, f) {
   var L = st.L, p = st.p, hz = L.hz, pcx = p.x + p.w / 2, i, d, o;
   if (hz && !st.noEn && f > 100 && !(L.arena && pcx > L.arena.c0 * TS - 40)) for (i = 0; i < hz.length; i++) { d = hz[i];
@@ -284,6 +331,8 @@ function hzStep(st, f) {
     if (o.y > (L.rows || ROWS) * TS + 20) st.hz.splice(i, 1);
   }
 }
+// Boss logic by variant e.v (leaper, hovering spitter, tidal swimmer, ...): sleeps until the hero is within 190 px,
+// has an invulnerability window after each hit (see hitBoss) and stays inside its arena bounds (mn / mx).
 function updBoss(st, e, f) {
   var p = st.p; if (e.inv > 0) e.inv--;
   var dx = p.x + p.w / 2 - e.x - e.w / 2;
@@ -324,6 +373,8 @@ function poundBreak(st, p, row) {
   for (c = c0; c <= c1; c++) { t = tileAt(st, c, row); if (t === T.POUND || t === T.BRICK) { setTile(st, c, row, T.AIR); hit = true; ev(st, 'brick', c * TS + 8, row * TS + 8); } }
   if (hit) st.score += 100; return hit;
 }
+// Boss takes damage (stomp / fireball / shell): ignored during invulnerability frames; at 0 hp it dies, awards points and
+// decrements st.boss (the castle goal opens when st.boss reaches 0).
 function hitBoss(st, e, dmg) {
   if (e.inv > 0) return false;
   e.hp -= dmg; e.inv = 55; ev(st, 'bosshit', e.x + e.w / 2, e.y);
@@ -331,6 +382,7 @@ function hitBoss(st, e, dmg) {
   return true;
 }
 
+// Route tracking for the planner / validator: has the current stage goal been reached (key, switch, door, teleport, power-up, kick, tile change, position)?
 function stageDone(st, g) {
   switch (g.k) {
     case 'key': return ((st.kb >> g.g) & 1) === 1;
@@ -348,6 +400,9 @@ function stageDone(st, g) {
   return true;
 }
 // ------------------------------------------------------------------ the step
+// Advance the world by one frame. Order matters: hero timers and platforms, water / vines / duck, hero x then y movement,
+// fireballs, cannons, enemies and hazards, items, collectibles, keys / doors / switches, enemy contact (stomp rules),
+// then environmental death checks (spikes, lava, poison, fire, scrollers, pit, timer) and the goal.
 function step(st, inp) {
   var L = st.L, p = st.p, f = st.f, i, e;
   if (p.dead || p.won) { st.f++; return; }
@@ -367,14 +422,17 @@ function step(st, inp) {
     else if (k2 === 9) { ms2.off = on2 ? Math.min(m2.amp, ms2.off + 0.9) : Math.max(0, ms2.off - 0.5); }
     else if (k2 === 10) { ms2.off = on2 ? Math.max(-m2.amp, ms2.off - 0.9) : Math.min(0, ms2.off + 0.5); }
     else if (k2 === 12) { var pr = L.movers[m2.pair], ps = st.mo[m2.pair], tot = m2.amp; if (on2) { ms2.off = Math.min(tot, ms2.off + 0.9); } else if (p.mv === m2.pair && p.ground) { ms2.off = Math.max(-tot, ms2.off - 0.9); } else { ms2.off += ms2.off > 0 ? -0.4 : ms2.off < 0 ? 0.4 : 0; if (Math.abs(ms2.off) < 0.4) ms2.off = 0; } } }
+  // platform positions this frame and next: a riding hero is moved by the difference so it sticks to the platform
   var mp0 = null, mp1 = null;
   if (st.mo.length) { mp0 = []; mp1 = []; for (i = 0; i < st.mo.length; i++) { mp0.push(movPos(st, i, f)); mp1.push(movPos(st, i, f + 1)); } }
   if (p.mv >= 0 && p.ground && movOn(st, p.mv, f + 1)) { p.x += mp1[p.mv].x - mp0[p.mv].x; p.y += mp1[p.mv].y - mp0[p.mv].y; }
+  // --- water & currents: swimming state, current push, splash event and the air meter (drowning damage when empty)
   var cx0 = p.x + p.w / 2, cell = tileAt(st, Math.floor(cx0 / TS), Math.floor((p.y + p.h * 0.5) / TS));
   var inW = isW(cell), feetW = isW(tileAt(st, Math.floor(cx0 / TS), Math.floor((p.y + p.h - 1) / TS)));
   var curPush = cell === T.CURL ? -0.05 : cell === T.CURR ? 0.05 : 0, curUp = cell === T.CURU ? -0.4 : 0;
   if (inW !== p.wasW) { ev(st, 'splash', cx0, p.y + p.h / 2, inW ? 1 : 0); p.wasW = inW; }
   if (inW) { if (!st.noEn) p.air--; if (p.air <= 0) { p.air = 0; if (p.dtick++ % 55 === 0) hurt(st, 'drown'); } } else { p.air = Math.min(AIRMAX, p.air + 8); p.dtick = 0; }
+  // jump pressed this frame (edge), used for the jump buffer and swim strokes
   var jEdge = jump && !p.jheld;
   // --- vines
   if (!p.climb && up && cell === T.VINE) { p.climb = true; p.vx = 0; p.vy = 0; p.ground = false; p.mv = -1; }
@@ -392,6 +450,7 @@ function step(st, inp) {
     if (!p.duck && p.ground && down && !inW) { p.duck = 1; p.y += p.h - P.SH; p.h = P.SH; }
     else if (p.duck && (!down || !p.ground) && !boxHit(st, p.x, p.y + p.h - P.BH, p.w, P.BH)) { p.y -= P.BH - P.SH; p.h = P.BH; p.duck = 0; }
   } else if (p.duck) p.duck = 0;
+  // 'carried' = horizontal movement inherited from conveyors / platforms below; skipped entirely while climbing a vine
   var carried = 0;
   if (!p.climb) {
     if (p.duck) dir = 0;
@@ -537,8 +596,10 @@ function step(st, inp) {
   if (st.sw > 0) { var c0s = Math.floor(p.x / TS), c1s = Math.floor((p.x + p.w - 1e-4) / TS), r0s = Math.floor(p.y / TS), r1s = Math.floor((p.y + p.h - 1e-4) / TS);
     for (var cs2 = c0s; cs2 <= c1s; cs2++) for (var rs2 = r0s; rs2 <= r1s; rs2++) if (tileRaw(st, cs2, rs2) === T.BRICK) { setTile(st, cs2, rs2, T.AIR); st.coins++; st.score += 10; ev(st, 'coin', cs2 * TS + 8, rs2 * TS + 8, 10); } }
   // --- keys, locked doors, one-shot switches, teleport pads, launch barrels, route tracking
+  // --- keys & doors: a key sets a bit in st.kb; a door with that bit opens when the hero touches it and its tiles turn to air
   var pcx = p.x + p.w / 2, pcy = p.y + p.h / 2;
   if (p.tcd > 0) p.tcd--;   // fins and wings no longer run out: only losing a life takes a power-up away
+  // route progress (crumbs) for the planner: advance st.cr when the hero passes the next waypoint of an unlocked stage
   if (L.crumbs) { var cb = L.crumbs; for (var kk = 1; kk <= 4 && st.cr + kk < cb.length; kk++) { var cq = cb[st.cr + kk]; if (cq[2] <= st.stage && Math.abs(pcx - cq[0]) < 22 && Math.abs(pcy - cq[1]) < 26) { st.cr += kk; break; } } }
   if (L.keys) for (i = 0; i < L.keys.length; i++) if (!st.kg[i]) { var ky = L.keys[i]; if (Math.abs(pcx - ky.x) < 11 && Math.abs(pcy - ky.y) < 13) { st.kg[i] = 1; st.kb |= 1 << ky.c; ev(st, 'key', ky.x, ky.y, ky.c); } }
   if (L.doors) for (i = 0; i < L.doors.length; i++) if (!st.dg[i]) { var dr = L.doors[i];
@@ -546,11 +607,13 @@ function step(st, inp) {
       if (((st.kb >> dr.g) & 1) && pcx > dr.c0 * TS - 10 && pcx < (dr.c1 + 1) * TS + 10 && ((p.y + p.h > dr.r * TS - 6 && p.y + p.h < dr.r * TS + 6) || (p.y > (dr.r + 1) * TS - 4 && p.y < (dr.r + 1) * TS + 30))) { st.dg[i] = 1; for (var hc = dr.c0; hc <= dr.c1; hc++) setTile(st, hc, dr.r, T.AIR); ev(st, 'unlock', pcx, p.y, dr.g); }
     } else if (((st.kb >> dr.g) & 1) && Math.abs(pcx - (dr.c * TS + 8)) < 16 && p.y + p.h > dr.r0 * TS - 2 && p.y < (dr.r1 + 1) * TS) { st.dg[i] = 1; for (var rr2 = dr.r0; rr2 <= dr.r1; rr2++) setTile(st, dr.c, rr2, T.AIR); ev(st, 'unlock', dr.c * TS + 8, p.y, dr.g); } }
   if (L.switches) for (i = 0; i < L.switches.length; i++) if (!st.sg2[i]) { var sw = L.switches[i]; if (pcx > sw.c * TS - 2 && pcx < sw.c * TS + TS + 2 && pcy > sw.r * TS - 4 && pcy < sw.r * TS + TS + 4) { st.sg2[i] = 1; st.sb |= 1 << sw.g; setTile(st, sw.c, sw.r, T.SWUSED); ev(st, 'switch', sw.c * TS + 8, sw.r * TS, sw.g); } }
+  // teleport pads and launch barrels: p.tcd is a short cooldown so the hero cannot re-trigger them at once
   if (L.tele && p.tcd === 0) for (i = 0; i < L.tele.length; i++) { var tp = L.tele[i]; if (pcx > tp.c * TS && pcx < tp.c * TS + TS && pcy > tp.r * TS - 2 && pcy < tp.r * TS + TS + 2) { p.x = tp.tx; p.y = tp.ty; p.vx = 0; p.vy = 0; p.tcd = 50; p.climb = false; st.tc++; ev(st, 'tele', tp.tx, tp.ty, i); break; } }
   if (L.launch && p.tcd === 0) for (i = 0; i < L.launch.length; i++) { var lb = L.launch[i]; if (pcx > lb.c * TS && pcx < lb.c * TS + TS && pcy > lb.r * TS - 2 && pcy < lb.r * TS + TS + 2) { p.vx = lb.vx; p.vy = lb.vy; p.ground = false; p.mv = -1; p.tcd = 30; ev(st, 'launch', lb.c * TS, lb.r * TS); break; } }
   if (L.route) { while (st.stage < L.route.length - 1 && stageDone(st, L.route[st.stage])) st.stage++; }
   // --- enemy contact
   for (i = 0; i < st.en.length; i++) { e = st.en[i]; if (!e.alive || e.hid || e.carried) continue;
+    // per-type hitbox shaping: whale hurts only on its head, jelly has a bell and a tentacle, clam only when open, type 27 only when active
     var ov;
     if (e.t === 12) ov = overlap(p, { x: e.dir > 0 ? e.x + e.w - 12 : e.x, y: e.y, w: 12, h: e.h });
     else if (e.t === 13) { var jw = e.w * (0.7 + 0.3 * (e.pul || 0)); ov = overlap(p, { x: e.x + (e.w - jw) / 2, y: e.y, w: jw, h: e.h * 0.7 }) || overlap(p, { x: e.x + e.w / 2 - 2, y: e.y + e.h * 0.7, w: 4, h: 18 }); }
@@ -558,26 +621,33 @@ function step(st, inp) {
     else if (e.t === 27) ov = e.s === 2 && overlap(p, e);
     else ov = overlap(p, e);
     if (!ov) continue;
+    // stomp rule: only some types can be jumped on, and the feet must be within 9 px (plus fall speed) of the enemy's top
     var stompable = e.t === 0 || e.t === 2 || e.t === 3 || e.t === 4 || e.t === 8 || e.t === 9 || e.t === 10 || e.t === 15 || e.t === 16 || e.t === 18 || e.t === 19 || e.t === 21 || e.t === 25 || (e.t === 23 && e.skin === 'snowball') || (e.t === 1 && p.spin > 0);
     var stomping = stompable && p.vy > 0 && (p.y + p.h) - e.y <= 9 + p.vy;
+    // a star hero kills everything it touches except the boss
     if (p.star > 0 && e.t !== 8) { killEnemy(st, e, 200); continue; }
     if (e.t === E.ROLL && e.mode === 'freeze' && !stomping) { freezeHero(st); e.alive = false; e.dt = 12; ev(st, 'burst', e.x, e.y); continue; }   // a snowball encases the hero in ice
+    // beetle shell states: sh 1 = idle shell, sh 2 = sliding (kg = grace frames so the kicker is not hit by its own kick)
     if (e.t === 3 && e.sh === 1) {            // idle shell: stomp or touch kicks it, holding Run carries it
       if (stomping) { e.sh = 2; e.dir = (p.x + p.w / 2 > e.x + e.w / 2) ? -1 : 1; e.kg = 14; p.vy = jump ? -6 : -3.8; st.score += 100; ev(st, 'kick', e.x, e.y); }
       else if (run && p.carry < 0) { p.carry = i; e.carried = true; ev(st, 'grab', e.x, e.y); }
       else { e.sh = 2; e.dir = (p.x + p.w / 2 > e.x + e.w / 2) ? -1 : 1; e.kg = 14; ev(st, 'kick', e.x, e.y); }
       continue; }
     if (e.t === 3 && e.sh === 2 && e.kg > 0) continue;
+    // a tiny hero only bounces off enemies; it cannot kill by stomping
     if (stomping && p.mini && e.t !== 8) { p.vy = jump ? -7.6 : -4.6; p.y = Math.min(p.y, e.y - p.h); p.coy = 0; ev(st, 'bump', e.x + e.w / 2, e.y); continue; }
+    // normal stomp: bosses lose hp (unless armoured), beetles retreat into their shell, others die and the hero bounces (higher when jump is held)
     if (stomping) {
       if (e.t === 8) { if (e.imm) { p.vy = -6.2; p.coy = 0; ev(st, 'bump', e.x + e.w / 2, e.y); } else if (hitBoss(st, e, 1)) { p.vy = -6.2; } continue; }   // imm: armoured top, only shells and fireballs hurt it
       if (e.t === 3) { if (e.sh === 2) { e.sh = 1; e.vx = 0; } else { e.sh = 1; e.y += 4; e.h = 9; e.vx = 0; } p.vy = jump ? -6.8 : -4.2; st.score += 100; ev(st, 'stomp', e.x + e.w / 2, e.y); p.coy = 0; continue; }
       e.alive = false; e.dt = 30; dropLoot(st, e); p.vy = jump ? -7.2 : -4.2; p.coy = 0; st.score += 100; ev(st, 'stomp', e.x + e.w / 2, e.y); if (e.t === 1) ev(st, 'spinkill', e.x, e.y); continue;
     }
+    // a mounted hero eats most enemies on contact; the exceptions (and spiky / sliding shells) still hurt
     if (p.mount && e.t !== 8 && e.t !== 5 && e.t !== 7 && e.t !== 11 && e.t !== 12 && e.t !== 13 && e.t !== 14 && e.t !== 17 && e.t !== 20 && !(e.t === 3 && e.sh === 2) && !(e.t === 1)) { killEnemy(st, e, 100); ev(st, 'eat', e.x, e.y); continue; }
     hurt(st, e.t === 5 ? 'crush' : e.t === 13 ? 'jelly' : e.t === 14 ? 'clam' : 'enemy');
   }
   // --- spikes / lava
+  // spikes hurt only when the feet sink 8 px in (then bounce the hero up); lava kills at once
   if (!p.dead) { var c0 = Math.floor((p.x + 3) / TS), c1 = Math.floor((p.x + p.w - 3) / TS), r0b = Math.floor((p.y + p.h - 7) / TS), r1b = Math.floor((p.y + p.h - 1e-4) / TS);
     for (var c2 = c0; c2 <= c1; c2++) for (var r2 = r0b; r2 <= r1b; r2++) { var t3 = tileAt(st, c2, r2);
       if (t3 === T.SPIKE && p.y + p.h > r2 * TS + 8) { hurt(st, 'spike'); if (!p.dead) p.vy = -5; }
@@ -595,12 +665,17 @@ function step(st, inp) {
   if (!p.dead && L.hasFire) { var fc0 = Math.floor((p.x + 2) / TS), fc1 = Math.floor((p.x + p.w - 2) / TS), fr0 = Math.floor((p.y + 2) / TS), fr1 = Math.floor((p.y + p.h - 2) / TS);
     for (var fc = fc0; fc <= fc1; fc++) for (var fr = fr0; fr <= fr1; fr++) if (tileRaw(st, fc, fr) === T.FIRE && fireOn(f, fc)) { hurt(st, 'fire'); if (!p.dead) p.vy = -4.5; } }
   // --- auto-scroller: a wall of lava / fog pushes the hero from the left
+  // rising lava and the chasing wall: both advance after a start delay; being below/behind the front kills
   if (L.rise) { if (st.lv === undefined) st.lv = L.rise.y0; if (f > L.rise.delay) st.lv -= L.rise.v; if (!p.dead && p.y + p.h > st.lv) { p.dead = true; p.why = 'lava'; ev(st, 'die', p.x, p.y); } }
   if (L.chase) { if (st.cw === undefined) st.cw = L.chase.x0; if (f > L.chase.delay) st.cw += L.chase.v; if (!p.dead && p.x + p.w < st.cw) { p.dead = true; p.why = 'chased'; ev(st, 'die', p.x, p.y); } }
   // --- pit / timer / goal / checkpoint
+  // rotating mace / fire-bar balls hurt on touch (skipped when enemies are disabled)
   if (L.maces && !st.noEn) for (i = 0; i < L.maces.length; i++) { var mc = L.maces[i], balls = maceBalls(mc, f); for (var bi = 0; bi < balls.length; bi++) { var bb = balls[bi]; if (bb.x + bb.r > p.x && bb.x - bb.r < p.x + p.w && bb.y + bb.r > p.y && bb.y - bb.r < p.y + p.h) hurt(st, 'mace'); } }
+  // falling below the level bottom kills; the countdown timer kills at 0
   var RW = L.rows || ROWS; if (p.y > RW * TS + 6) { p.dead = true; p.why = 'pit'; ev(st, 'die', p.x, RW * TS); }
   if (--st.t <= 0 && !p.dead) { p.dead = true; p.why = 'time'; ev(st, 'die', p.x, p.y); }
+  // goal: a castle (arena) ends when its boss is down; others need the flag pole / end cannon / exit button, and also all bosses defeated.
+  // Hitting the flag at the moving marker's height (ty) gives the bonus and sets st.tape
   var inGoal = L.goalRect ? (p.x < L.goalRect.x + L.goalRect.w && p.x + p.w > L.goalRect.x && p.y < L.goalRect.y + L.goalRect.h && p.y + p.h > L.goalRect.y) : p.x + p.w >= L.goalX;
   if (!inGoal && L.exitBtn && !L.vertical && p.x > L.goalRect.x + L.goalRect.w + 6) inGoal = true;   // hopped clean over the button: the stage still ends
   if (!p.dead && !p.won && L.arena && st.boss <= 0) { p.won = true; st.shot = f; ev(st, 'goal', p.x, p.y, 0); }   // a castle ends the moment its boss falls: no flag
@@ -608,10 +683,12 @@ function step(st, inp) {
   else if (!p.dead && st.boss <= 0 && inGoal && !L.arena) {
     p.won = true; var ty = L.poleY - 18 - (0.5 + 0.5 * Math.sin(f * 0.045)) * 90, hit = Math.abs(ty - (p.y + p.h / 2)) < 13; if (hit) { st.score += 3000; st.tape = 1; }
     ev(st, 'goal', L.goalX, p.y, hit ? 1 : 0); }
+  // passing the checkpoint x sets the flag used by respawn (newState with o.cp)
   if (!st.cp && p.x >= L.cp.x) st.cp = 1;
   st.f = f + 1;
 }
 
+// Public API for the game, planner, validator and tests.
 root.PF = { setMini: setMini, maceBalls: maceBalls, fireOn: fireOn, stageDone: stageDone, movOn: movOn, isW: isW, AIRMAX: AIRMAX, TS: TS, ROWS: ROWS, VW: VW, VH: VH, T: T, SOL: SOL, IN: IN, P: P, E: E, MV_PERIOD: MV_PERIOD, rng: rng, hash: hash, tri: tri, newState: newState, clone: clone, step: step, tileAt: tileAt, boxHit: boxHit, movPos: movPos,
   setPw: setPw, slopeY: slopeY, hurt: hurt };
 })(typeof window !== 'undefined' ? window : globalThis);

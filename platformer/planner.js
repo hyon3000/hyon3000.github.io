@@ -1,10 +1,17 @@
 // Shape World - look-ahead planner used by Auto Play (F3) and Hint (F4).
 // It clones the game's own deterministic simulation and tries input sequences made of the four keys a human has
 // (left / right / run / jump). The best plan's first few frames are executed through the normal input path.
+// Two planners live here, both built on the game's own deterministic sim (PF.clone / PF.step):
+//   makePlanner   = reactive look-ahead: scores a fixed set of scripted key sequences (CANDS) by simulating them H frames ahead.
+//   makeNavigator = route-aware wrapper: follows a generator plan or a PF.searchIter stage search, and falls back to the reactive planner
+//                   while airborne, in boss arenas, or when no plan is found. PFPlanner.make = navigator, PFPlanner.plain = reactive only.
 (function (root) {
 'use strict';
 var IN = PF.IN, N = 0, R = IN.R, RR = IN.R | IN.RUN, Lf = IN.L;
 var IN_R = PF.IN.R, IN_L = PF.IN.L, H = 64, REPLAN = 8;
+// Candidate input scripts. Fields: a = key mask for the first s frames, b = mask afterwards, s = switch frame,
+// // h = frames of Jump held starting at s + w (h = -1: never jump, 99 = hold to the end), t / c = after frame t (counted from s) switch to mask c,
+// // l = frames of walking Left before the script starts, w = extra wait after s before the jump begins. Keys: RR = right+run, R, N = none, Lf = left.
 var CANDS = (function () {
   var c = [], dirs = [RR, R, N], s, a, b, h;
   [0, 8, 20, 40].forEach(function (s) { dirs.forEach(function (a) { dirs.forEach(function (b) { if (s === 0 && a !== b) return; c.push({ a: a, b: b, s: s, h: -1 }); }); }); });
@@ -14,22 +21,31 @@ var CANDS = (function () {
   [20, 40].forEach(function (l) { [12, 22, 32].forEach(function (s) { [99, 12].forEach(function (h) { c.push({ a: RR, b: RR, s: s, h: h, l: l }); }); }); c.push({ a: RR, b: RR, s: 30, h: -1, l: l }); });
   return c;
 })();
+// Extra candidates only used when a boss is near: every jump timing 1..40 for each direction, plus a run-up then stand still (b = N) with a delayed jump (w).
 var BOSS_EXTRA = (function () { var c = []; [RR, R, N, Lf].forEach(function (d) { for (var s = 1; s <= 40; s++) [99, 12].forEach(function (h) { c.push({ a: d, b: d, s: s, h: h }); }); });
   [RR, Lf | IN.RUN].forEach(function (a) { [4, 8, 14, 20].forEach(function (s) { [6, 12, 18, 24, 30, 38].forEach(function (w) { [99, 12].forEach(function (h) { c.push({ a: a, b: N, s: s, w: w, h: h }); }); }); }); });
   return c; })();
+// Extra candidates that start by going left; only added on puzzle levels where the route may need backtracking.
 var LEFT_EXTRA = (function () { var c = []; var LL = Lf | IN.RUN; [Lf, LL].forEach(function (a) { [a, N].forEach(function (b) { [0, 4, 8, 12, 16, 20, 26, 32].forEach(function (s) { c.push({ a: a, b: b, s: s, h: -1 }); [99, 12].forEach(function (h) { c.push({ a: a, b: b, s: s, h: h }); }); }); }); }); return c; })();
+// True when a living boss (enemy type 8) is within 260 px of the hero: switches to the longer horizon and the boss-fight scoring.
 function bossNear(st) { if (st.boss <= 0) return false; for (var i = 0; i < st.en.length; i++) { var e = st.en[i]; if (e.t === 8 && e.alive && Math.abs(e.x - st.p.x) < 260) return true; } return false; }
+// Key mask of candidate c at frame k: optional left lead-in (l), then a until s, then b (or c after t), with Jump OR-ed in during the hold window.
 function inputAt(c, k) { if (c.l) { if (k < c.l) return Lf; k -= c.l; } var m = k < c.s ? c.a : (c.t !== undefined && k >= c.s + c.t ? c.c : c.b); var s0 = c.s + (c.w || 0); if (c.h > 0 && k >= s0 && k < s0 + c.h) m |= IN.J; return m; }
 
+// True if a landing spot (solid, platform, liquid/safe tile or a mover) exists below the hero; false means a free fall into a pit.
 function groundBelow(st) {
   var p = st.p, c0 = Math.floor(p.x / PF.TS), c1 = Math.floor((p.x + p.w - 1e-4) / PF.TS), r0 = Math.floor((p.y + p.h) / PF.TS);
   for (var c = c0; c <= c1; c++) for (var r = r0; r < (st.L.rows || PF.ROWS); r++) { var t = PF.tileAt(st, c, r); if (PF.SOL[t] || t === 12 || t === 13 || t === 9 || t === 7) return true; }
   var L = st.L; for (var i = 0; i < L.movers.length; i++) { var m = L.movers[i], mq = PF.movPos(st, i, st.f); if (p.x + p.w > mq.x - 20 && p.x < mq.x + m.w + 20 && p.y + p.h <= mq.y + 30) return true; }
   return false;
 }
+// Score candidate c: clone the state, replay the script for H frames (90 near a boss) and rate the end state; higher is better.
+// // Death returns a large negative that prefers dying later; reaching the flag returns a large positive that prefers winning sooner.
+// // traj (optional) collects the predicted path and the first landing index for the hint overlay.
 function evaluate(st0, c, traj) {
   var HH = st0.boss > 0 && bossNear(st0) ? 90 : H;
   st0.share = true; var st = PF.clone(st0); st0.share = false; var p = st.p, big0 = st0.p.big, k, sc, lastGround = p.ground, land = -1, jumped = false;
+  // Simulate frame by frame; an early death or win ends the rollout immediately.
   for (k = 0; k < HH; k++) {
     PF.step(st, inputAt(c, k));
     if (traj && (k & 1) === 0) traj.push({ x: p.x + p.w / 2, y: p.y + p.h });
@@ -37,61 +53,89 @@ function evaluate(st0, c, traj) {
     if (p.dead) return { sc: -1e5 + k * 30, dead: true, k: k };
     if (p.won) return { sc: 1e6 - k, won: true, k: k };
   }
+  // Puzzle levels outside boss fights: reward crumbs (waypoints) collected and stages finished, and pull toward the next two crumbs (weights 2.5 and 0.5, y counted 1.5x); small penalty for being airborne.
   if (st0.L.puzzle && st0.L.crumbs && !(st0.boss > 0 && bossNear(st0))) { var cbs = st.L.crumbs, tg = cbs[Math.min(cbs.length - 1, st.cr + 1)], tg2 = cbs[Math.min(cbs.length - 1, st.cr + 2)]; sc = st.cr * 500 + (st.stage - st0.stage) * 3000 - (Math.abs(p.x + 6 - tg[0]) + 1.5 * Math.abs(p.y + 7 - tg[1])) * 2.5 - (Math.abs(p.x + 6 - tg2[0]) + 1.5 * Math.abs(p.y + 7 - tg2[1])) * 0.5 + (st.score - st0.score) * 0.1; if (!p.ground) sc -= 15; return { sc: sc, dead: false, land: land, k: k }; }
+  // Find the nearest living boss (index bi); only the boss branches below use it.
   var bi = -1, bd = 1e9; if (st0.boss > 0) { for (var q = 0; q < st0.en.length; q++) { var be = st0.en[q]; if (be.t === 8 && be.alive) { var dd = Math.abs(p.x - be.x); if (dd < bd) { bd = dd; bi = q; } } } }
+  // Armoured boss: only kicked/thrown shells hurt it, so score boss HP lost (and a kill bonus) plus guidance toward getting a shell to the boss.
   if (bi >= 0 && st0.en[bi].imm && st0.en[bi].immKind === 'shell') {   // armoured boss: pick up a shell, carry it at the boss and throw it while the boss stands on the ground
     var b1 = st.en[bi], b0 = st0.en[bi], bx = b1.x + b1.w / 2, hx1 = p.x + 6, nd = 1e9, rd = 1e9, wd = 1e9, q2;
     sc = (b0.hp - b1.hp) * 4000 + (st.score - st0.score) * 0.25; if (!b1.alive) sc += 6000;
+    // Distances to the nearest rolling shell (rd, to the boss), idle uncarried shell (nd, to the hero) and walking cube-bug (wd, to the hero).
     for (q2 = 0; q2 < st.en.length; q2++) { var se = st.en[q2]; if (!se.alive || se.t !== 3 || se.x < b1.mn - 40 || (se.carried && p.carry < 0)) continue; if (se.sh === 2 && Math.abs(se.vx || 0) > 1) rd = Math.min(rd, Math.abs(se.x + se.w / 2 - bx)); else if (se.sh === 1 && !se.carried) nd = Math.min(nd, Math.abs(se.x + se.w / 2 - hx1)); else if (se.sh === 0) wd = Math.min(wd, Math.abs(se.x + se.w / 2 - hx1)); }
+    // Guidance priority: carrying a shell (bonus, closer to and facing the boss) > walk to an idle shell > stomp a bug to make one > approach the boss; rolling shells are drawn toward the boss.
     if (p.carry >= 0) sc += 300 - Math.abs(bx - hx1) * 0.8 + (p.face === (bx > hx1 ? 1 : -1) ? 40 : 0);
     else if (nd < 1e9) sc -= nd * 1.2 + (rd < 1e9 ? 0 : 60);
     else if (wd < 1e9) sc -= wd * 1.0 + 30;   // no shell yet: stomp a walking cube-bug to make one
     else sc -= Math.abs(bx - hx1) * 0.6;
     if (rd < 1e9) sc -= rd * 0.6;
   }
+  // Normal boss: stay near it (x distance * 3), big reward per HP removed by stomping, and a bonus for the kill.
   else if (bi >= 0) { var b1 = st.en[bi], b0 = st0.en[bi]; sc = -Math.abs(p.x + 6 - (b1.x + b1.w / 2)) * 3 + (b0.hp - b1.hp) * 900 + (st.score - st0.score) * 0.25; if (!b1.alive) sc += 3000; }
+  // No boss: plain progress, i.e. get as far right as possible, plus a little for score gained (coins, stomps).
   else sc = p.x * 3 + (st.score - st0.score) * 0.25;
+  // Penalty for losing the power-up (shrinking) during the rollout.
   if (big0 && !p.big) sc -= 400;
+  // Ice-block freeze: the longer it lasts the worse.
   if (p.frz > 0) sc -= 250 + p.frz * 3;   // frozen in an ice block: a helpless stretch
+  // Hazard penalty for ending under a telegraphed strike zone (smaller while it is still warming up).
   if (st.hz.length) for (var hq = 0; hq < st.hz.length; hq++) { var ho = st.hz[hq]; if (Math.abs(p.x + p.w / 2 - ho.x) < 26 && p.y < ho.gy + 4) sc -= (ho.wt > 0 ? 90 : 160); }   // standing under a marked strike zone
+  // Airborne at the end is slightly bad; airborne with nothing below (see groundBelow) is a near-death.
   if (!p.ground) { sc -= 25; if (!groundBelow(st)) sc -= 3000; }
+  // Drowning: reward gaining air when it is low to begin with, and punish ending with less than 200 air.
   if (st0.p.air < 700) sc += (p.air - st0.p.air) * 0.3; if (p.air < 200) sc -= (200 - p.air) * 3;
+  // Tie-breakers: prefer scripts that jump late and short, and avoid walking left unless it is needed.
   if (c.h > 0) sc -= 2 + c.s * 0.4;
   if (c.a === Lf || c.l) sc -= 30;
   return { sc: sc, dead: false, land: land, k: k };
 }
+// Reactive planner. decide(st) returns one key mask per frame from a short script (SL frames) re-planned when the script ends.
 function makePlanner() {
   var SL = 8;
   var pl = { script: null, i: 0, bestX: 0, bestF: 0, rnd: PF.rng(12345), explore: 0, last: null, stats: { plans: 0, ms: 0, sync: 0 }, pend: null, next: null };
   var now = function () { return typeof performance !== 'undefined' ? performance.now() : 0; };
+  // Forget the current script, the pre-computed next search and the stall / explore timers (new level or restart).
   pl.reset = function () { pl.script = null; pl.i = 0; pl.bestX = 0; pl.bestF = 0; pl.explore = 0; pl.pend = null; pl.next = null; };
+  // A resumable search over the candidate list; noise adds random jitter to scores, rising marks a jump already in flight.
   function newSearch(st, noise) { return { st: st, i: 0, best: null, bi: -1, noise: noise, rising: st.p.jheld && !st.p.ground && st.p.vy < 0, list: (bossNear(st) ? CANDS.concat(BOSS_EXTRA) : CANDS).concat(st.L.puzzle ? LEFT_EXTRA : []) }; }
+  // Evaluate up to n more candidates of search ps and keep the best; returns the result once the whole list is done, else null. A rising jump keeps its small bonus for jump-now candidates.
   function work(ps, n) {
     var end = Math.min(ps.list.length, ps.i + n);
     for (; ps.i < end; ps.i++) { var c = ps.list[ps.i], r = evaluate(ps.st, c, null); if (ps.rising && c.s === 0 && c.h > 0 && !c.l) r.sc += 8; var sc = r.sc + (ps.noise ? pl.rnd() * ps.noise : 0); if (ps.best === null || sc > ps.best.sc) { ps.best = r; ps.best.sc = sc; ps.bi = ps.i; } }
     if (ps.i >= ps.list.length) { ps.best.cand = ps.list[ps.bi]; return ps.best; } return null;
   }
+  // Synchronous full search (also used by the hint).
   pl.search = function (st, noise) { var ps = newSearch(st, noise); return work(ps, ps.list.length); };
+  // Turn the winning candidate into the next SL concrete key masks (12 for a left lead-in).
   function makeScript(best) { var len = best.cand.l ? 12 : SL, sc = []; for (var k = 0; k < len; k++) sc.push(inputAt(best.cand, k)); return sc; }
+  // Simulate the script to get the state expected when it ends; the next search is prepared on it.
   function predict(st, script) { st.share = true; var q = PF.clone(st); st.share = false; for (var k = 0; k < script.length; k++) PF.step(q, script[k]); return q; }
+  // Is the real state equal to the predicted one (position, speed, death ...)? Then the pre-computed search can be reused.
   function same(a, b) { return Math.abs(a.p.x - b.p.x) < 0.01 && Math.abs(a.p.y - b.p.y) < 0.01 && a.p.dead === b.p.dead && Math.abs(a.p.vx - b.p.vx) < 0.01 && Math.abs(a.p.vy - b.p.vy) < 0.01; }
+  // Per-frame entry. Execute the script; when it is used up, plan the next one.
   pl.decide = function (st) {
     var p = st.p, t0 = now();
+    // Track the furthest x reached and when, to detect stalls.
     if (p.x > pl.bestX + 4) { pl.bestX = p.x; pl.bestF = st.f; }
     if (!pl.script || pl.i >= pl.script.length) {
       var best = null;
+      // Boss stalemate breaker: remember total boss HP; if it has not changed for 240 frames while fighting, run noisy searches (bossNoise) for a while.
       var hps = 0; if (st.boss > 0) for (var hi = 0; hi < st.en.length; hi++) if (st.en[hi].t === 8 && st.en[hi].alive) hps += st.en[hi].hp;
       if (hps !== pl.hps) { pl.hps = hps; pl.hpF = st.f; }
       if (st.boss > 0 && bossNear(st) && st.f - (pl.hpF || 0) > 240) { pl.bossNoise = 40; pl.hpF = st.f - 120; }   // fight stalemate (standing still while the boss circles): try something random for a while
       if (pl.bossNoise > 0) pl.next = null;
+      // Fast path: the state matches the prediction, so the search done during the previous script is reused.
       if (pl.next && pl.next.pred && same(pl.next.pred, st)) { var ps = pl.next.ps; best = ps.done || work(ps, ps.list.length); }
       else {
+        // Stuck for 300 frames without progress: explore mode (small random score noise) for 40 frames. Otherwise search now (sync).
         if (st.f - pl.bestF > 300) { pl.explore = 40; pl.bestF = st.f - 100; }
         best = pl.search(st, pl.bossNoise > 0 ? 400 : (pl.explore > 0 ? 25 : 0)); if (pl.bossNoise > 0) pl.bossNoise -= SL; if (pl.explore > 0) pl.explore -= SL; pl.stats.sync++; }
       pl.next = null; pl.stats.plans++;
       pl.last = best; pl.script = makeScript(best); pl.i = 0;
+      // Predicted next search: start preparing the plan for where this script will end.
       var pred = predict(st, pl.script); pl.next = { pred: pred, ps: newSearch(pred, pl.explore > 0 ? 25 : 0) };
     }
+    // Spread the next search over the frames of the current script so each frame only pays a slice of the cost.
     if (pl.next && !pl.next.ps.done) { var per = Math.ceil(pl.next.ps.list.length / (pl.script.length - 1)); var r = work(pl.next.ps, per); if (r) pl.next.ps.done = r; }
     pl.stats.ms += now() - t0;
     return pl.script[pl.i++];
@@ -100,6 +144,7 @@ function makePlanner() {
 }
 
 // ---- hint: a short text + the predicted path / landing spot / hazard
+// Nearest hazard ahead of the hero (enemy, spike, pit, wall/ledge) as {kind, x, y, dx}; picks the hint text.
 function nearestHazard(st) {
   var p = st.p, L = st.L, TS = PF.TS, best = null, px = p.x + p.w / 2, d;
   function cons(kind, x, y, dx) { if (dx >= -4 && (best === null || dx < best.dx)) best = { kind: kind, x: x, y: y, dx: dx }; }
@@ -115,6 +160,7 @@ function nearestHazard(st) {
   }
   return best;
 }
+// Hint texts per key: [Korean, English].
 var MSG = {
   stomp: ['앞의 적을 밟을 수 있어요: 위에서 점프로 내려찍으세요', 'Stomp the enemy ahead: land on top of it'],
   blob: ['앞의 삼각 크롤러를 점프로 밟거나 넘어가세요', 'Jump on (or over) the crawler ahead'],
@@ -153,6 +199,7 @@ var MSG = {
   go: ['오른쪽으로 계속 가세요', 'Keep going right'],
   jump: ['지금 점프하세요', 'Jump now']
 };
+// Hint: run the planner, re-evaluate its choice to get the path, and choose a message from the plan and the nearest hazard.
 function makeHint(st, pl) {
   var best = pl.search(st, 0), traj = [], c = best.cand;
   var r = evaluate(st, c, traj), hz = nearestHazard(st), key = 'go', jumpAt = c.h > 0 ? c.s : -1;
@@ -160,10 +207,13 @@ function makeHint(st, pl) {
   else if (jumpAt < 0 && (c.a === N || (c.s > 0 && c.b === N)) && st.p.ground) key = 'wait';
   else if (hz && hz.dx < 120 && (hz.kind === 'pit' || hz.kind === 'mover')) key = 'wait';
   if (key === 'go' && hz && hz.dx < 170 && ['crush', 'ghost', 'boss', 'plant', 'bullet', 'beetle', 'spiky', 'spike', 'fish', 'mine', 'whale', 'jelly', 'clam', 'swoop', 'flock', 'balloon', 'shooter', 'bird', 'spark'].indexOf(hz.kind) >= 0) key = hz.kind;
+  // Water and wind override the generic go / wait messages (low air, swimming, wind zone within 40 px).
   var pp = st.p, pcx = pp.x + pp.w / 2, inWater = PF.isW(PF.tileAt(st, Math.floor(pcx / PF.TS), Math.floor((pp.y + pp.h / 2) / PF.TS)));
   if (key === 'go' || key === 'wait') { if (pp.air < 330 && inWater) key = 'air'; else if (inWater) key = 'swim'; else if (st.L.winds) for (var wi = 0; wi < st.L.winds.length; wi++) { var wz = st.L.winds[wi]; if (pcx > wz.x0 - 40 && pcx < wz.x1 + 40 && pp.y > wz.y0 - 40 && pp.y < wz.y1 + 40) { key = 'wind'; break; } } }
+  // Puzzle levels: point at the current route waypoint and use its stage-specific message (key, door, switch, teleport ...).
   var way = null;
   if (st.L.puzzle && st.L.route) { var rg = st.L.route[st.stage]; if (rg) { way = { x: rg.x, y: rg.y === null ? st.p.y : rg.y }; if (key === 'go' || key === 'jump' || key === 'wait') key = 'r' + rg.k; } }
+  // The predicted landing spot (first touchdown of the best plan), for the overlay.
   var land = null; if (r.land >= 0 && traj[r.land]) land = traj[r.land];
   
   var extra = (c.a & IN.RUN) || (c.b & IN.RUN) ? [' (달리기 유지)', ' (hold Run)'] : ['', ''];
@@ -174,10 +224,12 @@ function makeHint(st, pl) {
 // ---- navigator: the generator's own route search (PF.searchStage, a best-first search over jump/walk macros on the real simulation, enemies included)
 // plans each route stage (key, door, teleport, switch, exit ...) from the live state; the look-ahead planner only drives while airborne or when no plan is found
 // the plan may only end where the hero can stand still afterwards (an 'at' waypoint reached while sliding into a spike is a dead end)
+// True if the hero can stand still for 24 frames without dying and ends on the ground.
 function settles(s) { var q = PF.clone(s); for (var k = 0; k < 24; k++) { PF.step(q, 0); if (q.p.dead) return false; } return q.p.ground; }
 
 // armoured boss (only kicked shells hurt it): stomp a beetle, stand LEFT of the shell and walk into it so it rolls at the boss; the look-ahead planner dodges when the boss is close
 function best0(st, boss) { for (var i = 0; i < st.en.length; i++) { var e = st.en[i]; if (e.alive && e.t === 3 && e.x >= boss.x - 520 && e.x <= boss.x + 200) return e; } return null; }
+// Shell-boss controller. Currently it hands the whole fight to the look-ahead planner (shell-aware score in evaluate); the code below the first return is the older scripted approach and is unreachable.
 function shellBossMask(st, boss, fb) {   // + hop over ledges / cannons in the way
   return fb.decide(st);   // in the arena the look-ahead planner (shell-aware score) does the fight
   var m = shellBossMask0(st, boss, fb), p = st.p;
@@ -191,6 +243,7 @@ function shellBossMask(st, boss, fb) {   // + hop over ledges / cannons in the w
   }
   return m;
 }
+// Scripted shell-boss tactic: carry a shell at the boss, dodge rolling shells, pick up idle shells, stomp walking bugs to make shells.
 function shellBossMask0(st, boss, fb) {
   var IN = PF.IN, p = st.p, hx = p.x + p.w / 2, bd = boss.x + boss.w / 2 - hx, best = null, bs = 1e9, i, e, rolling = null;
   for (i = 0; i < st.en.length; i++) { e = st.en[i]; if (!e.alive || e.t !== 3 || e.x < boss.x - 520 || e.x > boss.x + 200) continue; if (e.sh === 2 && Math.abs(e.x - hx) < 240 && Math.abs(e.vx || 0) > 1) rolling = e; var d = Math.abs(e.x + e.w / 2 - hx) + (e.sh === 1 ? 0 : 30); if (d < bs) { bs = d; best = e; } }
@@ -213,39 +266,53 @@ function shellBossMask0(st, boss, fb) {
   if (p.ground && Math.abs(dx) < 22) return IN.J | (dx > 0 ? IN.R : IN.L);
   return dx > 0 ? IN.R : IN.L;
 }
+// Navigator: nv.decide(st, budgetMs) returns a key mask for this frame, or null while a budgeted search is still thinking.
 function makeNavigator() {
   var fb = makePlanner(), nv = { fb: fb, seq: null, i: 0, stage: -1, wait: 0, st: { plans: 0, fails: 0, ms: 0 } };
+  // Reset the reactive planner and every cached plan / search job.
   nv.reset = function () { fb.reset(); nv.planBad = false; nv.job = null; nv.busy = false; nv.seq = null; nv.i = 0; nv.stage = -1; nv.wait = 0; };
   // decide(st, budgetMs): with a budget the search is spread over several calls and null is returned while it is still thinking (the game does not step then)
   nv.job = null; nv.busy = false;
+  // Priority order: generator plan replay, mushroom pickup, shell boss, boss arena (reactive), cached macro sequence, then a new stage search.
   nv.decide = function (st, budgetMs) {
     var L = st.L;
     // the generator's own plan (trajectory-first stages): follow the recorded inputs while the hero is exactly where the plan expects him; otherwise the normal search takes over
+    // Follow the recorded inputs while the hero is exactly on the recorded path; one deviation abandons the plan for good (planBad).
     if (L.plan && !nv.planBad && st.f < L.plan.length) {
       var ex = L.planPos[st.f];
       if (ex && Math.abs(ex[0] - st.p.x) < 0.6 && Math.abs(ex[1] - st.p.y) < 0.6) return L.plan[st.f];
       nv.planBad = true;
     }
+    // Mushroom attraction: a shrunken hero walks to a nearby mushroom pickup (hopping obstacles, running when far) before a boss fight.
     if (st.boss > 0 && st.p.mini) for (var mi = 0; mi < st.it.length; mi++) { var mu = st.it[mi]; if (mu.alive && mu.k === 0 && mu.x > st.p.x - 90 && mu.x < st.p.x + 110 && Math.abs(mu.y - st.p.y) < 24 && st.p.ground) { nv.seq = null; nv.job = null; var mdx = mu.x + 6 - (st.p.x + st.p.w / 2); if (Math.abs(mdx) < 2) return 0; var mdir = mdx > 0 ? PF.IN.R : PF.IN.L, mc = Math.floor((mdx > 0 ? st.p.x + st.p.w + 2 : st.p.x - 2) / PF.TS), mr = Math.floor((st.p.y + st.p.h - 4) / PF.TS), mt = PF.tileAt(st, mc, mr); return mdir | (PF.SOL[mt] || PF.tileAt(st, mc, mr - 1) === 0 && PF.SOL[PF.tileAt(st, mc, mr + 1)] && false ? PF.IN.J : 0) | (Math.abs(mdx) > 24 ? PF.IN.RUN : 0); } }   // a shrunken hero must grow back before an arena fight: the mushroom at the entrance
+    // No route data: only the reactive planner can drive.
     if (!L.route || !PF.searchIter) return fb.decide(st);
+    // Find an armoured boss that is close enough (or inside the arena) to switch to the shell-boss controller.
     var shellBoss = null;
     if (st.boss > 0) for (var bi = 0; bi < st.en.length; bi++) { var be = st.en[bi]; if (be.t === 8 && be.alive && be.imm && be.immKind === 'shell' && (L.arena ? st.p.x >= L.arena.c0 * PF.TS - 30 : be.x - st.p.x < 340) && st.p.x - be.x < 300) shellBoss = be; }
     nv.sb = !!shellBoss;   // armoured boss: from the arena entrance on
     if (shellBoss) return shellBossMask(st, shellBoss, fb);   // armoured boss: only kicked shells hurt it
+    // Boss arenas (and boss-rush levels): drop any macro plan, the reactive planner handles the fight.
     if (st.boss > 0 && (bossNear(st) || nv.job === null && L.kind === 'bossrush')) { nv.seq = null; nv.job = null; return fb.decide(st); }   // boss arenas: the reactive look-ahead planner dodges and stomps   // boss arenas: the reactive look-ahead planner dodges and stomps
+    // Keep playing the macro sequence found for the current stage.
     if (nv.seq && nv.i < nv.seq.length && nv.stage === st.stage) return nv.seq[nv.i++];
     nv.seq = null;
+    // Start a new stage search; while waiting (nv.wait) or airborne the reactive planner drives instead.
     if (!nv.job) {
       if (nv.wait > 0 || !st.p.ground) { if (nv.wait > 0) nv.wait--; return fb.decide(st); }
+      // Current goal waypoint g (the last one repeats); target x and y (y may be null = any height).
       var g = L.route[Math.min(st.stage, L.route.length - 1)]; if (g.k === 'goal' && L.arena && st.boss > 0 && st.p.x < L.arena.c0 * PF.TS - 40) g = { k: 'xge', x: L.arena.c0 * PF.TS - 24, y: g.y, door: 1 };   // long castle: first reach the arena door, the fight itself is the reactive planner's job
       var tx = g.x === undefined ? L.goalX : g.x, ty = g.y === undefined ? null : g.y;
+      // Stage-done tests: strict also requires no poison and a safe stop (settles) unless it is the goal or a door; loose drops the safe-stop rule.
       var strict = function (s) { return PF.stageDone(s, g) && !(s.p.pois > 0) && (g.k === 'goal' || g.door || settles(s)); }, loose = function (s) { return PF.stageDone(s, g) && !(s.p.pois > 0); };
       var c2 = PF.clone(st); c2.en = []; c2.noEn = true;
       // tiers: with enemies and a safe stop, with a smaller budget, without the safe stop; last resort: as if the enemies were not there (a hit beats standing still)
+      // Search tiers, tried in order until one finds a plan: [state, done-test, node budget].
       var tiers = [[PF.clone(st), strict, 3000], [PF.clone(st), strict, 8000], [PF.clone(st), loose, 3000], [c2, strict, 4000]];
       if (L.route.length <= 2) tiers = [[PF.clone(st), strict, 1500]];   // plain run-to-the-flag stage: if the search is not quick, the reactive planner drives for a while
       nv.job = { stage: st.stage, ti: 0, it: null, tiers: tiers, tx: tx, ty: ty, plain: L.route.length <= 2 };
     }
+    // Run the current tier in slices; with a time budget return null (busy) when it is used up, so the game waits; on failure move to the next tier.
     var jb = nv.job, t0 = Date.now(), res;
     for (;;) {
       if (!jb.it) { var tr = jb.tiers[jb.ti]; jb.it = PF.searchIter(tr[0], tr[1], jb.tx, jb.ty, tr[2]); }
@@ -255,12 +322,16 @@ function makeNavigator() {
       jb.it = null;
     }
     nv.st.ms += Date.now() - t0; nv.busy = false; nv.job = null;
+    // Plan found: store the macro sequence and play its first key.
     if (res && res.seq.length) { nv.st.plans++; nv.seq = res.seq; nv.i = 0; nv.stage = st.stage; return nv.seq[nv.i++]; }
+    // Plain stage failed: let the reactive planner drive for 60 frames, then retry.
     if (jb.plain) { nv.st.fails++; nv.wait = 60; return fb.decide(st); }
     nv.st.fails++; nv.fl = (nv.fl || 0) + 1; if (nv.fl % 3 !== 0) { nv.seq = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]; nv.i = 0; nv.stage = st.stage; return 0; }   // brake and search again from a standing start; every third failure lets the look-ahead planner move
+    // Fallback after failure: reactive planner for 30 frames, then try again.
     nv.wait = 30; return fb.decide(st);
   };
   return nv;
 }
+// Public API.
 root.PFPlanner = { make: makeNavigator, plain: makePlanner, hint: makeHint, CANDS: CANDS, LEFT_EXTRA: LEFT_EXTRA, H: H, evaluate: evaluate, inputAt: inputAt };
 })(typeof window !== 'undefined' ? window : globalThis);

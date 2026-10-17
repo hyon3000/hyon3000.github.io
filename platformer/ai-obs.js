@@ -1,18 +1,28 @@
 // Shape World - observation encoder and tiny MLP policy runner for the reinforcement-learning auto player.
 // The policy outputs the same four human keys (left / right / run / jump). Weights come from ai-model.js (window.SHAPE_AI).
+// Observation layout (D floats): hero state, a 13x9 tile window around the hero (4 channels per cell), nearest enemies, enemy projectiles, items, coins, route guidance, ray features, wind/current.
+// // All values are clamped and rounded so the training and browser sides agree exactly.
 (function (root) {
 'use strict';
 var TS = PF.TS, ROWS = PF.ROWS, SOL = PF.SOL, IN = PF.IN;
+// Window size in cells (NC columns x NR rows), its offset from the hero cell (C0, R0) and the slot counts for enemies, projectiles, items and coins.
 var NC = 13, NR = 9, C0 = -3, R0 = -5, NE = 6, NP = 3, NI = 2, NK = 3;
+// Total observation length; must match the trained network's input size.
 var D = 16 + NC * NR * 4 + NE * 15 + NP * 4 + NI * 3 + NK * 2 + 14 + 4 + 12;
+// Enemy type -> coarse group (one-hot of 8 in the observation).
 var GROUP = { 0: 0, 3: 0, 1: 1, 11: 1, 13: 1, 17: 1, 20: 1, 12: 1, 2: 2, 9: 2, 10: 2, 15: 2, 16: 2, 19: 2, 4: 3, 18: 3, 5: 4, 6: 5, 7: 6, 14: 6, 8: 7 };
+// Route stage kind -> one-hot index.
 var STAGEK = { key: 0, door: 1, sw: 2, tele: 3, xge: 4, goal: 5 };
+// Clamp v to [-m, m].
 function cl(v, m) { return v > m ? m : v < -m ? -m : v; }
+// Fill out[] with the observation for the current state and return the number of values written.
 function build(st, out) {
   var p = st.p, L = st.L, RR = L.rows || ROWS, i, j, k, o = 0, pcx = p.x + p.w / 2, pcy = p.y + p.h / 2, w = st.L.w;
   var cell = PF.tileAt(st, Math.floor(pcx / TS), Math.floor(pcy / TS));
+  // Hero block: velocity, grounded / coyote / jump held, power, in-water, air left, star, mount, climb, facing, ...
   out[o++] = cl(p.vx / 3, 1.2); out[o++] = cl(p.vy / 8, 1.2); out[o++] = p.ground ? 1 : 0; out[o++] = p.coy > 0 ? 1 : 0; out[o++] = p.jheld ? 1 : 0; out[o++] = p.pw / 3;
   out[o++] = PF.isW(cell) ? 1 : 0; out[o++] = p.air / PF.AIRMAX; out[o++] = p.star > 0 ? 1 : 0; out[o++] = p.mount ? 1 : 0; out[o++] = p.climb ? 1 : 0; out[o++] = p.face; out[o++] = p.pm / PF.P.PMAX; out[o++] = p.inv > 0 ? 1 : 0; out[o++] = p.tcd > 0 ? 1 : 0; out[o++] = p.y / 224;
+  // Tile window: per cell solid, hazard, flow/current and a misc surface code; the window is centred on the hero.
   var hc = Math.floor(pcx / TS), hr = Math.floor(pcy / TS), base = o;
   for (i = 0; i < NC; i++) for (j = 0; j < NR; j++) {
     var c = hc + C0 + i, r = hr + R0 + j, eff = PF.tileAt(st, c, r), raw = (c >= 0 && c < w && r >= 0 && r < RR) ? L.tiles[c * RR + r] : (c < 0 || c >= w ? 1 : 0);
@@ -21,6 +31,7 @@ function build(st, out) {
     switch (eff) { case 12: ms = 0.5; break; case 13: ms = -0.5; break; case 7: ms = 0.9; break; case 8: ms = 0.8; break; case 10: ms = -0.35; break; case 11: ms = 0.35; break; case 27: ms = 0.7; break; case 28: ms = 0.2; break; case 31: ms = 0.6; break; case 32: ms = 0.65; break; case 19: ms = 0.55; break; case 30: ms = 0.4; break; case 25: ms = 0.45; break; case 26: ms = 0.3; break; case 3: case 4: case 20: case 21: ms = 0.25; break; case 2: ms = 0.15; break; case 18: ms = 0.3; break; }
     var q = base + (i * NR + j) * 4; out[q] = solid; out[q + 1] = haz; out[q + 2] = fl; out[q + 3] = ms;
   }
+  // Active moving platforms are painted into the window as solid cells.
   for (k = 0; k < L.movers.length; k++) { if (!PF.movOn(st, k, st.f)) continue; var mq = PF.movPos(st, k, st.f), mw = L.movers[k].w, mr = Math.floor(mq.y / TS) - hr - R0; if (mr < 0 || mr >= NR) continue;
     for (var cx = Math.floor(mq.x / TS); cx <= Math.floor((mq.x + mw) / TS); cx++) { var ci = cx - hc - C0; if (ci >= 0 && ci < NC) { var qq = base + (ci * NR + mr) * 4; if (out[qq] < 0.7) out[qq] = 0.7; } } }
   o = base + NC * NR * 4;
@@ -34,9 +45,12 @@ function build(st, out) {
     out[o++] = cl((en.x + en.w / 2 - pcx) / 150, 1.2); out[o++] = cl((en.y + en.h / 2 - pcy) / 100, 1.2); out[o++] = en.w / 48; out[o++] = en.h / 48;
     for (j = 0; j < 8; j++) out[o++] = j === g ? 1 : 0; out[o++] = en.t === 3 && en.sh ? (en.sh === 2 ? -1 : 0.5) : (en.dir || 0); out[o++] = cl((en.dvx || 0) / 2, 1.2); out[o++] = cl((en.dvy || 0) / 2, 1.2);
   }
+  // Enemy projectiles (relative position and velocity).
   for (i = 0; i < NP; i++) { if (i < st.ep.length) { var pr = st.ep[i]; out[o++] = cl((pr.x - pcx) / 100, 1.2); out[o++] = cl((pr.y - pcy) / 100, 1.2); out[o++] = cl(pr.vx / 3, 1.2); out[o++] = cl(pr.vy / 3, 1.2); } else { out[o++] = 0; out[o++] = 0; out[o++] = 0; out[o++] = 0; } }
+  // Nearest live items (relative position and kind).
   var items = []; for (k = 0; k < st.it.length; k++) if (st.it[k].alive) items.push(k);
   for (i = 0; i < NI; i++) { if (i < items.length) { var it = st.it[items[i]]; out[o++] = cl((it.x + 6 - pcx) / 100, 1.2); out[o++] = cl((it.y + 6 - pcy) / 100, 1.2); out[o++] = (it.k + 1) / 6; } else { out[o++] = 0; out[o++] = 0; out[o++] = 0; } }
+  // Nearest uncollected coins within range.
   var cs = []; for (k = 0; k < L.coins.length; k++) if (!st.cg[k]) { var cc = L.coins[k], ddx = cc.x - pcx, ddy = cc.y - pcy; if (Math.abs(ddx) < 160 && Math.abs(ddy) < 100) cs.push([ddx * ddx + ddy * ddy, k]); }
   cs.sort(function (a, b) { return a[0] - b[0]; });
   for (i = 0; i < NK; i++) { if (i < cs.length) { var cn = L.coins[cs[i][1]]; out[o++] = cl((cn.x - pcx) / 100, 1.2); out[o++] = cl((cn.y - pcy) / 100, 1.2); } else { out[o++] = 0; out[o++] = 0; } }
@@ -44,10 +58,13 @@ function build(st, out) {
   var cb = L.crumbs, t1x, t1y, t2x, t2y;
   if (cb && cb.length) { var a1 = cb[Math.min(cb.length - 1, st.cr + 1)], a2 = cb[Math.min(cb.length - 1, st.cr + 3)]; t1x = a1[0]; t1y = a1[1]; t2x = a2[0]; t2y = a2[1]; } else { t1x = t2x = L.goalX; t1y = t2y = L.poleY - 8; }
   out[o++] = cl((t1x - pcx) / 150, 1.2); out[o++] = cl((t1y - pcy) / 100, 1.2); out[o++] = cl((t2x - pcx) / 150, 1.2); out[o++] = cl((t2y - pcy) / 100, 1.2);
+  // One-hot of the current route stage kind.
   var rg = L.route ? L.route[st.stage] : null, sk = rg ? STAGEK[rg.k] : 5; for (j = 0; j < 6; j++) out[o++] = j === sk ? 1 : 0;
+  // Flags: boss fight, crumb guidance present, horizontal distance to the goal, puzzle level.
   out[o++] = st.boss > 0 ? 1 : 0; out[o++] = cb && cb.length ? 1 : 0; out[o++] = cl((L.goalX - pcx) / 800, 1.2); out[o++] = L.puzzle ? 1 : 0; 
   // ray features: how far to the next wall / pit / hazard / enemy ahead and behind (in tiles), obstacle height, pit width, ceiling clearance, drop depth
   var dirf = p.face >= 0 ? 1 : -1, fr = Math.floor((p.y + p.h - 1) / TS), cx0 = Math.floor(pcx / TS);
+  // Scan up to 12 tiles in direction dr: distance to the wall (and its height), pit (and width), hazard and enemy; normalised.
   function rays(dr) {
     var wallD = 12, wallH = 0, pitD = 12, pitW = 0, hazD = 12, k2, q2;
     for (k2 = 1; k2 <= 12; k2++) { var cc2 = cx0 + dr * k2, tf = PF.tileAt(st, cc2, fr), tg = PF.tileAt(st, cc2, fr - 1);
@@ -58,22 +75,26 @@ function build(st, out) {
     var ed = 12; for (var e2 = 0; e2 < st.en.length; e2++) { var en2 = st.en[e2]; if (!en2.alive) continue; var ddx = (en2.x + en2.w / 2 - pcx) * dr / TS; if (ddx > 0 && ddx < ed && Math.abs(en2.y + en2.h / 2 - pcy) < 26) ed = ddx; }
     return [wallD / 12, wallH / 5, pitD / 12, pitW / 6, hazD / 12, ed / 12];
   }
+  // Rays ahead and behind, plus ceiling clearance and ground depth.
   var rf = rays(dirf), rb = rays(-dirf), ce = 0; for (j = 1; j <= 6; j++) { if (SOL[PF.tileAt(st, cx0, Math.floor((p.y - 1) / TS) - j + 1)]) break; ce++; }
   var gd = 0; for (j = 1; j <= 6; j++) { if (SOL[PF.tileAt(st, cx0, fr + j)]) break; gd++; }
   out[o++] = rf[0]; out[o++] = rf[1]; out[o++] = rf[2]; out[o++] = rf[3]; out[o++] = rf[4]; out[o++] = rf[5]; out[o++] = rb[0]; out[o++] = rb[2]; out[o++] = rb[4]; out[o++] = rb[5]; out[o++] = ce / 6; out[o++] = gd / 6;
   // wind / current at the hero
   var wx = 0, wy = 0; if (L.winds) for (k = 0; k < L.winds.length; k++) { var wz = L.winds[k]; if (pcx > wz.x0 && pcx < wz.x1 && pcy > wz.y0 && pcy < wz.y1) { wx += wz.dx; wy += wz.dy; } }
   out[o++] = cl(wx * 8, 1.2); out[o++] = cl(wy * 2, 1.2); out[o++] = cell === 22 ? -1 : cell === 23 ? 1 : 0; out[o++] = cell === 24 ? 1 : 0;
+  // Final clamp and rounding to two decimals.
   for (i = 0; i < o; i++) out[i] = Math.round(cl(out[i], 1.27) * 100) / 100;
   return o;
 }
 // ---- MLP policy: D -> h1 -> h2 -> 4 key logits + value
 var NET = null;
 function b64f32(s) { var bin = atob(s), n = bin.length, u8 = new Uint8Array(n); for (var i = 0; i < n; i++) u8[i] = bin.charCodeAt(i); return new Float32Array(u8.buffer); }
+// Load the base64 float32 weights into the network buffers.
 function setWeights(m) {   // m = { obs, h1, h2, out, w: base64 float32 }
   var f = typeof m.w === 'string' ? b64f32(m.w) : m.w, o = 0, take = function (n) { var a = f.subarray(o, o + n); o += n; return a; };
   NET = { d: m.obs, h1: m.h1, h2: m.h2, out: m.out, W1: take(m.obs * m.h1), b1: take(m.h1), W2: take(m.h1 * m.h2), b2: take(m.h2), W3: take(m.h2 * m.out), b3: take(m.out), a1: new Float32Array(m.h1), a2: new Float32Array(m.h2), res: new Float32Array(m.out) };
 }
+// MLP forward pass with ReLU; zero inputs are skipped because the observation is sparse.
 function forward(obs) {
   var n = NET, d = n.d, h1 = n.h1, h2 = n.h2, i, j, s;
   for (j = 0; j < h1; j++) n.a1[j] = n.b1[j];
@@ -85,8 +106,11 @@ function forward(obs) {
   for (j = 0; j < n.out; j++) { s = n.b3[j]; for (i = 0; i < h2; i++) s += n.a2[i] * n.W3[i * n.out + j]; n.res[j] = s; }
   return n.res;
 }
+// Output index -> key bit (left, right, run, jump).
 var KEYBITS = [IN.L, IN.R, IN.RUN, IN.J];
+// Logit > 0 means key pressed; left+right together resolves to the larger logit.
 function maskOf(res) { var m = 0; for (var k = 0; k < 4; k++) if (res[k] > 0) m |= KEYBITS[k]; if ((m & IN.L) && (m & IN.R)) m &= (res[0] > res[1]) ? ~IN.R : ~IN.L; return m; }
+// Plain policy: runs the network every skip-th frame and holds the mask in between.
 function make() {
   var buf = new Float32Array(D), st = { skip: 2, k: 0, mask: 0, bestF: 0, bestCr: -1, noise: 0 };
   return {
@@ -101,6 +125,7 @@ function make() {
 // RL policy + simulation shield: before a key mask is used, the game's own simulation looks 28 frames ahead with the policy driving; if the hero would die, the look-ahead planner takes the wheel for 14 frames.
 function makeShielded() {
   var pol = make(), sim = make(), pl = PFPlanner.make(), S = { until: 0, hits: 0, f: 0, cr: -1, stage: -1, prog: 0, stalls: 0, polF: 0, plF: 0 };
+  // Shield test: simulate 28 frames with the policy driving; true if the hero would die.
   function dies(st, m0) { var c = PF.clone(st); c.share = true; sim.reset(); var m = m0; for (var k = 0; k < 28; k++) { PF.step(c, m); if (c.p.dead) return true; if (c.p.won) return false; m = sim.decide(c); } return false; }
   return {
     ready: function () { return !!NET; }, stats: S,
@@ -115,6 +140,7 @@ function makeShielded() {
     }
   };
 }
+// Public API.
 root.PFAI = { D: D, build: build, setWeights: setWeights, forward: forward, maskOf: maskOf, make: make, makeShielded: makeShielded, KEYBITS: KEYBITS };
 if (root.SHAPE_AI) { try { setWeights(root.SHAPE_AI); } catch (e) { root.PFAI.err = String(e); } }
 })(typeof window !== 'undefined' ? window : globalThis);
