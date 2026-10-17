@@ -44,6 +44,12 @@ THEMES[0].part = 'none'; THEMES[1].part = 'sparks'; THEMES[2].part = 'fireflies'
 // Extra themes (6 and up): autumn, jungle, snow, desert, swamp, storm, airship, crystal, volcano, ruins, factory, neon, tower, shaft, chase, gauntlet.
 THEMES[6] = mkTheme('#ff8a4a', '#ffe0a8', '#b8582a', '#8a3a1a', ['#6a3a22', '#5a301c', '#4a2616'], '#ffb04a', '#a8754a', 'autumn', '#fff0c0', 'leaves', 1.03);
 THEMES[7] = mkTheme('#123a2a', '#6ac88a', '#1a6a3a', '#0e4a28', ['#2a4a2a', '#244024', '#1c341c'], '#7affb0', '#6a8a5a', 'jungle', '#d8ffc8', 'fireflies', 0.97);
+// underground looks: plain soil tunnels, magma tunnels, frozen burrows, a deep glowing cavern, crystal mines
+THEMES[23] = mkTheme('#1a120c', '#3a2a1c', '#2a1c12', '#1e140c', ['#4a3426', '#3e2c20', '#32241a'], '#8a6a46', '#6a5238', 'ug', '#ffd08a', 'dust', 0.9);
+THEMES[24] = mkTheme('#1a0606', '#5a1408', '#3a0e08', '#240804', ['#3a2420', '#30201c', '#281814'], '#ff7a2a', '#6a4038', 'uglava', '#ff9a4a', 'embers', 0.82);
+THEMES[25] = mkTheme('#06182a', '#1a4a6a', '#1a4a6a', '#0e3454', ['#6ab8e0', '#58a4d0', '#4890c0'], '#e8fbff', '#3a78a8', 'ugice', '#c8f4ff', 'snow', 0.9);
+THEMES[26] = mkTheme('#06060e', '#16162a', '#1a1a2e', '#0e0e1c', ['#2a2a3c', '#242434', '#1e1e2c'], '#7affb0', '#4a4a5e', 'ugcave', '#9affc8', 'fireflies', 0.85);
+THEMES[27] = mkTheme('#0a0a1e', '#2a1050', '#2a1a5a', '#1a0e40', ['#3a2a60', '#30244e', '#281c42'], '#4af0e0', '#6a5aa0', 'ugcrystal', '#aaffff', 'sparks', 1.05);
 THEMES[22] = mkTheme('#0c2a4a', '#6ad0ff', '#2a6a9a', '#1a4a7a', ['#8ad8ff', '#6ac4f4', '#4aa8e0'], '#e8fbff', '#3a8ac0', 'snow', '#c8f4ff', 'snow', 0.95);
 THEMES[8] = mkTheme('#8aa8e0', '#f4fbff', '#c8d8f0', '#9ab4de', ['#c4d6f2', '#aec4e6', '#98b0d8'], '#ffffff', '#a8c0e0', 'snow', '#ffffff', 'snow', 1.22);
 THEMES[9] = mkTheme('#f0a050', '#ffe4a8', '#d89a5a', '#b87a3a', ['#d8a860', '#c89850', '#b88840'], '#ffe0a0', '#b89060', 'desert', '#fff4c0', 'dust', 0.92);
@@ -64,7 +70,25 @@ PF.THEME_PITCH = THEMES.map(function (t) { return t.pitch || 1; });
 // Draws one parallax layer twice side by side so it tiles seamlessly: fn(xOffset) paints a single period.
 function bgLayer(period, speed, cam, fn) { for (var k = 0; k < 2; k++) fn(-((cam * speed) % period) + k * period); }
 // BGX: per-mode backgrounds (th, cam) for the themed modes; drawBackground() dispatches here first.
+// underground backgrounds: rock strata, stalactites above and stalagmites below, plus each look's own details
+function ugBack(th, cam, kind) {
+  var k, cy = (G.camY || 0);
+  for (k = 0; k < 7; k++) { var y = ((k * 36 - cy * 0.3) % 252 + 252) % 252 - 16; ctx.globalAlpha = 0.5; rect(0, y, VW, 10 + (k * 7) % 12, k % 2 ? th.m1 : th.m2); ctx.globalAlpha = 1; }
+  bgLayer(360, 0.25, cam, function (o) { for (var i = 0; i < 7; i++) { var x = o + i * 52 + (i * 13) % 20, h = 14 + (i * 29) % 34; poly([x, 0, x + 14, 0, x + 7, h], th.m1); } });
+  bgLayer(420, 0.4, cam, function (o) { for (var i = 0; i < 6; i++) { var x = o + i * 70 + (i * 17) % 24, h = 10 + (i * 31) % 28; poly([x, VH, x + 18, VH, x + 9, VH - h], th.m2); } });
+  bgLayer(300, 0.5, cam, function (o) {
+    for (var i = 0; i < 5; i++) { var x = o + i * 60 + (i * 11) % 18;
+      if (kind === 'ug') { line(x, 0, x, 18 + (i * 9) % 30, '#6a4a2a', 1.5); circ(x, 20 + (i * 9) % 30, 2.4, '#ffd08a'); if (i % 2) { rect(x + 20, 60 + (i * 7) % 40, 3, 24, '#5a4028'); rect(x + 14, 60 + (i * 7) % 40, 15, 3, '#5a4028'); } }
+      else if (kind === 'uglava') { ctx.globalAlpha = 0.5 + 0.25 * Math.sin(F * 0.08 + i); line(x - 8, 30 + (i * 23) % 120, x + 22, 52 + (i * 19) % 110, '#ff6a2a', 2); ctx.globalAlpha = 1; }
+      else if (kind === 'ugice') { poly([x, 0, x + 6, 0, x + 3, 26 + (i * 13) % 20], '#bfefff'); poly([x + 20, VH, x + 30, VH, x + 25, VH - 22 - (i * 11) % 18], '#8ad8ff'); }
+      else if (kind === 'ugcave') { var my = VH - 6; rect(x - 1, my - 8 - (i % 3) * 3, 2, 8 + (i % 3) * 3, '#8a8aa0'); ctx.globalAlpha = 0.55 + 0.3 * Math.sin(F * 0.1 + i); circ(x, my - 9 - (i % 3) * 3, 5, '#7affb0'); circ(x, my - 9 - (i % 3) * 3, 2.4, '#e8fff0'); ctx.globalAlpha = 1; }
+      else { ctx.globalAlpha = 0.8; diamond(x, VH - 10 - (i * 7) % 14, 4, 9 + (i % 3) * 3, i % 2 ? '#4af0e0' : '#c86aff'); diamond(x + 9, VH - 6, 3, 6, '#7a6aff'); ctx.globalAlpha = 1; if (i % 2) { rect(x + 24, 40, 3, 60, '#4a3a2a'); rect(x + 18, 40, 15, 3, '#4a3a2a'); } }
+    } });
+  if (kind === 'uglava') { var gl = ctx.createLinearGradient(0, VH - 70, 0, VH); gl.addColorStop(0, 'rgba(255,90,20,0)'); gl.addColorStop(1, 'rgba(255,90,20,.35)'); ctx.fillStyle = gl; ctx.fillRect(0, VH - 70, VW, 70); }
+  if (kind === 'ugcrystal') { ctx.globalAlpha = 0.06; rect(0, 0, VW, VH, '#4af0e0'); ctx.globalAlpha = 1; }
+}
 var BGX = {
+  ug: function (th, cam) { ugBack(th, cam, 'ug'); }, uglava: function (th, cam) { ugBack(th, cam, 'uglava'); }, ugice: function (th, cam) { ugBack(th, cam, 'ugice'); }, ugcave: function (th, cam) { ugBack(th, cam, 'ugcave'); }, ugcrystal: function (th, cam) { ugBack(th, cam, 'ugcrystal'); },
   autumn: function (th, cam) { bgLayer(480, 0.18, cam, function (o) { for (var i = 0; i < 6; i++) { ctx.fillStyle = th.m1; ctx.beginPath(); ctx.ellipse(o + i * 80 + 20, VH - 8, 62, 30 + (i * 7) % 24, 0, Math.PI, 0); ctx.fill(); } }); bgLayer(420, 0.4, cam, function (o) { for (var i = 0; i < 5; i++) { var x = o + i * 84 + 30; rect(x - 2, VH - 62, 4, 52, '#4a2a18'); circ(x, VH - 70, 16, '#e8741a'); circ(x - 9, VH - 62, 11, '#ffa030'); circ(x + 10, VH - 64, 12, '#d4541a'); } }); },
   jungle: function (th, cam) { bgLayer(480, 0.2, cam, function (o) { for (var i = 0; i < 7; i++) { var x = o + i * 70 + 10; rect(x - 3, 30, 6, VH, th.m1); circ(x, 36 + (i % 3) * 8, 26, th.m1); } }); bgLayer(440, 0.45, cam, function (o) { for (var i = 0; i < 6; i++) { var x = o + i * 76 + 36; rect(x - 4, 60, 8, VH, th.m2); circ(x, 66, 30, th.m2); circ(x + 20, 80, 18, th.m2); line(x + 6, 40, x + 18, 120, '#2a8a4a', 2); } }); },
   snow: function (th, cam) { bgLayer(500, 0.15, cam, function (o) { for (var i = 0; i < 5; i++) { var x = o + i * 100, h = 70 + (i * 23) % 50; poly([x, VH - 12, x + 50, VH - 12 - h, x + 100, VH - 12], th.m1); poly([x + 50 - h * 0.22, VH - 12 - h * 0.78, x + 50, VH - 12 - h, x + 50 + h * 0.22, VH - 12 - h * 0.78], '#fff'); } }); bgLayer(420, 0.35, cam, function (o) { for (var i = 0; i < 6; i++) { var x = o + i * 70 + 20; poly([x, VH - 8, x + 22, VH - 48, x + 44, VH - 8], th.m2); } }); },
@@ -273,6 +297,11 @@ function drawHero(p, dead, spinA, mounted) {
 
 // Wall vent that blows bubbles while its jet is on.
 function drawBubbleJet(w, f) {
+  if (w.dy < 0) {   // a vent in the seabed blowing bubbles upward: they push the swimmer up
+    var onU = !w.per || ((f + (w.ph | 0)) % w.per) < w.on; rect(w.vx - 6, w.vy - 2, 12, 4, onU ? '#7ad0ff' : '#3a3460'); if (!onU) return;
+    for (var ju = 0; ju < 12; ju++) { var tu = ((f * 1.8 + ju * 17) % (w.y1 - w.y0)) / (w.y1 - w.y0), bxu = w.x0 + 3 + ((ju * 31) % Math.max(4, w.x1 - w.x0 - 6)) + Math.sin(f * 0.2 + ju) * 2; ctx.strokeStyle = 'rgba(230,255,255,' + (0.9 - tu * 0.5).toFixed(2) + ')'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(bxu, w.y1 - tu * (w.y1 - w.y0), 1.5 + (ju % 3) * 0.8, 0, 6.2832); ctx.stroke(); }
+    return;
+  }
   if (w.dy > 0) {   // a jet blowing down from a vent in the ceiling: bubbles stream downwards (toward the poison below)
     var on0 = !w.per || ((f + (w.ph | 0)) % w.per) < w.on; rect(w.vx - 6, w.vy - 3, 12, 4, on0 ? '#7ad0ff' : '#3a3460'); if (!on0) return;
     for (var jb = 0; jb < 12; jb++) { var t2 = ((f * 1.6 + jb * 19) % (w.y1 - w.y0)) / (w.y1 - w.y0), bx2 = w.x0 + 4 + ((jb * 37) % Math.max(4, w.x1 - w.x0 - 8)) + Math.sin(f * 0.2 + jb) * 2; ctx.strokeStyle = 'rgba(230,255,255,' + (0.9 - t2 * 0.5).toFixed(2) + ')'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(bx2, w.y0 + t2 * (w.y1 - w.y0), 1.5 + (jb % 3) * 0.8, 0, 6.2832); ctx.stroke(); }
@@ -283,7 +312,13 @@ function drawBubbleJet(w, f) {
   for (i = 0; i < 14; i++) { var t = ((f * 1.7 + i * 23) % len) / len, xx = (dd > 0 ? w.x0 : w.x1) + dd * t * len, yy = w.y0 + 4 + ((i * 37) % Math.max(4, w.y1 - w.y0 - 8)) + Math.sin(f * 0.2 + i) * 2; ctx.strokeStyle = 'rgba(230,255,255,' + (0.9 - t * 0.6).toFixed(2) + ')'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(xx, yy, 1.5 + (i % 3) * 0.8, 0, 6.2832); ctx.stroke(); }
 }
 // Whirlpool in water: spinning arcs.
+function drawGeyser(g, f) {   // a lava fire pillar: a glow and sparks warn, then a tall column of flame
+  var ph = (f + g.ph) % g.per, cx = g.x + g.w / 2;
+  if (ph < g.on) { var k = 1 - ph / g.on * 0.25, hh = g.h * Math.min(1, ph / 8 + 0.2) * k; ctx.globalAlpha = 0.55; poly([g.x - 2, g.y, g.x + g.w + 2, g.y, g.x + g.w * 0.8, g.y - hh, g.x + g.w * 0.2, g.y - hh], '#ff7a2a'); ctx.globalAlpha = 0.95; poly([g.x + 3, g.y, g.x + g.w - 3, g.y, g.x + g.w * 0.7, g.y - hh * 0.8, g.x + g.w * 0.3, g.y - hh * 0.8], '#ffb04a'); poly([g.x + g.w * 0.3, g.y, g.x + g.w * 0.7, g.y, cx, g.y - hh * 0.6], '#fff0a0'); ctx.globalAlpha = 1; for (var q = 0; q < 4; q++) circ(cx + Math.sin(f * 0.3 + q * 2) * g.w * 0.4, g.y - ((f * 3 + q * 23) % hh), 1.6, '#ffe08a'); }
+  else if (ph > g.per - 45) { var wu = (ph - (g.per - 45)) / 45; ctx.globalAlpha = 0.25 + 0.5 * wu * (0.5 + 0.5 * Math.sin(f * 0.6)); ell(cx, g.y - 1, g.w * 0.6, 3 + wu * 3, '#ffd24a'); ctx.globalAlpha = 1; for (var q2 = 0; q2 < 3; q2++) circ(cx + Math.sin(f * 0.5 + q2 * 2) * g.w * 0.3, g.y - 3 - ((f * 1.5 + q2 * 9) % (8 + wu * 14)), 1.4, '#ff8a3a'); }
+}
 function drawWhirl(w, f) {
+  if (w.drain) { ctx.globalAlpha = 0.5; circ(w.x, w.y, w.r * 0.55, '#1a0a30'); ctx.globalAlpha = 0.9; circ(w.x, w.y, 7, '#05020c'); ctx.globalAlpha = 1; ctx.strokeStyle = 'rgba(255,90,120,.7)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(w.x, w.y, 9 + Math.sin(f * 0.2) * 1.5, 0, 6.2832); ctx.stroke(); }
   for (var k = 0; k < 4; k++) { ctx.strokeStyle = 'rgba(220,250,255,' + (0.5 - k * 0.08).toFixed(2) + ')'; ctx.lineWidth = 1.5; ctx.beginPath(); var a0 = f * 0.12 * w.dir + k * 1.57; for (var q = 0; q <= 14; q++) { var rr = w.r * (0.15 + q / 14 * 0.85) * (1 - k * 0.1), an = a0 + q * 0.42 * w.dir; var px = w.x + Math.cos(an) * rr, py = w.y + Math.sin(an) * rr * 0.9; if (q) ctx.lineTo(px, py); else ctx.moveTo(px, py); } ctx.stroke(); }
   ctx.globalAlpha = 0.25; circ(w.x, w.y, 4, '#ffffff'); ctx.globalAlpha = 1;
 }
@@ -319,6 +354,8 @@ function drawHz(o, f) {
     case 'acorn': ell(x, y + 1, 3.6, 4.4, '#b0702a'); rect(x - 4, y - 4, 8, 3, '#6a4a1a'); break;
     case 'bomb': circ(x, y, 6.5, '#2a2a3a'); circ(x - 2, y - 2, 2, '#6a6a8a'); line(x + 2, y - 6, x + 5, y - 10, '#ffb04a', 1.5); circ(x + 5, y - 10, 1.6, '#ffe08a'); break;
     case 'bolt': spark4(x, y, 7, '#fffbb0'); circ(x, y, 2.5, '#ffffff'); break;
+    case 'web': ctx.globalAlpha = 0.85; ctx.strokeStyle = '#f4f4ff'; ctx.lineWidth = 1; for (var wb = 0; wb < 4; wb++) { var wa2 = wb * 0.785 + (o.rot || 0); ctx.beginPath(); ctx.moveTo(x - Math.cos(wa2) * 6, y - Math.sin(wa2) * 6); ctx.lineTo(x + Math.cos(wa2) * 6, y + Math.sin(wa2) * 6); ctx.stroke(); } ctx.beginPath(); ctx.arc(x, y, 3.5, 0, 6.2832); ctx.stroke(); ctx.globalAlpha = 1; break;
+    case 'bomb2': circ(x, y, 5.5, '#2a2a3a'); circ(x - 1.5, y - 1.5, 1.6, 'rgba(255,255,255,.3)'); line(x + 1, y - 5, x + 3, y - 8, '#8a6a3a', 1.5); circ(x + 3, y - 8.5, 1.5 + Math.sin(F), '#ffd24a'); break;
     case 'wrench': ctx.save(); ctx.translate(x, y); ctx.rotate(o.rot || 0); rect(-1.5, -2, 3, 10, '#8a94a8'); circ(0, -5, 4.5, '#aab4c8'); rect(-1.5, -10, 3, 5, '#2a2f3a'); circ(0, 8, 2.2, '#aab4c8'); ctx.restore(); break;
     case 'fire': circ(x, y, 5, 'rgba(255,90,20,.45)'); circ(x, y, 3.6, '#ff6a1a'); circ(x, y, 1.8, '#ffe8a0'); break;
     case 'snow': circ(x, y, 5, '#e8f6ff'); circ(x - 1.5, y - 1.5, 2.4, '#ffffff'); circ(x + 2, y + 2, 1.6, '#bfe0f4'); break;
@@ -352,6 +389,7 @@ function drawEnemy(e) {
       poly([cx, cy - 2, cx - 11, cy - 7 - fl, cx - 6, cy + 1], '#ffd0dc', '#a02a50'); poly([cx, cy - 2, cx + 11, cy - 7 - fl, cx + 6, cy + 1], '#ffd0dc', '#a02a50');
       diamond(cx, cy, 6.5, 7, '#ff5a7a', '#6a0a2a'); circ(cx + dir * 0.8, cy - 0.5, 2.6, '#fff'); circ(cx + dir * 1.6, cy - 0.3, 1.2, '#2a0a1a'); break; }
     case E.BEETLE: {   // cube-bug: a boxy bug; when stomped it leaves a glowing cube that can be kicked or carried
+      if (e.sh && e.bomb) { circ(cx, by - 5, 6, e.sh === 2 ? '#ff7a4a' : '#2a2a3a'); circ(cx - 1.5, by - 6.5, 1.8, 'rgba(255,255,255,.3)'); line(cx, by - 10, cx + 2, by - 14, '#8a6a3a', 1.5); circ(cx + 2, by - 14.5, 1.6 + Math.sin(f * 0.8), '#ffd24a'); break; }
       if (e.sh) { var ec = e.sh === 2 ? 'hsl(' + (F * 20 % 360) + ',80%,60%)' : '#ffb04a'; crystalBox(cx, by - 5, 8, ec); if (e.sh === 2) { ctx.globalAlpha = 0.45; poly([cx - e.dir * 8, by - 8, cx - e.dir * 17, by - 5, cx - e.dir * 8, by - 2], '#ffe0a0'); ctx.globalAlpha = 1; } break; }
       var s3 = Math.sin(f * 0.22 + e.x); rrect(cx - 6.5, by - 12, 13, 10, 3, '#3ac07a'); rect(cx - 6.5, by - 12, 13, 3, '#8affc0'); line(cx - 6.5, by - 7, cx + 6.5, by - 7, '#14663e', 1);
       line(cx + dir * 3, by - 12, cx + dir * 5, by - 16, '#8affc0', 1.5); circ(cx + dir * 5, by - 16, 1.5, '#ffe08a'); circ(cx + dir * 2.5, by - 8.5, 2.3, '#fff'); circ(cx + dir * 3.2, by - 8.4, 1.1, '#0a3020'); rect(cx - 5 + s3 * 1.5, by - 2, 3.5, 2, '#14663e'); rect(cx + 1.5 - s3 * 1.5, by - 2, 3.5, 2, '#14663e'); break; }
@@ -368,6 +406,45 @@ function drawEnemy(e) {
     case E.PLANT: { if (e.y > e.y0 - 1 && e.hid) break; var top = e.y;   // spore bud on a pylon
       line(cx, top + 8, cx, e.y0 + 6, '#3affb0', 2); spark8(cx, top + 6, 6.5, '#ff3a8a', f * 0.03); circ(cx, top + 6, 3.2, '#ffd0e4'); circ(cx, top + 6, 1.4, '#6a0a2a'); break; }
     case E.ROLL: drawRoller(e); break;
+    case E.LANDMINE: { if (e.s === 1) { ctx.globalAlpha = Math.max(0, e.tm / 10); circ(cx, cy, 10 + (10 - e.tm) * 1.4, '#ffd24a'); circ(cx, cy, 5 + (10 - e.tm), '#fff'); ctx.globalAlpha = 1; break; }   // buried mine: a half-sunk disc with a blinking light, easy to see and step around
+      ell(cx, by - 1, 8, 3.6, '#5a5a6a'); ell(cx, by - 2, 6.5, 2.6, '#7a7a8a'); circ(cx, by - 3.6, 1.7, (Math.floor(f / 12) % 2) ? '#ff4a4a' : '#7a1a1a'); rect(cx - 5, by - 2, 2, 1.4, '#3a3a48'); rect(cx + 3, by - 2, 2, 1.4, '#3a3a48'); break; }
+    case E.PILLBUG: { var pdr = e.dir >= 0 ? 1 : -1;   // pillbug: an armoured oval with legs; curls (flashes) before it rolls as a ball
+      if (e.s === 0) { var lg = Math.sin(f * 0.4 + e.x) * 1.4; for (var pl = 0; pl < 3; pl++) line(cx - 5 + pl * 5, by - 2, cx - 6 + pl * 5 + lg * (pl % 2 ? 1 : -1), by + 1, '#3a3050', 1.2); ell(cx, by - 5, 8, 5, '#6a6a90'); for (var ps = 0; ps < 3; ps++) line(cx - 4 + ps * 4, by - 9, cx - 4 + ps * 4, by - 1, 'rgba(20,10,50,.5)', 1); circ(cx + pdr * 6, by - 5, 2.6, '#8a8ab0'); circ(cx + pdr * 7, by - 5.4, 1, '#fff'); }
+      else { var fl2 = e.s === 1 && (Math.floor(f / 3) % 2); ctx.save(); ctx.translate(cx, by - 5); ctx.rotate(e.rot || 0); circ(0, 0, 6.5, fl2 ? '#ffb0b0' : '#6a6a90'); for (var pr = 0; pr < 3; pr++) { ctx.rotate(1.0472); line(0, -6, 0, 6, 'rgba(20,10,50,.55)', 1); } ctx.restore(); }
+      break; }
+    case E.HOPPER: { var hdr = e.dir >= 0 ? 1 : -1, air2 = !e.ground;   // hopper: a green grasshopper; stretched while airborne
+      var hy = air2 ? by - 9 : by - 6; ell(cx, hy, air2 ? 8 : 6.5, air2 ? 4 : 4.6, '#6ac84a'); line(cx - hdr * 3, hy + 1, cx - hdr * (air2 ? 11 : 7), hy + (air2 ? 4 : 2), '#3a7a22', 2); line(cx - hdr * (air2 ? 11 : 7), hy + (air2 ? 4 : 2), cx - hdr * (air2 ? 14 : 4), by, '#3a7a22', 2); circ(cx + hdr * 5, hy - 1.5, 2.4, '#fff'); circ(cx + hdr * 5.8, hy - 1.5, 1, '#102010'); line(cx + hdr * 4, hy - 3, cx + hdr * 8, hy - 7, '#3a7a22', 1); break; }
+    case E.MOLE: { var gy2 = e.y0 + e.h; ctx.save(); ctx.beginPath(); ctx.rect(e.x - 10, gy2 - 40, e.w + 20, 40); ctx.clip();   // mole: a dirt mound (it shakes before the mole pops up) and a velvety head with a pink nose
+      if (e.s === 1) { var sh3 = Math.sin(f * 1.4) * 1.5; ell(cx + sh3, gy2, 9, 4, '#8a5a30'); for (var mr = 0; mr < 3; mr++) circ(cx + sh3 - 4 + mr * 4, gy2 - 3 - (f + mr * 5) % 6, 1.2, '#b07a4a'); }
+      else if (e.s === 0) { ell(cx, gy2, 7, 2.5, '#8a5a30'); }
+      else if (!e.hid || e.up > 0) { ell(cx, gy2, 10, 3, '#8a5a30'); rrect(e.x, e.y, e.w, e.h + 3, 5, '#5a4a60'); circ(cx, e.y + 5, 2.6, '#ff9ab0'); circ(cx - 3.4, e.y + 2.6, 1.1, '#fff'); circ(cx + 3.4, e.y + 2.6, 1.1, '#fff'); line(cx - 7, e.y + 9, cx - 11, e.y + 5, '#c8b8d0', 1.5); line(cx + 7, e.y + 9, cx + 11, e.y + 5, '#c8b8d0', 1.5); }
+      ctx.restore(); break; }
+    case E.SHIELDER: { var sdr = e.dir >= 0 ? 1 : -1, s35 = Math.sin(f * 0.25 + e.x);   // shield bearer: a round bug carrying a big metal shield in front
+      circ(cx - sdr * 1, by - 6, 6.5, '#9a5a7a'); circ(cx - sdr * 1 + sdr * 1.5, by - 8, 2.2, '#fff'); circ(cx - sdr * 1 + sdr * 2.2, by - 8, 1, '#201020'); rect(cx - 5 + s35, by - 2, 3, 2, '#4a2a3a'); rect(cx + 2 - s35, by - 2, 3, 2, '#4a2a3a');
+      rrect(cx + sdr * 6 - 3, by - 14, 6, 14, 2, '#aab4c8'); rect(cx + sdr * 6 - 1, by - 13, 2, 12, '#e8f0ff'); break; }
+    case E.BOMBBUG: { var fz = e.s === 1, fl3 = fz && (Math.floor(f / 3) % 2), grow = fz ? 1 + e.tm / 48 * 0.35 : 1;   // bomb bug: a black round bug with a lit fuse; it flashes red as the fuse runs down
+      ctx.save(); ctx.translate(cx, by - 6); ctx.scale(grow, grow); circ(0, 0, 6.5, fl3 ? '#ff5a4a' : '#2a2a3a'); circ(-2, -2, 2, 'rgba(255,255,255,.25)'); circ(2.5, -0.5, 2, '#fff'); circ(3, -0.3, 0.9, '#201010'); ctx.restore();
+      line(cx, by - 12 * grow, cx + 2, by - 16 * grow, '#8a6a3a', 1.5); circ(cx + 2, by - 16.5 * grow, 1.6 + Math.sin(f * 0.8), '#ffd24a'); break; }
+    case E.BAT: { var hanging = e.s === 0, wb = Math.sin(f * 0.6) * 5;   // bat: hangs upside down (wings folded), flaps when it swoops
+      if (hanging) { line(cx, e.y - 3, cx, e.y + 2, '#3a2a4a', 1); ell(cx, cy + 2, 4, 6, '#4a3a60'); poly([cx - 3, cy + 6, cx, cy + 12, cx + 3, cy + 6], '#6a5a88'); circ(cx - 1.4, cy + 8, 0.8, '#ff6a6a'); circ(cx + 1.4, cy + 8, 0.8, '#ff6a6a'); }
+      else { ell(cx, cy, 4, 3.6, '#4a3a60'); poly([cx - 2, cy - 1, cx - 12, cy - 4 - wb, cx - 7, cy + 4], '#6a5a88'); poly([cx + 2, cy - 1, cx + 12, cy - 4 - wb, cx + 7, cy + 4], '#6a5a88'); circ(cx - 1.4, cy - 0.5, 0.9, '#ff6a6a'); circ(cx + 1.4, cy - 0.5, 0.9, '#ff6a6a'); }
+      break; }
+    case E.STORMCLOUD: { var fl4 = (Math.floor(f / 5) % 7 === 0);   // storm cloud: a dark cloud with a crackling flash and rain streaks
+      ctx.globalAlpha = 0.95; circ(cx - 8, cy + 1, 7, '#4a5068'); circ(cx + 2, cy - 2, 9, '#5a6078'); circ(cx + 11, cy + 1, 7, '#4a5068'); rect(cx - 14, cy + 1, 28, 6, '#4a5068'); ctx.globalAlpha = 1;
+      for (var rn = 0; rn < 4; rn++) line(cx - 8 + rn * 6, cy + 8 + (f * 3 + rn * 7) % 8, cx - 9 + rn * 6, cy + 11 + (f * 3 + rn * 7) % 8, 'rgba(180,200,255,.7)', 1);
+      if (fl4) { poly([cx, cy + 6, cx - 3, cy + 12, cx, cy + 12, cx - 2, cy + 18], '#fff27a'); } break; }
+    case E.HORNET: { var hs = e.s, hw2 = Math.sin(f * (hs === 2 ? 1.2 : 0.8)) * 4, hd3 = e.dir >= 0 ? 1 : -1, hf = hs === 1 && (Math.floor(f / 3) % 2);   // hornet: yellow and black stripes, buzzing wings; flashes white while it charges
+      ctx.globalAlpha = 0.6; poly([cx - 1, cy - 2, cx - 9, cy - 8 - hw2, cx - 4, cy - 1], '#e8f8ff'); poly([cx + 2, cy - 2, cx + 8, cy - 8 - hw2, cx + 4, cy - 1], '#e8f8ff'); ctx.globalAlpha = 1;
+      ell(cx, cy, 7, 4.4, hf ? '#ffffff' : '#ffd24a'); for (var hb = 0; hb < 3; hb++) rect(cx - 4 + hb * 3, cy - 3.6, 1.6, 7.2, '#2a2010'); poly([cx - hd3 * 6, cy, cx - hd3 * 10, cy + 1, cx - hd3 * 6, cy + 2], '#2a2010'); circ(cx + hd3 * 5, cy - 1, 2, '#fff'); circ(cx + hd3 * 5.6, cy - 1, 0.9, '#201010'); break; }
+    case E.BOMBER: { var bwv = Math.sin(f * 0.1 + e.x) * 1;   // bomber: a little balloon with a basket full of bombs
+      ell(cx, cy - 4 + bwv, 10, 8, '#d8584a'); for (var bs = -1; bs <= 1; bs++) line(cx + bs * 4, cy - 11 + bwv, cx + bs * 3, cy + 3 + bwv, 'rgba(120,20,10,.5)', 1); line(cx - 6, cy + 3 + bwv, cx - 4, cy + 7, '#6a4a2a', 1); line(cx + 6, cy + 3 + bwv, cx + 4, cy + 7, '#6a4a2a', 1); rect(cx - 5, cy + 7, 10, 5, '#9a6a3a'); circ(cx - 2, cy + 7, 2, '#2a2a3a'); circ(cx + 2, cy + 7, 2, '#2a2a3a'); break; }
+    case E.SPIDER: { var anc = e.ay0 - 8; line(cx, anc, cx, e.y + 3, 'rgba(240,240,255,.6)', 1);   // rope spider: hangs on a silk thread from the ceiling
+      circ(cx, cy + 1, 5, '#3a2a48'); circ(cx, cy - 2, 3.4, '#4a3a5a'); for (var sl = -1; sl <= 1; sl += 2) for (var sj = 0; sj < 3; sj++) line(cx + sl * 3, cy + sj * 2 - 1, cx + sl * (8 + sj), cy + sj * 3 + Math.sin(f * 0.4 + sj) * 1.5, '#3a2a48', 1.2); circ(cx - 1.5, cy - 2.6, 0.9, '#ff6a6a'); circ(cx + 1.5, cy - 2.6, 0.9, '#ff6a6a'); break; }
+    case E.FLOUNDER: { var fdx = e.dir >= 0 ? 1 : -1, wob = Math.sin(f * 0.25 + e.ph * 6) * 1;   // flounder: a flat, mottled fish creeping along the seabed with both eyes on top
+      ell(cx, cy + 1, 11, 3.6, '#9a8a5a'); ell(cx, cy, 10, 3.2, '#c0b078'); for (var fs = 0; fs < 4; fs++) circ(cx - 6 + fs * 4, cy + (fs % 2 ? 0.8 : -0.6), 1, '#7a6a3a'); poly([cx - fdx * 10, cy, cx - fdx * 15, cy - 3 + wob, cx - fdx * 15, cy + 3 + wob], '#9a8a5a');
+      circ(cx + fdx * 6, cy - 3.2, 1.6, '#fff'); circ(cx + fdx * 3.5, cy - 3.4, 1.6, '#fff'); circ(cx + fdx * 6.4, cy - 3.2, 0.7, '#102030'); circ(cx + fdx * 3.9, cy - 3.4, 0.7, '#102030'); break; }
+    case E.GULL: { var gdx2 = e.dir >= 0 ? 1 : -1, wf = Math.sin(f * (e.s === 2 ? 0.7 : 0.4)) * 5;   // gull: a white seabird; flaps harder when it bolts
+      poly([cx - 2, cy, cx - 11, cy - 5 - wf, cx - 6, cy + 2], '#f4f4fa', '#8a90a8'); poly([cx + 2, cy, cx + 11, cy - 5 - wf, cx + 6, cy + 2], '#f4f4fa', '#8a90a8'); ell(cx, cy + 1, 6, 3.6, '#fff'); circ(cx + gdx2 * 5, cy - 1, 2.6, '#fff'); circ(cx + gdx2 * 6, cy - 1.4, 0.8, '#102030'); poly([cx + gdx2 * 7, cy - 1, cx + gdx2 * 11, cy, cx + gdx2 * 7, cy + 0.8], '#ff9a2a'); break; }
     case E.THROWER: { var sk2 = e.skin, bobT = e.fly ? Math.sin(f * 0.2 + e.ph) * 1.5 : 0, bdy = by - 14 + bobT, tcol = sk2 === 'wrench' ? '#5aa0b0' : sk2 === 'fire' ? '#e0502a' : '#e8f4ff', tdk = sk2 === 'wrench' ? '#1a4a58' : sk2 === 'fire' ? '#6a1a04' : '#5a8ab0';   // a thrower: wrench bot (teal robot), fire spitter (red), snowman (white)
       if (e.fly) { poly([cx - 4, bdy + 6, cx - 14, bdy - 2 + Math.sin(f * 0.5) * 4, cx - 7, bdy + 10], '#f4f0ff', '#8a7ac0'); poly([cx + 4, bdy + 6, cx + 14, bdy - 2 + Math.sin(f * 0.5) * 4, cx + 7, bdy + 10], '#f4f0ff', '#8a7ac0'); }
       if (sk2 === 'snow') { circ(cx, bdy + 9, 6.5, tcol); circ(cx, bdy + 2, 4.6, tcol); circ(cx + dir * 1.6, bdy + 1.2, 1, '#102030'); circ(cx - dir * 0.8, bdy + 1.2, 1, '#102030'); poly([cx + dir * 2, bdy + 3, cx + dir * 7, bdy + 4, cx + dir * 2, bdy + 4.6], '#ff8a2a'); rect(cx - 4, bdy - 3, 8, 2.4, '#3a4a8a'); }
@@ -393,7 +470,7 @@ function drawEnemy(e) {
       circ(e.x + 2, cy, 4.2, '#3a4a3a'); circ(e.x + 1, cy - 1, 1.6, '#fff'); circ(e.x + 1, cy - 1, 0.7, '#102010');
       if (zap || chg) for (var zk = 0; zk < (zap ? 9 : 3); zk++) { var zx = e.x + ((zk * 41 + f * 5) % bl); spark4(zx, cy + ((zk * 7 + f) % 9) - 4, zap ? 5 : 3, zap ? '#fff27a' : '#c8f0a0'); } break; }
     case E.SWIM: { if (e.pz) { ctx.globalAlpha = 0.9; circ(cx, cy, 9, 'rgba(176,74,255,.35)'); ctx.globalAlpha = 1; } var big = e.sz === 1, wag = Math.sin(f * 0.3 + e.x * 0.1) * 2.5, bw = big ? 11 : 6, bh = big ? 6 : 4;
-      poly([cx - dir * bw * 0.8, cy, cx - dir * (bw + 6), cy - 4 - wag, cx - dir * (bw + 6), cy + 4 - wag], big ? '#2a3ac0' : '#4a6aff'); ell(cx, cy, bw, bh, big ? '#3a4ae0' : '#5a7aff'); ell(cx, cy + bh * 0.3, bw * 0.8, bh * 0.5, 'rgba(255,255,255,.25)');
+      poly([cx - dir * bw * 0.8, cy, cx - dir * (bw + 6), cy - 4 - wag, cx - dir * (bw + 6), cy + 4 - wag], big ? (e.pzn ? '#6a2aa0' : '#2a3ac0') : (e.pzn ? '#9a4ae0' : '#4a6aff')); ell(cx, cy, bw, bh, big ? (e.pzn ? '#8a3ad0' : '#3a4ae0') : (e.pzn ? '#b06aff' : '#5a7aff')); ell(cx, cy + bh * 0.3, bw * 0.8, bh * 0.5, 'rgba(255,255,255,.25)');
       if (big) { poly([cx - 3, cy - bh, cx + 1, cy - bh - 4, cx + 4, cy - bh], '#9ab0ff'); line(cx - dir * 2, cy - bh + 1, cx - dir * 2, cy + bh - 1, 'rgba(255,255,255,.35)'); }
       circ(cx + dir * bw * 0.5, cy - 0.5, big ? 2.6 : 2, '#fff'); circ(cx + dir * bw * 0.6, cy - 0.5, big ? 1.2 : 1, '#0a1040'); break; }
     // Chaser, floating mine, whale.
@@ -405,7 +482,7 @@ function drawEnemy(e) {
     // Jellyfish and clam.
     case E.JELLY: { var pu = e.pul || 0, jw = e.w * (0.7 + 0.3 * pu) / 2, jh = e.h * 0.55; ctx.fillStyle = 'rgba(255,90,200,.8)'; ctx.beginPath(); ctx.ellipse(cx, e.y + jh, jw, jh, 0, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#ffd0f0'; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(cx, e.y + jh, jw, jh, 0, Math.PI, 0); ctx.stroke(); line(cx - jw * 0.5, e.y + jh, cx - jw * 0.3, e.y + 3, 'rgba(255,255,255,.5)'); line(cx + jw * 0.4, e.y + jh, cx + jw * 0.2, e.y + 3, 'rgba(255,255,255,.5)');
       ctx.strokeStyle = '#ff6ac8'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(cx, e.y + jh); for (var z = 1; z <= 5; z++) ctx.lineTo(cx + Math.sin(f * 0.15 + z) * 3, e.y + jh + z * 3.6); ctx.stroke(); circ(cx, e.y + jh + 18, 1.6, '#fff'); break; }
-    case E.CLAM: { var op = e.s === 1, gape = op ? 6 : 0; poly([e.x, by, e.x + e.w, by, e.x + e.w - 2, by - 5, e.x + 2, by - 5], '#8a5ae0', '#2a1070'); ctx.save(); ctx.translate(e.x + 2, by - 5); ctx.rotate(op ? -0.7 : 0); poly([0, 0, e.w - 4, 0, e.w - 6, -6, 2, -6], '#a88aff', '#2a1070'); ctx.restore(); if (op) { circ(cx, by - 6, 3, '#fff'); circ(cx - 0.8, by - 6.8, 1, '#bff'); } else rect(e.x + 3, by - 6, e.w - 6, 1.2, '#ff3a8a'); break; }
+    case E.CLAM: { var op = e.s === 1, gape = op ? 6 : 0; poly([e.x, by, e.x + e.w, by, e.x + e.w - 2, by - 5, e.x + 2, by - 5], '#8a5ae0', '#2a1070'); ctx.save(); ctx.translate(e.x + 2, by - 5); ctx.rotate(op ? -0.7 : 0); poly([0, 0, e.w - 4, 0, e.w - 6, -6, 2, -6], '#a88aff', '#2a1070'); ctx.restore(); if (op && !e.pg) { circ(cx, by - 6, 3.4, '#fff'); circ(cx - 0.8, by - 6.8, 1.2, '#bff'); ctx.globalAlpha = 0.35 + 0.25 * Math.sin(F * 0.2); circ(cx, by - 6, 6, '#ffffff'); ctx.globalAlpha = 1; } else rect(e.x + 3, by - 6, e.w - 6, 1.2, '#ff3a8a'); break; }
     // Air enemies: swooping birds, flock, balloon.
     case E.SWOOP: { var sw = e.s === 1 ? 0 : Math.sin(f * 0.35) * 4; poly([cx - 3, cy, cx - 12, cy - 5 - sw, cx - 7, cy + 2], '#e8fbff', '#2a7aa0'); poly([cx + 3, cy, cx + 12, cy - 5 - sw, cx + 7, cy + 2], '#e8fbff', '#2a7aa0'); poly([cx - 5, cy - 4, cx + 5, cy - 4, cx, cy + 6], '#4ac8ff', '#0a4a70'); circ(cx, cy - 1.5, 2.4, '#fff'); circ(cx + (e.dir || 1) * 0.6, cy - 1.3, 1.1, '#021a2a'); if (e.s === 1) line(cx, cy - 4, cx - (e.dir || 1) * 6, cy - 14, 'rgba(255,255,255,.5)', 1.5); break; }
     case E.FLOCK: { var fw = Math.sin(f * 0.4 + e.idx) * 2.5; poly([cx, cy + 2, cx - 6, cy - 3 - fw, cx - 4, cy + 1], '#b8ff6a', '#4a7a08'); poly([cx, cy + 2, cx + 6, cy - 3 - fw, cx + 4, cy + 1], '#b8ff6a', '#4a7a08'); circ(cx, cy + 1, 2.2, '#7aff3a'); circ(cx + dir * 0.6, cy + 0.8, 0.9, '#10300a'); break; }
@@ -414,7 +491,8 @@ function drawEnemy(e) {
     case E.SHOOTER: { var ds = e.dir || 1; hex(cx, cy, 8.5, '#2a2450', Math.PI / 6); hex(cx, cy, 6.6, '#4a3f86', Math.PI / 6); poly([cx + ds * 11, cy, cx + ds * 3, cy - 4, cx + ds * 3, cy + 4], '#ff8a3a'); circ(cx - ds * 1, cy, 2.2, ((f + e.pho) % 130 > 105) ? '#fff' : '#ff8a3a'); poly([cx - 7, cy + 7, cx + 7, cy + 7, cx, cy + 12 + Math.sin(f * 0.3) * 2], 'rgba(122,255,224,.6)'); break; }
     case E.BIRD: { var bw2 = Math.sin(f * 0.3) * 3.5; line(cx, cy + 4, cx, cy + 11, 'rgba(255,255,255,.6)', 1); diamond(cx, cy + 14, 3.5, 4.5, '#2ee6d6', '#0a6a70'); poly([cx - 2, cy, cx - 12, cy - 5 - bw2, cx - 7, cy + 3], '#ffd8b8', '#a04a1a'); poly([cx + 2, cy, cx + 12, cy - 5 - bw2, cx + 7, cy + 3], '#ffd8b8', '#a04a1a'); ell(cx, cy, 6, 4.5, '#ff9a5a'); poly([cx + dir * 5, cy - 1, cx + dir * 9, cy + 0.5, cx + dir * 5, cy + 2], '#ffe08a'); circ(cx + dir * 2, cy - 1.5, 1.6, '#fff'); circ(cx + dir * 2.4, cy - 1.5, 0.8, '#200'); break; }
     // Leaping fish, ember and spark.
-    case E.LEAPFISH: { var lf = e.poison ? ['#a63ad8', '#e9a6ff', '#4a0e6a'] : ['#1fa6c8', '#9af0ff', '#0c4a68'], tl = e.up > 0 ? -0.5 : 0.5; ctx.save(); ctx.translate(cx, cy); ctx.rotate(tl); ell(0, 0, 8, 4.4, lf[0]); poly([-7, 0, -13, -4.5, -13, 4.5], lf[0]); poly([-1, -4, 3, -8, 4, -3], lf[1]); circ(4, -1, 1.6, '#fff'); circ(4.6, -1, 0.7, '#102030'); ctx.restore(); break; }
+    case E.LEAPFISH: { if (e.ride) { var rtl = e.up > 0 ? -0.25 : 0.25; ctx.save(); ctx.translate(cx, cy); ctx.rotate(rtl); ell(0, 0, 13, 7.5, '#d8a22a'); poly([-11, 0, -19, -6, -19, 6], '#d8a22a'); rect(-9, -8, 18, 3, '#ffe9a0'); rect(-9, -8, 18, 1, '#fff6d0'); ell(0, 2, 10, 3.5, 'rgba(255,255,255,.3)'); circ(8, -1.5, 2, '#fff'); circ(8.8, -1.5, 0.9, '#102030'); ctx.restore(); break; }
+      var lf = e.poison ? ['#a63ad8', '#e9a6ff', '#4a0e6a'] : ['#1fa6c8', '#9af0ff', '#0c4a68'], tl = e.up > 0 ? -0.5 : 0.5; ctx.save(); ctx.translate(cx, cy); ctx.rotate(tl); ell(0, 0, 8, 4.4, lf[0]); poly([-7, 0, -13, -4.5, -13, 4.5], lf[0]); poly([-1, -4, 3, -8, 4, -3], lf[1]); circ(4, -1, 1.6, '#fff'); circ(4.6, -1, 0.7, '#102030'); ctx.restore(); break; }
     case E.EMBER: { var fl = 0.8 + 0.2 * Math.sin(f * 0.5 + e.x); ctx.globalAlpha = 0.35; circ(cx, cy + (e.up > 0 ? 6 : -6), 9 * fl, '#ff7a1a'); ctx.globalAlpha = 1; poly([cx - 6, cy + 2, cx - 3, cy - 10 * fl, cx, cy - 2, cx + 3, cy - 12 * fl, cx + 6, cy + 2], '#ffb02a'); circ(cx, cy, 6.4, '#ff4a1a'); circ(cx, cy, 4, '#ffd24a'); circ(cx - 1.5, cy - 1.5, 1.4, '#fff4c0'); break; }
     case E.SPARK: { ctx.globalAlpha = 0.5; var sx0 = e.x0, sy0 = e.y0; line(e.x0, e.y0, e.x1, e.y1, '#8a7aff', 1); ctx.globalAlpha = 1; circ(cx, cy, 6, 'rgba(120,255,240,.25)'); circ(cx, cy, 3.6, '#e8fffa'); ctx.strokeStyle = '#7affe8'; ctx.lineWidth = 1.2; for (var k3 = 0; k3 < 4; k3++) { var ak = k3 * Math.PI / 2 + f * 0.25; ctx.beginPath(); ctx.moveTo(cx + Math.cos(ak) * 3, cy + Math.sin(ak) * 3); ctx.lineTo(cx + Math.cos(ak + 0.4) * 6, cy + Math.sin(ak + 0.4) * 6); ctx.lineTo(cx + Math.cos(ak - 0.1) * 9, cy + Math.sin(ak - 0.1) * 9); ctx.stroke(); } break; }
     // Boss.
@@ -459,6 +537,11 @@ function drawSpecial(q, got) { if (got) ctx.globalAlpha = 0.25; var w = 7.5 + Ma
 // Moving / falling platform.
 function drawMover(m, pos, st, i) {
   var k = m.kind | 0, w = m.w, x = pos.x, y = pos.y;
+  if (k === 2 && m.cross) { var pcx = x + w / 2; line(m.cx, m.y, pcx, y + 3, '#7a6a9a', 3); line(m.cx, m.y, pcx, y + 3, '#c8b8e8', 1); circ(m.cx, m.y, 5, '#4a3a6a'); circ(m.cx, m.y, 2.5, '#d8c8f8'); }   // a rotating cross: spokes from the hub to each pad
+  if (k === 15 || k === 16) { ctx.fillStyle = '#7a7468'; ctx.beginPath(); ctx.moveTo(x + 1, y + 11); ctx.lineTo(x, y + 4); ctx.lineTo(x + 5, y); ctx.lineTo(x + w - 5, y); ctx.lineTo(x + w, y + 4); ctx.lineTo(x + w - 1, y + 11); ctx.closePath(); ctx.fill(); rect(x + 4, y, w - 8, 2, '#b8b2a4'); line(x + 8, y + 3, x + 12, y + 9, '#4a463e', 1); line(x + w - 10, y + 2, x + w - 14, y + 7, '#4a463e', 1); circ(x + 7, y + 6, 1.4, '#9a9488'); circ(x + w - 8, y + 7, 1.2, '#5a564e'); return; }   // a heavy stone block
+  if (k === 17) { var hx = m.cx, hy = m.y - m.len; line(hx, hy, x + w / 2, y + 1, '#8a7a6a', 1.5); circ(hx, hy, 3, '#5a4a3a'); rrect(x, y, w, 6, 2, '#b07a3a'); rect(x + 2, y, w - 4, 1.6, '#e0b070'); line(x + 4, y + 3, x + w - 4, y + 3, 'rgba(60,30,0,.4)', 1); return; }   // a swinging plank on chains
+  if (k === 18) { ctx.strokeStyle = 'rgba(200,220,255,.25)'; ctx.lineWidth = 1; ctx.strokeRect(m.cx - m.wd / 2, m.y + 3, m.wd, m.ht); rrect(x, y, w, 7, 2, '#8aa0c0'); rect(x + 2, y, w - 4, 2, '#d8e8ff'); circ(x + 5, y + 4, 1.2, '#2a3a5a'); circ(x + w - 5, y + 4, 1.2, '#2a3a5a'); return; }   // a pad running round a rail loop
+  if (k === 19) { ctx.strokeStyle = 'rgba(120,80,40,.25)'; ctx.lineWidth = 1; line(m.x0, y + 8, m.x0 + m.span, y + 8, 'rgba(120,80,40,.25)', 1); for (var pl = 0; pl < 3; pl++) rect(x + pl * (w / 3), y, w / 3 - 1, 6, pl % 2 ? '#a06a2a' : '#b87a34'); rect(x, y + 5, w, 2, '#6a4218'); return; }   // a drifting raft of planks
   if (k === 3) { var s = st.mo[i].s; ctx.globalAlpha = s === 3 ? 0.15 : 1; var sh = s === 1 ? Math.sin(F * 1.2) : 0; poly([x + sh, y, x + w + sh, y, x + w - 4 + sh, y + 7, x + 4 + sh, y + 7], '#ff9a6a'); rect(x + 2 + sh, y, w - 4, 2, '#ffd0b0'); line(x + 10 + sh, y + 1, x + 13 + sh, y + 6, '#6a2a14'); line(x + w - 12 + sh, y + 1, x + w - 14 + sh, y + 6, '#6a2a14'); ctx.globalAlpha = 1; return; }
   if (k === 2) { ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(m.cx, m.y, m.amp, 0, 6.2832); ctx.stroke(); }
   if (k === 4) { var on = PF.movOn(st, i, st.f), nxt = PF.movOn(st, i, st.f + 40); if (!on) { ctx.globalAlpha = 0.12; } else if (!nxt) { ctx.globalAlpha = (Math.floor(st.f / 4) % 2) ? 0.35 : 1; } ell(x + w / 2, y + 3, w / 2, 4, '#e8f4ff'); ell(x + w / 2, y + 2, w / 2 - 3, 2.4, '#fff'); for (var cl = 0; cl < 3; cl++) line(x + 6 + cl * 8, y + 5, x + 10 + cl * 8, y + 5, 'rgba(120,150,220,.6)', 1); ctx.globalAlpha = 1; return; }
@@ -531,6 +614,7 @@ function drawLevel(st, th) {
   if (L.keys) for (i = 0; i < L.keys.length; i++) if (!st.kg[i]) drawKey(L.keys[i].x, L.keys[i].y, L.keys[i].c, false);
   if (L.winds) for (i = 0; i < L.winds.length; i++) { var wzd = L.winds[i]; if (wzd.gust) drawGust(wzd, st.f, cam); else if (wzd.bub) drawBubbleJet(wzd, st.f); else drawWind(wzd); }
   if (L.whirls) for (i = 0; i < L.whirls.length; i++) drawWhirl(L.whirls[i], st.f);
+  if (L.geysers) for (i = 0; i < L.geysers.length; i++) drawGeyser(L.geysers[i], st.f);
   if (L.pockets) for (i = 0; i < L.pockets.length; i++) if (!st.pk[i]) drawPocket(L.pockets[i]);
   drawGoal(L, st, st.boss > 0);
   for (i = 0; i < L.movers.length; i++) drawMover(L.movers[i], PF.movPos(st, i, st.f), st, i);
@@ -560,6 +644,7 @@ function drawLevel(st, th) {
     if (p.mini) { var mcx = p.x + p.w / 2, mby = p.y + p.h; ctx.save(); ctx.translate(mcx, mby); ctx.scale(0.85, 0.85); ctx.translate(-mcx, -mby); }
     if (p.wing > 0) { var wf = Math.sin(F * 0.5) * 4, wx = p.x + p.w / 2, wy = p.y + p.h * 0.45; poly([wx - 3, wy, wx - 14, wy - 8 + wf, wx - 9, wy + 1], '#f4f0ff', '#8a7ac0'); poly([wx + 3, wy, wx + 14, wy - 8 + wf, wx + 9, wy + 1], '#f4f0ff', '#8a7ac0'); }
     drawHero(p, false, 0, !!p.mount);
+    if (p.slow > 0) { ctx.globalAlpha = 0.75; ctx.strokeStyle = '#f4f4ff'; ctx.lineWidth = 1; var hx5 = p.x + p.w / 2, hy5 = p.y + p.h / 2; for (var wq = 0; wq < 4; wq++) { var wq2 = wq * 0.785; ctx.beginPath(); ctx.moveTo(hx5 - Math.cos(wq2) * 10, hy5 - Math.sin(wq2) * 12); ctx.lineTo(hx5 + Math.cos(wq2) * 10, hy5 + Math.sin(wq2) * 12); ctx.stroke(); } ctx.beginPath(); ctx.arc(hx5, hy5, 7, 0, 6.2832); ctx.stroke(); ctx.globalAlpha = 1; }
     if (p.frz > 0) { var ix = p.x - 3, iy = p.y - 2, iw = p.w + 6, ih = p.h + 4, thaw = p.frz < 24 && (Math.floor(p.frz / 3) % 2); ctx.globalAlpha = thaw ? 0.45 : 0.78; rrect(ix, iy, iw, ih, 3, '#bfefff'); ctx.globalAlpha = 0.9; rect(ix + 2, iy + 2, 3, ih - 6, '#ffffff'); line(ix + iw - 4, iy + 3, ix + iw - 8, iy + 9, '#7ac0e0', 1); line(ix + 3, iy + ih - 3, ix + 8, iy + ih - 8, '#7ac0e0', 1); ctx.globalAlpha = 1; }
     if (p.fin > 0) { var fx = p.x + p.w / 2; poly([fx - 7, p.y + p.h, fx - 1, p.y + p.h, fx - 6, p.y + p.h + 3], '#2ee6d6'); poly([fx + 1, p.y + p.h, fx + 7, p.y + p.h, fx + 6, p.y + p.h + 3], '#2ee6d6'); }
     if (p.mini) ctx.restore();
