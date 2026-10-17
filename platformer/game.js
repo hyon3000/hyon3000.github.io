@@ -332,6 +332,8 @@ function handleEvents(st) {
       case 'pearl': sfx('special'); pop(e.x, e.y - 8, '+300', '#fff'); spark(e.x, e.y, '#ffffff', 10); break;
       case 'treasure': sfx('special'); pop(e.x, e.y - 8, '+500', '#7affe0'); spark(e.x, e.y, '#7affe0', 10); break;
       case 'drop': sfx('coin'); break;
+      case 'burst': sfx('thud'); spark(e.x, e.y, '#ffd0a0', 8); break;
+      case 'freeze': sfx('hurt'); spark(e.x, e.y, '#bfefff', 14); say(TT('얼어붙었다!', 'Frozen!'), 70); break;
       case 'bossdead': sfx('bossdead'); spark(e.x, e.y, '#ffd23a', 24); say(TT('보스 격파! 깃발이 열렸어요', 'Boss defeated! The gate is open'), 150); break;
       case 'goal': sfx('goal'); break;
       case 'spinkill': pop(e.x, e.y - 8, TT('스핀!', 'SPIN!'), '#fff'); break;
@@ -393,7 +395,10 @@ function fixedStep() {
       else { saveProg(); levelInit(st.cp); say(TT('다시 도전! 남은 목숨 ' + G.lives, 'Try again! Lives left: ' + G.lives), 120); }
     }
   } else if (G.mode === 'clear') {
-    G.clearT++; var pw = st.p; pw.y = Math.min(pw.y + 1.2, G.L.poleY - pw.h);
+    G.clearT++; var pw = st.p;
+    if (G.L.endCannon) { var ft = Math.max(0, G.clearT - 6); if (G.clearT === 6) { pw.x = G.L.goalX - 6; pw.y = G.L.poleY - 30; } if (G.clearT > 6) { pw.x += 4.2; pw.y -= 3.4 - ft * 0.012; } }   // shot out of the cannon up and away
+    else if (G.L.arena) { }
+    else pw.y = Math.min(pw.y + 1.2, G.L.poleY - pw.h);
     if (G.clearT > 170) {
       G.base += st.score; G.coinBase += st.coins; var node = G.curNode, d = G.prog.done[G.wid] = G.prog.done[G.wid] || {};
       d[node.i] = 1; if (G.secretExit) { var sc = G.prog.secret[G.wid] = G.prog.secret[G.wid] || {}; sc[node.i] = true; G.lives++; sfx('life'); }

@@ -52,6 +52,8 @@ function evaluate(st0, c, traj) {
   else if (bi >= 0) { var b1 = st.en[bi], b0 = st0.en[bi]; sc = -Math.abs(p.x + 6 - (b1.x + b1.w / 2)) * 3 + (b0.hp - b1.hp) * 900 + (st.score - st0.score) * 0.25; if (!b1.alive) sc += 3000; }
   else sc = p.x * 3 + (st.score - st0.score) * 0.25;
   if (big0 && !p.big) sc -= 400;
+  if (p.frz > 0) sc -= 250 + p.frz * 3;   // frozen in an ice block: a helpless stretch
+  if (st.hz.length) for (var hq = 0; hq < st.hz.length; hq++) { var ho = st.hz[hq]; if (Math.abs(p.x + p.w / 2 - ho.x) < 26 && p.y < ho.gy + 4) sc -= (ho.wt > 0 ? 90 : 160); }   // standing under a marked strike zone
   if (!p.ground) { sc -= 25; if (!groundBelow(st)) sc -= 3000; }
   if (st0.p.air < 700) sc += (p.air - st0.p.air) * 0.3; if (p.air < 200) sc -= (200 - p.air) * 3;
   if (c.h > 0) sc -= 2 + c.s * 0.4;

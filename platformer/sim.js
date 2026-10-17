@@ -10,7 +10,7 @@ function fireOn(f, c) { return ((f + c * 17) % 130) < 55; }   // timed fire jet 
 var IN = { L: 1, R: 2, J: 4, RUN: 8, DN: 16, UP: 32, SPIN: 64 };
 var P = { WALK: 1.4, RUN: 2.2, PRUN: 2.75, PMAX: 64, ACCG: 0.12, ACCA: 0.07, FRIC: 0.14, JUMP: -6.3, JRUN: 0.5, GUP: 0.28, GCUT: 0.7, GDN: 0.55, MAXFALL: 7.5,
           COY: 5, JBUF: 6, PW: 12, SH: 14, BH: 24, INV: 100, ACTIVE: 340, STAR: 600, POIS: 180 };
-var E = { WALKER: 0, SPIKY: 1, FLYER: 2, BEETLE: 3, BULLET: 4, CRUSH: 5, GHOST: 6, PLANT: 7, BOSS: 8, SWIM: 9, CHASER: 10, FMINE: 11, WHALE: 12, JELLY: 13, CLAM: 14, SWOOP: 15, FLOCK: 16, BALLOON: 17, SHOOTER: 18, BIRD: 19, SPARK: 20, LEAPFISH: 21, EMBER: 22 };   // LEAPFISH: leaps out of water / poison (killable); EMBER: leaps out of lava (fire-proof, cannot be stomped)
+var E = { WALKER: 0, SPIKY: 1, FLYER: 2, BEETLE: 3, BULLET: 4, CRUSH: 5, GHOST: 6, PLANT: 7, BOSS: 8, SWIM: 9, CHASER: 10, FMINE: 11, WHALE: 12, JELLY: 13, CLAM: 14, SWOOP: 15, FLOCK: 16, BALLOON: 17, SHOOTER: 18, BIRD: 19, SPARK: 20, LEAPFISH: 21, EMBER: 22, ROLL: 23, SQUID: 24, STRIDER: 25, PUFFER: 26, EEL: 27 };   // LEAPFISH: leaps out of water / poison (killable); EMBER: leaps out of lava (fire-proof, cannot be stomped)
 var AIRMAX = 900;
 var MV_PERIOD = 1440;
 
@@ -47,7 +47,7 @@ function newState(L, o) {
   var st = { L: L, f: 0, mod: EMPTY, score: 0, coins: 0, t: Math.round(L.time * 60), cp: o.cp ? 1 : 0, ev: o.rec ? [] : null, noEn: !!o.noEn, noPM: !!o.noPM, sw: 0, sc: 0, boss: 0, tape: 0,
     p: { x: s.x, y: s.y, vx: 0, vy: 0, w: P.PW, h: P.SH, big: false, pw: 0, ground: true, coy: 0, jbuf: 0, jheld: false, sprev: false, rprev: true, face: 1, inv: 0, dead: false, won: false, mv: -1, anim: 0, why: '',
       pm: 0, spin: 0, star: 0, mount: 0, mini: 0, fin: 0, wing: 0, climb: false, carry: -1, swim: false, fbc: 0, air: AIRMAX, wasW: false, dtick: 0, tcd: 0 },
-    en: [], it: [], fb: [], ep: [], cg: new Uint8Array(L.coins.length), sg: new Uint8Array((L.special || []).length), pk: new Uint8Array((L.pockets || []).length), mo: [], sb: 0, kb: 0, kg: new Uint8Array((L.keys || []).length), dg: new Uint8Array((L.doors || []).length), sg2: new Uint8Array((L.switches || []).length), tc: 0, stage: 0, cr: 0 };
+    en: [], it: [], fb: [], ep: [], hz: [], cg: new Uint8Array(L.coins.length), sg: new Uint8Array((L.special || []).length), pk: new Uint8Array((L.pockets || []).length), mo: [], sb: 0, kb: 0, kg: new Uint8Array((L.keys || []).length), dg: new Uint8Array((L.doors || []).length), sg2: new Uint8Array((L.switches || []).length), tc: 0, stage: 0, cr: 0 };
   if (L.items) for (var ii = 0; ii < L.items.length; ii++) st.it.push({ k: L.items[ii].k, x: L.items[ii].x, y: L.items[ii].y, w: 12, h: 12, vx: 0, vy: 0, em: 0, alive: true, ground: false });
   if (L.egg && !o.mount) st.it.push({ k: 4, x: L.egg.x, y: L.egg.y, w: 12, h: 12, vx: 0, vy: 0, em: 0, alive: true, ground: false });
   if (o.pw) { setPw(st.p, o.pw); } if (o.mount) st.p.mount = 1;
@@ -69,6 +69,7 @@ function clone(st) {
   c.it = st.it.length ? st.it.map(function (s) { var e = {}; for (var k in s) e[k] = s[k]; return e; }) : [];
   c.fb = st.fb.length ? st.fb.map(function (s) { return { x: s.x, y: s.y, vx: s.vx, vy: s.vy, life: s.life }; }) : [];
   c.ep = st.ep.length ? st.ep.map(function (s) { return { x: s.x, y: s.y, vx: s.vx, vy: s.vy, life: s.life }; }) : [];
+  c.hz = st.hz.length ? st.hz.map(function (s) { var e = {}; for (var k in s) e[k] = s[k]; return e; }) : [];
   c.mo = st.mo.map(function (s) { return { off: s.off, vy: s.vy, s: s.s, t: s.t, ox: s.ox }; });
   c.cg = st.cg.slice(); c.sg = st.sg.slice(); c.pk = st.pk.slice(); c.kg = st.kg.slice(); c.dg = st.dg.slice(); c.sg2 = st.sg2.slice(); c.ev = null; return c;
 }
@@ -142,7 +143,7 @@ function moveEnt(st, o, g) {
 }
 function hurt(st, why) {
   var p = st.p;
-  if (p.inv > 0 || p.dead || p.star > 0) return;
+  if (p.inv > 0 || p.dead || p.star > 0 || p.frz > 0) return;
   if (p.carry >= 0) { var ce = st.en[p.carry]; if (ce) { ce.sh = 1; ce.carried = false; } p.carry = -1; }
   if (p.mount) { p.mount = 0; p.inv = P.INV; ev(st, 'hurt', p.x, p.y); return; }
   if (p.pw > 0) { setPw(p, 0); p.inv = P.INV; ev(st, 'hurt', p.x, p.y); }
@@ -216,6 +217,71 @@ function updEnemy(st, e, f) {
       if (Math.abs(p.x + p.w / 2 - e.x - e.w / 2) < 18) up = Math.min(up, e.up || 0);
       e.up = up; e.y = e.y0 - up * 18; e.hid = up < 0.25; return; }
     case 8: updBoss(st, e, f); return;
+    case 23: { e.vx = e.dir * e.spd; hw = moveEnt(st, e); e.rot = (e.rot || 0) + e.vx * 0.18; if (hw || ++e.tm > 900 || e.y > (st.L.rows || ROWS) * TS + 20) { e.alive = false; e.dt = 12; ev(st, 'burst', e.x + e.w / 2, e.y + e.h / 2); } e.ax = e.x; return; }   // rolling snowball / boulder / tumbleweed
+    case 24: { e.tm++; var sc0 = e.cnt | 0;   // squid: rests, then jets off in a random direction (the choice is a hash of its own counter, so every run of the sim is identical)
+      if (e.s === 0) { e.vx *= 0.9; e.vy *= 0.9; if (e.tm > e.wait) { var ha = hash(e.id | 0, sc0, 31), an = (ha % 6283) / 1000; e.dvx = Math.cos(an) * 2.3; e.dvy = Math.sin(an) * 1.7; e.cnt = sc0 + 1; e.s = 1; e.tm = 0; if (hash(e.id | 0, sc0, 32) % 3 === 0) { var tdx = p.x - e.x, tdy = p.y - e.y, td = Math.max(1, Math.sqrt(tdx * tdx + tdy * tdy)); if (td < 130) { e.dvx = tdx / td * 2.3; e.dvy = tdy / td * 1.7; } } } }
+      else { var kk = 1 - e.tm / 26; e.vx = e.dvx * kk; e.vy = e.dvy * kk; if (e.tm > 26) { e.s = 0; e.tm = 0; e.wait = 24 + hash(e.id | 0, sc0, 33) % 50; } }
+      var qx = e.x + e.vx, qy = e.y + e.vy;
+      if (isW(tileAt(st, Math.floor((qx + e.w / 2) / TS), Math.floor((qy + e.h / 2) / TS))) && !boxHit(st, qx, qy, e.w, e.h) && Math.abs(qx - e.ax0) < e.rx && Math.abs(qy - e.ay0) < e.ry) { e.x = qx; e.y = qy; } else { e.dvx = -e.dvx; e.dvy = -e.dvy; e.vx = -e.vx; e.vy = -e.vy; }
+      if (e.vx) e.dir = e.vx > 0 ? 1 : -1; e.ax = e.x; return; }
+    case 25: { var scx = p.x + p.w / 2, ex = e.x + e.w / 2, dsx = scx - ex;   // water strider: skates on the surface after the hero, never leaves it
+      var near = Math.abs(dsx) < 170 && p.y > e.sy - 90 ? 1 : 0, vx25 = near ? (Math.abs(dsx) < 6 ? 0 : (dsx > 0 ? 1 : -1) * (e.s === 1 ? 1.5 : 0.95)) : 0;
+      if (near && !e.s && Math.abs(dsx) < 60) e.s = 1; if (e.s === 1 && ++e.tm > 40) { e.s = 0; e.tm = -60; }
+      if (!near) { var hx25 = e.ax0 - ex; vx25 = Math.abs(hx25) < 3 ? 0 : (hx25 > 0 ? 0.4 : -0.4); }
+      var nx25 = e.x + vx25, sc25 = Math.floor((nx25 + e.w / 2 + (vx25 > 0 ? e.w / 2 : -e.w / 2)) / TS);
+      if (vx25 && isW(tileAt(st, sc25, Math.floor((e.sy + 2) / TS))) && !isW(tileAt(st, sc25, Math.floor((e.sy - 3) / TS))) && nx25 > e.mn && nx25 + e.w < e.mx) { e.x = nx25; e.dir = vx25 > 0 ? 1 : -1; }
+      e.y = e.sy - e.h + 3 + Math.sin(f * 0.2 + e.id) * 0.6; e.ax = e.x; return; }
+    case 26: { var pcx2 = e.ax0 + e.rg * tri(f * e.sp + e.ph), pcy2 = e.ay0 + Math.sin(f * 0.04 + e.ph * 6.283) * 4, nd = Math.abs(p.x + p.w / 2 - pcx2) < 62 && Math.abs(p.y + p.h / 2 - pcy2) < 46;   // pufferfish: swells up when the hero gets close
+      e.inf = Math.max(0, Math.min(1, (e.inf || 0) + (nd ? 0.08 : -0.025))); e.w = 12 + 12 * e.inf; e.h = 10 + 10 * e.inf; e.x = pcx2 - e.w / 2; e.y = pcy2 - e.h / 2; e.dir = tri((f + 1) * e.sp + e.ph) > tri(f * e.sp + e.ph) ? 1 : -1; e.ax = pcx2; return; }
+    case 27: { var ph27 = (f + e.pho) % 200; e.s = ph27 < 110 ? 0 : ph27 < 140 ? 1 : 2; e.ax = e.x; return; }   // electric eel: idle, charges (warning sparks), zaps along its whole body
+  }
+}
+// ------------------------------------------------------------------ theme hazards (L.hz): objects that drop from above after a warning, lightning, rolling things; all of it is a function of the frame number and the hero, so the planner's look-ahead sees it exactly
+function groundY(st, x, y0) { var c = Math.floor(x / TS), R = st.L.rows || ROWS, r = Math.max(0, Math.floor(y0 / TS)); for (; r < R; r++) if (SOL[tileAt(st, c, r)]) return r * TS; return R * TS; }
+function freezeHero(st) { var p = st.p; if (p.frz > 0 || p.frzcd > 0 || p.star > 0 || p.dead) return false; p.frz = 80; p.vx = 0; ev(st, 'freeze', p.x, p.y); return true; }
+function hzEffect(st, o) {
+  var p = st.p;
+  if (o.mode === 'freeze') freezeHero(st); else if (o.mode === 'kill') { if (p.star <= 0 && !(p.frz > 0)) dieNow(st, o.skin); } else hurt(st, o.skin);
+}
+function hzImpact(st, o) {
+  var c = Math.floor(o.x / TS), R = st.L.rows || ROWS, r = Math.floor((o.y + o.sz) / TS);
+  ev(st, 'burst', o.x, o.y);
+  if (o.crater) {
+    for (var dc = -1; dc <= 1; dc++) for (var dr = -1; dr <= 1; dr++) if (tileRaw(st, c + dc, r + dr) === T.BRICK) { setTile(st, c + dc, r + dr, T.AIR); ev(st, 'brick', (c + dc) * TS + 8, (r + dr) * TS + 8); }
+    var tr = r; if (tileRaw(st, c, tr) !== T.SOLID) tr = r + 1;   // the floor tile the rock struck
+    if (tileRaw(st, c, tr) === T.SOLID && tileRaw(st, c, tr - 1) === T.AIR && SOL[tileRaw(st, c, tr + 1)] && SOL[tileRaw(st, c, tr + 2)] && st.L.tiles[c * R + tr] === T.SOLID && Math.abs(c * TS - st.L.goalX) > 90 && c * TS > st.L.start.x + 70) { setTile(st, c, tr, T.AIR); ev(st, 'brick', c * TS + 8, tr * TS + 8); }   // a one-tile dent, never a pit
+  }
+}
+function hzStep(st, f) {
+  var L = st.L, p = st.p, hz = L.hz, pcx = p.x + p.w / 2, i, d, o;
+  if (hz && !st.noEn && f > 100 && !(L.arena && pcx > L.arena.c0 * TS - 40)) for (i = 0; i < hz.length; i++) { d = hz[i];
+    if ((f + d.off) % d.per !== 0 || pcx < (d.x0 || 0) || pcx > (d.x1 || 1e9)) continue;
+    var hh = hash(L.seed | 0, (d.id | 0) * 977 + f, 5), jit = (hh % 1001) / 1000 - 0.5;
+    if (d.k === 'fall') {
+      var x = Math.max(14, Math.min(L.w * TS - 14, pcx + p.face * (d.lead || 0) + jit * 2 * (d.spread || 40))), y0, gy;
+      if (d.ceil) { var cr = Math.floor(p.y / TS), found = -1; for (var q = 0; q < 9; q++) { if (SOL[tileAt(st, Math.floor(x / TS), cr - q)]) { found = cr - q; break; } } if (found < 0) continue; y0 = (found + 1) * TS + 4; }
+      else { y0 = Math.max(-10, p.y - 150); if (boxHit(st, x - 4, y0, 8, 8)) continue; }
+      gy = groundY(st, x, y0 + 8); if (gy - y0 < 24) continue;
+      st.hz.push({ k: 'fall', skin: d.skin, mode: d.mode, crater: d.crater, x: x, y: y0, vy: d.ceil ? 0 : 1.2, wt: d.warn, gy: gy, sz: d.sz || 5, sk: 0 });
+    } else if (d.k === 'bolt') {
+      var bx = Math.max(14, Math.min(L.w * TS - 14, pcx + p.face * (d.lead || 0) + jit * 2 * (d.spread || 40)));
+      st.hz.push({ k: 'bolt', skin: d.skin, mode: d.mode, x: bx, gy: groundY(st, bx, Math.max(0, p.y - 60)), wt: d.warn, sk: 0, y: 0, sz: 0 });
+    } else if (d.k === 'roll') {
+      var rx = pcx + (d.dir < 0 ? 250 : -250), rc = Math.floor(rx / TS), rr0 = Math.max(0, Math.floor(p.y / TS) - 5), rrow = -1, busy = false;
+      if (rx < 40 || rx > L.w * TS - 60) continue;
+      for (var e2 = 0; e2 < st.en.length; e2++) if (st.en[e2].alive && st.en[e2].t === E.ROLL && Math.abs(st.en[e2].x - rx) < 160) busy = true; if (busy) continue;
+      for (var rq = rr0; rq < rr0 + 11; rq++) if (SOL[tileAt(st, rc, rq)] && !SOL[tileAt(st, rc, rq - 1)] && !isW(tileAt(st, rc, rq - 1))) { rrow = rq; break; }
+      if (rrow < 0 || Math.abs(rrow * TS - (p.y + p.h)) > 4 * TS) continue;
+      var rs = d.sz || 14; st.en.push({ t: E.ROLL, skin: d.skin, mode: d.mode, x: rx, y: rrow * TS - rs, w: rs, h: rs, vx: 0, vy: 0, spd: d.spd || 1.5, dir: d.dir || -1, alive: true, dt: 0, ground: false, sh: 0, kg: 0, s: 0, tm: 0, inv: 0, ax: rx, rot: 0 });
+    }
+  }
+  for (i = st.hz.length - 1; i >= 0; i--) { o = st.hz[i];
+    if (o.wt > 0) { o.wt--; if (o.wt === 0 && o.k === 'bolt') o.sk = 9; continue; }
+    if (o.k === 'bolt') { if (o.sk > 0) { o.sk--; if (!p.dead && Math.abs(pcx - o.x) < 8 && p.y < o.gy) hzEffect(st, o); if (o.sk === 0) { ev(st, 'burst', o.x, o.gy); st.hz.splice(i, 1); } } continue; }
+    o.vy = Math.min(7, o.vy + 0.26); o.y += o.vy;
+    if (!p.dead && o.x + o.sz > p.x && o.x - o.sz < p.x + p.w && o.y + o.sz > p.y && o.y - o.sz < p.y + p.h) { hzEffect(st, o); ev(st, 'burst', o.x, o.y); st.hz.splice(i, 1); continue; }
+    if (o.y >= o.gy - o.sz || boxHit(st, o.x - 3, o.y + o.sz - 2, 6, 4)) { hzImpact(st, o); st.hz.splice(i, 1); continue; }
+    if (o.y > (L.rows || ROWS) * TS + 20) st.hz.splice(i, 1);
   }
 }
 function updBoss(st, e, f) {
@@ -285,6 +351,7 @@ function stageDone(st, g) {
 function step(st, inp) {
   var L = st.L, p = st.p, f = st.f, i, e;
   if (p.dead || p.won) { st.f++; return; }
+  if (p.frz > 0) { p.frz--; inp = 0; p.vx = 0; if (p.frz === 0) { p.frzcd = 150; p.inv = Math.max(p.inv, 30); } } else if (p.frzcd > 0) p.frzcd--;   // an ice block cannot move
   var left = inp & 1, right = inp & 2, spinIn = inp & 64, jump = (inp & 4) || spinIn, run = inp & 8, up = inp & 32, down = inp & 16, dir = (right ? 1 : 0) - (left ? 1 : 0);
   // --- switch timer (bricks are coins while active): never leave the hero stuck inside a brick when it ends
   if (st.sw > 0) { st.sw--; if (st.sw === 0) { var guard = 0; while (boxHit(st, p.x, p.y, p.w, p.h) && guard++ < 40) p.y -= 1; } }
@@ -362,7 +429,9 @@ function step(st, inp) {
     if (p.spin > 0) p.spin--;
     p.jheld = !!jump;
     if (inW) { p.vx += curPush; p.vy += curUp; if (curUp) p.vy = Math.max(p.vy, -2.6); }
-    if (L.winds) for (i = 0; i < L.winds.length; i++) { var wz = L.winds[i]; if (cx0 > wz.x0 && cx0 < wz.x1 && p.y + p.h / 2 > wz.y0 && p.y + p.h / 2 < wz.y1) { p.vx += wz.dx * (p.ground ? 0.35 : 1); if (wz.dx) p.vx = Math.max(-3.4, Math.min(3.4, p.vx)); if (wz.dy) { p.vy += wz.dy; if (wz.dy < 0) p.vy = Math.max(p.vy, -2.7); } } }
+    if (L.winds) for (i = 0; i < L.winds.length; i++) { var wz = L.winds[i]; if ((!wz.per || ((f + (wz.ph | 0)) % wz.per) < wz.on) && cx0 > wz.x0 && cx0 < wz.x1 && p.y + p.h / 2 > wz.y0 && p.y + p.h / 2 < wz.y1) { p.vx += wz.dx * (p.ground ? 0.35 : 1); if (wz.dx) p.vx = Math.max(-3.4, Math.min(3.4, p.vx)); if (wz.dy) { p.vy += wz.dy; if (wz.dy < 0) p.vy = Math.max(p.vy, -2.7); } } }
+    if (L.whirls) for (i = 0; i < L.whirls.length; i++) { var wh = L.whirls[i], whx = cx0 - wh.x, why = p.y + p.h / 2 - wh.y, whd = Math.sqrt(whx * whx + why * why);   // whirlpool: spins the swimmer around its eye and pulls in a little
+      if (whd < wh.r && whd > 1) { var wk = 1 - whd / wh.r, wt1 = wh.dir || 1; p.vx += (-why / whd * wt1 * 0.17 - whx / whd * 0.05) * wk * 1.6; p.vy += (whx / whd * wt1 * 0.12 - why / whd * 0.035) * wk * 1.6; p.vx = Math.max(-2.6, Math.min(2.6, p.vx)); p.vy = Math.max(-2.4, Math.min(2.4, p.vy)); } }
     // --- conveyor under the feet
     if (p.ground) { var tb = tileAt(st, Math.floor(cx0 / TS), Math.floor((p.y + p.h + 0.5) / TS)); if (tb === T.CONVL) carried = -0.7; else if (tb === T.CONVR) carried = 0.7; }
     // --- move x
@@ -437,6 +506,7 @@ function step(st, inp) {
   for (i = 0; i < st.en.length; i++) { e = st.en[i]; if (!e.alive) { if (e.dt > 0) e.dt--; continue; } var oex = e.x, oey = e.y; updEnemy(st, e, f); e.dvx = e.x - oex; e.dvy = e.y - oey; }
   for (i = st.ep.length - 1; i >= 0; i--) { var pr = st.ep[i]; pr.x += pr.vx; pr.y += pr.vy; pr.vy += 0.01; if (--pr.life <= 0 || boxHit(st, pr.x - 3, pr.y - 3, 6, 6)) { st.ep.splice(i, 1); continue; }
     if (pr.x > p.x - 3 && pr.x < p.x + p.w + 3 && pr.y > p.y - 3 && pr.y < p.y + p.h + 3) { st.ep.splice(i, 1); hurt(st, 'shot'); } }
+  hzStep(st, f);
   for (i = 0; i < st.it.length; i++) { e = st.it[i]; if (!e.alive) continue;
     if (e.em > 0) { e.em--; e.y -= 1.2; continue; }
     if (e.k === 0 || e.k === 4 || e.k === 5) { if (moveEnt(st, e)) e.vx = -e.vx; }
@@ -471,7 +541,10 @@ function step(st, inp) {
   if (p.tcd > 0) p.tcd--;   // fins and wings no longer run out: only losing a life takes a power-up away
   if (L.crumbs) { var cb = L.crumbs; for (var kk = 1; kk <= 4 && st.cr + kk < cb.length; kk++) { var cq = cb[st.cr + kk]; if (cq[2] <= st.stage && Math.abs(pcx - cq[0]) < 22 && Math.abs(pcy - cq[1]) < 26) { st.cr += kk; break; } } }
   if (L.keys) for (i = 0; i < L.keys.length; i++) if (!st.kg[i]) { var ky = L.keys[i]; if (Math.abs(pcx - ky.x) < 11 && Math.abs(pcy - ky.y) < 13) { st.kg[i] = 1; st.kb |= 1 << ky.c; ev(st, 'key', ky.x, ky.y, ky.c); } }
-  if (L.doors) for (i = 0; i < L.doors.length; i++) if (!st.dg[i]) { var dr = L.doors[i]; if (((st.kb >> dr.g) & 1) && Math.abs(pcx - (dr.c * TS + 8)) < 16 && p.y + p.h > dr.r0 * TS - 2 && p.y < (dr.r1 + 1) * TS) { st.dg[i] = 1; for (var rr2 = dr.r0; rr2 <= dr.r1; rr2++) setTile(st, dr.c, rr2, T.AIR); ev(st, 'unlock', dr.c * TS + 8, p.y, dr.g); } }
+  if (L.doors) for (i = 0; i < L.doors.length; i++) if (!st.dg[i]) { var dr = L.doors[i];
+    if (dr.h) {   // a hatch in a floor / ceiling hole (a door that is crossed going down or up): opens when the hero stands on it or is right under it
+      if (((st.kb >> dr.g) & 1) && pcx > dr.c0 * TS - 10 && pcx < (dr.c1 + 1) * TS + 10 && ((p.y + p.h > dr.r * TS - 6 && p.y + p.h < dr.r * TS + 6) || (p.y > (dr.r + 1) * TS - 4 && p.y < (dr.r + 1) * TS + 30))) { st.dg[i] = 1; for (var hc = dr.c0; hc <= dr.c1; hc++) setTile(st, hc, dr.r, T.AIR); ev(st, 'unlock', pcx, p.y, dr.g); }
+    } else if (((st.kb >> dr.g) & 1) && Math.abs(pcx - (dr.c * TS + 8)) < 16 && p.y + p.h > dr.r0 * TS - 2 && p.y < (dr.r1 + 1) * TS) { st.dg[i] = 1; for (var rr2 = dr.r0; rr2 <= dr.r1; rr2++) setTile(st, dr.c, rr2, T.AIR); ev(st, 'unlock', dr.c * TS + 8, p.y, dr.g); } }
   if (L.switches) for (i = 0; i < L.switches.length; i++) if (!st.sg2[i]) { var sw = L.switches[i]; if (pcx > sw.c * TS - 2 && pcx < sw.c * TS + TS + 2 && pcy > sw.r * TS - 4 && pcy < sw.r * TS + TS + 4) { st.sg2[i] = 1; st.sb |= 1 << sw.g; setTile(st, sw.c, sw.r, T.SWUSED); ev(st, 'switch', sw.c * TS + 8, sw.r * TS, sw.g); } }
   if (L.tele && p.tcd === 0) for (i = 0; i < L.tele.length; i++) { var tp = L.tele[i]; if (pcx > tp.c * TS && pcx < tp.c * TS + TS && pcy > tp.r * TS - 2 && pcy < tp.r * TS + TS + 2) { p.x = tp.tx; p.y = tp.ty; p.vx = 0; p.vy = 0; p.tcd = 50; p.climb = false; st.tc++; ev(st, 'tele', tp.tx, tp.ty, i); break; } }
   if (L.launch && p.tcd === 0) for (i = 0; i < L.launch.length; i++) { var lb = L.launch[i]; if (pcx > lb.c * TS && pcx < lb.c * TS + TS && pcy > lb.r * TS - 2 && pcy < lb.r * TS + TS + 2) { p.vx = lb.vx; p.vy = lb.vy; p.ground = false; p.mv = -1; p.tcd = 30; ev(st, 'launch', lb.c * TS, lb.r * TS); break; } }
@@ -482,11 +555,13 @@ function step(st, inp) {
     if (e.t === 12) ov = overlap(p, { x: e.dir > 0 ? e.x + e.w - 12 : e.x, y: e.y, w: 12, h: e.h });
     else if (e.t === 13) { var jw = e.w * (0.7 + 0.3 * (e.pul || 0)); ov = overlap(p, { x: e.x + (e.w - jw) / 2, y: e.y, w: jw, h: e.h * 0.7 }) || overlap(p, { x: e.x + e.w / 2 - 2, y: e.y + e.h * 0.7, w: 4, h: 18 }); }
     else if (e.t === 14) ov = !e.s && overlap(p, e);
+    else if (e.t === 27) ov = e.s === 2 && overlap(p, e);
     else ov = overlap(p, e);
     if (!ov) continue;
-    var stompable = e.t === 0 || e.t === 2 || e.t === 3 || e.t === 4 || e.t === 8 || e.t === 9 || e.t === 10 || e.t === 15 || e.t === 16 || e.t === 18 || e.t === 19 || e.t === 21 || (e.t === 1 && p.spin > 0);
+    var stompable = e.t === 0 || e.t === 2 || e.t === 3 || e.t === 4 || e.t === 8 || e.t === 9 || e.t === 10 || e.t === 15 || e.t === 16 || e.t === 18 || e.t === 19 || e.t === 21 || e.t === 25 || (e.t === 23 && e.skin === 'snowball') || (e.t === 1 && p.spin > 0);
     var stomping = stompable && p.vy > 0 && (p.y + p.h) - e.y <= 9 + p.vy;
     if (p.star > 0 && e.t !== 8) { killEnemy(st, e, 200); continue; }
+    if (e.t === E.ROLL && e.mode === 'freeze' && !stomping) { freezeHero(st); e.alive = false; e.dt = 12; ev(st, 'burst', e.x, e.y); continue; }   // a snowball encases the hero in ice
     if (e.t === 3 && e.sh === 1) {            // idle shell: stomp or touch kicks it, holding Run carries it
       if (stomping) { e.sh = 2; e.dir = (p.x + p.w / 2 > e.x + e.w / 2) ? -1 : 1; e.kg = 14; p.vy = jump ? -6 : -3.8; st.score += 100; ev(st, 'kick', e.x, e.y); }
       else if (run && p.carry < 0) { p.carry = i; e.carried = true; ev(st, 'grab', e.x, e.y); }
@@ -527,7 +602,10 @@ function step(st, inp) {
   var RW = L.rows || ROWS; if (p.y > RW * TS + 6) { p.dead = true; p.why = 'pit'; ev(st, 'die', p.x, RW * TS); }
   if (--st.t <= 0 && !p.dead) { p.dead = true; p.why = 'time'; ev(st, 'die', p.x, p.y); }
   var inGoal = L.goalRect ? (p.x < L.goalRect.x + L.goalRect.w && p.x + p.w > L.goalRect.x && p.y < L.goalRect.y + L.goalRect.h && p.y + p.h > L.goalRect.y) : p.x + p.w >= L.goalX;
-  if (!p.dead && st.boss <= 0 && inGoal) {
+  if (!inGoal && L.exitBtn && !L.vertical && p.x > L.goalRect.x + L.goalRect.w + 6) inGoal = true;   // hopped clean over the button: the stage still ends
+  if (!p.dead && !p.won && L.arena && st.boss <= 0) { p.won = true; st.shot = f; ev(st, 'goal', p.x, p.y, 0); }   // a castle ends the moment its boss falls: no flag
+  else if (!p.dead && st.boss <= 0 && inGoal && L.endCannon) { p.won = true; st.shot = f; ev(st, 'cannon', L.goalX, L.poleY - 20); ev(st, 'goal', L.goalX, p.y, 0); }
+  else if (!p.dead && st.boss <= 0 && inGoal && !L.arena) {
     p.won = true; var ty = L.poleY - 18 - (0.5 + 0.5 * Math.sin(f * 0.045)) * 90, hit = Math.abs(ty - (p.y + p.h / 2)) < 13; if (hit) { st.score += 3000; st.tape = 1; }
     ev(st, 'goal', L.goalX, p.y, hit ? 1 : 0); }
   if (!st.cp && p.x >= L.cp.x) st.cp = 1;
