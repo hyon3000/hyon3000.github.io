@@ -124,8 +124,8 @@ function probe() {
 }
 
 // ------------------------------------------------------------------ worlds
-var KIND_THEME = { plain: 0, hills: 0, flood: 3, deep: 3, toxic: 10, ghost: 2, sky: 1, cave: 5, bonus: 1, castle: 4, autumn: 6, jungle: 7, snow: 8, desert: 9, swamp: 10, storm: 11, airship: 12, crystal: 13, volcano: 14, ruins: 15, factory: 16, neon: 17, glacier: 22, tower: 18, shaft: 19, chase: 20, skymaze: 1, aircourse: 1, flystep: 1, gates: 15, odyssey: 0, zigzag: 15, lavatower: 14, gauntlet: 21, bossrush: 4, maze: 5 };
-var KIND_NAMES = { autumn: ['가을 과수원', 'Autumn Orchard'], jungle: ['정글', 'Jungle'], snow: ['설원', 'Snowfield'], desert: ['사막', 'Desert'], swamp: ['늪', 'Swamp'], storm: ['폭풍 구름', 'Storm Clouds'], airship: ['비행선', 'Airship Fleet'], crystal: ['수정 동굴', 'Crystal Cavern'], volcano: ['화산', 'Volcano'], ruins: ['유적', 'Ruins'], factory: ['공장', 'Factory'], neon: ['네온 도시', 'Neon City'], skymaze: ['공중 미로', 'Sky Labyrinth'], aircourse: ['공중 코스', 'Sky Course'], gates: ['변신 관문', 'Power Gates'], odyssey: ['구불구불 여정', 'Winding Journey'], flystep: ['날것 징검다리', 'Flyer Hops'], zigzag: ['굽이굽이 성', 'Switchback Keep'], lavatower: ['용암 탑', 'Rising Lava Tower'], glacier: ['얼음 지대', 'Ice Fields'], tower: ['탑 오르기', 'Tower Climb'], shaft: ['깊은 수직굴', 'Deep Shaft'], chase: ['추격전', 'Chase'], gauntlet: ['시간제 관문', 'Timed Gauntlet'], bossrush: ['보스 러시', 'Boss Rush'], cannon: ['대포', 'Cannon'], plain: ['초원', 'Meadow'], hills: ['언덕', 'Hills'], flood: ['물가', 'Lagoon'], deep: ['심해', 'Deep Sea'], toxic: ['독 늪', 'Toxic Marsh'], ghost: ['유령의 숲', 'Haunted Grove'], sky: ['하늘길', 'Sky Path'], cave: ['동굴', 'Cavern'], castle: ['성채', 'Fortress'], maze: ['미궁', 'Labyrinth'], room: ['비밀방', 'Bonus Room'], bonus: ['별길', 'Star Road'] };
+var KIND_THEME = { plain: 0, hills: 0, flood: 3, deep: 3, toxic: 10, ghost: 2, sky: 1, cave: 5, bonus: 1, castle: 4, autumn: 6, jungle: 7, snow: 8, desert: 9, swamp: 10, storm: 11, airship: 12, crystal: 13, volcano: 14, ruins: 15, factory: 16, neon: 17, glacier: 22, tower: 18, shaft: 19, chase: 20, skymaze: 1, aircourse: 1, flystep: 1, gates: 15, odyssey: 0, zigzag: 15, lavatower: 14, gauntlet: 21, bossrush: 4, maze: 5, house: 0 };
+var KIND_NAMES = { autumn: ['가을 과수원', 'Autumn Orchard'], jungle: ['정글', 'Jungle'], snow: ['설원', 'Snowfield'], desert: ['사막', 'Desert'], swamp: ['늪', 'Swamp'], storm: ['폭풍 구름', 'Storm Clouds'], airship: ['비행선', 'Airship Fleet'], crystal: ['수정 동굴', 'Crystal Cavern'], volcano: ['화산', 'Volcano'], ruins: ['유적', 'Ruins'], factory: ['공장', 'Factory'], neon: ['네온 도시', 'Neon City'], skymaze: ['공중 미로', 'Sky Labyrinth'], aircourse: ['공중 코스', 'Sky Course'], gates: ['변신 관문', 'Power Gates'], odyssey: ['구불구불 여정', 'Winding Journey'], flystep: ['날것 징검다리', 'Flyer Hops'], zigzag: ['굽이굽이 성', 'Switchback Keep'], lavatower: ['용암 탑', 'Rising Lava Tower'], glacier: ['얼음 지대', 'Ice Fields'], tower: ['탑 오르기', 'Tower Climb'], shaft: ['깊은 수직굴', 'Deep Shaft'], chase: ['추격전', 'Chase'], gauntlet: ['시간제 관문', 'Timed Gauntlet'], bossrush: ['보스 러시', 'Boss Rush'], cannon: ['대포', 'Cannon'], plain: ['초원', 'Meadow'], hills: ['언덕', 'Hills'], flood: ['물가', 'Lagoon'], deep: ['심해', 'Deep Sea'], toxic: ['독 늪', 'Toxic Marsh'], ghost: ['유령의 숲', 'Haunted Grove'], sky: ['하늘길', 'Sky Path'], cave: ['동굴', 'Cavern'], castle: ['성채', 'Fortress'], maze: ['미궁', 'Labyrinth'], room: ['비밀방', 'Bonus Room'], bonus: ['별길', 'Star Road'], house: ['도박집', 'Gamble House'] };
 function effN(n) { return n >= 1000 ? n : n + 5 - (n === 1 ? 2 : 0); }   // the difficulty curve starts one world later (stage 1 stays gentle)
 // every world: a gentle starter, three stages from a seeded rotation of all the other kinds (so neighbouring stages and worlds feel different), one labyrinth, and the ending
 // map types (layouts) x themes (looks): 20 x 23 = 460 combinations. Layout list (20): plain, hills + the rotation below (flood sky cave ice storm swamp crystal airship ruins factory volcano ghost-maze tower shaft chase gauntlet sky-labyrinth) + the labyrinth slot (key rooms / tunnel grid). Castles, cannons and bonus stages keep their own look.
@@ -140,7 +140,7 @@ function unlocked(depth) { return Math.min(ROTATION.length, 6 + depth * 3); }   
 function worldKinds(seed, w, depth) {
   depth = depth || 0; var pool = ROTATION.slice(0, unlocked(depth)), r = rng(hash(seed, w, 1357)), i, j, t;
   for (i = pool.length - 1; i > 0; i--) { j = Math.floor(r() * (i + 1)); t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
-  var out = [STARTERS[Math.floor(r() * STARTERS.length)]]; var vk = (w % 2 === 0) ? 'tower' : 'shaft'; pool = pool.filter(function (k) { return k !== 'tower' && k !== 'shaft' && k !== 'odyssey'; }); out.push(hash(seed, w, 77) % 3 === 0 ? vk : 'odyssey'); /* the vertical slot is a winding journey two times in three */ for (i = 0; i < 2; i++) out.push(pool[i]); if (w % 2 === 0 && depth > 0 && out[2] !== 'maze') out[2] = ['skymaze', 'aircourse', 'flystep'][Math.floor(r() * 3)]; if (w % 2 === 1 && depth > 0) out[2] = vk === 'tower' ? 'shaft' : 'tower';
+  var out = [STARTERS[Math.floor(r() * STARTERS.length)]]; var vk = (w % 2 === 0) ? 'tower' : 'shaft'; pool = pool.filter(function (k) { return k !== 'tower' && k !== 'shaft' && k !== 'odyssey'; }); out.push(w === 0 ? 'flood' : hash(seed, w, 77) % 3 === 0 ? vk : 'odyssey');   /* the winding journey is hard: it first appears from level 3 on (world 0's second stage is a lagoon) */ /* the vertical slot is a winding journey two times in three */ for (i = 0; i < 2; i++) out.push(pool[i]); if (w % 2 === 0 && depth > 0 && out[2] !== 'maze') out[2] = ['skymaze', 'aircourse', 'flystep'][Math.floor(r() * 3)]; if (w % 2 === 1 && depth > 0) out[2] = vk === 'tower' ? 'shaft' : 'tower';
   var mp = depth === 0 ? 3 : 1 + Math.floor(r() * 3); out[mp] = 'maze';
   if (hash(seed, w, 88) % 5 < 2) { var di = out[3] === 'maze' ? 2 : 3; if (out[di] !== 'maze') out[di] = 'deep'; }   // a fully underwater stage in about two worlds out of five
   if (hash(seed, w, 89) % 4 === 0) { var ti = (out[2] !== 'maze' && out[2] !== 'deep') ? 2 : (out[3] !== 'maze' && out[3] !== 'deep') ? 3 : -1; if (ti >= 0) out[ti] = 'toxic'; }   // a poison marsh in about a quarter of the worlds
@@ -167,7 +167,7 @@ function worldKindsOld(seed, w) {
   var mp = w === 0 ? 3 : 1 + Math.floor(r() * 3); out[mp] = 'maze';
   out.push('castle'); return out;
 }
-function kindOf(seed, n) { if (n >= 1000) return 'bonus'; var w = Math.floor((n - 1) / 5); return worldKinds(seed, w, w)[(n - 1) % 5]; }
+function kindOf(seed, n) { if (n >= 2000) return 'house'; if (n >= 1000) return 'bonus'; var w = Math.floor((n - 1) / 5); return worldKinds(seed, w, w)[(n - 1) % 5]; }
 // the overworld map: five level nodes joined by a winding path (+ one hidden bonus node that a secret exit opens)
 // world map of one world: 4 levels, then an ending node (a fortress with a boss, or a cannon). Some levels have a secret exit that opens a branch: an alternate chain ending in the OTHER ending, or a bonus level.
 // the main ending is always reachable without any secret exit.
@@ -193,6 +193,11 @@ function worldMap(seed, wid, depth, mainEnd) {
       var b1 = { i: base, n: 1000 + wid * 10 + bn++, kind: 'bonus', x: m.x + 22, y: Math.round(m.y + up * 50), main: false }; nodes.push(b1); edges.push({ a: s, b: base, secret: true });
     }
   });
+  // exactly one Gamble House per world (a one-shot bonus stage; 'item' or 'life' type, hash-chosen): a dead-end side node off the middle of the main route or off the first node of the hidden route
+  var hType = hash(seed, wid, 5100) % 2 ? 'life' : 'item', hHid = hash(seed, wid, 5101) % 2 === 1, hPar = null, hn = { i: 20, n: 2000 + wid * 10, kind: 'house', house: hType, main: false };
+  if (hHid) { hPar = nodes.filter(function (q) { return q.i === 10; })[0]; var upH = nodes[picked[0]].y > 115 ? -1 : 1; hn.x = hPar.x + 14; hn.y = Math.max(30, Math.min(192, Math.round(hPar.y + upH * 30))); }
+  else { hPar = nodes[1]; hn.x = hPar.x + 30; hn.y = Math.round(hPar.y + (hPar.y > 115 ? 34 : -34)); }
+  hn.hidden = hHid; nodes.push(hn); edges.push({ a: hPar.i, b: 20, secret: false });
   return { wid: wid, depth: depth, mainEnd: mainEnd, endMain: mainId, endAlt: nodes.some(function (q) { return q.i === altId; }) ? altId : -1, kinds: kinds, nodes: nodes, edges: edges };
 }
 function validateWorldMap(m) {
@@ -207,7 +212,7 @@ function validateWorldMap(m) {
   // no cycles: all edges go to nodes that are "later" (higher x) or ending nodes
   m.edges.forEach(function (e) { if (ids[e.b].x < ids[e.a].x - 1) { out.ok = false; out.why = 'backward edge'; } });
   // every node except the endings and bonus dead ends has an outgoing edge
-  m.nodes.forEach(function (q) { if (!(adj[q.i] || []).length && !q.ending && q.kind !== 'bonus') { out.ok = false; out.why = 'dead end ' + q.i; } });
+  m.nodes.forEach(function (q) { if (!(adj[q.i] || []).length && !q.ending && q.kind !== 'bonus' && q.kind !== 'house') { out.ok = false; out.why = 'dead end ' + q.i; } });
   out.branches = branch; out.hasAlt = m.endAlt >= 0; return out;
 }
 function validateInfinite(seed, maxDepth) {   // every world up to maxDepth exists, is reachable from world 0, has two exits one level deeper, and the main-route chain never ends
@@ -230,7 +235,7 @@ var HZ_PACKS = {
   8: [[{ k: 'roll', skin: 'snowball', mode: 'freeze', per: 300, sz: 14, spd: 1.5 }], [{ k: 'fall', skin: 'snowlump', mode: 'freeze', warn: 40, per: 230, spread: 55, lead: 24 }], [GUST(0.075, 420, 150)], [{ k: 'fall', skin: 'icicle', mode: 'hurt', warn: 28, per: 190, ceil: 1, spread: 70 }, { k: 'roll', skin: 'snowball', mode: 'freeze', per: 420, sz: 12, spd: 1.2 }]],
   22: [[{ k: 'roll', skin: 'snowball', mode: 'freeze', per: 260, sz: 14, spd: 1.7 }, { k: 'fall', skin: 'icicle', mode: 'hurt', warn: 28, per: 240, ceil: 1, spread: 60 }], [GUST(-0.07, 380, 140), { k: 'fall', skin: 'snowlump', mode: 'freeze', warn: 45, per: 300, spread: 50, lead: 20 }], [{ k: 'fall', skin: 'hail', mode: 'hurt', warn: 18, per: 110, spread: 110, sz: 4 }]],
   14: [[{ k: 'fall', skin: 'meteor', mode: 'kill', crater: 1, warn: 62, per: 210, spread: 55, lead: 26, sz: 7 }], [{ k: 'fall', skin: 'ember', mode: 'hurt', warn: 22, per: 100, spread: 110, sz: 4 }], [{ k: 'fall', skin: 'meteor', mode: 'kill', crater: 1, warn: 70, per: 280, spread: 40, lead: 40, sz: 7 }, { k: 'fall', skin: 'ember', mode: 'hurt', warn: 24, per: 150, spread: 90, sz: 4 }]],
-  9: [[{ k: 'roll', skin: 'weed', mode: 'hurt', per: 280, sz: 12, spd: 2.0 }], [{ k: 'shot', per: 240, spread: 35, dir: 1, spd: 1.8 }, { k: 'banzai', per: 800 }], [GUST(0.1, 340, 170), { k: 'fall', skin: 'rock', mode: 'hurt', warn: 34, per: 260, spread: 60, sz: 5 }], [{ k: 'roll', skin: 'weed', mode: 'hurt', per: 360, sz: 12, spd: 1.6 }, GUST(-0.085, 480, 160)]],
+  9: [[{ k: 'roll', skin: 'weed', mode: 'hurt', per: 280, sz: 12, spd: 2.0 }], [{ k: 'shot', per: 240, spread: 35, dir: 1, spd: 1.8 }, { k: 'bigball', per: 800 }], [GUST(0.1, 340, 170), { k: 'fall', skin: 'rock', mode: 'hurt', warn: 34, per: 260, spread: 60, sz: 5 }], [{ k: 'roll', skin: 'weed', mode: 'hurt', per: 360, sz: 12, spd: 1.6 }, GUST(-0.085, 480, 160)]],
   7: [[{ k: 'fall', skin: 'coconut', mode: 'hurt', warn: 32, per: 220, spread: 50, lead: 20, sz: 6 }], [{ k: 'fall', skin: 'coconut', mode: 'hurt', warn: 32, per: 200, spread: 80, sz: 6 }, { k: 'roll', skin: 'boulder', mode: 'hurt', per: 460, sz: 16, spd: 1.4 }]],
   10: [[{ k: 'fall', skin: 'glob', mode: 'hurt', warn: 30, per: 190, spread: 70, sz: 5 }], [{ k: 'fall', skin: 'glob', mode: 'hurt', warn: 26, per: 140, spread: 100, sz: 5 }]],
   11: [[{ k: 'bolt', skin: 'bolt', mode: 'hurt', warn: 52, per: 250, spread: 60, lead: 36 }], [GUST(0.09, 300, 140), { k: 'bolt', skin: 'bolt', mode: 'hurt', warn: 56, per: 330, spread: 50, lead: 30 }], [GUST(-0.09, 280, 120)]],
@@ -238,15 +243,15 @@ var HZ_PACKS = {
   13: [[{ k: 'fall', skin: 'shard', mode: 'hurt', warn: 26, per: 170, ceil: 1, spread: 90 }], [{ k: 'fall', skin: 'shard', mode: 'hurt', warn: 22, per: 130, ceil: 1, spread: 120 }]],
   15: [[{ k: 'shot', per: 220, spread: 40, dir: -1, spd: 1.7 }], [{ k: 'roll', skin: 'boulder', mode: 'hurt', per: 380, sz: 18, spd: 1.6 }], [{ k: 'fall', skin: 'rock', mode: 'hurt', warn: 36, per: 210, spread: 60, lead: 18, sz: 6 }, { k: 'roll', skin: 'boulder', mode: 'hurt', per: 560, sz: 16, spd: 1.4 }]],
   6: [[{ k: 'fall', skin: 'acorn', mode: 'hurt', warn: 26, per: 200, spread: 80, sz: 4 }], [GUST(0.08, 360, 170), { k: 'fall', skin: 'acorn', mode: 'hurt', warn: 26, per: 260, spread: 70, sz: 4 }]],
-  16: [[{ k: 'shot', per: 170, spread: 50, dir: -1, spd: 2.0 }, { k: 'banzai', per: 760 }], [{ k: 'bolt', skin: 'spark', mode: 'hurt', warn: 40, per: 200, spread: 90, lead: 30 }], [{ k: 'fall', skin: 'bolt', mode: 'hurt', warn: 26, per: 170, spread: 90, sz: 5 }]],
+  16: [[{ k: 'shot', per: 170, spread: 50, dir: -1, spd: 2.0 }, { k: 'bigball', per: 760 }], [{ k: 'bolt', skin: 'spark', mode: 'hurt', warn: 40, per: 200, spread: 90, lead: 30 }], [{ k: 'fall', skin: 'bolt', mode: 'hurt', warn: 26, per: 170, spread: 90, sz: 5 }]],
   17: [[{ k: 'bolt', skin: 'spark', mode: 'hurt', warn: 36, per: 180, spread: 100, lead: 24 }]],
-  12: [[{ k: 'shot', per: 140, spread: 40, dir: -1, spd: 1.9 }], [{ k: 'banzai', per: 620 }, { k: 'shot', per: 200, spread: 30, dir: -1, spd: 1.7 }], [GUST(-0.1, 300, 150)], [{ k: 'fall', skin: 'bomb', mode: 'hurt', crater: 1, warn: 36, per: 220, spread: 70, lead: 20, sz: 6 }, GUST(0.09, 400, 130)]],
+  12: [[{ k: 'shot', per: 140, spread: 40, dir: -1, spd: 1.9 }], [{ k: 'bigball', per: 620 }, { k: 'shot', per: 200, spread: 30, dir: -1, spd: 1.7 }], [GUST(-0.1, 300, 150)], [{ k: 'fall', skin: 'bomb', mode: 'hurt', crater: 1, warn: 36, per: 220, spread: 70, lead: 20, sz: 6 }, GUST(0.09, 400, 130)]],
   1: [[GUST(0.09, 330, 150)], [{ k: 'fall', skin: 'hail', mode: 'hurt', warn: 18, per: 120, spread: 110, sz: 4 }]],
   0: [], 2: [], 3: [], 4: [], 18: [], 19: [], 20: [], 21: []
 };
 // picks one hazard pack from HZ_PACKS for the theme (weather / trouble of that look) and scales it by difficulty; skipped for rooms, vertical and special layouts
-// ranged attackers per look: hammer bros, fire spitters and snowmen (ground walkers or hovering flyers) lob hammers / flames (power down) and snowballs (ice block); and which themed power-ups the ? blocks may hold
-var THROW_SKIN = { 8: 'snow', 22: 'snow', 14: 'fire', 16: 'fire', 9: 'fire', 15: 'hammer', 12: 'hammer', 17: 'hammer', 1: 'hammer', 11: 'snow', 5: 'hammer', 13: 'fire' };
+// ranged attackers per look: wrench bots, fire spitters and snowmen (ground walkers or hovering flyers) lob wrenches / flames (power down) and snowballs (ice block); and which themed power-ups the ? blocks may hold
+var THROW_SKIN = { 8: 'snow', 22: 'snow', 14: 'fire', 16: 'fire', 9: 'fire', 15: 'wrench', 12: 'wrench', 17: 'wrench', 1: 'wrench', 11: 'snow', 5: 'wrench', 13: 'fire' };
 var THEME_QPK = { 8: [11, 1, 2], 22: [11, 1, 2], 14: [1, 1, 10], 15: [10, 1, 2], 12: [10, 1, 2], 9: [10, 1, 2], 16: [10, 1, 2], 17: [10, 1, 2], 11: [11, 1, 2], 5: [10, 1, 2] };
 function addThrowers(L, seed, n) {
   var skin = THROW_SKIN[L.theme]; if (!skin || !HZ_LAYOUTS[L.layout] || L.vertical || L.room || L.arena || L.endCannon || L.zones || !(L.diff > 0.1)) return;
@@ -255,7 +260,7 @@ function addThrowers(L, seed, n) {
   while (placed < want && tries++ < 60) {
     var c = x0 + hash(seed, n, 940 + tries) % (x1 - x0), run = 0, cc;
     for (cc = c; cc < c + 7 && cc < gt.length; cc++) if (gt[cc] === gt[c] && gt[c] < PF.ROWS) run++; else break;
-    var air = placed % 2 === 1 || skin === 'hammer' && L.theme === 1;
+    var air = placed % 2 === 1 || skin === 'wrench' && L.theme === 1;
     if (run < 6 && !air) continue;
     var gy = gt[c] * TSz, per = Math.round((200 - 40 * L.diff - 30 * hard) + hash(seed, n, 960 + tries) % 30), ph = hash(seed, n, 970 + tries) % per;
     if (air) L.enemies.push({ t: E.THROWER, skin: skin, fly: 1, x: c * TSz, y: gy - 6 * TSz, w: 14, h: 14, ax: c * TSz, ax0: c * TSz, ay0: gy - 6 * TSz, ph: (hash(seed, n, 980 + tries) % 628) / 100, per: per + 40, pho: ph, spd: 0, dir: -1 });
@@ -280,6 +285,8 @@ function addHazards(L, seed, n) {
   }
 }
 // build one candidate: buildRaw() picks the generator by kind, then the theme is chosen, hazards are added and the ending is attached
+// ending style by look: machines and fleets end on an exit button (and every descending stage does); the rest end at a finish flag
+var BTN_THEMES = { 16: 1, 17: 1, 12: 1, 21: 1, 20: 1, 19: 1, 18: 1 };
 function build(seed, n, a, o) {
   var L = buildRaw(seed, n, a, o), o2 = o || {};
   if (o2.theme !== undefined) L.theme = o2.theme;
@@ -289,7 +296,7 @@ function build(seed, n, a, o) {
   // the ending: a big exit button instead of the beacon gate on every descending stage and on about half of the others (castles and cannons have their own endings)
   if (!L.arena && !L.endCannon && !L.room && L.kind !== 'bonus' && L.kind !== 'bossrush' && L.kind !== 'castle' && L.goalX < 1e5 && L.poleY !== undefined && L.start) {
     var desc = L.goalRect && L.goalRect.y + L.goalRect.h > L.start.y + 3 * TS;
-    if (desc || hash(seed, n, 321) % 2 === 0) { L.exitBtn = 1; L.goalRect = { x: L.goalX - 12, w: 24, y: L.poleY - 30, h: 30 }; }
+    if (desc || BTN_THEMES[L.theme]) { L.exitBtn = 1; L.goalRect = { x: L.goalX - 12, w: 24, y: L.poleY - 30, h: 30 }; }
   }
   return L;
 }
@@ -301,6 +308,7 @@ function buildRaw(seed, n, a, o) {
   if (!o.room) {
     if (kk1 === 'maze') return (hash(seed, n, 5) % 2 === 0) ? buildMaze(seed, n, a) : buildGrid(seed, n, a, 'cave');
     if (kk1 === 'deep') return buildDeep(seed, n, a, o);
+    if (kk1 === 'house') return buildHouse(seed, n, a, o);
     if (kk1 === 'ghost') return buildGhostHouse(seed, n, a);
     if (kk1 === 'gates') return buildGates(seed, n, a);
     if (kk1 === 'toxic') { var Lt = buildGates(seed, n, a, 'toxic'); Lt.kind = 'toxic'; Lt.kindAsked = 'toxic'; Lt.themeList = [10, 10, 3, 7, 13, 5]; return Lt; }
@@ -499,13 +507,14 @@ function buildRaw(seed, n, a, o) {
       // heavy poison sinks: a layer of it lies on the basin floor under the clean water, or it pools in pits dug into the floor (swim above it, touching it is deadly)
       // poison variant: below 0.35 a poison layer on the basin floor, below 0.7 puddles dug into the floor, else clean water (the first stage stays clean)
       var pvar = nn >= 2 ? r() : 1;
-      if (pvar < 0.35 && D >= 3) { for (var ti = 0; ti < tl.length; ti++) { var te = tl[ti]; if (te[2] === T.WATER && te[1] === f - 1 && te[0] >= bs.c0 && te[0] < bs.c0 + inner) te[2] = T.POISON; } usedPoisonLayer = true; }
+      var layerHere = pvar < 0.35 && D >= 3;
+      if (layerHere) { for (var ti = 0; ti < tl.length; ti++) { var te = tl[ti]; if (te[2] === T.WATER && te[1] === f - 1 && te[0] >= bs.c0 && te[0] < bs.c0 + inner) te[2] = T.POISON; } usedPoisonLayer = true; }
       // puddles: 1-2 pits in the basin floor filled with poison, to be swum over
       else if (pvar < 0.7 && inner >= 12) { var pcn = rnd(1, 2); for (i2 = 0; i2 < pcn; i2++) { var pc1 = bs.c0 + 2 + Math.floor((i2 + 0.3 + r() * 0.4) * (inner - 6) / pcn); if (pill[pc1] || pill[pc1 + 1] || pill[pc1 - 1] || pill[pc1 + 2]) continue; gt[pc1] = f + 1; gt[pc1 + 1] = f + 1; tl.push([pc1, f, T.POISON]); tl.push([pc1 + 1, f, T.POISON]); } }
       // coins along the basin, then optional side currents (CURL / CURR), then air pockets every 7 columns so the swimmer can breathe
       for (i2 = 0; i2 < 4; i2++) coinsX.push({ x: (bs.c0 + 3 + i2 * (inner - 6) / 3) * TS + 8, y: (g + 1.5) * TS });
-      if (r() < 0.55 && inner >= 14) { var cs0 = bs.c0 + rnd(3, inner - 9), csl = rnd(4, 6), ct = r() < 0.5 ? T.CURL : T.CURR; for (i2 = 0; i2 < csl; i2++) for (q = g; q < f; q++) if (!pill[cs0 + i2]) tl.push([cs0 + i2, q, ct]); }
-      if (r() < 0.35 && inner >= 12) { var cu0 = bs.c0 + rnd(4, inner - 6); for (i2 = 0; i2 < 2; i2++) for (q = g; q < f; q++) if (!pill[cu0 + i2]) tl.push([cu0 + i2, q, T.CURU]); }
+      if (r() < 0.55 && inner >= 14) { var cs0 = bs.c0 + rnd(3, inner - 9), csl = rnd(4, 6), ct = r() < 0.5 ? T.CURL : T.CURR; for (i2 = 0; i2 < csl; i2++) for (q = g; q < (layerHere ? f - 1 : f); q++) if (!pill[cs0 + i2]) tl.push([cs0 + i2, q, ct]); }
+      if (r() < 0.35 && inner >= 12) { var cu0 = bs.c0 + rnd(4, inner - 6); for (i2 = 0; i2 < 2; i2++) for (q = g; q < (layerHere ? f - 1 : f); q++) if (!pill[cu0 + i2]) tl.push([cu0 + i2, q, T.CURU]); }
       for (var pc = bs.c0 + 4; pc < bs.c0 + inner - 2; pc += 7) if (!pill[pc]) pockets.push({ x: pc * TS + 8, y: (g + 1.5) * TS });
       // creatures only in real stages, not in bonus rooms
       if (!room) { waterLife(bs.c0, inner, g, D, pill); if (diff > 0.15 && r() < (kind === 'flood' ? 0.6 : 0.25)) { var lc = bs.c0 + rnd(4, Math.max(4, inner - 5)), lper = rnd(120, 180); enemiesX.push({ t: E.LEAPFISH, x: lc * TS + 1, y: g * TS, w: 14, h: 9, ax: lc * TS + 1, by: g * TS, per: lper, pho: rnd(0, lper), hgt: rnd(30, 50), up: 1, hid: true, spd: 0 }); } }
@@ -836,6 +845,9 @@ function checkContainment(L) {
   // every liquid cell needs a floor below and a wall (solid or liquid) on both sides; a failure here means the level is redrawn
   for (var c = 0; c < w; c++) for (var r = 0; r < R; r++) { var t = tiles[c * R + r]; if (!wetTile(t)) continue;
     if (!ok(at(c, r + 1))) bad.push(['floor', c, r]); else if (!ok(at(c - 1, r))) bad.push(['left', c, r]); else if (!ok(at(c + 1, r))) bad.push(['right', c, r]); }
+  // heavy poison sinks: it never touches water sideways (a wall must stand between) and never lies above water
+  function waterish(t) { return t === T.WATER || t === T.CURL || t === T.CURR || t === T.CURU || t === T.WLEVEL; }
+  for (var c3 = 0; c3 < w; c3++) for (var r3 = 0; r3 < R; r3++) if (tiles[c3 * R + r3] === T.POISON) { if (waterish(at(c3 - 1, r3)) || waterish(at(c3 + 1, r3))) bad.push(['mix', c3, r3]); else if (waterish(at(c3, r3 + 1))) bad.push(['mixv', c3, r3]); }
   function wetAt(x, y) { return wetTile(at(Math.floor(x / TS), Math.floor(y / TS))); }
   // swimmers must stay inside liquid over their whole sweep (extremes of ax / ay)
   (L.enemies || []).forEach(function (e) {
@@ -1573,8 +1585,10 @@ function deepFeatures(X, cs, ce, wl, gt) {
     else if (pick < 0.40) { len = rnd(3, 5); var rr0 = rnd(wl + 3, wl + 4); if (free(cx, cx + len)) { var okf = true; for (q = 0; q < len; q++) if (gt[cx + q] < rr0 + 3) okf = false; if (okf) { for (q = 0; q < len; q++) tl.push([cx + q, rr0, T.SOLID]); take(cx, cx + len); } } cx += rnd(5, 8); }
     else if (pick < 0.52 && diff >= 0) { len = rnd(5, 8); if (free(cx, cx + len)) { var ct = r() < 0.5 ? T.CURL : T.CURR, cr0 = rnd(wl + 2, wl + 4); for (q = 0; q < len; q++) for (var cq = 0; cq < 2; cq++) tl.push([cx + q, cr0 + cq, ct]); take(cx, cx + len); } cx += len + rnd(2, 4); }
     else if (pick < 0.60) { if (free(cx, cx + 2)) { for (q = 0; q < 2; q++) for (var uq = wl + 1; uq < gt[cx + q]; uq++) tl.push([cx + q, uq, T.CURU]); take(cx, cx + 2); } cx += rnd(5, 8); }
-    else if (pick < 0.72 && nn >= 2) { if (free(cx, cx + 2) && gt[cx] === gt[cx + 1]) { var fo = gt[cx]; gt[cx] = fo + 1; gt[cx + 1] = fo + 1; tl.push([cx, fo, T.POISON]); tl.push([cx + 1, fo, T.POISON]); take(cx, cx + 2); } cx += rnd(5, 8); }
-    else if (pick < 0.82 && nn >= 2) { len = rnd(5, 9); if (free(cx, cx + len)) { for (q = 0; q < len; q++) tl.push([cx + q, gt[cx + q] - 1, T.POISON]); take(cx, cx + len); } cx += len + rnd(2, 4); }
+    // water never touches poison sideways: a poison pit's neighbours are raised to wall height
+    else if (pick < 0.72 && nn >= 2) { if (free(cx - 1, cx + 3) && gt[cx] === gt[cx + 1]) { var fo = gt[cx]; gt[cx] = fo + 1; gt[cx + 1] = fo + 1; gt[cx - 1] = Math.min(gt[cx - 1], fo); gt[cx + 2] = Math.min(gt[cx + 2], fo); tl.push([cx, fo, T.POISON]); tl.push([cx + 1, fo, T.POISON]); take(cx - 1, cx + 3); } cx += rnd(5, 8); }
+    // a poison layer lies on a flat seabed, closed at both ends by a raised wall tile
+    else if (pick < 0.82 && nn >= 2) { len = rnd(5, 9); var flatL = free(cx - 1, cx + len + 1); for (q = -1; q <= len && flatL; q++) if (gt[cx + q] !== gt[cx]) flatL = false; if (flatL) { var f0 = gt[cx]; for (q = 0; q < len; q++) tl.push([cx + q, f0 - 1, T.POISON]); gt[cx - 1] = f0 - 1; gt[cx + len] = f0 - 1; take(cx - 1, cx + len + 1); } cx += len + rnd(2, 4); }
     else if (pick < 0.88 && diff > 0.2) { if (free(cx, cx + 6)) { whirls.push({ x: (cx + 3) * TS, y: (wl + 4) * TS, r: 38, dir: r() < 0.5 ? 1 : -1 }); take(cx, cx + 6); } cx += rnd(8, 11); }
     else if (pick < 0.95 && diff > 0.1) { len = 6; if (free(cx, cx + len)) { var jd = r() < 0.5 ? 1 : -1, jx0 = jd > 0 ? cx * TS : (cx + len) * TS - 96, jy = rnd(wl + 2, wl + 4) * TS; winds.push({ x0: jx0, x1: jx0 + 96, y0: jy, y1: jy + 2 * TS, dx: jd * 0.11, dy: 0, per: 260, on: 130, ph: rnd(0, 259), bub: 1, vx: jd > 0 ? cx * TS : (cx + len) * TS }); take(cx, cx + len); } cx += rnd(7, 10); }
     else cx += rnd(3, 5);
@@ -1909,12 +1923,35 @@ function buildVertical(seed, n, a, kind) {
   return L;
 }
 
+// Gamble House: a one-shot bonus room. 'item' = one hidden box per power-up kind, 'life' = four boxes holding 1/2/5/10 extra lives; the hero opens exactly one (from below), the rest lock and the exit unlocks
+var HOUSE_ITEMS = [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11];
+function buildHouse(seed, n, a, o) {
+  var r = rng(hash(seed, n, 4401 + a)), type = (o && o.house) || (hash(seed, n, 4400) % 2 ? 'life' : 'item'), rows = ROWS, g = 11, br = g - 4, vals = [], step = type === 'item' ? 3 : 6, i, c;
+  if (type === 'item') vals = HOUSE_ITEMS.slice(); else vals = [-1, -2, -5, -10];
+  for (i = vals.length - 1; i > 0; i--) { var j = Math.floor(r() * (i + 1)), t = vals[i]; vals[i] = vals[j]; vals[j] = t; }
+  var c0 = type === 'item' ? 6 : 8, W = c0 + (vals.length - 1) * step + 12, tiles = new Uint8Array(W * rows), boxItems = {}, cols = [];
+  for (c = 0; c < W; c++) for (var q = g; q < rows; q++) tiles[c * rows + q] = T.SOLID;
+  for (q = 0; q < rows; q++) { tiles[q] = T.SOLID; tiles[(W - 1) * rows + q] = T.SOLID; }
+  for (i = 0; i < vals.length; i++) { c = c0 + i * step; tiles[c * rows + br] = T.QP; boxItems[c + ',' + br] = vals[i]; cols.push(c); }
+  var pick = Math.floor(r() * vals.length), gc = W - 5, gx = gc * TS + 8, gy = g * TS;
+  var L = { seed: seed, n: n, kind: 'house', house: type, attempt: a, diff: 0, w: W, rows: rows, tiles: tiles, gt: (function () { var o2 = []; for (var k = 0; k < W; k++) o2.push(g); return o2; })(), coins: [], special: [], enemies: [], movers: [], cannons: [], rings: [], winds: [], pockets: [], keys: [], doors: [], switches: [], tele: [], launch: [], grp: new Uint8Array(W * rows),
+    boxItems: boxItems, route: [{ k: 'used', c: cols[pick], r: br, x: cols[pick] * TS + 8, y: gy - 7 }].concat(type === 'item' ? [{ k: 'got', x: cols[pick] * TS + 8 + 36, y: gy - 7 }] : []).concat([{ k: 'goal', x: gx, y: gy - 10 }]), puzzle: true, exitBtn: 1, goalRect: { x: gx - 12, w: 24, y: gy - 30, h: 30 }, goalX: gx, poleCol: gc, poleY: gy,
+    start: { x: 3 * TS + 2, y: gy - P.SH }, cp: { x: (W - 1) * TS, y: gy - P.SH }, time: 90, theme: [0, 1, 6][hash(seed, n, 4402) % 3], themeList: [0, 1, 6], room: false, hasBoss: false, kindAsked: 'house', hasFire: false, hasIce: false, hasMud: false };
+  return L;
+}
 function roomLevel(seed, n, secret) {
   var L = null;
   for (var a = 0; a < 10; a++) { L = build(seed, n + 500 + a, a, { room: true, kind: 'plain' }); L.theme = 1; L.enemies = []; L.rings = []; L.special = []; L.cannons = []; L.exitKind = secret ? 'secret' : 'ret'; var v = validate(L); if (v.ok) { L.valid = true; L.script = v.script; return L; } }
   L.valid = false; return L;
 }
 // entry point: up to 16 build attempts, each must pass validate -> replay -> checkContainment; the time budget and the boss-less fallback keep it from stalling
+// time limit (seconds): the fastest known clear (the validated script) + 30%, times a multiplier that is 2x at level 1 and falls toward 1x as the levels go on (1 + 1/(1 + (n-1)/8)), rounded UP to a multiple of 50 s; a boss fight is not in the enemy-free script, so castles get +30 s per arena
+function levelTime(L, n) {
+  var minSec = L.script ? L.script.length / 60 : 20, trav = (Math.abs(L.goalX - L.start.x) + Math.abs((L.poleY || 0) - L.start.y)) / 150; if (trav > minSec && L.goalX < 1e5) minSec = trav;   // a castle's script stops at the arena: never below the walking time (about 150 px per second)
+  if (L.arena) minSec += L.kind === 'bossrush' ? 60 : 30;
+  var mult = 1 + 1 / (1 + (Math.max(1, n >= 1000 ? 1000 : n) - 1) / 8);
+  return Math.max(50, Math.ceil(minSec * 1.3 * mult / 50) * 50);
+}
 function generate(seed, n, o) {
   var L = null, v = null, t0 = Date.now();
   for (var a = 0; a < 16; a++) {
@@ -1924,7 +1961,7 @@ function generate(seed, n, o) {
     // rising-lava speed derives from the solver's frame count: the climb is possible but tight
     if (v.ok && L.rise) { var climb = L.rows * TS - 100, frames = v.script.length; L.rise.v = Math.max(0.06, Math.min(0.5, climb / (frames * 1.9))); L.rise.delay = 240; }
     // success path: replay, then containment, then crumbs (not for planned levels); gauntlet levels get a time cap from the script length
-    if (v.ok) { L.script = v.script; if (replay(L)) { var cc = checkContainment(L); if (!cc.bad) { L.valid = true; L.attempt = a; L.vnodes = v.nodes; L.crumbs = L.plan ? null : makeCrumbs(L); if (L.kindAsked === 'gauntlet') L.time = Math.min(L.time, Math.ceil(L.script.length / 60 * 1.6) + 14); return L; } } }
+    if (v.ok) { L.script = v.script; if (replay(L)) { var cc = checkContainment(L); if (!cc.bad) { L.valid = true; L.attempt = a; L.vnodes = v.nodes; L.crumbs = L.plan ? null : makeCrumbs(L); L.time = levelTime(L, n); if (L.kindAsked === 'gauntlet') L.time = Math.min(L.time, Math.ceil(L.script.length / 60 * 1.6) + 14); return L; } } }
     if (Date.now() - t0 > (L.kindAsked === 'gates' || L.kindAsked === 'toxic' ? 9500 : 6500)) break;   // the segment-composed stages are built piece by piece and may need a second attempt
   }
   L.valid = false; L.attempt = 16; return L;

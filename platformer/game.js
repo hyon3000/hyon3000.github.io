@@ -225,7 +225,7 @@ function isOpen(nd) { return isOpenW(G.wid, G.map, nd); }
 function isVisible(nd) { return nd.main || isOpen(nd); }
 function allNodes() { return G.map.nodes.filter(isVisible); }
 // the next level the auto player (and the hint) should take: any open, unfinished level, preferring the main route (it never needs a secret exit)
-function nextTarget() { var c = G.map.nodes.filter(function (n) { return isOpenW(G.wid, G.map, n) && !isDone(n.i) && (!worldCleared(G.wid) || n.main); }); c.sort(function (a, b) { return (a.main ? 0 : 1) - (b.main ? 0 : 1) || a.i - b.i; }); return c[0] || null; }
+function nextTarget() { var c = G.map.nodes.filter(function (n) { return isOpenW(G.wid, G.map, n) && !isDone(n.i) && (!worldCleared(G.wid) || n.main) && !(n.kind === 'house' && worldCleared(G.wid)); }); c.sort(function (a, b) { return (a.kind === 'house' ? 0 : 1) - (b.kind === 'house' ? 0 : 1) || (a.main ? 0 : 1) - (b.main ? 0 : 1) || a.i - b.i; }); return c[0] || null; }   // an open Gamble House is visited first (optional, one-shot)
 // Move the map cursor to the neighbouring node in a direction.
 function moveSel(dir) {
   var cur = nodeById(G.sel) || G.map.nodes[0], vx = dir === 'right' ? 1 : dir === 'left' ? -1 : 0, vy = dir === 'down' ? 1 : dir === 'up' ? -1 : 0, best = null, bs = 1e9;
@@ -295,7 +295,7 @@ function selectMove(k) {
   else if (k === 'jump') { if (G.selCol === 0) { G.selCol = 1; sfx('pop'); } else selectPick(G.selSi); }
 }
 function selectPick(si) {
-  var w = G.selList[G.selWi], nd = G.selMapObj.nodes[si]; if (!nd) return; var s = stageState(w.id, G.selMapObj, nd); if (s === 'locked') { sfx('bump'); return; }
+  var w = G.selList[G.selWi], nd = G.selMapObj.nodes[si]; if (!nd) return; var s = stageState(w.id, G.selMapObj, nd); if (s === 'locked' || (nd.kind === 'house' && s === 'done')) { sfx('bump'); return; }
   closeSelect(); G.mode = 'map'; if (w.id !== G.wid) setWorld(w.id); G.sel = nd.i; G.main = null; enterLevel(nd.i, true);
 }
 // Power-ups that carry over from one level to the next (lost on death).
@@ -306,9 +306,9 @@ function levelInit(cp) {
 }
 // Enter a map node: generates the level (shows loading) and starts it if the node is open.
 function enterLevel(i, force) {
-  var node = nodeById(i); if (!node || G.mode === 'loading') return; if (!force && !isOpen(node)) return;
+  var node = nodeById(i); if (!node || G.mode === 'loading') return; if (!force && !isOpen(node)) return; if (node.kind === 'house' && isDone(node.i)) { sfx('bump'); say(TT('도박집은 한 번만 이용할 수 있어요', 'The Gamble House can only be used once'), 120); return; }
   G.curNode = node; G.mode = 'loading'; G.st = null; G.hint = null; saveProg();
-  setTimeout(function () { G.n = node.n; var sd = PF.hash(G.seed, G.wid, 31); G.L = PF.generate(sd, node.n, { kind: node.kind, secret: !!node.secret }); G.main = null; levelInit(false); var kn = PF.KIND_NAMES[G.L.kind]; say(PFR.levelLabel({ n: node.n }) + ' ' + (KO ? PF.THEME_NAMES[G.L.theme | 0][0] + ' ' + kn[0] : PF.THEME_NAMES[G.L.theme | 0][1] + ' ' + kn[1]), 150); G.msgIsLevel = true; }, 30);
+  setTimeout(function () { G.n = node.n; var sd = PF.hash(G.seed, G.wid, 31); G.L = PF.generate(sd, node.n, { kind: node.kind, secret: !!node.secret, house: node.house }); G.main = null; levelInit(false); var kn = PF.KIND_NAMES[G.L.kind]; say(PFR.levelLabel({ n: node.n }) + ' ' + (KO ? PF.THEME_NAMES[G.L.theme | 0][0] + ' ' + kn[0] : PF.THEME_NAMES[G.L.theme | 0][1] + ' ' + kn[1]), 150); G.msgIsLevel = true; }, 30);
 }
 // Run-wide coin count (banked + current level).
 function totalCoins() { return G.coinBase + (G.st ? G.st.coins : 0); }
@@ -355,6 +355,7 @@ function handleEvents(st) {
       case 'grow': sfx('grow'); pop(e.x, e.y - 6, TT('파워업!', 'POWER UP!'), '#7dff9a'); spark(e.x + 6, e.y + 10, '#7dff9a', 12); say(TT('파워업! 한 번 맞아도 괜찮아요', 'Power up! You can take a hit now'), 120); break;
       case 'pow2': sfx('item'); pop(e.x, e.y - 6, '+300', '#7dff9a'); break;
       case 'hurt': spark(e.x + 6, e.y + 8, '#ff8a8a', 10); say(G.st && G.st.p.air <= 0 ? TT('숨이 막혀요! 물 밖으로', 'Out of air! Leave the water') : TT('아야! 파워다운', 'Ouch! Power lost'), 90); break;
+      case 'lives': G.lives += e.a | 0; sfx('life'); spark(e.x, e.y, '#ffe08a', 14); pop(e.x, e.y - 8, '+' + e.a + ' UP', '#ffe08a'); say(TT('목숨 +' + e.a + '!', 'Extra lives +' + e.a + '!'), 150); break;
       case 'special': sfx('special'); pop(e.x, e.y - 8, '★' + e.a + '/5', '#d08aff'); spark(e.x, e.y, '#d08aff', 10); if (e.a >= 5) { G.lives++; sfx('life'); say(TT('특수 코인 5개! 목숨 +1', 'All 5 special coins! Extra life'), 150); } break;
       case 'warp': G.pendingWarp = e.a; break;
       case 'key': sfx('special'); pop(e.x, e.y - 8, TT('열쇠!', 'KEY!'), '#fff'); spark(e.x, e.y, '#ffffff', 8); say(TT('열쇠를 얻었어요: 같은 색 문을 여세요', 'Got a key: open the door of the same colour'), 130); break;

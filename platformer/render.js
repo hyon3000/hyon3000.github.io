@@ -262,7 +262,7 @@ function drawHero(p, dead, spinA, mounted) {
   if (!mounted) { var st2 = Math.sin(p.anim * 2.2), mv = Math.abs(p.vx) > 0.2 && p.ground; if (p.ground) { circ(cx - 3 + (mv ? st2 * 2.5 : 0), y + h - 1, 2, dark); circ(cx + 3 - (mv ? st2 * 2.5 : 0), y + h - 1, 2, dark); } else { circ(cx - 3, y + h - 3, 2, dark); circ(cx + 3, y + h - 4, 2, dark); } }
   var top = by + 1, bot = by + h - 1;
   poly([cx, top, cx + rx, cy, cx, bot, cx - rx, cy], dark); poly([cx, top + 1.5, cx + rx - 2, cy, cx, bot - 1.5, cx - rx + 2, cy], body); poly([cx, top + 1.5, cx - rx + 2, cy, cx, cy], light);
-  if (pw === 4) { rect(cx - 5, top - 1, 10, 4, '#c8d0e0'); rect(cx - 5, top - 1, 10, 1.5, '#fff'); line(cx + face * 6, cy + 2, cx + face * 10, cy - 4, '#8a5a2a', 1.6); rect(cx + face * 10 - 2, cy - 7, 5, 4, '#6a6a7a'); }
+  if (pw === 4) { rect(cx - 5, top - 1, 10, 3, '#ffd24a'); rect(cx - 5, top - 1, 10, 1.2, '#fff0a0'); line(cx + face * 6, cy + 4, cx + face * 6, cy - 4, '#8a94a8', 2); circ(cx + face * 6, cy - 5, 2.8, '#aab4c8'); }
   if (pw === 5) { poly([cx - 3, top + 3, cx - 1, top - 6, cx + 1, top + 3], '#e8f8ff', '#5aa0c8'); poly([cx + 1, top + 3, cx + 4, top - 4, cx + 5, top + 3], '#bfe8ff', '#5aa0c8'); }
   if (pw === 2) { poly([cx - 3, top + 3, cx - 1, top - 5, cx + 0.5, top + 2], '#ffb02a'); poly([cx - 0.5, top + 2, cx + 2, top - 7, cx + 4, top + 3], '#ff7a1a'); }
   else if (p.big) { poly([cx - 3, top + 3, cx, top - 3, cx + 3, top + 3], '#fff0c0'); }
@@ -319,7 +319,7 @@ function drawHz(o, f) {
     case 'acorn': ell(x, y + 1, 3.6, 4.4, '#b0702a'); rect(x - 4, y - 4, 8, 3, '#6a4a1a'); break;
     case 'bomb': circ(x, y, 6.5, '#2a2a3a'); circ(x - 2, y - 2, 2, '#6a6a8a'); line(x + 2, y - 6, x + 5, y - 10, '#ffb04a', 1.5); circ(x + 5, y - 10, 1.6, '#ffe08a'); break;
     case 'bolt': spark4(x, y, 7, '#fffbb0'); circ(x, y, 2.5, '#ffffff'); break;
-    case 'hammer': ctx.save(); ctx.translate(x, y); ctx.rotate(o.rot || 0); rect(-1, -2, 2, 9, '#8a5a2a'); rect(-6, -7, 12, 6, '#7a7a8a'); rect(-6, -7, 12, 2, '#c8c8d8'); ctx.restore(); break;
+    case 'wrench': ctx.save(); ctx.translate(x, y); ctx.rotate(o.rot || 0); rect(-1.5, -2, 3, 10, '#8a94a8'); circ(0, -5, 4.5, '#aab4c8'); rect(-1.5, -10, 3, 5, '#2a2f3a'); circ(0, 8, 2.2, '#aab4c8'); ctx.restore(); break;
     case 'fire': circ(x, y, 5, 'rgba(255,90,20,.45)'); circ(x, y, 3.6, '#ff6a1a'); circ(x, y, 1.8, '#ffe8a0'); break;
     case 'snow': circ(x, y, 5, '#e8f6ff'); circ(x - 1.5, y - 1.5, 2.4, '#ffffff'); circ(x + 2, y + 2, 1.6, '#bfe0f4'); break;
     default: circ(x, y, 5, '#ffd24a');
@@ -368,16 +368,17 @@ function drawEnemy(e) {
     case E.PLANT: { if (e.y > e.y0 - 1 && e.hid) break; var top = e.y;   // spore bud on a pylon
       line(cx, top + 8, cx, e.y0 + 6, '#3affb0', 2); spark8(cx, top + 6, 6.5, '#ff3a8a', f * 0.03); circ(cx, top + 6, 3.2, '#ffd0e4'); circ(cx, top + 6, 1.4, '#6a0a2a'); break; }
     case E.ROLL: drawRoller(e); break;
-    case E.THROWER: { var sk2 = e.skin, bobT = e.fly ? Math.sin(f * 0.2 + e.ph) * 1.5 : 0, bdy = by - 14 + bobT, tcol = sk2 === 'hammer' ? '#5a7ad0' : sk2 === 'fire' ? '#e0502a' : '#e8f4ff', tdk = sk2 === 'hammer' ? '#1a2a60' : sk2 === 'fire' ? '#6a1a04' : '#5a8ab0';   // a thrower: hammer bro (blue helmet), fire spitter (red), snowman (white)
+    case E.THROWER: { var sk2 = e.skin, bobT = e.fly ? Math.sin(f * 0.2 + e.ph) * 1.5 : 0, bdy = by - 14 + bobT, tcol = sk2 === 'wrench' ? '#5aa0b0' : sk2 === 'fire' ? '#e0502a' : '#e8f4ff', tdk = sk2 === 'wrench' ? '#1a4a58' : sk2 === 'fire' ? '#6a1a04' : '#5a8ab0';   // a thrower: wrench bot (teal robot), fire spitter (red), snowman (white)
       if (e.fly) { poly([cx - 4, bdy + 6, cx - 14, bdy - 2 + Math.sin(f * 0.5) * 4, cx - 7, bdy + 10], '#f4f0ff', '#8a7ac0'); poly([cx + 4, bdy + 6, cx + 14, bdy - 2 + Math.sin(f * 0.5) * 4, cx + 7, bdy + 10], '#f4f0ff', '#8a7ac0'); }
       if (sk2 === 'snow') { circ(cx, bdy + 9, 6.5, tcol); circ(cx, bdy + 2, 4.6, tcol); circ(cx + dir * 1.6, bdy + 1.2, 1, '#102030'); circ(cx - dir * 0.8, bdy + 1.2, 1, '#102030'); poly([cx + dir * 2, bdy + 3, cx + dir * 7, bdy + 4, cx + dir * 2, bdy + 4.6], '#ff8a2a'); rect(cx - 4, bdy - 3, 8, 2.4, '#3a4a8a'); }
-      else { rrect(cx - 6, bdy + 3, 12, 11, 3, tcol); rect(cx - 6, bdy + 3, 12, 3, tdk); circ(cx + dir * 2.4, bdy + 6, 2.4, '#fff'); circ(cx + dir * 3.2, bdy + 6.2, 1.1, '#101010'); if (sk2 === 'hammer') { rrect(cx - 7, bdy - 1, 14, 6, 3, tdk); rect(cx + dir * 6 - 1, bdy + 4, 2, 7, '#8a5a2a'); rect(cx + dir * 6 - 4, bdy + 1, 8, 4, '#8a8a9a'); } else { poly([cx - 3, bdy + 3, cx, bdy - 6, cx + 3, bdy + 3], '#ffb02a'); circ(cx + dir * 7, bdy + 8, 2.4 + Math.sin(f * 0.4), '#ffd24a'); } }
+      else { rrect(cx - 6, bdy + 3, 12, 11, 3, tcol); rect(cx - 6, bdy + 3, 12, 3, tdk); circ(cx + dir * 2.4, bdy + 6, 2.4, '#fff'); circ(cx + dir * 3.2, bdy + 6.2, 1.1, '#101010'); if (sk2 === 'wrench') { line(cx, bdy + 3, cx, bdy - 3, '#2a3a40', 1.5); circ(cx, bdy - 4, 2, '#ffd24a'); rect(cx - 5, bdy + 5, 10, 3, '#0a2a30'); circ(cx + dir * 2.5, bdy + 6.5, 1.2, '#7affea'); line(cx + dir * 6, bdy + 12, cx + dir * 6, bdy + 3, '#8a94a8', 2); circ(cx + dir * 6, bdy + 2, 3, '#aab4c8'); } else { poly([cx - 3, bdy + 3, cx, bdy - 6, cx + 3, bdy + 3], '#ffb02a'); circ(cx + dir * 7, bdy + 8, 2.4 + Math.sin(f * 0.4), '#ffd24a'); } }
       break; }
-    case E.BANZAI: { var bw = e.w, bh = e.h, bdx = e.dir >= 0 ? 1 : -1, bx0 = e.x, by0 = e.y;   // giant cannonball: a black bullet with angry eyes, fins and a flame; the flat top is the riding surface
-      ctx.globalAlpha = 0.5; poly([bx0 - bdx * 2, by0 + 6, bx0 - bdx * 16, by0 + 2 + Math.sin(F * 0.6) * 3, bx0 - bdx * 12, by0 + bh / 2, bx0 - bdx * 16, by0 + bh - 2 - Math.sin(F * 0.6) * 3, bx0 - bdx * 2, by0 + bh - 6], '#ff8a3a'); ctx.globalAlpha = 1;
-      rrect(bx0, by0, bw, bh, 12, '#1a1a2a'); rect(bx0 + 4, by0, bw - 12, 3, '#4a4a6a'); ell(bx0 + (bdx > 0 ? bw - 8 : 8), by0 + bh / 2, 10, 13, '#22223a');
-      circ(bx0 + (bdx > 0 ? bw - 12 : 12), by0 + 12, 4, '#fff'); circ(bx0 + (bdx > 0 ? bw - 12 : 12) + bdx * 1.2, by0 + 12.5, 2, '#d02020'); line(bx0 + (bdx > 0 ? bw - 18 : 18), by0 + 6, bx0 + (bdx > 0 ? bw - 8 : 8), by0 + 9, '#fff', 2);
-      rect(bx0 + (bdx > 0 ? 6 : bw - 14), by0 + bh - 8, 8, 4, '#c8c8d8'); break; }
+    case E.BIGBALL: { var bw = e.w, bh = e.h, bdx = e.dir >= 0 ? 1 : -1, bx0 = e.x, by0 = e.y, bcx = bx0 + bw / 2, bcy = by0 + bh / 2 + 2;   // giant cannonball: a riveted iron sphere with a jet flame behind it; the flat steel cap on top is the riding surface
+      ctx.globalAlpha = 0.55; poly([bcx - bdx * 14, bcy - 6, bcx - bdx * 34 - Math.sin(F * 0.7) * 4, bcy, bcx - bdx * 14, bcy + 6], '#ff9a3a'); ctx.globalAlpha = 0.9; poly([bcx - bdx * 14, bcy - 3, bcx - bdx * 24 - Math.sin(F * 0.9) * 3, bcy, bcx - bdx * 14, bcy + 3], '#ffe08a'); ctx.globalAlpha = 1;
+      circ(bcx, bcy, 15, '#2a2e3a'); circ(bcx - 3, bcy - 3, 11, '#4a5062'); circ(bcx - 6, bcy - 6, 4, '#8a94a8');
+      for (var rv = 0; rv < 8; rv++) { var ra = rv * 0.7854 + 0.3; circ(bcx + Math.cos(ra) * 11, bcy + Math.sin(ra) * 11, 1.3, '#aab4c8'); }
+      ctx.strokeStyle = '#1a1e28'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(bcx, bcy, 8, 0.4, 2.6); ctx.stroke();
+      rect(bcx - 11, by0 - 1, 22, 4, '#c8ccd8'); rect(bcx - 11, by0 - 1, 22, 1.5, '#ffffff'); break; }
     // Underwater enemies: squid, strider, puffer, eel, swimmers.
     case E.SQUID: { var sq = e.s === 1, pu2 = sq ? 3 : 0, tw = Math.sin(f * 0.3 + e.id) * 1.5; ctx.fillStyle = sq ? '#ff7ab0' : '#e0509a'; ctx.beginPath(); ctx.ellipse(cx, cy - 2, 6 - pu2 * 0.4, 8 + pu2 * 0.6, 0, 0, 6.2832); ctx.fill(); poly([cx - 6, cy - 5, cx, cy - 15, cx + 6, cy - 5], '#c03a80');
       for (var tq = -2; tq <= 2; tq++) { ctx.strokeStyle = '#ff9ac8'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(cx + tq * 2.2, cy + 5); ctx.lineTo(cx + tq * 2.6 + tw * (tq % 2 ? 1 : -1), cy + 10 + (sq ? 3 : 0)); ctx.stroke(); }
@@ -437,7 +438,7 @@ function drawItem(e) {
   var cx = e.x + 6, cy = e.y + 6 + Math.sin(F * 0.15) * 0.7;
   if (e.k === 0) { circ(cx, cy, 6.5, '#1aa860'); circ(cx, cy, 5.2, '#4aff9a'); circ(cx - 1.6, cy - 1.8, 1.8, '#d8ffe8'); ctx.strokeStyle = '#0a5a30'; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(cx, cy, 6.5, 2.4, 0.4, 0, 6.2832); ctx.stroke(); }
   else if (e.k === 1) { poly([cx - 6, cy + 6, cx - 5, cy - 2, cx - 2.5, cy + 0.5, cx, cy - 8, cx + 2.5, cy + 0.5, cx + 5, cy - 3, cx + 6, cy + 6], '#ff7a1a', '#7a2a04'); poly([cx - 3, cy + 6, cx, cy - 1, cx + 3, cy + 6], '#ffe08a'); }
-  else if (e.k === 10) { rect(cx - 1.5, cy - 2, 3, 9, '#8a5a2a'); rect(cx - 6, cy - 7, 12, 6, '#8a8a9a'); rect(cx - 6, cy - 7, 12, 2, '#d8d8e8'); }
+  else if (e.k === 10) { rect(cx - 1.5, cy - 1, 3, 9, '#8a94a8'); circ(cx, cy - 4, 5, '#aab4c8'); rect(cx - 1.5, cy - 10, 3, 6, '#3a1a4a'); circ(cx, cy + 8, 2.4, '#aab4c8'); }
   else if (e.k === 11) { for (var ar = 0; ar < 6; ar++) { var aa = ar * 1.0472 + F * 0.03; line(cx, cy, cx + Math.cos(aa) * 7, cy + Math.sin(aa) * 7, '#bfe8ff', 1.6); } circ(cx, cy, 2.4, '#ffffff'); }
   else if (e.k === 2) { poly([cx - 6, cy + 5, cx - 1, cy - 7, cx + 6, cy - 5, cx + 1, cy + 7], '#d8ff6a', '#4a7a08'); line(cx - 3, cy + 4, cx + 3, cy - 4, '#4a7a08'); }
   else if (e.k === 3) spark8(cx, cy, 7, 'hsl(' + (F * 12 % 360) + ',95%,62%)', F * 0.08);
@@ -501,11 +502,14 @@ function drawGoal(L, st, locked) {
   if (L.arena) return;
   if (L.exitBtn) { drawExitButton(L, st, locked); return; }   // castles have no flag: the fight is the ending
   if (L.endCannon) { drawEndCannon(L, st); return; }   // beacon gate: two tapered obelisks and an energy beam
-  var gx = L.goalX, base = L.poleY, top = base - 9 * TS, tx = gx + 14, col = locked ? '#7a3a4a' : '#7a6ae0';
-  poly([gx - 3, base, gx + 6, base, gx + 4.5, top + 8, gx + 1.5, top], col); poly([tx - 3, base, tx + 6, base, tx + 4.5, top + 8, tx + 1.5, top], col);
-  diamond(gx + 3, top - 4, 3.5, 6, locked ? '#d04a4a' : '#2ee6d6'); diamond(tx + 3, top - 4, 3.5, 6, locked ? '#d04a4a' : '#2ee6d6');
-  if (locked) { for (var k = 0; k < 3; k++) { ctx.globalAlpha = 0.5; line(gx + 6, base - 20 - k * 22, tx - 2, base - 20 - k * 22, '#ff4a6a', 2); } ctx.globalAlpha = 1; return; }
-  var ty = base - 18 - (0.5 + 0.5 * Math.sin(st.f * 0.045)) * 90; ctx.globalAlpha = 0.35; rect(gx + 6, ty - 4, tx - gx - 8, 8, '#7affe0'); ctx.globalAlpha = 1; rect(gx + 6, ty - 1, tx - gx - 8, 2, '#e8fffa');
+  // finish flag: two poles with waving pennants and a tape that sweeps up and down between them (touching the tape is the bonus)
+  var gx = L.goalX, base = L.poleY, top = base - 9 * TS, tx = gx + 14, pole = locked ? '#8a6a72' : '#e8e4f0', fc = locked ? '#7a3a4a' : '#ff4a5a', fc2 = locked ? '#7a3a4a' : '#ffd24a', wv = Math.sin(st.f * 0.12) * 2;
+  rect(gx + 2, top, 2, base - top, pole); circ(gx + 3, top - 2, 3, locked ? '#d04a4a' : '#ffd24a');
+  poly([gx + 4, top + 1, gx + 17 + wv, top + 5, gx + 4, top + 11], fc, '#7a0a1a'); poly([gx + 4, top + 1, gx + 11 + wv * 0.5, top + 3, gx + 4, top + 6], 'rgba(255,255,255,.35)');
+  rect(tx + 2, top + 2 * TS, 2, base - top - 2 * TS, pole); circ(tx + 3, top + 2 * TS - 2, 2.4, locked ? '#d04a4a' : '#ffd24a');
+  poly([tx + 4, top + 2 * TS + 1, tx + 14 - wv, top + 2 * TS + 4, tx + 4, top + 2 * TS + 9], fc2, '#7a5a0a');
+  if (locked) { for (var k = 0; k < 3; k++) { ctx.globalAlpha = 0.5; line(gx + 4, base - 20 - k * 22, tx + 2, base - 20 - k * 22, '#ff4a6a', 2); } ctx.globalAlpha = 1; return; }
+  var ty = base - 18 - (0.5 + 0.5 * Math.sin(st.f * 0.045)) * 90; ctx.globalAlpha = 0.35; rect(gx + 4, ty - 4, tx - gx - 2, 8, '#7affe0'); ctx.globalAlpha = 1; rect(gx + 4, ty - 1, tx - gx - 2, 2, '#e8fffa');
 }
 // stages made of zones (odyssey) have a look per zone (cell); the others one look
 function zoneTheme(L, c, r, def) { if (!L.zones) return def; var zi = Math.floor(r / L.zoneCH) * L.zoneGX + Math.floor(c / L.zoneCW), z = L.zones[zi]; return z >= 0 && THEMES[z] ? THEMES[z] : def; }
@@ -571,7 +575,7 @@ function panel(x, y, w, h) { ctx.fillStyle = 'rgba(10,8,34,.88)'; ctx.fillRect(x
 // Zero-pads a score to 6 digits.
 function pad6(n) { var s = String(Math.max(0, n | 0)); while (s.length < 6) s = '0' + s; return s; }
 // Text for the level pill, e.g. world-stage, or STAR ROAD for bonus levels (n >= 1000).
-function levelLabel(G) { var n = G.n; if (n >= 1000) return TT('별길', 'STAR ROAD'); var w = Math.floor((n - 1) / 5) + 1, i = (n - 1) % 5 + 1; return w + '·' + i; }
+function levelLabel(G) { var n = G.n; if (n >= 2000) return TT('도박집', 'GAMBLE HOUSE'); if (n >= 1000) return TT('별길', 'STAR ROAD'); var w = Math.floor((n - 1) / 5) + 1, i = (n - 1) % 5 + 1; return w + '·' + i; }
 // Small hero diamond used for lives.
 function heroIcon(x, y, s) { poly([x, y - 5 * s, x + 5 * s, y, x, y + 5 * s, x - 5 * s, y], '#ff8a3d'); poly([x, y - 5 * s, x - 5 * s, y, x, y], '#ffc08a'); circ(x, y, 2 * s, '#fff'); circ(x + 0.6 * s, y, 1 * s, '#2a1456'); }
 // In-level HUD: score, gems, level label, lives, power-up and timer bar.
@@ -600,7 +604,7 @@ function overlay(title, lines) {
 }
 // ---------------------------------------------------------------- overworld map: low-poly islands, glowing route, hex / diamond nodes
 // Node colour per level kind on the overworld map.
-var NODE_COL = { cannon: '#ff8a3a', maze: '#ffb04a', plain: '#7a6ae0', hills: '#4ac8a0', flood: '#38b8f0', ghost: '#a07aff', sky: '#ff9ac0', cave: '#d09050', castle: '#ff4a6a', bonus: '#ffe08a' };
+var NODE_COL = { cannon: '#ff8a3a', maze: '#ffb04a', plain: '#7a6ae0', hills: '#4ac8a0', flood: '#38b8f0', ghost: '#a07aff', sky: '#ff9ac0', cave: '#d09050', castle: '#ff4a6a', bonus: '#ffe08a', house: '#e0a040' };
 // Overworld map of the current world: gradient sky, floating islands, routes (dashed when secret) and level nodes (hex / diamond).
 function drawMap() {
   var wm = G.map, pal = [['#14103a', '#3a2a7a'], ['#0a2a3a', '#1a6a7a'], ['#2a1030', '#7a2a6a'], ['#102a20', '#2a7a5a']][wm.wid % 4];
@@ -616,16 +620,17 @@ function drawMap() {
     if (nd.kind === 'castle') { poly([nd.x - 9, nd.y + 8, nd.x - 9, nd.y - 3, nd.x - 4, nd.y - 9, nd.x, nd.y - 3, nd.x + 4, nd.y - 9, nd.x + 9, nd.y - 3, nd.x + 9, nd.y + 8], col, '#1a0a20'); }
     else if (nd.kind === 'cannon') { circ(nd.x - 3, nd.y + 5, 5, '#1a1030'); circ(nd.x - 3, nd.y + 5, 3.4, col); ctx.save(); ctx.translate(nd.x, nd.y); ctx.rotate(-0.6); rrect(-4, -5, 16, 9, 3, '#1a1030'); rrect(-3, -4, 14, 7, 2.5, col); ctx.restore(); }
     else if (nd.kind === 'bonus') spark8(nd.x, nd.y, 9, col, F * 0.03);
+    else if (nd.kind === 'house') { var hc = done ? '#6a6a80' : col; poly([nd.x - 10, nd.y + 8, nd.x - 10, nd.y - 2, nd.x, nd.y - 9, nd.x + 10, nd.y - 2, nd.x + 10, nd.y + 8], '#10082a'); poly([nd.x - 8.5, nd.y + 7, nd.x - 8.5, nd.y - 1.5, nd.x, nd.y - 7, nd.x + 8.5, nd.y - 1.5, nd.x + 8.5, nd.y + 7], hc); rrect(nd.x - 7, nd.y + 1, 14, 6, 1.5, done ? '#4a4a5a' : '#7a4a1a'); rrect(nd.x - 2, nd.y + 2.5, 4, 2.5, 0.8, done ? '#8a8a9a' : '#ffe08a'); }
     else { hex(nd.x, nd.y, 9, '#10082a', Math.PI / 6); hex(nd.x, nd.y, 7.3, col, Math.PI / 6); }
     if (done) { diamond(nd.x + 8, nd.y - 8, 4, 5, '#fff'); ctx.strokeStyle = '#18a070'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(nd.x + 6, nd.y - 8); ctx.lineTo(nd.x + 7.8, nd.y - 6); ctx.lineTo(nd.x + 10.5, nd.y - 10); ctx.stroke(); }
     if (sel) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(nd.x, nd.y, 13 + Math.sin(F * 0.2) * 1.5, 0, 6.3); ctx.stroke(); }
-    text(nd.kind === 'bonus' ? '★' : String(nd.ending ? 5 : nd.i + 1), nd.x, nd.y + 0.5, 8, '#fff', 'center'); }
+    if (nd.kind !== 'house') text(nd.kind === 'bonus' ? '★' : String(nd.ending ? 5 : nd.i + 1), nd.x, nd.y + 0.5, 8, '#fff', 'center'); }
   var cur = all.filter(function (n) { return n.i === G.sel; })[0] || nodes[0];
   drawHero({ x: cur.x - 6, y: cur.y - 30 + Math.sin(F * 0.1) * 2, w: 12, h: 14, pw: 0, big: false, face: 1, ground: false, anim: 0, vx: 0, inv: 0, star: 0, spin: 0 }, false, 0, false);
   rrect(3, 3, 90, 14, 7, 'rgba(10,8,34,.62)'); text(TT('월드 ', 'WORLD ') + G.worldName(wm.wid), 10, 10.5, 9, '#ffd0a0');
   rrect(100, 3, 110, 14, 7, 'rgba(10,8,34,.62)'); diamond(110, 10, 4, 5, '#2ee6d6'); text(pad6(G.base), 118, 10.5, 8.5, '#fff');
   rrect(VW - 76, 3, 73, 14, 7, 'rgba(10,8,34,.62)'); for (i = 0; i < Math.min(G.lives, 5); i++) heroIcon(VW - 66 + i * 11, 10, 0.9);
-  var sn = all.filter(function (n) { return n.i === G.sel; })[0]; if (sn) { var kn = PF.KIND_NAMES[sn.kind]; rrect(70, VH - 26, 260, 18, 9, 'rgba(10,8,34,.72)'); text((sn.kind === 'bonus' ? '★ ' : G.worldName(wm.wid) + '·' + (sn.ending ? 5 : sn.i + 1) + '  ') + (KO ? kn[0] : kn[1]), VW / 2, VH - 17, 9, '#fff', 'center', false); }
+  var sn = all.filter(function (n) { return n.i === G.sel; })[0]; if (sn) { var kn = PF.KIND_NAMES[sn.kind]; rrect(70, VH - 26, 260, 18, 9, 'rgba(10,8,34,.72)'); text((sn.kind === 'bonus' || sn.kind === 'house' ? '★ ' : G.worldName(wm.wid) + '·' + (sn.ending ? 5 : sn.i + 1) + '  ') + (KO ? kn[0] : kn[1]), VW / 2, VH - 17, 9, '#fff', 'center', false); }
   if (G.auto) { var w2 = 128; rrect(VW / 2 - w2 / 2, 20, w2, 14, 4, 'rgba(255,138,61,.95)'); text(TT('자동 플레이 (F3 끄기)', 'AUTO PLAY (F3 to stop)'), VW / 2, 27, 8, '#2a1000', 'center', false); }
   if (G.msgT > 0 && G.msg) { var tw = Math.min(VW - 16, 8 + G.msg.length * (KO ? 7.4 : 4.9)); rrect(VW / 2 - tw / 2, 40, tw, 15, 4, 'rgba(10,8,34,.78)'); text(G.msg, VW / 2, 47.5, 8, '#fff', 'center', false); }
   text(TT('← → ↑ ↓ 선택   점프/Enter 시작', 'Arrows select   Jump/Enter start'), VW / 2, VH - 38, 7.5, '#cfe', 'center');
@@ -686,7 +691,7 @@ function drawSelect() {
   nodes.forEach(function (nd, k) {
     var gi = m.nodes.indexOf(nd), st = G.selStageState(w2.id, m, nd), sel = G.selCol === 1 && G.selSi === gi, kn = PF.KIND_NAMES[nd.kind]; y = 40 + k * 16; G.selRects.push({ x: 148, y: y - 1, w: 240, h: 15, kind: 'stage', idx: gi });
     rrect(148, y - 1, 240, 15, 5, sel ? 'rgba(46,230,214,.35)' : 'rgba(255,255,255,.06)'); var dim = st === 'locked';
-    text((nd.kind === 'bonus' ? '★' : G.worldName(w2.id) + '·' + (nd.ending ? 5 : nd.i + 1)) + '  ' + (KO ? kn[0] : kn[1]) + (nd.ending ? (nd.ending === 'castle' ? TT('  (성채 끝)', '  (castle ending)') : TT('  (대포 끝)', '  (cannon ending)')) : '') + (nd.main ? '' : TT('  [비밀 길]', '  [secret route]')), 154, y + 6.5, 8.5, dim ? '#6a6a88' : '#fff', 'left', false);
+    text((nd.kind === 'bonus' || nd.kind === 'house' ? '★' : G.worldName(w2.id) + '·' + (nd.ending ? 5 : nd.i + 1)) + '  ' + (KO ? kn[0] : kn[1]) + (nd.ending ? (nd.ending === 'castle' ? TT('  (성채 끝)', '  (castle ending)') : TT('  (대포 끝)', '  (cannon ending)')) : '') + (nd.main ? '' : nd.kind === 'house' ? TT('  [1회]', '  [once]') : TT('  [비밀 길]', '  [secret route]')), 154, y + 6.5, 8.5, dim ? '#6a6a88' : '#fff', 'left', false);
     if (st === 'done') text('✓', 382, y + 6.5, 9, '#7affe0', 'right', false); else if (st === 'locked') text(TT('잠김', 'locked'), 382, y + 6.5, 7, '#6a6a88', 'right', false); else text('▶', 382, y + 6.5, 8, '#ffd0a0', 'right', false);
   });
   if (G.prog.wcl[w2.id]) text(TT('월드 클리어: 모든 스테이지를 고를 수 있어요', 'World cleared: every stage is selectable'), 150, 40 + nodes.length * 16 + 8, 7.5, '#7affe0', 'left', false);
