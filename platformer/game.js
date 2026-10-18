@@ -175,7 +175,7 @@ function autoMask(st) {
     if (G.fbUntil > st.f) { G.usingFallback = true; return G.planner.decide(st); }
     G.usingFallback = false; return G.ai.decide(st);
   }
-  if (st.skipSec === undefined && G.curNode && !G.main && !st.L.room) st.skipSec = (PF.hash(G.seed, G.wid, 900 + G.curNode.i) % 100) >= 30;   // the auto player aims for the normal exit 70% of the time, the secret exit 30%
+  if (st.skipSec === undefined && G.curNode && !G.main && !st.L.room) st.skipSec = (PF.hash(G.seed, G.wid, 900 + G.curNode.i) % 100) >= 30;   if ((G.map.loop && G.map.loop.keys.indexOf(G.curNode.i) >= 0 && isDone(G.map.loop.trap)) || (G.prog.loopEnd && G.prog.loopEnd[G.wid] && G.map.edges.some(function (e) { return e.secret && !e.house && e.a === G.curNode.i && e.b === G.map.endAlt; }))) st.skipSec = false;   // sent back by the trap: take the hidden exit this time   // the auto player aims for the normal exit 70% of the time, the secret exit 30%
   G.usingFallback = true; var am = G.planner.decide(st, 9); if (am === null || am === undefined) return am;
   return am | autoUp(st);   // the planner only drives left / right / run / jump: the Up key is added here where it matters
 }
@@ -236,7 +236,8 @@ function isOpen(nd) { return isOpenW(G.wid, G.map, nd); }
 function isVisible(nd) { return nd.main || isOpen(nd); }
 function allNodes() { return G.map.nodes.filter(isVisible); }
 // the next level the auto player (and the hint) should take: any open, unfinished level, preferring the main route (it never needs a secret exit)
-function nextTarget() { var c = G.map.nodes.filter(function (n) { return isOpenW(G.wid, G.map, n) && !isDone(n.i) && (!worldCleared(G.wid) || n.main) && !(n.kind === 'house' && worldCleared(G.wid)); }); c.sort(function (a, b) { return (a.kind === 'house' ? 0 : 1) - (b.kind === 'house' ? 0 : 1) || (a.main ? 0 : 1) - (b.main ? 0 : 1) || a.i - b.i; }); return c[0] || null; }   // an open Gamble House is visited first (optional, one-shot)
+function nextTarget() { var c = G.map.nodes.filter(function (n) { return isOpenW(G.wid, G.map, n) && !isDone(n.i) && (!worldCleared(G.wid) || n.main) && !(n.kind === 'house' && worldCleared(G.wid)); }); c.sort(function (a, b) { return (a.kind === 'house' ? 0 : 1) - (b.kind === 'house' ? 0 : 1) || (a.main ? 0 : 1) - (b.main ? 0 : 1) || a.i - b.i; }); if (!c.length && !worldCleared(G.wid)) { var lp0 = G.map.loop, sc0 = G.prog.secret[G.wid] || {}, lend = G.prog.loopEnd && G.prog.loopEnd[G.wid], sk = G.map.edges.filter(function (e) { return e.secret && !e.house && !sc0[e.a] && isDone(e.a) && ((lp0 && isDone(lp0.trap) && lp0.keys.indexOf(e.a) >= 0) || (lend && e.b === G.map.endAlt)); }); if (sk.length) return nodeById(sk[0].a); }   // sent back (by a trap level or a backward ending): go find the hidden exit again
+  return c[0] || null; }   // an open Gamble House is visited first (optional, one-shot)
 // Move the map cursor to the neighbouring node in a direction.
 function moveSel(dir) {
   var cur = nodeById(G.sel) || G.map.nodes[0], vx = dir === 'right' ? 1 : dir === 'left' ? -1 : 0, vy = dir === 'down' ? 1 : dir === 'up' ? -1 : 0, best = null, bs = 1e9;
@@ -258,11 +259,13 @@ function startGame(fresh) {
 }
 // ---- world endings (castle / cannon) lead to different next worlds on the super map
 function endWorld(ending) {
-  G.prog.wcl[G.wid] = ending; var w = PF.worldInfo(G.seed, G.wid), next = w.next[ending]; G.endingTaken = ending; saveProg();   // the world graph is endless: every ending leads to a new world
+  var w = PF.worldInfo(G.seed, G.wid), next = w.next[ending]; G.endingTaken = ending; G.endingBack = w.back === ending;
+  if (G.endingBack) { (G.prog.loopEnd = G.prog.loopEnd || {})[G.wid] = ending; } else { G.prog.wcl[G.wid] = ending; if (G.prog.loopEnd) delete G.prog.loopEnd[G.wid]; }   // a backward ending does NOT finish the world: its other ending is still to be found
+  saveProg();   // the world graph is endless: every ending leads to a new world
   G.superFrom = G.wid; G.superTo = next; G.superT = 0; G.mode = 'super'; sfx('life');
 }
 // Leave the super map into the world just reached.
-function leaveSuper() { var nx = G.superTo; G.prog.front = Math.max(G.prog.front || 0, nx); setWorld(nx); saveProg(); G.mode = 'map'; G.mapCool = 0; say(TT('월드 ' + worldName(nx) + ' 도착!', 'Arrived in world ' + worldName(nx) + '!'), 150); }
+function leaveSuper() { var nx = G.superTo; G.prog.front = Math.max(G.prog.front || 0, nx); setWorld(nx); saveProg(); G.mode = 'map'; G.mapCool = 0; say(G.endingBack ? TT('월드 ' + worldName(nx) + '(으)로 되돌아왔어요! 다른 엔딩을 찾으세요', 'Sent back to world ' + worldName(nx) + '! Find the other ending') : TT('월드 ' + worldName(nx) + ' 도착!', 'Arrived in world ' + worldName(nx) + '!'), 150); G.endingBack = false; }
 // ---- stage select dialog (Game menu / T): cleared worlds + the current one, and inside a world its cleared stages + the frontier; a cleared world opens all its stages
 // ---- navigation: back to the world map at any time, and from the map up to the super map
 // Navigation: back to the world map, and from the map up to the super map; sbMove/sbPick drive the super-map cursor.
@@ -291,7 +294,7 @@ function worldOpen(id) {
   for (var w in G.prog.wcl) { var inf = PF.worldInfo(G.seed, +w); if (inf && inf.next && inf.next[G.prog.wcl[w]] === id) return true; }
   return false;
 }
-G.worldOpen = worldOpen;
+G.worldOpen = worldOpen; G.nextTarget = nextTarget; G.endWorld = endWorld; G.setWorld = setWorld;
 function sbPick(id) {
   var ok = worldOpen(id); if (!ok) { sfx('bump'); return; }
   closeSuper(); if (id !== G.wid) { setWorld(id); saveProg(); say(TT('월드 ' + worldName(id), 'World ' + worldName(id)), 120); }
@@ -423,7 +426,7 @@ function fixedStep() {
   for (i = G.bumps.length - 1; i >= 0; i--) if (++G.bumps[i].t > 10) G.bumps.splice(i, 1);
   if (G.mode === 'start' || G.mode === 'over') { if (G.auto && ++G.autoWait > 90) startGame(false); return; }
   if (G.mode === 'map') {
-    if (G.auto && ++G.mapCool > 70) { G.mapCool = 0; var nd = nextTarget(); if (nd) { G.sel = nd.i; enterLevel(nd.i); } }
+    if (G.auto && ++G.mapCool > 70) { G.mapCool = 0; var nd = nextTarget(); if (nd) { G.sel = nd.i; enterLevel(nd.i); } else { var pwl = Object.keys(G.prog.loopEnd || {}).map(Number).filter(function (id) { return !worldCleared(id) && id !== G.wid; })[0]; if (pwl !== undefined) { setWorld(pwl); saveProg(); } } }   // sent back by a world ending: return to the unfinished world
     return; }
   if (G.mode === 'super') { if (++G.superT > 100 && G.auto) leaveSuper(); return; }
   if (G.mode === 'end') { if (++G.superT > 240 && G.auto) startGame(true); return; }
@@ -466,7 +469,7 @@ function fixedStep() {
       if (node.kind === 'bonus') { G.lives++; sfx('life'); }
       G.mode = 'map'; G.st = null; G.L = null; G.mapCool = 0;
       if (node.ending) { endWorld(node.ending); }
-      else { var tg = nextTarget(); G.sel = tg ? tg.i : G.sel; if (G.secretExit) { var br = G.map.edges.filter(function (e) { return e.a === node.i && e.secret; })[0]; if (br) G.sel = br.b; } say(G.secretExit ? TT('비밀 출구! 지도에 새 길이 열렸어요', 'Secret exit! A new route opened on the map') : TT('레벨 클리어!', 'Level cleared!'), 150); }
+      else { var tg = nextTarget(); G.sel = tg ? tg.i : G.sel; var lp = G.map.loop; if (lp && node.i === lp.trap && !G.secretExit) { G.sel = lp.back; } if (G.secretExit) { var br = G.map.edges.filter(function (e) { return e.a === node.i && e.secret; })[0]; if (br) G.sel = br.b; } say(lp && node.i === lp.trap && !G.secretExit ? TT('길이 되돌아갔어요! 숨은 출구를 찾아보세요', 'The path leads back! Find the hidden exit') : G.secretExit ?  TT('비밀 출구! 지도에 새 길이 열렸어요', 'Secret exit! A new route opened on the map') : TT('레벨 클리어!', 'Level cleared!'), 150); }
       saveProg();
     }
   }

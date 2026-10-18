@@ -208,6 +208,8 @@ function worldInfo(seed, wid) {
   if (d === 0) { cs = 0; cn = 1; } else if (d === 1) { cs = s; cn = s === 1 ? 2 : 1 + (h(2) % 2); } else { cs = s; cn = (s + 1 + (h(3) % 2)) % 3; }
   // next.castle / next.cannon are the worlds the two endings lead to (depth d+1), so the paths fork and merge across slots
   var info = { id: wid, depth: d, slot: s, mainEnd: mainEnd, next: { castle: (d + 1) * 3 + cs, cannon: (d + 1) * 3 + cn } };
+  // world 7 and later: in some worlds one of the two endings sends the hero BACK to an earlier world (the other ending goes on)
+  if (d >= 6 && h(5) % 100 < 40) { var be = h(6) % 2 ? 'castle' : 'cannon'; info.back = be; info.next[be] = (d - 1 - (h(7) % 2)) * 3 + (h(8) % 3); }
   if (Object.keys(_wi).length > 4000) _wi = {}; _wi[key] = info; return info;
 }
 function worldExists(wid) { var d = Math.floor(wid / 3), s = wid % 3; return wid >= 0 && (d === 0 ? s === 0 : d === 1 ? s < 2 : true); }
@@ -247,7 +249,23 @@ function worldMap(seed, wid, depth, mainEnd) {
   if (hHid) { hn.x = hPar.x + 8; hn.y = Math.max(30, Math.min(192, Math.round(hPar.y + (hPar.y > 115 ? 34 : -34)))); }
   else { hn.x = hPar.x + Math.round(sp * 0.4); hn.y = Math.round(hPar.y + (hPar.y > 115 ? 34 : -34)); }
   nodes.push(hn); edges.push({ a: hPar.i, b: 20, secret: hHid, house: true });
-  return { wid: wid, depth: depth, S: S, base: base, mainEnd: 'castle', endMain: E, endAlt: CANNON_ID, kinds: kinds, nodes: nodes, edges: edges };
+  var wmap = { wid: wid, depth: depth, S: S, base: base, mainEnd: 'castle', endMain: E, endAlt: CANNON_ID, kinds: kinds, nodes: nodes, edges: edges };
+  // world 7 and later: in some worlds one level's normal exit leads BACK to an earlier level (8-3 -> 8-1); the way on is a hidden exit found in a level at or before the trap
+  if (depth >= 6 && hash(seed, wid, 6100) % 100 < 60 && picked.length) {
+    var cand = []; for (i = 1; i <= S - 3; i++) cand.push(i);
+    for (i = cand.length - 1; i > 0; i--) { var jj = hash(seed, wid, 6101 + i) % (i + 1), tmp = cand[i]; cand[i] = cand[jj]; cand[jj] = tmp; }
+    var keep = edges.slice();
+    for (var ci = 0; ci < cand.length; ci++) {
+      var tr = cand[ci], keys = picked.filter(function (k) { return k <= tr && secretTarget(k, S) > tr; });
+      if (!keys.length) continue;
+      var bk = hash(seed, wid, 6102 + ci) % tr;
+      wmap.edges = keep.filter(function (e) { return !(e.a === tr && e.b === tr + 1); }).concat([{ a: tr, b: bk, secret: false, back: true }]);
+      wmap.loop = { trap: tr, back: bk, keys: keys };
+      if (validateWorldMap(wmap).ok) return wmap;
+    }
+    wmap.edges = keep; delete wmap.loop;
+  }
+  return wmap;
 }
 function validateWorldMap(m) {
   var ids = {}, out = { ok: true, why: '' }, i; m.nodes.forEach(function (q) { ids[q.i] = q; });
@@ -255,7 +273,8 @@ function validateWorldMap(m) {
   function reach(allowSecret) { var seen = { 0: 1 }, st = [0]; while (st.length) { var a = st.pop(); (adj[a] || []).forEach(function (e) { if (e.secret && !allowSecret) return; if (!seen[e.b]) { seen[e.b] = 1; st.push(e.b); } }); } return seen; }
   var all = reach(true), plain = reach(false);
   m.nodes.forEach(function (q) { if (!all[q.i]) { out.ok = false; out.why = 'unreachable ' + q.i; } });
-  if (!plain[m.endMain]) { out.ok = false; out.why = 'castle needs secrets'; }
+  if (!(m.loop ? all[m.endMain] : plain[m.endMain])) { out.ok = false; out.why = 'castle needs secrets'; }
+  if (m.loop && plain[m.endMain]) { out.ok = false; out.why = 'loop does not block the castle'; }
   if (m.endAlt >= 0 && plain[m.endAlt]) { out.ok = false; out.why = 'cannon reachable without secrets'; }
   if (!all[m.endAlt]) { out.ok = false; out.why = 'cannon unreachable'; }
   var sec = m.edges.filter(function (e) { return e.secret && !e.house; }), branch = sec.length; if (branch < 1 || branch > 2) { out.ok = false; out.why = 'secret edges ' + branch; }
@@ -267,7 +286,7 @@ function validateWorldMap(m) {
   // the map is one connected picture when edges are read as undirected
   var und = {}; m.edges.forEach(function (e) { (und[e.a] = und[e.a] || []).push(e.b); (und[e.b] = und[e.b] || []).push(e.a); }); var us = { 0: 1 }, ust = [0]; while (ust.length) { var ua = ust.pop(); (und[ua] || []).forEach(function (b) { if (!us[b]) { us[b] = 1; ust.push(b); } }); } m.nodes.forEach(function (q) { if (!us[q.i]) { out.ok = false; out.why = 'disconnected ' + q.i; } });
   // no cycles: all edges go to nodes that are "later" (higher x) or ending nodes
-  m.edges.forEach(function (e) { if (ids[e.b].x < ids[e.a].x - 1) { out.ok = false; out.why = 'backward edge'; } });
+  m.edges.forEach(function (e) { if (!e.back && ids[e.b].x < ids[e.a].x - 1) { out.ok = false; out.why = 'backward edge'; } });
   // every node except the endings and the house has an outgoing edge
   m.nodes.forEach(function (q) { if (!(adj[q.i] || []).length && !q.ending && q.kind !== 'bonus' && q.kind !== 'house') { out.ok = false; out.why = 'dead end ' + q.i; } });
   out.branches = branch; out.hasAlt = m.endAlt >= 0; return out;
@@ -2467,8 +2486,10 @@ function boxify(L) {
   if (!L.items || !L.items.length || L.kind === 'castle' || L.kind === 'bossrush' || L.kind === 'cannon' || L.kind === 'house' || L.arena) return;
   var rows = L.rows || ROWS, keep = [], fb = L.fixedBox || {};
   for (var i = 0; i < L.items.length; i++) {
-    var it = L.items[i], c = Math.floor((it.x + 6) / TS), r0 = Math.floor((it.y + 6) / TS), gr = -1, rr, ok = true;
+    var it = L.items[i], req = false, c = Math.floor((it.x + 6) / TS), r0 = Math.floor((it.y + 6) / TS), gr = -1, rr, ok = true;
     for (rr = r0; rr < rows && gr < 0; rr++) if (PF.SOL[L.tiles[c * rows + rr]]) gr = rr;
+    for (var q0 = 0; q0 < (L.route || []).length; q0++) { var rs = L.route[q0]; if (rs.k === 'pw' && Math.abs(rs.x - (it.x + 6)) < 24 && Math.abs(rs.y - (it.y + 6)) < 40) req = true; }   // the route stands on this pickup: puzzle gear stays on the floor
+    if (req) ok = false;
     var br = gr - 4;
     if (gr < 0 || br < 1) ok = false;
     for (rr = br - 1; ok && rr < gr; rr++) if (L.tiles[c * rows + rr] !== T.AIR) ok = false;
