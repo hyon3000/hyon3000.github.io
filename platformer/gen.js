@@ -819,8 +819,8 @@ function buildRaw(seed, n, a, o) {
     else if (ck === 'ring') {
       var secret = (wantSecret && ringCount === 0 && !castle && !room);
       if (!secret) {   // an ordinary bonus ring (Up on it warps into a bonus room)
-        len = 7; c0 = flat(len, g); var rc = c0 + 3; ringCount++;
-        tl.push([rc, g - 1, T.RING]); tl.push([rc, g - 2, T.RING]); rings.push({ c: rc, secret: false, room: 0, y: g * TS });
+        // bonus rings are gone (their rooms looped back to the ring): only hidden secret exits remain, so this chunk is just a calm stretch of floor
+        len = 7; c0 = flat(len, g); ringCount++;
         flats.push({ c: c0, len: len, g: g, noEn: true });
       } else {
         // a secret exit is no ring any more: it hides in the terrain. Reaching its invisible zone (the top of a ledge ladder, the end of a 1-tile tunnel in a mound, the bottom of a pit that has a floor and a coin trail) warps into the secret room. The route stages below make the validator (and the auto player) walk there.
