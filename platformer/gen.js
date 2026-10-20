@@ -58,13 +58,13 @@ var AIRS = [0, IN.R, IN.R | IN.RUN, IN.L], HOLDS = [3, 10, 99];
 // best-first macro search on the real simulation from state st0 until pred(state) holds; returns { st, seq } or null
 function searchStage(st0, pred, tx, ty, maxNodes) { var it = searchIter(st0, pred, tx, ty, maxNodes), r; while ((r = it.run(1e9)) === undefined); return r; }
 // resumable form: run(n) expands up to n nodes and returns undefined (not finished), null (no route) or { st, seq }
-function searchIter(st0, pred, tx, ty, maxNodes) {
+function searchIter(st0, pred, tx, ty, maxNodes, hf) {
   if (pred(st0)) return { run: function () { return { st: st0, seq: [], nodes: 0 }; } };
   var seen = new Set(), heap = [], nodes = 0, swimLv = !!st0.L.swimNodes;
   function key(st) { var p = st.p, a = Math.abs(p.vx), sc = (p.vx < -0.3 ? -1 : 1) * (a < 0.3 ? 0 : a < 1.8 ? 1 : 2) + 2, ph = (p.mv >= 0 || st.sw || st.L.hasFire) ? Math.floor((st.f % MV_PERIOD) / 20) + 1 : (nearEn(st) ? 40 + Math.floor(st.f / 10) % 32 : 0); return ((((Math.round(p.x / 3) * 256 + Math.round(p.y)) * 5 + sc) * 80 + ph) * 64 + (st.kb & 7) * 8 + (st.sb & 7)) * 40 + Math.min(39, st.mod.size); }
   var snowLv = !!st0.L.snow;   // frost levels: whether an enemy is frozen and whether the hero holds the snow flower also tell search nodes apart
   function key2(st) { var k0 = key(st); if (!snowLv) return k0; var fz = 0; for (var q = 0; q < st.en.length; q++) if (st.en[q].frz > 0) fz |= 1 << Math.min(q, 10); return (k0 * 2048 + fz) * 8 + (st.p.pw & 7); }
-  function hval(st) { var p = st.p; return Math.abs(p.x + 6 - tx) + (ty === null ? 0 : 1.5 * Math.abs(p.y + 7 - ty)); }
+  function hval(st) { if (hf) return hf(st); var p = st.p; return Math.abs(p.x + 6 - tx) + (ty === null ? 0 : 1.5 * Math.abs(p.y + 7 - ty)); }
   var root = { st: st0, par: null, seq: [], h: hval(st0) }; seen.add(key2(st0)); heapPush(heap, root);
   function path(nd, extra) { var parts = [extra]; while (nd) { parts.push(nd.seq); nd = nd.par; } var out = []; for (var i = parts.length - 1; i >= 0; i--) for (var j = 0; j < parts[i].length; j++) out.push(parts[i][j]); return out; }
   return { run: function (budget) {

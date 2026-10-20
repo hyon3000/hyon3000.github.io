@@ -310,11 +310,112 @@ function shellBossMask0(st, boss, fb) {
   if (p.ground && Math.abs(dx) < 22) return IN.J | (dx > 0 ? IN.R : IN.L);
   return dx > 0 ? IN.R : IN.L;
 }
+// Script hint: the generator's validated script (L.script, enemy-free) is the same stage route the search would find. Its trajectory is recorded once per level
+// (position and speed before each frame) so a stage can be answered by replaying the script from the matching frame on a clone with the real enemies: no search needed.
+var TRAJ = new WeakMap();
+function scriptTraj(L) {
+  if (TRAJ.has(L)) return TRAJ.get(L);
+  var tr = null;
+  if (L.script && L.script.length && L.route && !L.plan) {
+    var V = L; if (L.arena && L.vgoal) { V = {}; for (var vk in L) V[vk] = L[vk]; V.arena = null; V.goalX = L.vgoal.x; V.poleY = L.vgoal.y + 10; V.goalRect = { x: L.vgoal.x - 8, y: L.vgoal.y - 4 * PF.TS, w: 16, h: 4 * PF.TS }; V.route = L.route.slice(0, -1).concat([{ k: 'goal', x: L.vgoal.x, y: L.vgoal.y }]); }   // chain castle: the script proves the route to the arena floor (like the generator's vcopy)
+    var st = PF.newState(V, { noEn: !L.stepEn, noPM: true });
+    if (L.stepEn && L.reqEn) { st.en = st.en.filter(function (e) { return L.reqEn.indexOf(e.t) >= 0; }); st.boss = st.en.filter(function (e) { return e.t === 8; }).length; }
+    var n = L.script.length, X = new Float32Array(n), Y = new Float32Array(n), VX = new Float32Array(n), VY = new Float32Array(n), G = new Uint8Array(n), ST = new Int32Array(n), by = new Map(), len = 0;
+    for (var i = 0; i < n; i++) {
+      var p = st.p; X[i] = p.x; Y[i] = p.y; VX[i] = p.vx; VY[i] = p.vy; G[i] = p.ground ? 1 : 0; ST[i] = st.stage; len = i + 1;
+      var key = Math.round(p.x) + ',' + Math.round(p.y), a = by.get(key); if (a) a.push(i); else by.set(key, [i]);
+      PF.step(st, L.script[i]); if (st.p.dead || st.p.won) break;
+    }
+    tr = { X: X, Y: Y, VX: VX, VY: VY, G: G, ST: ST, by: by, len: len };
+  }
+  TRAJ.set(L, tr);
+  return tr;
+}
+// Script frames whose recorded state equals the hero's now (frame f first, then position lookup).
+function scriptStarts(L, st) {
+  var tr = scriptTraj(L), out = [], p = st.p; if (!tr) return out;
+  function ok(i) { return i < tr.len && Math.abs(tr.X[i] - p.x) < 0.6 && Math.abs(tr.Y[i] - p.y) < 0.6 && Math.abs(tr.VX[i] - p.vx) < 0.05 && Math.abs(tr.VY[i] - p.vy) < 0.05 && tr.G[i] === (p.ground ? 1 : 0); }
+  if (ok(st.f)) out.push(st.f);
+  var xs = [Math.floor(p.x), Math.ceil(p.x)], ys = [Math.floor(p.y), Math.ceil(p.y)];
+  for (var a = 0; a < 2 && out.length < 4; a++) for (var b = 0; b < 2; b++) { var l = tr.by.get(xs[a] + ',' + ys[b]); if (l) for (var j = 0; j < l.length && out.length < 4; j++) if (l[j] !== st.f && ok(l[j]) && out.indexOf(l[j]) < 0) out.push(l[j]); }
+  return out;
+}
+// Script-guided search heuristic: how far along the script (the frames of the current stage) a standing node is; smaller = closer to done.
+// Off-path nodes get a large value plus the plain distance, so the search stays complete but follows the validated route first.
+function scriptGuide(L, stage, tx, ty) {
+  var tr = scriptTraj(L), endJ = tr.len - 1, cells = new Map(), i, i0 = -1;
+  for (i = 0; i < tr.len; i++) if (tr.ST[i] >= stage) { i0 = i; break; }
+  if (i0 < 0) return null;
+  for (i = i0 + 1; i < tr.len; i++) if (tr.ST[i] > stage) { endJ = i; break; }
+  for (i = i0; i <= endJ; i++) if (tr.G[i]) { var key = Math.floor(tr.X[i] / 16) * 4096 + Math.floor(tr.Y[i] / 16), a = cells.get(key); if (a) a.push(i); else cells.set(key, [i]); }
+  return function (st) {
+    var p = st.p, cx = Math.floor(p.x / 16), cy = Math.floor(p.y / 16), bj = -1, bd = 1e9;
+    for (var a = -2; a <= 2; a++) for (var b = -1; b <= 1; b++) { var l = cells.get((cx + a) * 4096 + cy + b); if (l) for (var j = 0; j < l.length; j++) { var q = l[j], dx = Math.abs(tr.X[q] - p.x), dy = Math.abs(tr.Y[q] - p.y); if (dx < 32 && dy < 12) { var d = dx + 3 * dy; if (d < bd || (d === bd && q > bj)) { bd = d; bj = q; } } } }
+    if (bj >= 0) return (endJ - bj) + 0.5 * bd + 0.001 * (Math.abs(p.x + 6 - tx) + (ty === null ? 0 : 1.5 * Math.abs(p.y + 7 - ty)));
+    return 1e5 + Math.abs(p.x + 6 - tx) + (ty === null ? 0 : 1.5 * Math.abs(p.y + 7 - ty));
+  };
+}
+// Replay the script from frame i0 on a clone (real enemies) until the stage is done by pred and the hero stands (then ext more frames must be survived); returns the key sequence or null (death, or never done).
+function scriptStage(L, st, i0, pred, needGround, ext) {
+  var q = PF.clone(st), sc = L.script, end = Math.min(sc.length, i0 + 1500);
+  for (var k = i0; k < end; k++) {
+    PF.step(q, sc[k]); if (q.p.dead || (st.p.pw > 0 && q.p.pw === 0) || (st.p.big && !q.p.big)) return null;   // (a hit that costs the power-up is as bad as dying)
+    if ((q.p.won || q.p.ground || !needGround) && pred(q)) { for (var e = k + 1; e <= k + (ext || 0) && e < sc.length && !q.p.won; e++) { PF.step(q, sc[e]); if (q.p.dead || (st.p.pw > 0 && q.p.pw === 0) || (st.p.big && !q.p.big)) return null; } return sc.slice(i0, k + 1); }
+    if (q.p.won) return null;
+  }
+  return null;
+}
 // Navigator: nv.decide(st, budgetMs) returns a key mask for this frame, or null while a budgeted search is still thinking.
 function makeNavigator() {
-  var fb = makePlanner(), nv = { fb: fb, seq: null, i: 0, stage: -1, wait: 0, st: { plans: 0, fails: 0, ms: 0 } };
+  var fb = makePlanner(), now = function () { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }, nv = { fb: fb, seq: null, i: 0, stage: -1, wait: 0, st: { plans: 0, fails: 0, ms: 0 } };
+  // True when the hero can plan from here: standing, or afloat on swim levels.
+  function onBase(st) { var L = st.L; return st.p.ground || (L.swimNodes && PF.isW(PF.tileAt(st, Math.floor((st.p.x + st.p.w / 2) / PF.TS), Math.floor((st.p.y + st.p.h / 2) / PF.TS)))); }
+  // Is the real state the one predicted for the end of the sequence (same frame, stage, position, speed)?
+  function samePred(a, b) { return a.f === b.f && a.stage === b.stage && Math.abs(a.p.x - b.p.x) < 0.01 && Math.abs(a.p.y - b.p.y) < 0.01 && Math.abs(a.p.vx - b.p.vx) < 0.01 && Math.abs(a.p.vy - b.p.vy) < 0.01 && a.p.dead === b.p.dead; }
+  // Build the stage search for state st: { hint: key sequence } when the validated script already solves the stage, else { job } with its search tiers.
+  function makeJob(st) {
+    var L = st.L;
+    // Current goal waypoint g (the last one repeats); target x and y (y may be null = any height).
+    var g = L.route[Math.min(st.stage, L.route.length - 1)]; if (g.k === 'goal' && L.arena && st.boss > 0 && !PF.inArena(st)) g = L.vgoal ? L.route[L.route.length - 2] : { k: 'xge', x: L.arena.c0 * PF.TS - 24, y: g.y, door: 1 };   // long castle: first reach the arena door, the fight itself is the reactive planner's job
+    var tx = g.x === undefined ? L.goalX : g.x, ty = g.y === undefined ? null : g.y;
+    // Stage-done tests: strict also requires no poison and a safe stop (settles) unless it is the goal or a door; loose drops the safe-stop rule.
+    var nearDone = function (s) { return g.k === 'near' && s.stage > st.stage; }, strict = function (s) { return (PF.stageDone(s, g) || nearDone(s)) && !(s.p.pois > 0) && (g.k === 'goal' || g.door || settles(s)) && (!L.swimNodes || g.k === 'goal' || clearOfEn(s)); }, loose = function (s) { return (PF.stageDone(s, g) || nearDone(s)) && !(s.p.pois > 0); };
+    var scripted = L.route.length > 2 || L.kind === 'skymaze';
+    // Script hint: the validated script usually already solves this stage (also with the real enemies); verify it by replay, search only when it fails.
+    if (scripted && !st.p.pois && st.p.ground) { var ssx = scriptStarts(L, st); for (var si = 0; si < ssx.length; si++) { var hs = scriptStage(L, st, ssx[si], strict, g.k !== 'goal'); if (hs && hs.length) return { hint: hs }; } }
+    var c2 = PF.clone(st); c2.en = []; c2.noEn = true;
+    // Search tiers, tried in order until one finds a plan: [state, done-test, node budget (, heuristic)]. With enemies and a safe stop (one 8000-node tier: a 3000-node tier first would only repeat its first nodes),
+    // without the safe stop, a long last try, and as a last resort as if the enemies were not there (a hit beats standing still).
+    var tiers = [[PF.clone(st), strict, 8000], [PF.clone(st), loose, 3000], [PF.clone(st), strict, 16000], [c2, strict, 4000]];
+    if (L.route.length <= 2) tiers = [[PF.clone(st), strict, 1500]];   // plain run-to-the-flag stage: if the search is not quick, the reactive planner drives for a while
+    var gd = scripted && !L.swimNodes && scriptTraj(L) ? scriptGuide(L, st.stage, tx, ty) : null; if (gd && gd(st) < 1e5) tiers.unshift([PF.clone(st), strict, 60], [PF.clone(st), strict, 1200, gd]);   // on the validated route: a quick plain try (most stages are easy), then a script-guided search
+    return { job: { stage: st.stage, ti: 0, it: null, tiers: tiers, tx: tx, ty: ty, plain: L.route.length <= 2, fin: false, res: null } };
+  }
+  // Run job jb for up to n search nodes of its current tier; sets jb.fin / jb.res when a tier found a plan or the last tier failed.
+  function advance(jb, n) {
+    if (!jb.it) { var tr = jb.tiers[jb.ti]; jb.it = PF.searchIter(tr[0], tr[1], jb.tx, jb.ty, tr[2], tr[3]); }
+    var r = jb.it.run(n); if (r === undefined) return;
+    if (r || ++jb.ti >= jb.tiers.length) { jb.fin = true; jb.res = r; return; }
+    jb.it = null;
+  }
+  // Pipelining: while a sequence plays, the search for the stage that follows it (from the state the sequence ends in) is prepared in small slices (about 5 ms per frame),
+  // so the game rarely has to stop and think when the sequence is used up.
+  function pipe(st) {
+    var L = st.L;
+    if (nv.preSeq !== nv.seq) {
+      nv.preSeq = nv.seq; nv.pre = null;
+      if (st.boss > 0 || st.p.wing > 0 || st.p.pois > 0) return;
+      var q = PF.clone(st);   // (no share: the clone is stepped for many frames and must not move the real enemies)
+      for (var k = nv.i; k < nv.seq.length; k++) { PF.step(q, nv.seq[k]); if (q.p.dead || q.p.won || q.stage !== st.stage) break; }
+      if (q.p.dead || q.p.won || q.stage === st.stage || !onBase(q) || q.boss > 0 || q.p.wing > 0) return;
+      var rg = L.route[Math.min(q.stage, L.route.length - 1)]; if (rg.k === 'ropeDone') return;
+      var mj = makeJob(q); nv.pre = mj.hint ? { pred: q, hint: mj.hint } : { pred: q, job: mj.job };
+    }
+    var pr = nv.pre; if (!pr || !pr.job || pr.job.fin) return;
+    var t = now(); do { advance(pr.job, 1); } while (!pr.job.fin && now() - t < 5);
+  }
   // Reset the reactive planner and every cached plan / search job.
-  nv.reset = function () { fb.reset(); nv.planBad = false; nv.job = null; nv.busy = false; nv.seq = null; nv.i = 0; nv.stage = -1; nv.wait = 0; };
+  nv.reset = function () { fb.reset(); nv.planBad = false; nv.job = null; nv.pre = null; nv.preSeq = null; nv.busy = false; nv.seq = null; nv.i = 0; nv.stage = -1; nv.wait = 0; };
   // decide(st, budgetMs): with a budget the search is spread over several calls and null is returned while it is still thinking (the game does not step then)
   nv.job = null; nv.busy = false;
   // Priority order: generator plan replay, mushroom pickup, shell boss, boss arena (reactive), cached macro sequence, then a new stage search.
@@ -347,7 +448,7 @@ function makeNavigator() {
     // Boss arenas (and boss-rush levels): drop any macro plan, the reactive planner handles the fight.
     if (st.boss > 0 && (bossNear(st) || (L.vgoal && PF.inArena(st)) || nv.job === null && L.kind === 'bossrush')) { nv.seq = null; nv.job = null; return fb.decide(st); }   // boss arenas: the reactive look-ahead planner dodges and stomps   // boss arenas: the reactive look-ahead planner dodges and stomps
     // Keep playing the macro sequence found for the current stage.
-    if (nv.seq && nv.i < nv.seq.length && (nv.stage === st.stage || (L.snow && !st.p.ground))) return nv.seq[nv.i++];   // frost levels: a stage that completes in mid-air (the ice forms during the jump) does not cut the jump short
+    if (nv.seq && nv.i < nv.seq.length && (nv.stage === st.stage || (L.snow && !st.p.ground))) { pipe(st); return nv.seq[nv.i++]; }   // frost levels: a stage that completes in mid-air (the ice forms during the jump) does not cut the jump short
     nv.seq = null;
     // Rope gap: the pumping controller (PF.ropeSolve: jump, grab with Up, pump with the swing, release when a look-ahead lands on the far ledge) plans the whole crossing on a clone of the live state.
     var rg0 = L.route[Math.min(st.stage, L.route.length - 1)];
@@ -358,30 +459,19 @@ function makeNavigator() {
       if (rsl && rsl.seq.length) { nv.rw = 0; nv.st.plans++; nv.seq = rsl.seq; nv.i = 0; nv.stage = st.stage; return nv.seq[nv.i++]; }
       nv.st.fails++; nv.seq = []; for (var rk = 0; rk < 14; rk++) nv.seq.push(rk < 10 ? PF.IN.L : 0); nv.i = 0; nv.stage = st.stage; return nv.seq[nv.i++];   // no crossing from here: step back a little and try again
     }
+    // A search prepared while the previous sequence was playing (see pipe): adopt it when the hero is exactly where it was predicted to be.
+    if (nv.pre) { var pre = nv.pre; nv.pre = null; if (!nv.job && samePred(pre.pred, st) && !(nv.wait > 0)) { if (pre.hint) { nv.st.plans++; nv.st.hints = (nv.st.hints | 0) + 1; nv.seq = pre.hint; nv.i = 0; nv.stage = st.stage; return nv.seq[nv.i++]; } nv.job = pre.job; } }
     // Start a new stage search; while waiting (nv.wait) or airborne the reactive planner drives instead.
     if (!nv.job) {
-      if (nv.wait > 0 || !(st.p.ground || (L.swimNodes && PF.isW(PF.tileAt(st, Math.floor((st.p.x + st.p.w / 2) / PF.TS), Math.floor((st.p.y + st.p.h / 2) / PF.TS)))))) { if (nv.wait > 0) nv.wait--; return fb.decide(st); }   // swim levels (L.swimNodes) also plan while afloat
-      // Current goal waypoint g (the last one repeats); target x and y (y may be null = any height).
-      var g = L.route[Math.min(st.stage, L.route.length - 1)]; if (g.k === 'goal' && L.arena && st.boss > 0 && !PF.inArena(st)) g = L.vgoal ? L.route[L.route.length - 2] : { k: 'xge', x: L.arena.c0 * PF.TS - 24, y: g.y, door: 1 };   // long castle: first reach the arena door, the fight itself is the reactive planner's job
-      var tx = g.x === undefined ? L.goalX : g.x, ty = g.y === undefined ? null : g.y;
-      // Stage-done tests: strict also requires no poison and a safe stop (settles) unless it is the goal or a door; loose drops the safe-stop rule.
-      var nearDone = function (s) { return g.k === 'near' && s.stage > st.stage; }, strict = function (s) { return (PF.stageDone(s, g) || nearDone(s)) && !(s.p.pois > 0) && (g.k === 'goal' || g.door || settles(s)) && (!L.swimNodes || g.k === 'goal' || clearOfEn(s)); }, loose = function (s) { return (PF.stageDone(s, g) || nearDone(s)) && !(s.p.pois > 0); };
-      var c2 = PF.clone(st); c2.en = []; c2.noEn = true;
-      // tiers: with enemies and a safe stop, with a smaller budget, without the safe stop; last resort: as if the enemies were not there (a hit beats standing still)
-      // Search tiers, tried in order until one finds a plan: [state, done-test, node budget].
-      var tiers = [[PF.clone(st), strict, 3000], [PF.clone(st), strict, 8000], [PF.clone(st), loose, 3000], [c2, strict, 4000]];
-      if (L.route.length <= 2) tiers = [[PF.clone(st), strict, 1500]];   // plain run-to-the-flag stage: if the search is not quick, the reactive planner drives for a while
-      nv.job = { stage: st.stage, ti: 0, it: null, tiers: tiers, tx: tx, ty: ty, plain: L.route.length <= 2 };
+      if (nv.wait > 0 || !onBase(st)) { if (nv.wait > 0) nv.wait--; return fb.decide(st); }
+      var mj = makeJob(st);
+      if (mj.hint) { nv.st.plans++; nv.st.hints = (nv.st.hints | 0) + 1; nv.seq = mj.hint; nv.i = 0; nv.stage = st.stage; return nv.seq[nv.i++]; }
+      nv.job = mj.job;
     }
     // Run the current tier in slices; with a time budget return null (busy) when it is used up, so the game waits; on failure move to the next tier.
     var jb = nv.job, t0 = Date.now(), res;
-    for (;;) {
-      if (!jb.it) { var tr = jb.tiers[jb.ti]; jb.it = PF.searchIter(tr[0], tr[1], jb.tx, jb.ty, tr[2]); }
-      res = jb.it.run(budgetMs ? 60 : 1e9);
-      if (res === undefined) { if (budgetMs && Date.now() - t0 >= budgetMs) { nv.busy = true; nv.st.ms += Date.now() - t0; return null; } continue; }
-      if (res || ++jb.ti >= jb.tiers.length) break;
-      jb.it = null;
-    }
+    while (!jb.fin) { advance(jb, budgetMs ? 4 : 1e9); if (!jb.fin && budgetMs && Date.now() - t0 >= budgetMs) { nv.busy = true; nv.st.ms += Date.now() - t0; return null; } }
+    res = jb.res;
     nv.st.ms += Date.now() - t0; nv.busy = false; nv.job = null;
     // Plan found: store the macro sequence and play its first key.
     if (res && res.seq.length) { nv.st.plans++; nv.seq = res.seq; nv.i = 0; nv.stage = st.stage; return nv.seq[nv.i++]; }
