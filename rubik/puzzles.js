@@ -551,11 +551,11 @@
   }
   function icosaNSpec(n) {
     const g = icosaFacets(), D = V.dot(g.facets[0].normal, g.facets[0].verts[0]);
-    return layeredSpec('icosa' + n, g.facets, oppositePairs(g.facets).map((f) => ({ u: f.normal, D: D })), n, 3, 1 / g.radius, 0.02, 4000);
+    return layeredSpec('icosa' + n, g.facets, oppositePairs(g.facets).map((f) => ({ u: f.normal, D: D })), n, 3, 1 / g.radius, 0.02, 0);
   }
   function dodecaNSpec(n) {
     const g = dodecaFacets(), D = V.dot(g.facets[0].normal, g.facets[0].verts[0]);
-    return layeredSpec('dodeca' + n, g.facets, oppositePairs(g.facets).map((f) => ({ u: f.normal, D: D })), n, 5, 1 / g.radius, 0.022, 4000);
+    return layeredSpec('dodeca' + n, g.facets, oppositePairs(g.facets).map((f) => ({ u: f.normal, D: D })), n, 5, 1 / g.radius, 0.022, 0);
   }
   function skewbNSpec(n) {
     const facets = [];
@@ -564,7 +564,7 @@
       facets.push({ verts: [P(1, 1), P(-1, 1), P(-1, -1), P(1, -1)], normal: nn });
     });
     const axes = [[1, 1, 1], [1, 1, -1], [1, -1, 1], [-1, 1, 1]].map((a) => ({ u: V.norm(a), D: Math.sqrt(3) * 0.85 }));
-    return layeredSpec('skewb' + n, facets, axes, n, 3, 1 / Math.sqrt(3), 0.04, 4000);
+    return layeredSpec('skewb' + n, facets, axes, n, 3, 1 / Math.sqrt(3), 0.04, 0);
   }
 
   const META = {
@@ -585,10 +585,10 @@
   META.icosa = { key: 'icosa', spec: function () { return icosaSpec(ICOSA_H); }, extras: null, scramble: 40, solver: 'history', view: { yaw: 0.4, pitch: 0.3 },
     colours: ['#f2f2f2', '#ffd400', '#d41f26', '#ff7f0e', '#0f9d58', '#1a4fd6', '#7b2fbe', '#ff78b4', '#9be000', '#00c2d6', '#8c8c8c', '#9c5a2e', '#0b1f6b', '#00796b', '#7a0f2e', '#e6c88f', '#2b2b2b', '#b9a6ff', '#6b7a00', '#8fd0ff'] };
   // ---------------- custom puzzles: topology + size ----------------
-  const TOPOS = ['tetra', 'cube', 'octa', 'dodeca', 'icosa', 'skewb'];
-  const MINN = { tetra: 2, cube: 2, octa: 2, dodeca: 2, icosa: 2, skewb: 2 };
-  const MAXN = { tetra: 20, cube: 20, octa: 14, dodeca: 8, icosa: 6, skewb: 12 };
-  const BUILTIN = { cube: { 2: 'cube2', 3: 'cube', 4: 'cube4', 5: 'cube5', 6: 'cube6', 7: 'cube7' }, tetra: { 3: 'tetra' }, octa: { 3: 'octa' }, icosa: { 2: 'icosa' }, skewb: { 2: 'skewb' }, dodeca: {} };
+  const TOPOS = ['tetra', 'cube', 'octa', 'dodeca', 'icosa', 'skewb', 'square'];
+  const MINN = { tetra: 2, cube: 2, octa: 2, dodeca: 2, icosa: 2, skewb: 2, square: 1 };
+  const MAXN = { tetra: Infinity, cube: Infinity, octa: Infinity, dodeca: Infinity, icosa: Infinity, skewb: Infinity, square: Infinity };      // no upper limit on the size
+  const BUILTIN = { cube: { 2: 'cube2', 3: 'cube', 4: 'cube4', 5: 'cube5', 6: 'cube6', 7: 'cube7' }, tetra: { 3: 'tetra' }, octa: { 3: 'octa' }, icosa: { 2: 'icosa' }, skewb: { 2: 'skewb' }, dodeca: {}, square: { 1: 'sq1' } };
   const BASE = { tetra: 'tetra', cube: 'cube', octa: 'octa', dodeca: 'dodeca', icosa: 'icosa', skewb: 'skewb' };
   const SPECS = { tetra: tetraSpec, cube: cubeSpec, octa: octaSpec, dodeca: dodecaNSpec, icosa: icosaNSpec, skewb: skewbNSpec };
   // key of the puzzle for a topology and a size: a built-in key when the combination exists (with its own solver), else a generated 'x:topo:n'
@@ -597,6 +597,7 @@
     if (TOPOS.indexOf(topo) < 0 || !(n >= MINN[topo]) || n > MAXN[topo]) return null;
     if (BUILTIN[topo][n]) return BUILTIN[topo][n];
     const key = 'x:' + topo + ':' + n;
+    if (topo === 'square') return key;                  // Square-n has its own page (sq1.html) and engine (sq1-core.js)
     if (!META[key]) {
       const bm = META[BASE[topo]];
       META[key] = { key: key, spec: function () { return SPECS[topo](n); }, extras: null, scramble: topo === 'cube' ? Math.min(250, 20 + 10 * (n - 3)) : Math.max(25, Math.min(300, Math.round(n * (topo === 'tetra' ? 12 : topo === 'octa' ? 10 : 24)))),
@@ -608,8 +609,9 @@
   // display name of a custom puzzle (KO / EN)
   function nameOf(key, ko) {
     const p = parseKey(key); if (!p) return null;
-    const T = ko ? { tetra: '정사면체', cube: '큐브', octa: '정팔면체', dodeca: '정십이면체', icosa: '정이십면체', skewb: '스큐브' } : { tetra: 'Tetrahedron', cube: 'Cube', octa: 'Octahedron', dodeca: 'Dodecahedron', icosa: 'Icosahedron', skewb: 'Skewb' };
-    return p.topo === 'cube' ? (ko ? '큐브 ' : 'Cube ') + p.n + '×' + p.n + '×' + p.n : T[p.topo] + ' (n=' + p.n + ')';
+    const T = ko ? { tetra: '정사면체', cube: '큐브', octa: '정팔면체', dodeca: '정십이면체', icosa: '정이십면체', skewb: '스큐브', square: '스퀘어' } : { tetra: 'Tetrahedron', cube: 'Cube', octa: 'Octahedron', dodeca: 'Dodecahedron', icosa: 'Icosahedron', skewb: 'Skewb', square: 'Square' };
+    if (p.topo === 'square') return T.square + '-' + p.n;
+    return p.topo === 'cube' ? (ko ? '큐브' : 'Cube') + p.n : T[p.topo] + ' (n=' + p.n + ')';
   }
   // the key a built-in puzzle has as a (topology, size) pair, or null
   function describe(key) {
