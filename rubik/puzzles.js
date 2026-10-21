@@ -79,6 +79,140 @@
     };
   }
 
+  // ---------------- 2x2x2: optimal solver ----------------
+  // 3,674,160 positions (corner 0 fixed): corner permutation (5040) x orientation (3^7), BFS table of the quarter-turn distance (God's number 14).
+  // A state with any whole-cube orientation is first rotated until the reference corner piece sits in its home place; the moves found there are
+  // translated back with the same rotation, so every kind of turn the player may have made (both halves of every axis) is handled.
+  function cube2Extras(P) {
+    let S = null;
+    P.initSolver = function () {
+      if (S) return S;
+      const t0 = Date.now(), sc = P.solvedCol, k = P.stickers[0].c; // (stickers are scaled by 1/(2*sqrt(3)))
+      const unit = 1 / (2 * Math.sqrt(3));
+      function slotAt(x, y, z) {
+        for (let i = 0; i < P.N; i++) { const c = P.stickers[i].c; if (Math.abs(c[0] - x * unit) < 1e-6 && Math.abs(c[1] - y * unit) < 1e-6 && Math.abs(c[2] - z * unit) < 1e-6) return i; }
+        throw new Error('cube2: no sticker');
+      }
+      const cs = [], sg = [];      // corner position p (bit0 x, bit1 y, bit2 z set = positive side): its x / y / z facing stickers
+      for (let p = 0; p < 8; p++) {
+        const x = p & 1 ? 1 : -1, y = p & 2 ? 1 : -1, z = p & 4 ? 1 : -1;
+        cs.push([slotAt(2 * x, y, z), slotAt(x, 2 * y, z), slotAt(x, y, 2 * z)]); sg.push(x * y * z);
+      }
+      const home = cs.map((t) => t.map((i) => sc[i]));
+      const pieceOf = {};
+      home.forEach((h, p) => { pieceOf[h.slice().sort().join(',')] = p; });
+      // clockwise (seen from outside) colour list of piece p at its home: positive parity corners read x,y,z clockwise, the others x,z,y
+      const L = home.map((h, p) => (sg[p] > 0 ? [h[0], h[1], h[2]] : [h[0], h[2], h[1]]));
+      function encode(col) {                  // -> { perm[8], ori[8] } or null
+        const perm = [], ori = [];
+        for (let p = 0; p < 8; p++) {
+          const c = [col[cs[p][0]], col[cs[p][1]], col[cs[p][2]]], pc = pieceOf[c.slice().sort().join(',')];
+          if (pc === undefined) return null;
+          const o = L[pc].indexOf(c[0]); if (o < 0) return null;
+          // the stickers of position p in clockwise order: x,y,z (positive parity) or x,z,y; check that the cyclic order matches the piece
+          const cw = sg[p] > 0 ? [c[0], c[1], c[2]] : [c[0], c[2], c[1]];
+          if (cw[1] !== L[pc][(o + 1) % 3]) return null;
+          perm.push(pc); ori.push(o);
+        }
+        return { perm: perm, ori: ori };
+      }
+      function decode(st) {
+        const col = new Uint8Array(P.N);
+        for (let p = 0; p < 8; p++) {
+          const l = L[st.perm[p]], o = st.ori[p], a = [l[o % 3], l[(o + 1) % 3], l[(o + 2) % 3]];
+          if (sg[p] > 0) { col[cs[p][0]] = a[0]; col[cs[p][1]] = a[1]; col[cs[p][2]] = a[2]; } else { col[cs[p][0]] = a[0]; col[cs[p][2]] = a[1]; col[cs[p][1]] = a[2]; }
+        }
+        return col;
+      }
+      // canonical moves: the positive half of every axis (they never touch corner 0 = the all-negative corner), both directions
+      const moves = []; for (let li = 0; li < 3; li++) for (const d of [1, -1]) moves.push({ li: li, d: d, b: li * 2, m: P.moveOf(li * 2, d) });
+      const posMap = [], delta = [];
+      moves.forEach((mv) => {
+        const id = { perm: [0, 1, 2, 3, 4, 5, 6, 7], ori: [0, 0, 0, 0, 0, 0, 0, 0] }, st = encode(P.apply(decode(id), mv.m));
+        const pm = [], dl = [];
+        for (let q = 0; q < 8; q++) { const pc = st.perm[q]; pm[pc] = q; dl[pc] = st.ori[q]; }
+        if (pm[0] !== 0 || dl[0] !== 0) throw new Error('cube2: corner 0 moved');
+        posMap.push(pm); delta.push(dl);
+      });
+      // tables: permutation (7 pieces at positions 1..7 -> rank), orientation (7 digits, base 3)
+      const FACT = [1, 1, 2, 6, 24, 120, 720];
+      function rankPerm(a) { let r = 0; for (let i = 0; i < 7; i++) { let c = 0; for (let j = i + 1; j < 7; j++) if (a[j] < a[i]) c++; r += c * FACT[6 - i]; } return r; }
+      function unrankPerm(r) { const av = [0, 1, 2, 3, 4, 5, 6], out = []; for (let i = 0; i < 7; i++) { const f = FACT[6 - i], c = Math.floor(r / f); r -= c * f; out.push(av.splice(c, 1)[0]); } return out; }
+      const NP = 5040, NO = 2187, PM = moves.map(() => new Uint16Array(NP)), OM = moves.map(() => new Uint16Array(NO));
+      for (let r = 0; r < NP; r++) {
+        const a = unrankPerm(r);              // a[pos-1] = piece-1
+        moves.forEach((mv, mi) => { const n = new Array(7); for (let p = 1; p < 8; p++) n[posMap[mi][p] - 1] = a[p - 1]; PM[mi][r] = rankPerm(n); });
+      }
+      for (let o = 0; o < NO; o++) {
+        const dg = []; let x = o; for (let i = 0; i < 7; i++) { dg.push(x % 3); x = Math.floor(x / 3); }       // dg[pos-1]
+        moves.forEach((mv, mi) => { const n = new Array(7); for (let p = 1; p < 8; p++) n[posMap[mi][p] - 1] = (dg[p - 1] + delta[mi][p]) % 3; let v = 0; for (let i = 6; i >= 0; i--) v = v * 3 + n[i]; OM[mi][o] = v; });
+      }
+      const dist = new Int8Array(NP * NO).fill(-1), queue = new Int32Array(3674160 + 10);
+      let qh = 0, qt = 0; dist[0] = 0; queue[qt++] = 0;
+      while (qh < qt) {
+        const s = queue[qh++], r = (s / NO) | 0, o = s - r * NO, d = dist[s] + 1;
+        for (let mi = 0; mi < 6; mi++) { const ns = PM[mi][r] * NO + OM[mi][o]; if (dist[ns] < 0) { dist[ns] = d; queue[qt++] = ns; } }
+      }
+      // the 24 whole-cube rotations: matrix + sticker permutation
+      const rots = [], seenM = {};
+      const gx = [[1, 0, 0], [0, 0, -1], [0, 1, 0]], gy = [[0, 0, 1], [0, 1, 0], [-1, 0, 0]];
+      const mmul = (A, B) => A.map((row, i) => [0, 1, 2].map((j) => row[0] * B[0][j] + row[1] * B[1][j] + row[2] * B[2][j]));
+      const I3 = [[1, 0, 0], [0, 1, 0], [0, 0, 1]], fr = [I3]; seenM[JSON.stringify(I3)] = 1;
+      for (let i = 0; i < fr.length; i++) [gx, gy].forEach((g) => { const m = mmul(g, fr[i]), key = JSON.stringify(m); if (!seenM[key]) { seenM[key] = 1; fr.push(m); } });
+      fr.forEach((M) => {
+        const perm = new Int16Array(P.N);
+        for (let i = 0; i < P.N; i++) { const c = P.stickers[i].c, q = [0, 1, 2].map((r) => M[r][0] * c[0] + M[r][1] * c[1] + M[r][2] * c[2]); let f = -1; for (let j = 0; j < P.N; j++) { const cj = P.stickers[j].c; if (Math.abs(cj[0] - q[0]) < 1e-6 && Math.abs(cj[1] - q[1]) < 1e-6 && Math.abs(cj[2] - q[2]) < 1e-6) { f = j; break; } } perm[i] = f; }
+        rots.push({ M: M, perm: perm });
+      });
+      S = {
+        states: qt, maxDepth: dist[queue[qt - 1]], ms: Date.now() - t0, dist: dist,
+        // distance (quarter turns) of a state in any orientation, -1 when it is not a valid state
+        distance: function (col) { const c = canon(col); return c ? c.d : -1; },
+        // next move toward the solved state: {b, d} | null when solved | undefined when the state is not reachable
+        next: function (col) {
+          const c = canon(col); if (!c) return undefined; if (c.d === 0) return null;
+          const r0 = c.r;
+          for (let mi = 0; mi < 6; mi++) {
+            const ns = PM[mi][c.pr] * NO + OM[mi][c.po]; if (dist[ns] !== c.d - 1) continue;
+            const mv = moves[mi], e = [0, 0, 0]; e[mv.li] = 1;
+            const v = [0, 1, 2].map((q) => r0.M[0][q] * e[0] + r0.M[1][q] * e[1] + r0.M[2][q] * e[2]);     // M^T e: the same half-space in the frame of the real cube
+            const li = Math.abs(v[0]) > 0.5 ? 0 : Math.abs(v[1]) > 0.5 ? 1 : 2, sgn = v[li] > 0 ? 1 : -1;
+            return sgn > 0 ? { b: li * 2, d: mv.d } : { b: li * 2 + 1, d: -mv.d };
+          }
+          return undefined;
+        },
+      };
+      function canon(col) {
+        for (let ri = 0; ri < rots.length; ri++) {
+          const rp = rots[ri].perm, c2 = new Uint8Array(P.N); for (let i = 0; i < P.N; i++) c2[rp[i]] = col[i];
+          const st = encode(c2); if (!st || st.perm[0] !== 0 || st.ori[0] !== 0) continue;
+          const a = []; for (let p = 1; p < 8; p++) a.push(st.perm[p] - 1);
+          let o = 0; for (let p = 7; p >= 1; p--) o = o * 3 + st.ori[p];
+          const pr = rankPerm(a), d = dist[pr * NO + o]; if (d < 0) return null;
+          return { r: rots[ri], pr: pr, po: o, d: d };
+        }
+        return null;
+      }
+      return S;
+    };
+  }
+
+  // ---------------- skewb ----------------
+  // A cube cut by the four planes through its centre perpendicular to the body diagonals: every face shows a diamond (the centre) and four corner triangles
+  // (30 stickers). A turn rotates one half of the cube (4 corners + 3 centres) by 120 degrees about a body diagonal; both halves of every diagonal can be turned.
+  function skewbSpec() {
+    const facets = [], stickers = [];
+    FACE_ORDER.forEach((nm, fi) => {
+      const n = FACE[nm], u = Math.abs(n[1]) === 1 ? [1, 0, 0] : [0, 1, 0], w = V.cross(n, u);
+      const P = (a, b) => V.add(n, V.add(V.mul(u, a), V.mul(w, b)));
+      facets.push({ verts: [P(1, 1), P(-1, 1), P(-1, -1), P(1, -1)], normal: n });
+      stickers.push({ facet: fi, verts: [P(1, 0), P(0, 1), P(-1, 0), P(0, -1)], kind: 'd' });
+      [[1, 1], [-1, 1], [-1, -1], [1, -1]].forEach((q) => stickers.push({ facet: fi, verts: [P(q[0], q[1]), P(0, q[1]), P(q[0], 0)], kind: 't' }));
+    });
+    const lines = [[1, 1, 1], [1, 1, -1], [1, -1, 1], [-1, 1, 1]].map((ax) => ({ axis: ax, n: 3, bands: [{ lo: 0, hi: INF }, { lo: -INF, hi: 0 }] }));
+    return { name: 'skewb', facets: facets, stickers: stickers, lines: lines, scale: 1 / Math.sqrt(3), gap: 0.05 };
+  }
+
   // ---------------- tetrahedron ----------------
   function tetraSpec() {
     const T = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]], facets = [], stickers = [];
@@ -190,6 +324,65 @@
           return null;
         },
       };
+      // ---- shortest solution: IDA* over the core moves (h = core table distance, admissible); the tips only matter at the end: a core solution of g moves
+      // leaves every tip rotated by the big turns of its own vertex, and each tip that is still off costs one extra tip turn. ----
+      const cyc = [];
+      for (let v = 0; v < 4; v++) { const pm = P.perms[P.moveOf(tipBand[v], 1)], t = tipStk[v], a0 = t[0], b0 = pm[a0], c0 = pm[b0]; cyc.push([a0, b0, c0]); }
+      function shiftOf(col, v) {
+        const cy = cyc[v];
+        for (let r = 0; r < 3; r++) { let ok = true; for (let k = 0; k < 3; k++) if (col[cy[k]] !== sc[cy[(k - r + 3) % 3]]) ok = false; if (ok) return r; }
+        return -1;
+      }
+      const bigDelta = [[0, 0], [0, 0], [0, 0], [0, 0]]; let tipsOk = true;
+      for (let v = 0; v < 4; v++) [1, -1].forEach((d, di) => {
+        const c2 = P.apply(sc, P.moveOf(bigBand[v], d));
+        bigDelta[v][di] = shiftOf(c2, v);
+        for (let w = 0; w < 4; w++) if (w !== v && shiftOf(c2, w) !== 0) tipsOk = false;
+        if (bigDelta[v][di] < 0) tipsOk = false;
+      });
+      const mv2 = moves.map((m, mi) => ({ v: (mi / 2) | 0, di: mi & 1, d: m.d, b: m.b }));
+      let cachePlan = null, cacheSigs = null;
+      function plan(col, limitMs) {
+        const e0 = encE(col), a0 = encA(col), sh0 = [0, 1, 2, 3].map((v) => shiftOf(col, v));
+        if (e0 < 0 || a0 < 0 || sh0.some((x) => x < 0) || !tipsOk) return null;
+        const h0 = dist[e0 * NA + a0]; if (h0 < 0) return null;
+        const tEnd = Date.now() + limitMs; let nodes = 0, timeout = false, path = [], finalSh = null;
+        function dfs(e, a, sh, g, B, lastV) {
+          if ((++nodes & 4095) === 0 && Date.now() > tEnd) { timeout = true; return false; }
+          const d = dist[e * NA + a];
+          if (g + d > B) return false;
+          if (d === 0) { let extra = 0; for (let v = 0; v < 4; v++) if (sh[v] !== 0) extra++; if (g + extra <= B) { finalSh = sh; return true; } }
+          for (let mi = 0; mi < 8; mi++) {
+            const m = mv2[mi]; if (m.v === lastV) continue;
+            const ne = TE[mi][e], na = TA[mi][a];
+            if (g + 1 + dist[ne * NA + na] > B) continue;
+            const sh2 = sh.slice(); sh2[m.v] = (sh[m.v] + bigDelta[m.v][m.di]) % 3;
+            path.push(mi);
+            if (dfs(ne, na, sh2, g + 1, B, m.v)) return true;
+            if (timeout) return false;
+            path.pop();
+          }
+          return false;
+        }
+        for (let B = h0; B <= h0 + 6; B++) {
+          path = []; if (dfs(e0, a0, sh0, 0, B, -1)) break; if (timeout) return null;
+          if (B === h0 + 6) return null;
+        }
+        const out = path.map((mi) => ({ b: mv2[mi].b, d: mv2[mi].d }));
+        for (let v = 0; v < 4; v++) if (finalSh[v] !== 0) out.push({ b: tipBand[v], d: finalSh[v] === 2 ? 1 : -1 });
+        return out;
+      }
+      S.nextGreedy = S.next;
+      S.plan = plan;
+      S.next = function (col) {
+        const sig = col.join(',');
+        if (cacheSigs) { const i = cacheSigs.indexOf(sig); if (i >= 0) return cachePlan[i]; }
+        const pl = plan(col, 2500);
+        if (!pl || !pl.length) return S.nextGreedy(col);
+        cachePlan = pl; cacheSigs = []; let c = col;
+        pl.forEach((m) => { cacheSigs.push(c.join(',')); c = P.apply(c, P.moveOf(m.b, m.d)); });
+        return pl[0];
+      };
       return S;
     };
   }
@@ -297,6 +490,10 @@
       colours: ['#f2f2f2', '#ffe000', '#d41f26', '#ff8000', '#0f9d58', '#1a4fd6', '#7b2fbe', '#ff78b4', '#9be000', '#00c2d6', '#8c8c8c', '#9c5a2e'] },
   };
   META.cube5 = { key: 'cube5', spec: function () { return cubeSpec(5); }, extras: null, scramble: 60, solver: 'history', view: { yaw: 0.55, pitch: 0.5 }, colours: META.cube.colours };
+  [2, 4, 6, 7].forEach(function (n) {
+    META['cube' + n] = { key: 'cube' + n, spec: function () { return cubeSpec(n); }, extras: n === 2 ? cube2Extras : null, scramble: { 2: 15, 4: 45, 6: 80, 7: 100 }[n], solver: n === 2 ? 'table' : 'history', view: { yaw: 0.55, pitch: 0.5 }, colours: META.cube.colours };
+  });
+  META.skewb = { key: 'skewb', spec: skewbSpec, extras: null, scramble: 25, solver: 'history', view: { yaw: 0.55, pitch: 0.5 }, colours: META.cube.colours };
   META.icosa = { key: 'icosa', spec: function () { return icosaSpec(ICOSA_H); }, extras: null, scramble: 40, solver: 'history', view: { yaw: 0.4, pitch: 0.3 },
     colours: ['#f2f2f2', '#ffd400', '#d41f26', '#ff7f0e', '#0f9d58', '#1a4fd6', '#7b2fbe', '#ff78b4', '#9be000', '#00c2d6', '#8c8c8c', '#9c5a2e', '#0b1f6b', '#00796b', '#7a0f2e', '#e6c88f', '#2b2b2b', '#b9a6ff', '#6b7a00', '#8fd0ff'] };
   const cache = {};
@@ -309,5 +506,5 @@
     if (m.extras) m.extras(P);
     cache[key] = P; return P;
   }
-  root.RBPuzzles = { get: getPuzzle, META: META, KEYS: ['cube', 'cube5', 'tetra', 'octa', 'dodeca', 'icosa'], icosaSpec: icosaSpec, build: E.build };
+  root.RBPuzzles = { get: getPuzzle, META: META, KEYS: ['cube2', 'cube', 'cube4', 'cube5', 'cube6', 'cube7', 'skewb', 'tetra', 'octa', 'dodeca', 'icosa'], icosaSpec: icosaSpec, build: E.build };
 })(typeof window !== 'undefined' ? window : globalThis);

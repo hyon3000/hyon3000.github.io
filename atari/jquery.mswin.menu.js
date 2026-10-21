@@ -160,6 +160,16 @@
             // 최상위 메뉴는 클릭으로만 열리도록, focus에서는 ui-state-open을 추가하지 않음
         },
 
+        // opening a submenu focuses its first item; with the stock behaviour a mouse event makes that item open ITS submenu at once
+        // (4th menu level: Other Games > category), so the first item is focused with a neutral event instead
+        expand: function (event) {
+            var newItem = this.active && this.active.children(".ui-menu").children(".ui-menu-item").first();
+            if (newItem && newItem.length) {
+                this._open(newItem.parent());
+                this._delay(function () { this.focus($.Event("expandfocus"), newItem); });
+            }
+        },
+
         _open: function (submenu) {
             var position, zIndex;
 
