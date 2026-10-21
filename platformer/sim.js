@@ -265,7 +265,7 @@ function bump(st, r) {
     if (t2 === T.QP && st.L.qpk && p.pw >= 1 && ((best * 3 + r * 5) % 3 === 0)) k = st.L.qpk[(best + r) % st.L.qpk.length];   // themed power-ups (wrench belt / snow flower)
     if (t2 === T.QP && ((best * 7 + r * 13) % 5 === 0)) { k = 6 + ((best + r * 3) % 4); if (k === 8 && (best * 11 + r * 7) % 7 !== 0) k = 9; }   // wings are very rare (a clock instead)
     if (st.L.fixedBox && st.L.fixedBox[best + ',' + r] !== undefined) k = st.L.fixedBox[best + ',' + r];   // a loose pickup that was moved into a block
-    if (p.pw === 0 && k !== 3 && k !== 6) k = 0;   // a small hero always gets the mushroom first (only a star may come out of a block)
+    if (p.pw === 0 && k !== 3 && k !== 6 && !(st.L.fixedBox && st.L.fixedBox[best + ',' + r] !== undefined && (k === 1 || k === 2 || k === 11))) k = 0;   // a small hero always gets the mushroom first (only a star may come out of a block; a flower that was moved into a block from the floor stays a flower: puzzle gear)
     st.it.push({ k: k, x: best * TS + 2, y: y, w: 12, h: 12, vx: k === 1 || k === 2 ? 0 : 0.7, vy: 0, em: 14, alive: true, ground: false });
     ev(st, 'item', x, y - 4);
   }
@@ -475,11 +475,15 @@ function updEnemy(st, e, f) {
       if (boom) { e.s = 1; e.tm = 10; ev(st, 'burst', e.x + e.w / 2, e.y); ev(st, 'spring', e.x, e.y); }
       e.ax = e.x; return; }
     case 28: { e.x += e.vx; e.ax = e.x; if (++e.tm > 1200 || e.x > p.x + 520 || e.x < p.x - 560) { e.alive = false; e.dt = 10; } return; }   // giant cannonball: flies straight through everything, can be ridden
-    case 24: { e.tm++; var sc0 = e.cnt | 0;   // squid: rests, then jets off in a random direction (the choice is a hash of its own counter, so every run of the sim is identical)
-      if (e.s === 0) { e.vx *= 0.9; e.vy *= 0.9; if (e.tm > e.wait) { var ha = hash(e.id | 0, sc0, 31), an = (ha % 6283) / 1000; e.dvx = Math.cos(an) * 2.3; e.dvy = Math.sin(an) * 1.7; e.cnt = sc0 + 1; e.s = 1; e.tm = 0; if (hash(e.id | 0, sc0, 32) % 3 === 0) { var tdx = p.x - e.x, tdy = p.y - e.y, td = Math.max(1, Math.sqrt(tdx * tdx + tdy * tdy)); if (td < 130) { e.dvx = tdx / td * 2.3; e.dvy = tdy / td * 1.7; } } } }
-      else { var kk = 1 - e.tm / 26; e.vx = e.dvx * kk; e.vy = e.dvy * kk; if (e.tm > 26) { e.s = 0; e.tm = 0; e.wait = 24 + hash(e.id | 0, sc0, 33) % 50; } }
+    case 24: { e.tm++; var sc0 = e.cnt | 0;   // squid: short rests between jets in a random diagonal direction at a random speed (all choices hash the squid's own counter, so every run of the sim is identical)
+      if (e.s === 0) { e.vx *= 0.9; e.vy *= 0.9; if (e.tm > e.wait) { var ha = hash(e.id | 0, sc0, 31), sd = 1.2 + (hash(e.id | 0, sc0, 34) % 20) / 10, sgx = ha % 2 ? 1 : -1, sgy = (ha >> 1) % 2 ? 1 : -1, ang = 0.35 + ((ha >> 2) % 100) / 100 * 0.9; e.jx = sgx * Math.cos(ang) * sd; e.jy = sgy * Math.sin(ang) * sd; e.cnt = sc0 + 1; e.s = 1; e.tm = 0; e.dur = 20 + hash(e.id | 0, sc0, 35) % 24; } }
+      else { var kk = 1 - e.tm / e.dur; e.vx = e.jx * kk; e.vy = e.jy * kk; if (e.tm > e.dur) { e.s = 0; e.tm = 0; e.wait = 8 + hash(e.id | 0, sc0, 33) % 30; } }
+      var okSq = function (xx, yy) { return isW(tileAt(st, Math.floor((xx + e.w / 2) / TS), Math.floor((yy + e.h / 2) / TS))) && !boxHit(st, xx, yy, e.w, e.h) && Math.abs(xx - e.ax0) < e.rx && Math.abs(yy - e.ay0) < e.ry; };
       var qx = e.x + e.vx, qy = e.y + e.vy;
-      if (isW(tileAt(st, Math.floor((qx + e.w / 2) / TS), Math.floor((qy + e.h / 2) / TS))) && !boxHit(st, qx, qy, e.w, e.h) && Math.abs(qx - e.ax0) < e.rx && Math.abs(qy - e.ay0) < e.ry) { e.x = qx; e.y = qy; } else { e.dvx = -e.dvx; e.dvy = -e.dvy; e.vx = -e.vx; e.vy = -e.vy; }
+      if (okSq(qx, qy)) { e.x = qx; e.y = qy; }
+      else if (okSq(qx, e.y)) { e.x = qx; e.jy = -e.jy; e.vy = -e.vy; }
+      else if (okSq(e.x, qy)) { e.y = qy; e.jx = -e.jx; e.vx = -e.vx; }
+      else { e.jx = -e.jx; e.jy = -e.jy; e.vx = -e.vx; e.vy = -e.vy; if (e.s === 0) e.tm = e.wait; }   // boxed in: jet away at once
       if (e.vx) e.dir = e.vx > 0 ? 1 : -1; e.ax = e.x; return; }
     case 25: { var scx = p.x + p.w / 2, ex = e.x + e.w / 2, dsx = scx - ex;   // water strider: skates on the surface after the hero, never leaves it
       var near = Math.abs(dsx) < 170 && p.y > e.sy - 90 ? 1 : 0, vx25 = near ? (Math.abs(dsx) < 6 ? 0 : (dsx > 0 ? 1 : -1) * (e.s === 1 ? 1.5 : 0.95)) : 0;
@@ -687,6 +691,7 @@ function step(st, inp) {
   if (p.mv >= 0 && p.ground && movOn(st, p.mv, f + 1)) { p.x += mp1[p.mv].x - mp0[p.mv].x; p.y += mp1[p.mv].y - mp0[p.mv].y; }
   // --- water & currents: swimming state, current push, splash event and the air meter (drowning damage when empty)
   var cx0 = p.x + p.w / 2, cell = tileAt(st, Math.floor(cx0 / TS), Math.floor((p.y + p.h * 0.5) / TS));
+  if (cell === T.SLP && isW(tileAt(st, Math.floor(cx0 / TS), Math.floor((p.y + p.h * 0.5) / TS) - 1))) cell = T.WATER;   // a submerged slope cell: its open half still holds water (the swimmer on a sea-floor slope keeps swimming)
   var inW = isW(cell), feetW = isW(tileAt(st, Math.floor(cx0 / TS), Math.floor((p.y + p.h - 1) / TS)));
   var curPush = cell === T.CURL ? -0.05 : cell === T.CURR ? 0.05 : 0, curUp = cell === T.CURU ? -0.4 : 0;
   if (inW !== p.wasW) { ev(st, 'splash', cx0, p.y + p.h / 2, inW ? 1 : 0); p.wasW = inW; }
@@ -794,11 +799,12 @@ function step(st, inp) {
       if (boxHit(st, p.x, ny, p.w, p.h)) { var r = Math.floor(ny / TS); p.y = (r + 1) * TS; p.vy = 0; bump(st, r); } else p.y = ny;
     }
     // --- slopes: stand on the highest of the two feet
-    if (p.vy >= 0 || p.ground) {
+    if (p.vy >= 0 || p.ground || inW) {
       var bot = p.y + p.h, best = 1e9, xs = [p.x + 1, p.x + p.w - 1];
       for (var xi = 0; xi < 2; xi++) { var cc = Math.floor(xs[xi] / TS), r0 = Math.floor((bot - 0.01) / TS);
         for (var dr = 0; dr < 2; dr++) { var tt = tileAt(st, cc, r0 + dr); if (isSl(tt)) { var sy = slopeY(tt, cc, r0 + dr, xs[xi], st); if (bot >= sy - (wasGround ? (tt === T.SLP ? 12 : 5) : 0) && bot <= sy + TS && sy < best) best = sy; } } }
       if (best < 1e8 && !(p.vy < 0)) { p.y = best - p.h; p.vy = 0; p.ground = true; }
+      else if (best < 1e8 && inW && !boxHit(st, p.x, best - p.h, p.w, p.h)) p.y = best - p.h;   // swimming up into the body of a sea-floor slope: slide up its surface instead of sinking into it
     }
     if (p.ground && !wasGround) ev(st, 'land', p.x, p.y + p.h);
   }

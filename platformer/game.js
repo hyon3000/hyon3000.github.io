@@ -346,9 +346,12 @@ window.toggleAuto = function () {
   return G.auto;
 };
 window.giveHint = function () {
-  if (G.mode === 'map') { var nd = nextTarget(); say(nd ? TT('다음 레벨: ' + worldName(G.wid) + '·' + (nd.num || nd.i + 1) + ' (' + PF.KIND_NAMES[nd.kind][0] + ')', 'Next level: ' + worldName(G.wid) + '·' + (nd.num || nd.i + 1) + ' (' + PF.KIND_NAMES[nd.kind][1] + ')') : TT('이 월드를 모두 깼어요', 'World cleared'), 150); return; }
+  if (G.mode === 'map') { var nd = nextTarget(); if (nd) { G.mapHint = { to: nd.i, f0: G.frame }; } say(nd ? TT('다음 레벨: ' + worldName(G.wid) + '·' + (nd.num || nd.i + 1) + ' (' + PF.KIND_NAMES[nd.kind][0] + ')', 'Next level: ' + worldName(G.wid) + '·' + (nd.num || nd.i + 1) + ' (' + PF.KIND_NAMES[nd.kind][1] + ')') : TT('이 월드를 모두 깼어요', 'World cleared'), 150); return; }
   if (G.mode !== 'play') { say(TT('게임 중에만 힌트를 볼 수 있어요', 'Hints are available while playing'), 90); return; }
-  var h = PFPlanner.hint(G.st, G.planner); G.hint = h; G.hintT = 220; G.hintF = G.frame; say(TT(h.ko, h.en), 220); sfx('hint');
+  // hint = the planner's route for the next ~3 s drawn as a white line (nothing is steered for the player); it is computed once on a copy of the state
+  var h = PFPlanner.hint(G.st, G.planner.fb || PFPlanner.plain()), q = PF.clone(G.st), pl = PFPlanner.make(), t0 = Date.now(), pts = [{ x: q.p.x + q.p.w / 2, y: q.p.y + q.p.h / 2 }];
+  q.ev = null; for (var hk = 0; hk < 180 && !q.p.dead && !q.p.won && Date.now() - t0 < 600; hk++) { var hm = pl.decide(q); PF.step(q, hm || 0); pts.push({ x: q.p.x + q.p.w / 2, y: q.p.y + q.p.h / 2 }); }
+  h.path = pts; G.hint = h; G.hintT = 180; G.hintF = G.frame; say(TT(h.ko, h.en), 180); sfx('hint');
 };
 window.toggleSound = function () { G.snd = !G.snd; try { localStorage.setItem(SND_KEY, G.snd ? '1' : '0'); } catch (e) {} reportSound(); if (G.snd) sfx('coin'); return G.snd; };
 window.isSound = function () { return G.snd; };
@@ -440,7 +443,7 @@ function fixedStep() {
     PF.step(st, mask());
     handleEvents(st);
     if (G.pendingWarp !== undefined) { var wi = G.pendingWarp; G.pendingWarp = undefined; var wrg = G.L && G.L.rings && G.L.rings[wi]; if (!G.auto || !wrg || !wrg.secret || !G.st.skipSec) enterRoom(wi); }
-    if (G.hint && G.hintT > 0) { G.hintT--; if (G.hintT <= 0) G.hint = null; else if ((G.frame - G.hintF) % 20 === 0) { G.hint = PFPlanner.hint(G.st, G.planner); } }
+    if (G.hint && G.hintT > 0) { G.hintT--; if (G.hintT <= 0) G.hint = null; }
     st = G.st; var tc = totalCoins(); if (tc >= G.nextLife) { G.nextLife += 50; G.lives++; sfx('life'); say(TT('코인 50개! 목숨 +1', '50 coins! Extra life'), 120); }
     var p = st.p;
     if (p.dead) { G.mode = 'dying'; G.dieT = 0; G.dy = p.y; G.dvy = -5.5; setAuto(0); finishRun(); if (p.why === 'time') say(TT('시간 초과!', 'Time is up!'), 120); }

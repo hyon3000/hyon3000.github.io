@@ -8,7 +8,7 @@
     check: ['오류 표시', 'Check'], checkT: ['규칙에 어긋난 줄을 빨갛게 표시', 'Mark lines that break their clue in red'], newg: ['새 게임', 'New game'],
     hint2: ['클릭 = 채우기, 오른쪽 클릭 / 길게 누르기 = X, 끌어서 한 번에 칠하기.', 'Click = fill, right-click / long-press = X, drag to paint a run.'],
     hint3: ['탭 = 채우기, 더블탭 / 오른쪽 클릭 = X, 끌면 회전, 층 슬라이더로 안쪽 칸까지.', 'Tap = fill, double-tap / right-click = X, drag to rotate, layer slider reaches inner cells.'],
-    win: ['완성! 기록', 'Solved! Time'], newbest: ['새 최고 기록!', 'New best!'], cheated: ['(치트 사용: 기록 안 됨)', '(cheat used: not recorded)'],
+    win: ['완성! 기록', 'Solved! Time'], newbest: ['새 최고 기록!', 'New best!'],
     fixed: ['잘못 표시한 칸 하나를 고쳤습니다.', 'Fixed one wrong mark.'], removed: ['잘못 표시한 칸을 지웠습니다.', 'Removed the wrong marks.'],
     line: ['줄', 'line'], row: ['행', 'Row'], col: ['열', 'Column'], gen: ['퍼즐을 만드는 중...', 'Generating...'],
     cut: ['층 자르기', 'Layer cut'], axis: ['축', 'Axis'], none: ['없음', 'off'],
@@ -120,8 +120,7 @@
     C.win = function () {
       C.won = true; C.elapsed = C.curTime(); C.running = false; C.winAt = performance.now(); C.stopAuto(); C.hl = null;
       var msg = t('win') + ' ' + fmtTime(C.elapsed), best = C.getBest();
-      if (C.cheated) msg += '  ' + t('cheated');
-      else if (!best || C.elapsed < best) { store(C.bestKey(), String(Math.round(C.elapsed))); msg += '  ' + t('newbest'); }
+      if (!best || C.elapsed < best) { store(C.bestKey(), String(Math.round(C.elapsed))); msg += '  ' + t('newbest'); }
       C.updateBest(); C.status(msg, 'win'); C.onWin();
     };
     function apply(list, key) {

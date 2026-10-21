@@ -7,11 +7,11 @@
   const D = 4.4;                                         // camera distance (puzzle radius = 1)
   const T = KO ? {
     names: { cube5: '큐브 5×5 (5x5x5)', icosa: '정이십면체', cube: '큐브 (3x3x3)', tetra: '정사면체', octa: '정팔면체', dodeca: '정십이면체' },
-    moves: '이동', time: '시간', best: '최고', solved: '완성!', solvedAuto: '완성 (치트 사용: 기록 없음)', newRec: '신기록!', again: '새 게임 (F2)',
+    moves: '이동', time: '시간', best: '최고', solved: '완성!', newRec: '신기록!', again: '새 게임 (F2)',
     wait: '해법 계산 중...', prep: '해법 계산기 준비 중...', hint: '빈 곳을 끌어 돌려 보기 · 조각을 밀어 층 돌리기', keys: 'F2 새 게임 · F3 자동 풀기 · F4 힌트', scr: '섞는 중...',
   } : {
     names: { cube5: '5x5x5 Cube', icosa: 'Icosahedron', cube: 'Cube (3x3x3)', tetra: 'Tetrahedron', octa: 'Octahedron', dodeca: 'Dodecahedron' },
-    moves: 'Moves', time: 'Time', best: 'Best', solved: 'SOLVED!', solvedAuto: 'SOLVED (cheat used: no record)', newRec: 'New best!', again: 'New game (F2)',
+    moves: 'Moves', time: 'Time', best: 'Best', solved: 'SOLVED!', newRec: 'New best!', again: 'New game (F2)',
     wait: 'Computing solution...', prep: 'Preparing the solver...', hint: 'Drag empty space to rotate the view · swipe a piece to turn its layer', keys: 'F2 new game · F3 auto-solve · F4 hint', scr: 'Scrambling...',
   };
 
@@ -60,7 +60,7 @@
     G.hist = [];
     if (!(G.started || G.cheated)) return;
     G.mode = 'solved'; setAuto(false); G.hint = null; G.queue = [];
-    if (!G.cheated) {
+    {   // every solve counts as a record, cheats included
       const all = loadBest(), cur = all[G.key] || {}; G.newRec = false;
       if (cur.time === undefined || G.time < cur.time) { cur.time = G.time; G.newRec = true; }
       if (cur.moves === undefined || G.moves < cur.moves) { cur.moves = G.moves; G.newRec = true; }
@@ -317,7 +317,7 @@
     if (G.mode === 'solved') {
       const bw = cw * 0.92, bh = fs * 6.4, bx = (cw - bw) / 2, by = ch - bh - fs * 0.4;
       ctx.fillStyle = 'rgba(8,12,22,0.82)'; ctx.fillRect(bx, by, bw, bh); ctx.strokeStyle = '#ffd866'; ctx.lineWidth = 2; ctx.strokeRect(bx, by, bw, bh);
-      txt(G.cheated ? T.solvedAuto : T.solved, cw / 2, by + fs * 1.2, G.cheated ? fs * 0.95 : fs * 1.6, '#ffd866', 'center', true);
+      txt(T.solved, cw / 2, by + fs * 1.2, fs * 1.6, '#ffd866', 'center', true);
       txt(T.moves + ' ' + G.moves + '   ' + T.time + ' ' + fmtTime(G.time), cw / 2, by + fs * 2.9, fs, '#fff');
       txt((G.newRec ? T.newRec + '  ' : '') + (best.time !== undefined ? T.best + ' ' + best.moves + ' / ' + fmtTime(best.time) : ''), cw / 2, by + fs * 4.0, fs * 0.9, '#9fe3a0');
       const w = fs * 9, h = fs * 1.5, x = cw / 2 - w / 2, y = by + fs * 4.6;
