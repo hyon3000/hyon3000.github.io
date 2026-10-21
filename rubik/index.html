@@ -61,6 +61,7 @@ ul.menu { min-width: 150px; width: max-content; }
               <li class="th thicosa" onclick="return runMenu(function(){ setTheme('icosa'); });"><a href="#">　</a></li>
             </ul>
           </li>
+          <li onclick="return runMenu(function(){ openCustom(); });"><a href="#" data-t="custom">　사용자 지정...</a></li>
           <li class="menu-scranim" onclick="return runMenu(function(){ toggleScrAnim(); });"><a href="#" data-t="scranim">　섞기 애니메이션</a></li>
           <li onclick="return runMenu(function(){ goFullscreen(); });"><a href="#" data-t="full">　전체화면</a></li>
           <li class="separator"></li>
@@ -143,6 +144,19 @@ ul.menu { min-width: 150px; width: max-content; }
     <div class="window-content"><iframe id="game" src="game.html"></iframe></div>
   </div>
 
+  <div class="window gdialog" id="customWin" style="width:330px">
+    <div class="title-bar"><div class="title-icon" style="background-image:url(icon.png);background-size:16px 16px"></div><div class="title" data-t="cTitle">사용자 지정</div>
+      <div class="title-button-group"><div class="title-button close" onclick="closeDlg('customWin')"></div></div></div>
+    <div class="window-content">
+      <div style="font-size:12px;line-height:1.7">
+        <div><label style="display:inline-block;width:70px" data-t="cShape">모양</label><select id="cTopo" style="min-width:150px"></select></div>
+        <div><label style="display:inline-block;width:70px" data-t="cSize">크기</label><input id="cSize" type="number" min="2" step="1" value="3" style="width:80px"> <span id="cRange" style="color:#444"></span></div>
+        <div id="cDesc" style="margin-top:4px;color:#333"></div>
+        <div id="cErr" style="margin-top:4px;color:#b00000;min-height:1.2em"></div>
+      </div>
+      <div class="row"><button type="button" class="title-button" style="padding:2px 14px;" onclick="applyCustom()" data-t="ok">확인</button> <button type="button" class="title-button" style="padding:2px 14px;" onclick="closeDlg('customWin')" data-t="cCancel">취소</button></div></div>
+  </div>
+
   <div class="window gdialog" id="helpWin" style="width:340px">
     <div class="title-bar"><div class="title-icon" style="background-image:url(icon.png);background-size:16px 16px"></div><div class="title" data-t="howT">게임 방법</div>
       <div class="title-button-group"><div class="title-button close" onclick="closeDlg('helpWin')"></div></div></div>
@@ -154,6 +168,8 @@ ul.menu { min-width: 150px; width: max-content; }
 <script src="vendor/jquery-ui.min.js"></script>
 <script src="jquery.mswin.js"></script>
 <script src="jquery.mswin.menu.js"></script>
+<script src="engine.js"></script>
+<script src="puzzles.js"></script>
 <script>
 (function () {
   var KO = /^ko/i.test(navigator.language || 'ko');
@@ -162,28 +178,56 @@ ul.menu { min-width: 150px; width: max-content; }
     help1: '<b>큐브</b>는 3D 회전 퍼즐 모음입니다. 게임 &gt; 테마에서 <b>큐브</b>(3x3x3, 그리고 2x2x2 · 4x4x4 · 5x5x5 · 6x6x6 · 7x7x7), <b>스큐브</b>(큐브를 정육면체의 몸대각선에 수직으로 자른 퍼즐: 한 번에 큐브의 절반(꼭짓점 4개와 면 중심 3개)을 120° 돌림, 각 면은 마름모 1개 + 삼각형 4개), <b>정사면체</b>(꼭짓점마다 끝조각 + 두 층), <b>정팔면체</b>(면 돌리기형: 8개 삼각형 면, 한 번에 면 하나와 그 옆 조각들이 120도 돕니다), <b>정십이면체</b>(12개 오각형 면, 면 하나가 72도씩 돕니다), <b>정이십면체</b>(20개 삼각형 면, 면 하나와 그쪽 반쪽이 120도 돕니다), <b>큐브 5×5</b>(층 5개, 안쪽 층도 돌립니다)를 고릅니다. 모든 면의 색이 한 가지로 모이면 완성입니다.<br><b>조작</b>: 빈 곳을 끌면 퍼즐 전체가 회전합니다(오른쪽 버튼 드래그, 방향키도 가능). 조각(스티커)을 누른 채 손가락/마우스가 움직이는 방향으로 밀면 그 조각이 들어 있는 층이 그 방향으로 돕니다. 큐브는 가운데 층도 돌릴 수 있습니다. 모든 색에는 작은 무늬가 있어 색을 구분하기 쉽습니다.<br><b>새 게임(F2)</b>: 퍼즐을 섞습니다(큐브 25, 정사면체 15, 정팔면체 30, 정십이면체 60번, 정이십면체 40번, 5×5 60번). 시계는 섞은 뒤 첫 번째 직접 돌리는 순간부터 갑니다. 퍼즐마다 최단 이동 수와 최단 시간이 이 브라우저에 저장됩니다(치트를 쓰면 기록되지 않습니다).<br><b>치트</b>: 도움말 &gt; 치트 &gt; 자동으로 풀기(F3) = 풀릴 때까지 한 수씩 돌려 줍니다, 힌트 보기(F4) = 돌릴 층을 잠깐 반짝여 보여 준 뒤 딱 한 수만 대신 돌려 줍니다. 큐브는 코침바 2단계 알고리즘(cube.js, MIT)으로 20수 안팎에 풀고, 정사면체와 2×2×2는 모든 상태를 미리 계산한 표(IDA*/BFS)로 가장 짧은 수로 풀며(2×2×2는 최대 14수, 풀이 표를 처음 만들 때 1~3초 걸립니다), 스큐브, 정팔면체, 정십이면체, 정이십면체, 큐브 4×4·5×5·6×6·7×7은 지금까지 돌린 수를 거꾸로 되돌립니다(경우의 수가 너무 커서 최단 풀이를 구할 수 없습니다)(자동 풀기는 내 수를 거꾸로 재생).' }
   : { game: 'Game', newg: '　New Game', scranim: '　Scramble Animation', cheat: '　Cheat...', auto: '　Solve Automatically', hint: '　Give a Hint', theme: '　Theme...', full: '　Fullscreen', exit: '　Exit(X)', help: 'Help', how: '　How to Play(H)', other: '　Other Games', mine: '　Minesweeper', g2048: '　2048', trex: '　T-Rex', pinball: '　3D Pinball', doodle: '　Doodle', board: '　Board Games', baduk: '　Go & Gomoku', chess: '　Chess', janggi: '　Janggi', shooter: '　Bullet Shot', boxpush: '　Box Push', hwatu: '　Hwatu', trump: '　Trump Cards', mahjong: '　Mahjong', nonogram: '　Nonogram', chomper: '　Maze Chomper', card: '　Card Games', swap: '　Swap Puzzle', sudoku: '　Sudoku', poly: '　Polycube (Tetris)', bubble: '　Bubble Shooter', snake: '　Snake', platformer: '　Shape World', atari: '　Atari Breakout', howT: 'How to play', ok: 'OK', title: 'Cube',
     help1: '<b>Cube</b> is a set of 3D twisty puzzles. Pick one in Game &gt; Theme: <b>Cube</b> (3x3x3, plus 2x2x2 / 4x4x4 / 5x5x5 / 6x6x6 / 7x7x7), <b>Skewb</b> (a cube cut through its centre perpendicular to its body diagonals: one turn rotates a half of the cube, 4 corners and 3 centres, by 120 degrees; every face is a diamond plus four triangles), <b>Tetrahedron</b> (a tip and two layers at every corner), <b>Octahedron</b> (a face-turning octahedron: 8 triangular faces, one turn moves a face together with the pieces beside it by 120 degrees), <b>Dodecahedron</b> (12 pentagonal faces, each face layer turns by 72 degrees), <b>Icosahedron</b> (20 triangular faces, a face turns together with the half of the puzzle on its side by 120 degrees), <b>5x5x5 Cube</b> (5 layers per axis, inner layers turn too). The puzzle is solved when every face has a single colour.<br><b>Controls</b>: drag empty space to rotate the whole puzzle (right-button drag and the arrow keys work too). Press a sticker and swipe in the direction you want it to go: the layer that contains the sticker turns that way. The cube also has middle layers. Every colour has a small mark so colours are easy to tell apart.<br><b>New Game (F2)</b> scrambles the puzzle (cube 25, tetrahedron 15, octahedron 30, dodecahedron 60, icosahedron 40, 5x5x5 60 turns). The clock starts with your first own turn after the scramble. The best moves and best time of every puzzle are saved in this browser (not when a cheat was used).<br><b>Cheat</b>: Help &gt; Cheat &gt; Solve Automatically (F3) = turns the puzzle step by step until it is solved, Give a Hint (F4) = flashes the layer to turn, then makes exactly one move for you. The cube is solved with Kociemba\'s two-phase algorithm (cube.js, MIT licence) in about 20 moves, the tetrahedron and the 2x2x2 cube with exact tables of all states (IDA* / BFS) in the fewest possible moves (at most 14 for the 2x2x2; the table takes 1-3 s to build the first time), and the skewb, octahedron, dodecahedron, icosahedron and the 4x4x4 / 5x5x5 / 6x6x6 / 7x7x7 cubes (too many positions for a shortest solution) by replaying your moves backwards (auto solve = undo everything since the scramble).' };
+  T.custom = KO ? '　사용자 지정...' : '　Custom...'; T.cTitle = KO ? '사용자 지정' : 'Custom puzzle'; T.cShape = KO ? '모양' : 'Shape'; T.cSize = KO ? '크기' : 'Size'; T.cCancel = KO ? '취소' : 'Cancel';
+  T.helpCustom = KO ? '<br><b>사용자 지정</b>(게임 &gt; 사용자 지정...): 모양(정사면체 · 큐브 · 정팔면체 · 정십이면체 · 정이십면체 · 스큐브)과 크기(2 이상의 정수; 모양마다 한도가 있습니다)를 골라 풀 수 있습니다. 크기는 큐브에서는 한 변의 칸 수, 정사면체와 정팔면체에서는 모서리 하나의 삼각형 수, 정십이면체 · 정이십면체 · 스큐브에서는 회전축 방향의 층 수입니다(스큐브 2 = 보통 스큐브). 자동 풀기와 힌트는 몇몇 경우(큐브 3x3x3 · 2x2x2, 정사면체 3)를 빼면 지금까지 돌린 수를 거꾸로 되돌립니다.'
+    : '<br><b>Custom</b> (Game &gt; Custom...): pick a shape (tetrahedron, cube, octahedron, dodecahedron, icosahedron, skewb) and a size (an integer of 2 or more; every shape has an upper limit). The size is the number of cells per side for the cube, the number of triangles per edge for the tetrahedron and the octahedron, and the number of layers along a turn axis for the dodecahedron, the icosahedron and the skewb (skewb 2 = the usual skewb). Auto solve and hint replay your moves backwards, except in a few cases (cube 3x3x3 and 2x2x2, tetrahedron 3).';
   document.documentElement.lang = KO ? 'ko' : 'en';
   [].forEach.call(document.querySelectorAll('[data-t]'), function (e) { var k = e.getAttribute('data-t'); if (T[k] !== undefined) e.textContent = T[k]; });
-  document.getElementById('helpTxt').innerHTML = T.help1;
+  document.getElementById('helpTxt').innerHTML = T.help1 + T.helpCustom;
   var KEYS = ['cube2', 'cube', 'cube4', 'cube5', 'cube6', 'cube7', 'skewb', 'tetra', 'octa', 'dodeca', 'icosa'], theme = 'cube';
-  try { var st = localStorage.getItem('rubik_theme'); if (KEYS.indexOf(st) >= 0) theme = st; } catch (e) {}
-  var qt = new URLSearchParams(location.search).get('theme'); if (KEYS.indexOf(qt) >= 0) theme = qt;
-  document.getElementById('game').src = 'game.html?t=' + theme;
+  var PZ = window.RBPuzzles;
+  function validKey(k) { if (KEYS.indexOf(k) >= 0) return true; var p = PZ.parseKey(k); return !!(p && PZ.customKey(p.topo, p.n)); }
+  try { var st = localStorage.getItem('rubik_theme'); if (st && validKey(st)) theme = st; } catch (e) {}
+  var qs0 = new URLSearchParams(location.search), qt = qs0.get('theme');
+  if (qt && validKey(qt)) theme = qt;
+  else if (qs0.get('topo') && PZ.customKey(qs0.get('topo'), qs0.get('n'))) theme = PZ.customKey(qs0.get('topo'), qs0.get('n'));
+  document.getElementById('game').src = 'game.html?t=' + encodeURIComponent(theme);
   function resize() {
     var vw = window.innerWidth, vh = window.innerHeight, win = document.getElementById('mainwin'), chrome = 46, ratio = 0.78, gw, gh;
     if (vw / (vh - chrome) < ratio) { gw = vw - 14; gh = gw / ratio; } else { gh = vh - chrome - 8; gw = gh * ratio; }
     win.style.width = Math.floor(gw + 14) + 'px'; win.style.height = Math.floor(gh + chrome + 8) + 'px';
   }
   resize(); window.addEventListener('resize', resize);
+  function nameOfTheme(k) { return NAMES[k] || PZ.nameOf(k, KO) || k; }
   function marks() {
     KEYS.forEach(function (k) { var a = document.querySelector('.th' + k + ' a'); a.textContent = (k === theme ? '✓ ' : '\u3000') + NAMES[k]; });
-    document.getElementById('ttitle').textContent = T.title + ' - ' + NAMES[theme]; document.title = T.title + ' - ' + NAMES[theme];
+    document.getElementById('ttitle').textContent = T.title + ' - ' + nameOfTheme(theme); document.title = T.title + ' - ' + nameOfTheme(theme);
   }
   window.setTheme = function (t) {
     theme = t; markAuto(false); marks();
     try { localStorage.setItem('rubik_theme', t); } catch (e) {}
-    document.getElementById('game').src = 'game.html?t=' + t;
+    document.getElementById('game').src = 'game.html?t=' + encodeURIComponent(t);
   };
+  // ---- custom puzzle: shape (topology) + size ----
+  var TOPO_NAME = KO ? { tetra: '정사면체', cube: '큐브', octa: '정팔면체', dodeca: '정십이면체', icosa: '정이십면체', skewb: '스큐브' } : { tetra: 'Tetrahedron', cube: 'Cube', octa: 'Octahedron', dodeca: 'Dodecahedron', icosa: 'Icosahedron', skewb: 'Skewb' };
+  var TOPO_DESC = KO ? { tetra: '크기 = 모서리 하나의 삼각형 수 (3 = 피라밍크스형)', cube: '크기 = 한 변의 칸 수 (3 = 보통 큐브)', octa: '크기 = 모서리 하나의 삼각형 수 (3 = 면 돌리기 정팔면체)', dodeca: '크기 = 회전축 방향의 층 수 (면 돌리기, 72도)', icosa: '크기 = 회전축 방향의 층 수 (면 돌리기, 120도, 2 = 가운데를 자른 보통형)', skewb: '크기 = 대각선 방향의 층 수 (2 = 보통 스큐브)' }
+    : { tetra: 'size = triangles per edge (3 = pyraminx-like)', cube: 'size = cells per side (3 = the usual cube)', octa: 'size = triangles per edge (3 = face-turning octahedron)', dodeca: 'size = layers along a turn axis (face turning, 72 degrees)', icosa: 'size = layers along a turn axis (face turning, 120 degrees, 2 = cut through the centre)', skewb: 'size = layers along a body diagonal (2 = the usual skewb)' };
+  var cT = document.getElementById('cTopo');
+  PZ.TOPOS.forEach(function (t) { var o = document.createElement('option'); o.value = t; o.textContent = TOPO_NAME[t]; cT.appendChild(o); });
+  function cInfo() {
+    var t = cT.value; document.getElementById('cRange').textContent = '(' + PZ.MINN[t] + ' ~ ' + PZ.MAXN[t] + ')'; document.getElementById('cDesc').textContent = TOPO_DESC[t];
+    document.getElementById('cSize').max = PZ.MAXN[t]; document.getElementById('cErr').textContent = '';
+  }
+  cT.onchange = function () { var sz = document.getElementById('cSize'); sz.value = Math.min(PZ.MAXN[cT.value], Math.max(PZ.MINN[cT.value], +sz.value || 3)); cInfo(); };
+  window.openCustom = function () {
+    var d = PZ.describe(theme); if (d) { cT.value = d.topo; document.getElementById('cSize').value = d.n; } cInfo(); openDlg('customWin'); document.getElementById('cSize').focus();
+  };
+  window.applyCustom = function () {
+    var t = cT.value, n = Math.floor(+document.getElementById('cSize').value), key = PZ.customKey(t, n);
+    if (!key) { document.getElementById('cErr').textContent = (KO ? '크기는 ' : 'The size must be an integer from ') + PZ.MINN[t] + (KO ? ' 이상 ' : ' to ') + PZ.MAXN[t] + (KO ? ' 이하의 정수여야 합니다.' : '.'); return; }
+    closeDlg('customWin'); setTheme(key);
+  };
+  document.getElementById('cSize').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); applyCustom(); } });
   function closeMenus() {
     var mb = $('.menu-bar'); try { mb.menubar('collapseAll'); } catch (e) {}
     mb.find('.ui-state-open').removeClass('ui-state-open'); mb.find('> li').removeClass('ui-state-active ui-state-hover ui-state-focus');

@@ -32,14 +32,15 @@
   const S = { cw: 0, ch: 0, dpr: 1, yaw: 0.5, pitch: 0.4, f: 1, cx: 0, cy: 0, down: null, drag: null, held: { l: 0, r: 0, u: 0, d: 0 }, rgb: [], btn: null, ptr: null };
   let sigCache = '';
 
+  function nameOf(key) { return T.names[key] || PZ.nameOf(key, KO) || key; }
   function setTheme(key) {
-    if (!PZ.META[key]) key = 'cube';
+    if (!PZ.META[key]) { const pk = PZ.parseKey(key); key = (pk && PZ.customKey(pk.topo, pk.n)) || 'cube'; }
     G.key = key; G.P = PZ.get(key); S.yaw = G.P.meta.view.yaw; S.pitch = G.P.meta.view.pitch;
     S.rgb = G.P.meta.colours.map(hex2rgb);
     lsSet('rubik_theme', key);
-    document.title = T.names[key];
+    document.title = nameOf(key);
     if (key === 'cube') cubeInit();
-    if (key === 'tetra') setTimeout(function () { try { G.P.initSolver(); } catch (e) {} }, 30);
+    if (key === 'tetra' || key === 'cube2') setTimeout(function () { try { G.P.initSolver(); } catch (e) {} }, 30);
     newGame();
   }
 
@@ -306,7 +307,7 @@
     g.addColorStop(0, '#2b3a55'); g.addColorStop(1, '#0c1018'); ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch);
     drawPuzzle(now);
     const best = loadBest()[G.key] || {};
-    txt(T.names[G.key], cw / 2, ch * 0.04, fs * 1.15, '#e8eefc', 'center', true);
+    txt(nameOf(G.key), cw / 2, ch * 0.04, fs * 1.15, '#e8eefc', 'center', true);
     const line = T.moves + ' ' + G.moves + '   ' + T.time + ' ' + fmtTime(G.time) + (best.time !== undefined ? '   ' + T.best + ' ' + best.moves + ' / ' + fmtTime(best.time) : '');
     txt(line, cw / 2, ch * 0.04 + fs * 1.6, fs * 0.95, '#aab6d0');
     let msg = '';

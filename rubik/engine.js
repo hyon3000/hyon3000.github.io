@@ -88,11 +88,20 @@
     });
     // sticker permutations of every move: move m = band*2 + (dir > 0 ? 0 : 1); perm[i] = slot that receives the sticker of slot i
     const perms = new Array(bands.length * 2);
+    // slot lookup by centroid: hashed on a 1e-3 grid (the 27 neighbouring cells are searched too, so no point near a cell border is missed)
+    const GR = 1000, grid = new Map();
+    function gk(a, b2, c) { return a + ',' + b2 + ',' + c; }
+    for (let j = 0; j < N; j++) { const c = st[j].c, k = gk(Math.round(c[0] * GR), Math.round(c[1] * GR), Math.round(c[2] * GR)); const l = grid.get(k); if (l) l.push(j); else grid.set(k, [j]); }
     function findSlot(q, nrm) {
-      for (let j = 0; j < N; j++) {
-        if (Math.abs(st[j].c[0] - q[0]) < 1e-5 && Math.abs(st[j].c[1] - q[1]) < 1e-5 && Math.abs(st[j].c[2] - q[2]) < 1e-5) {
-          if (V.dot(st[j].n, nrm) < 1 - 1e-5) return -1;
-          return j;
+      const qx = Math.round(q[0] * GR), qy = Math.round(q[1] * GR), qz = Math.round(q[2] * GR);
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+        const l = grid.get(gk(qx + dx, qy + dy, qz + dz)); if (!l) continue;
+        for (let t = 0; t < l.length; t++) {
+          const j = l[t];
+          if (Math.abs(st[j].c[0] - q[0]) < 1e-5 && Math.abs(st[j].c[1] - q[1]) < 1e-5 && Math.abs(st[j].c[2] - q[2]) < 1e-5) {
+            if (V.dot(st[j].n, nrm) < 1 - 1e-5) return -1;
+            return j;
+          }
         }
       }
       return -1;
