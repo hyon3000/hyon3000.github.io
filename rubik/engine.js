@@ -39,7 +39,8 @@
     const st = spec.stickers.map((s, idx) => {
       let verts = s.verts.map((v) => V.mul(v, k));
       const N = facets[s.facet].normal;
-      if (V.dot(V.cross(V.sub(verts[1], verts[0]), V.sub(verts[2], verts[0])), N) < 0) verts = verts.slice().reverse();
+      let nw = [0, 0, 0]; for (let q = 0; q < verts.length; q++) nw = V.add(nw, V.cross(verts[q], verts[(q + 1) % verts.length]));        // Newell normal (a star has reflex corners)
+      if (V.dot(nw, N) < 0) verts = verts.slice().reverse();
       const c = V.avg(verts);
       // distance from the centroid to the nearest edge (used for marks / minimum size)
       let rad = 1e9;
@@ -71,6 +72,7 @@
           // no sticker may be cut by a plane
           let mn = 1e9, mx = -1e9;
           st[i].verts.forEach((v) => { const q = V.dot(v, ax); mn = Math.min(mn, q); mx = Math.max(mx, q); });
+          if (spec.loose) continue;                     // loose puzzles (a star-shaped sticker) assign a sticker to a band by its centre only
           if (inside) { if (mn < lo - 1e-5 || mx > hi + 1e-5) throw new Error('sticker ' + i + ' cut by band ' + li); }
           else if (!(mx <= lo + 1e-5 || mn >= hi - 1e-5)) throw new Error('sticker ' + i + ' cut by band(out) ' + li);
         }

@@ -6,11 +6,11 @@
   const canvas = document.getElementById('app'), ctx = canvas.getContext('2d');
   const D = 4.4;                                         // camera distance (puzzle radius = 1)
   const T = KO ? {
-    names: { cube2: '큐브2', cube4: '큐브4', cube5: '큐브5', cube6: '큐브6', cube7: '큐브7', skewb: '스큐브', heli: '헬리콥터큐브', icosa: '정이십면체', cube: '큐브 (3x3x3)', tetra: '정사면체', octa: '정팔면체', dodeca: '정십이면체' },
+    names: { cube2: '미니큐브', cube4: '리벤지큐브', cube5: '큐브5', cube6: '큐브6', cube7: '큐브7', skewb: '스큐브', heli: '헬리콥터큐브', icosa: '정이십면체', cube: '루빅스큐브 (3x3x3)', tetra: '피라밍크스', octa: '다이아몬드', dodeca: '메가밍크스', pentult: '펜튤티메이트' },
     moves: '이동', time: '시간', best: '최고', solved: '완성!', newRec: '신기록!', again: '새 게임 (F2)',
     wait: '해법 계산 중...', prep: '해법 계산기 준비 중...', hint: '빈 곳을 끌어 돌려 보기 · 조각을 밀어 층 돌리기', keys: 'F2 새 게임 · F3 자동 풀기 · F4 힌트', scr: '섞는 중...',
   } : {
-    names: { cube2: 'Cube2', cube4: 'Cube4', cube5: 'Cube5', cube6: 'Cube6', cube7: 'Cube7', skewb: 'Skewb', heli: 'Helicopter Cube', icosa: 'Icosahedron', cube: 'Cube (3x3x3)', tetra: 'Tetrahedron', octa: 'Octahedron', dodeca: 'Dodecahedron' },
+    names: { cube2: 'Mini Cube', cube4: 'Revenge Cube', cube5: 'Cube5', cube6: 'Cube6', cube7: 'Cube7', skewb: 'Skewb', heli: 'Helicopter Cube', icosa: 'Icosahedron', cube: 'Rubik\'s Cube (3x3x3)', tetra: 'Pyraminx', octa: 'Diamond', dodeca: 'Megaminx', pentult: 'Pentultimate' },
     moves: 'Moves', time: 'Time', best: 'Best', solved: 'SOLVED!', newRec: 'New best!', again: 'New game (F2)',
     wait: 'Computing solution...', prep: 'Preparing the solver...', hint: 'Drag empty space to rotate the view · swipe a piece to turn its layer', keys: 'F2 new game · F3 auto-solve · F4 hint', scr: 'Scrambling...',
   };

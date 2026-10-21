@@ -570,24 +570,163 @@
     const g = icosaFacets(), D = V.dot(g.facets[0].normal, g.facets[0].verts[0]);
     return layeredSpec('icosa' + n, g.facets, oppositePairs(g.facets).map((f) => ({ u: f.normal, D: D })), n, 3, 1 / g.radius, 0.02, 0);
   }
-  function dodecaNSpec(n) {
-    const g = dodecaFacets(), D = V.dot(g.facets[0].normal, g.facets[0].verts[0]);
-    return layeredSpec('dodeca' + n, g.facets, oppositePairs(g.facets).map((f) => ({ u: f.normal, D: D })), n, 5, 1 / g.radius, 0.022, 0);
+  // n = 2: every face is a pentagram (one sticker, tips on the edge midpoints) with a quadrilateral at each vertex; the two cap planes per axis at D / PHI decide which
+  // stickers turn (a sticker belongs to a cap by its centre: the puzzle is "loose", the star is one rigid face), only the caps turn.
+  function dodeca2Spec() {
+    const g = dodecaFacets(), D = V.dot(g.facets[0].normal, g.facets[0].verts[0]), d2 = D / PHI, stickers = [];
+    function lineInt(a, b, c, d) { const d1 = V.sub(b, a), d2v = V.sub(d, c), cr = V.cross(d1, d2v), t = V.dot(V.cross(V.sub(c, a), d2v), cr) / V.dot(cr, cr); return V.add(a, V.mul(d1, t)); }
+    g.facets.forEach((f, fi) => {
+      const v = f.verts, M = v.map((p, i) => V.mul(V.add(p, v[(i + 1) % 5]), 0.5)), N = [];
+      for (let i = 0; i < 5; i++) N.push(lineInt(M[i], M[(i + 2) % 5], M[(i + 4) % 5], M[(i + 1) % 5]));      // notch between the tips i and i + 1
+      const star = []; for (let i = 0; i < 5; i++) { star.push(M[i]); star.push(N[i]); }
+      stickers.push({ facet: fi, verts: star, kind: 's' });
+      for (let i = 0; i < 5; i++) stickers.push({ facet: fi, verts: [v[(i + 1) % 5], M[(i + 1) % 5], N[i], M[i]], kind: 'q' });
+    });
+    const lines = oppositePairs(g.facets).map((f) => ({ axis: f.normal, n: 5, bands: [{ lo: d2, hi: INF }, { lo: -INF, hi: -d2 }] }));
+    return { name: 'dodeca2', facets: g.facets, stickers: stickers, lines: lines, scale: 1 / g.radius, gap: 0.022, loose: true };
   }
-  function skewbNSpec(n) {
+  // n = 3 is the dodecahedron of the theme list (face turns of the caps cut at height h).  Cap planes (one pair +- per value, only the caps turn) for the other sizes:
+  // even n = 2m: D / PHI (the pentagram chords) and m - 1 more equally spaced up to the face (n = 4: the middle one cuts every quadrilateral into four by a cross);
+  // odd n >= 5: D / PHI, h and (n - 5) / 2 more equally spaced between h and the face.  The centre of every face is ONE sticker: the pentagram of the chords for an even n (the cells
+  // inside it are merged: the puzzle is "loose", a sticker belongs to a cap by its centre only), the pentagon inside the chords (a cell) for an odd n.
+  function inPoly2(P, p, nrm) {
+    const t = Math.abs(nrm[0]) < 0.8 ? [1, 0, 0] : [0, 1, 0], u = V.norm(V.cross(nrm, t)), w = V.cross(nrm, u), pt = [V.dot(p, u), V.dot(p, w)], q = P.map((v) => [V.dot(v, u), V.dot(v, w)]);
+    let c = false;
+    for (let i = 0, j = q.length - 1; i < q.length; j = i++) if ((q[i][1] > pt[1]) !== (q[j][1] > pt[1]) && pt[0] < (q[j][0] - q[i][0]) * (pt[1] - q[i][1]) / (q[j][1] - q[i][1]) + q[i][0]) c = !c;
+    return c;
+  }
+  function dodecaNSpec(n) {
+    if (n === 2) return dodeca2Spec();
+    const base = dodecaSpec(); if (n === 3) return base;
+    const h = base.lines[0].bands[0].lo, g = dodecaFacets(), D = V.dot(g.facets[0].normal, g.facets[0].verts[0]), d2 = D / PHI, vals = [d2];
+    if (n % 2 === 0) { const m = n / 2; for (let k = 1; k <= m - 1; k++) vals.push(d2 + (D - d2) * k / m); }
+    else { vals.push(h); const m = (n - 5) / 2; for (let k = 1; k <= m; k++) vals.push(h + (D - h) * k / (m + 1)); }
+    const ds = vals.concat(vals.map((x) => -x));
+    const sp = layeredSpec('dodeca' + n, g.facets, oppositePairs(g.facets).map((f) => ({ u: f.normal, ds: ds })), n, 5, 1 / g.radius, 0.022, 0);
+    sp.lines.forEach((l) => { const mid = (l.bands.length - 1) / 2; l.bands = l.bands.filter((bd, i) => i !== mid); });          // every cap layer of an axis turns, the big middle slab does not
+    if (n % 2) return sp;
+    const reg = dodeca2Spec().stickers.filter((s) => s.kind === 's'), out = [];
+    sp.stickers.forEach((s) => { const r = reg.find((x) => x.facet === s.facet); if (!inPoly2(r.verts, V.avg(s.verts), g.facets[s.facet].normal)) out.push(s); });
+    reg.forEach((r) => out.push({ facet: r.facet, verts: r.verts, kind: r.kind }));
+    sp.stickers = out; sp.loose = true;
+    return sp;
+  }
+  // face-turning dodecahedron, deep cut: n = 2 is the Pentultimate (one plane per face axis through the centre).  For a larger n the planes are: the one through the centre and, for t = 1 .. n - 2,
+  // the pair +- (D / PHI + (D - D / PHI) t / (n - 1)) (D = distance of a face from the centre): the nearest lines to the centre are then five lines parallel to the edges, so the middle of
+  // every face is ONE pentagon, and every turn is exact (the stickers are the cells the planes cut out of the faces).
+  function dodecaDeepSpec(n) {
+    const g = dodecaFacets(), D = V.dot(g.facets[0].normal, g.facets[0].verts[0]), d2 = D / PHI, vals = [0];
+    for (let t = 1; t <= n - 2; t++) { const d = d2 + (D - d2) * t / (n - 1); vals.push(d); vals.push(-d); }
+    const ds = vals.sort((a, b) => b - a);
+    return layeredSpec('dodecadc' + n, g.facets, oppositePairs(g.facets).map((f) => ({ u: f.normal, ds: ds })), n, 5, 1 / g.radius, 0.022, 0);
+  }
+  // axes through opposite vertices: unit vectors (one per pair) and O = the height of the plane through the neighbours of a vertex (a plane there cuts the corner off)
+  function vertexAxes(facets) {
+    const vs = []; facets.forEach((f) => f.verts.forEach((v) => { if (!vs.some((w) => V.len(V.sub(w, v)) < 1e-6)) vs.push(v); }));
+    const ax = []; vs.forEach((v) => { const u = V.norm(v); if (!ax.some((w) => Math.abs(Math.abs(V.dot(w, u)) - 1) < 1e-6)) ax.push(u); });
+    let mn = 1e9, O = 0; vs.forEach((w) => { const d = V.len(V.sub(w, vs[0])); if (d > 1e-6 && d < mn - 1e-9) { mn = d; O = V.dot(V.norm(vs[0]), w); } });
+    return { axes: ax, O: O };
+  }
+  function ctSpec(name, g, order, n, np) {              // np planes per axis (default n - 1)
+    const va = vertexAxes(g.facets), ds = [];
+    np = np || n - 1;
+    if (np === 1) ds.push(0); else for (let k = 0; k < np; k++) ds.push(va.O * (1 - 2 * k / (np - 1)));
+    return layeredSpec(name + n, g.facets, va.axes.map((u) => ({ u: u, ds: ds })), n, order, 1 / g.radius, 0.022, 0);
+  }
+  // corner-turning dodecahedron / icosahedron: n - 1 planes per vertex axis equally spaced between the planes that cut the corners off (n = 2: the plane through the centre)
+  // dodecahedron CT: the corner planes pass through the centres of the three faces at the vertex (depth D cos(angle vertex axis - face axis)), so every line cut into a face goes through the
+  // centre of that face (n = 2 = Chopasaurus: just these two planes per vertex axis, only the two corners turn); n planes equally spaced between them in general
+  function dodecactSpec(n) {
+    const g = dodecaFacets(), va = vertexAxes(g.facets), D = V.dot(g.facets[0].normal, g.facets[0].verts[0]);
+    let c = -1; g.facets.forEach((f) => { c = Math.max(c, V.dot(va.axes[0], f.normal)); });
+    const Cd = D * c, ds = []; for (let k = 0; k < n; k++) ds.push(Cd * (1 - 2 * k / (n - 1)));
+    const sp = layeredSpec('dodecact' + n, g.facets, va.axes.map((u) => ({ u: u, ds: ds })), n, 3, 1 / g.radius, 0.022, 0);
+    if (n === 2) {
+      sp.lines.forEach((l) => { l.bands = [l.bands[0], l.bands[2]]; });
+      // Chopasaurus: every face is cut by five lines that all go through its centre (each perpendicular to the direction centre - vertex): 5 quadrilaterals (with a vertex) and 5 triangles
+      // (with an edge midpoint).  The stickers are built directly and belong to a corner by their centre only ("loose").
+      const out = [];
+      g.facets.forEach((f, fi) => {
+        const v = f.verts, C = V.avg(v), nrm = f.normal, t0 = V.norm(V.sub(v[0], C)), w0 = V.cross(nrm, t0);
+        const ang = (p) => { const r = V.sub(p, C); return Math.atan2(V.dot(r, w0), V.dot(r, t0)); };
+        // boundary point of the ray from the centre in direction (cos a, sin a) in the face plane
+        const hit = (a) => {
+          const dir = V.add(V.mul(t0, Math.cos(a)), V.mul(w0, Math.sin(a)));
+          let best = null;
+          for (let i = 0; i < v.length; i++) {
+            const A = v[i], B = v[(i + 1) % v.length], e = V.sub(B, A), cr = V.cross(dir, e), den = V.dot(cr, cr);
+            if (den < 1e-12) continue;
+            const s = V.dot(V.cross(V.sub(A, C), dir), cr) / den, tt = V.dot(V.cross(V.sub(A, C), e), cr) / den;
+            if (tt > 1e-9 && s > -1e-9 && s < 1 + 1e-9) best = V.add(C, V.mul(dir, tt));
+          }
+          return best;
+        };
+        const vang = v.map(ang), rays = [];
+        // rays: perpendicular to every vertex direction (both ways) - angles vang + 90 degrees, + 270 degrees
+        v.forEach((q, i) => { rays.push(vang[i] + Math.PI / 2); rays.push(vang[i] - Math.PI / 2); });
+        const norm = (a) => { while (a < -Math.PI) a += 2 * Math.PI; while (a >= Math.PI) a -= 2 * Math.PI; return a; };
+        const ra = rays.map(norm).sort((a, b) => a - b), pts = ra.map(hit);
+        for (let j = 0; j < ra.length; j++) {
+          const a0 = ra[j], a1 = j + 1 < ra.length ? ra[j + 1] : ra[0] + 2 * Math.PI, poly = [C, pts[j]];
+          v.forEach((q, i) => { let a = norm(vang[i]); for (const k of [0, 2 * Math.PI]) { if (a + k > a0 + 1e-9 && a + k < a1 - 1e-9) poly.push(q); } });
+          poly.push(pts[(j + 1) % ra.length]);
+          out.push({ facet: fi, verts: poly, kind: poly.length > 4 ? 'q' : 't' });
+        }
+      });
+      sp.stickers = out; sp.loose = true;
+    }
+    return sp;
+  }
+  function icosactSpec(n) { return ctSpec('icosact', icosaFacets(), 5, n, n); }       // n planes: n = 2 is the two corner planes (the faces are not cut: an easter egg like n = 1), n = 3 adds the one through the centre
+  // face-turning icosahedron: n = 2 is the icosahedron of the theme list (caps cut at ICOSA_H of the inradius); for a larger n the pairs +- (h + (D - h) k / (n - 1)), k = 0 .. n - 2, only the caps turn
+  function icosaFTSpec(n) {
+    const g = icosaFacets(), D = V.dot(g.facets[0].normal, g.facets[0].verts[0]), h = ICOSA_H * D, vals = [];
+    for (let k = 0; k <= n - 2; k++) vals.push(h + (D - h) * k / (n - 1));
+    const ds = vals.concat(vals.map((x) => -x)).sort((a, b) => b - a);
+    const sp = layeredSpec('icosa' + n, g.facets, oppositePairs(g.facets).map((f) => ({ u: f.normal, ds: ds })), n, 3, 1 / g.radius, 0.02, 0);
+    sp.lines.forEach((l) => { const mid = (l.bands.length - 1) / 2; l.bands = l.bands.filter((bd, i) => i !== mid); });
+    return sp;
+  }
+  // the dodecahedron cut through the centre (one plane per axis): the two halves of every axis turn by 72 degrees
+  function dodecaDsSpec(ds) { const g = dodecaFacets(); return layeredSpec('dodecaX', g.facets, oppositePairs(g.facets).map((f) => ({ u: f.normal, ds: ds })), 2, 5, 1 / g.radius, 0.022, 0); }
+  function pentultSpec() {
+    const g = dodecaFacets();
+    return layeredSpec('pentult', g.facets, oppositePairs(g.facets).map((f) => ({ u: f.normal, ds: [0] })), 2, 5, 1 / g.radius, 0.022, 0);
+  }
+  // Edge-turning tetrahedron (ET): the three axes through the midpoints of opposite edges carry n - 1 parallel cut planes (n = 2: the plane through the centre; the others are equally
+  // spaced between -1/2 and 1/2); a slab turns by 180 degrees about its axis (the tetrahedron has this symmetry, so every slab fits back).
+  function tetraDsSpec(ds) {
+    const T = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]], facets = [];
+    for (let f = 0; f < 4; f++) facets.push({ verts: [0, 1, 2, 3].filter((i) => i !== f).map((i) => T[i]), normal: V.norm(V.mul(T[f], -1)) });
+    return layeredSpec('tetraX', facets, [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map((a) => ({ u: a, ds: ds })), 2, 2, 1 / Math.sqrt(3), 0.04, 0);
+  }
+  function tetraETSpec(n) {
+    const T = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]], facets = [];
+    for (let f = 0; f < 4; f++) facets.push({ verts: [0, 1, 2, 3].filter((i) => i !== f).map((i) => T[i]), normal: V.norm(V.mul(T[f], -1)) });
+    const ds = []; if (n === 2) ds.push(0); else for (let k = 0; k <= n - 2; k++) ds.push(0.5 * (1 - 2 * k / (n - 2)));
+    const axes = [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map((a) => ({ u: a, ds: ds }));
+    return layeredSpec('tetraet' + n, facets, axes, n, 2, 1 / Math.sqrt(3), 0.04, 0);
+  }
+  // Corner-turning octahedron (CT): the three axes through opposite vertices carry n - 1 parallel cut planes (n = 2: the plane through the centre; the others are equally spaced between
+  // -1/2 and 1/2); a slab turns by 90 degrees about its axis.
+  function octactSpec(n) {
+    const facets = [], sg = [[1, 1, 1], [1, 1, -1], [1, -1, 1], [1, -1, -1], [-1, 1, 1], [-1, 1, -1], [-1, -1, 1], [-1, -1, -1]];
+    sg.forEach((s) => facets.push({ verts: [[s[0], 0, 0], [0, s[1], 0], [0, 0, s[2]]], normal: V.norm(s) }));
+    const ds = []; if (n === 2) ds.push(0); else for (let k = 0; k <= n - 2; k++) ds.push(0.5 * (1 - 2 * k / (n - 2)));
+    return layeredSpec('octact' + n, facets, [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map((a) => ({ u: a, ds: ds })), n, 4, 1, 0.03, 0);
+  }
+  // Corner-turning cube (CT): the four body diagonals (vertex - centre - opposite vertex) each carry n - 1 parallel cut planes n.p = d, equally spaced between -1 and 1
+  // (n = 2: the one plane through the centre = Skewb; n = 3: the planes at +-1 that cut the eight corners off = Dino Cube, whose faces are split into four right triangles).
+  // A slab turns by 120 degrees about its diagonal.
+  function cubectSpec(n) {
     const facets = [];
     FACE_ORDER.forEach((nm) => {
       const nn = FACE[nm], u = Math.abs(nn[1]) === 1 ? [1, 0, 0] : [0, 1, 0], w = V.cross(nn, u), P = (a, b) => V.add(nn, V.add(V.mul(u, a), V.mul(w, b)));
       facets.push({ verts: [P(1, 1), P(-1, 1), P(-1, -1), P(1, -1)], normal: nn });
     });
-    // n = number of pieces a face diagonal passes through (3 = the usual skewb).  Every body diagonal (tetrahedron vertices) has parallel cut planes n.p = d:
-    // odd n = 2r + 1: r planes spaced 2 / r apart, symmetric about the centre; even n = 2j + 2: j + 1 planes 1, 1 - e, 1 - 2e ... with e = 4 / (2j + 1) (the first one
-    // runs along the other diagonal of every face, the rest cut two squares and two triangles out of the diagonal)
-    const ds = [];
-    if (n % 2) { const r = (n - 1) / 2, e = 2 / r; for (let k = 0; k < r; k++) ds.push((k - (r - 1) / 2) * e); }
-    else { const j = (n - 2) / 2, e = 4 / (2 * j + 1); for (let k = 0; k <= j; k++) ds.push(1 - k * e); }
+    const ds = []; if (n === 2) ds.push(0); else for (let k = 0; k <= n - 2; k++) ds.push(1 - 2 * k / (n - 2));
     const axes = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]].map((a) => ({ u: V.norm(a), ds: ds.map((d) => d / Math.sqrt(3)) }));
-    return layeredSpec('skewb' + n, facets, axes, n, 3, 1 / Math.sqrt(3), 0.04, 0);
+    return layeredSpec('cubect' + n, facets, axes, n, 3, 1 / Math.sqrt(3), 0.04, 0);
   }
 
   const META = {
@@ -605,16 +744,20 @@
     META['cube' + n] = { key: 'cube' + n, spec: function () { return cubeSpec(n); }, extras: n === 2 ? cube2Extras : null, scramble: { 2: 15, 4: 45, 6: 80, 7: 100 }[n], solver: n === 2 ? 'table' : 'history', view: { yaw: 0.55, pitch: 0.5 }, colours: META.cube.colours };
   });
   META.heli = { key: 'heli', spec: heliSpec, extras: null, scramble: 24, solver: 'history', view: { yaw: 0.55, pitch: 0.5 }, colours: META.cube.colours };
+  META.pentult = { key: 'pentult', spec: pentultSpec, extras: null, scramble: 40, solver: 'history', view: { yaw: 0.4, pitch: 0.35 }, colours: META.dodeca.colours };
+  META.pyramorphix = { key: 'pyramorphix', spec: function () { return tetraETSpec(2); }, extras: null, scramble: 14, solver: 'history', view: META.tetra.view, colours: META.tetra.colours };
   META.skewb = { key: 'skewb', spec: skewbSpec, extras: null, scramble: 25, solver: 'history', view: { yaw: 0.55, pitch: 0.5 }, colours: META.cube.colours };
   META.icosa = { key: 'icosa', spec: function () { return icosaSpec(ICOSA_H); }, extras: null, scramble: 40, solver: 'history', view: { yaw: 0.4, pitch: 0.3 },
     colours: ['#f2f2f2', '#ffd400', '#d41f26', '#ff7f0e', '#0f9d58', '#1a4fd6', '#7b2fbe', '#ff78b4', '#9be000', '#00c2d6', '#8c8c8c', '#9c5a2e', '#0b1f6b', '#00796b', '#7a0f2e', '#e6c88f', '#2b2b2b', '#b9a6ff', '#6b7a00', '#8fd0ff'] };
   // ---------------- custom puzzles: topology + size ----------------
-  const TOPOS = ['tetra', 'cube', 'octa', 'dodeca', 'icosa', 'skewb', 'square'];
-  const MINN = { tetra: 2, cube: 2, octa: 2, dodeca: 2, icosa: 2, skewb: 3, square: -1 };
-  const MAXN = { tetra: Infinity, cube: Infinity, octa: Infinity, dodeca: Infinity, icosa: Infinity, skewb: Infinity, square: Infinity };      // no upper limit on the size
-  const BUILTIN = { cube: { 2: 'cube2', 3: 'cube', 4: 'cube4', 5: 'cube5', 6: 'cube6', 7: 'cube7' }, tetra: { 3: 'tetra' }, octa: { 3: 'octa' }, icosa: { 2: 'icosa' }, skewb: { 3: 'skewb' }, dodeca: {}, square: { 1: 'sq1' } };
-  const BASE = { tetra: 'tetra', cube: 'cube', octa: 'octa', dodeca: 'dodeca', icosa: 'icosa', skewb: 'skewb' };
-  const SPECS = { tetra: tetraSpec, cube: cubeSpec, octa: octaSpec, dodeca: dodecaNSpec, icosa: icosaNSpec, skewb: skewbNSpec };
+  const TOPOS = ['tetra', 'tetraet', 'cube', 'cubeet', 'octa', 'octact', 'octaet', 'dodeca', 'dodecadc', 'dodecact', 'dodecaet', 'icosa', 'icosadc', 'icosact', 'icosaet', 'cubect', 'square'];
+  META.icosamate = { key: 'icosamate', spec: function () { return icosaNSpec(2); }, extras: null, scramble: 40, solver: 'history', view: META.icosa.view, colours: META.icosa.colours };
+  META.chopasaurus = { key: 'chopasaurus', spec: function () { return dodecactSpec(2); }, extras: null, scramble: 40, solver: 'history', view: META.dodeca.view, colours: META.dodeca.colours };
+  const MINN = { dodecact: 2, dodecaet: 2, icosadc: 2, icosact: 2, icosaet: 2, dodecadc: 2, tetra: 2, tetraet: 2, octact: 2, octaet: 2, cube: 2, cubeet: 2, octa: 2, dodeca: 2, icosa: 2, cubect: 2, square: -1 };
+  const MAXN = { dodecact: Infinity, dodecaet: Infinity, icosadc: Infinity, icosact: Infinity, icosaet: Infinity, dodecadc: Infinity, tetra: Infinity, tetraet: Infinity, octact: Infinity, octaet: Infinity, cube: Infinity, cubeet: Infinity, octa: Infinity, dodeca: Infinity, icosa: Infinity, cubect: Infinity, square: Infinity };      // no upper limit on the size
+  const BUILTIN = { cube: { 2: 'cube2', 3: 'cube', 4: 'cube4', 5: 'cube5', 6: 'cube6', 7: 'cube7' }, tetra: { 3: 'tetra' }, tetraet: { 2: 'pyramorphix' }, octact: {}, octaet: {}, dodecadc: { 2: 'pentult' }, dodecact: { 2: 'chopasaurus' }, dodecaet: { 2: 'bigchop' }, icosadc: { 2: 'icosamate' }, icosact: {}, icosaet: {}, octa: { 3: 'octa' }, icosa: { 2: 'icosa' }, cubect: { 2: 'skewb' }, dodeca: { 3: 'dodeca' }, square: { 1: 'sq1' }, cubeet: { 2: 'chop', 3: 'heli' } };
+  const BASE = { tetra: 'tetra', tetraet: 'tetra', octact: 'octa', octaet: 'octa', dodecadc: 'dodeca', dodecact: 'dodeca', dodecaet: 'dodeca', icosadc: 'icosa', icosact: 'icosa', icosaet: 'icosa', cube: 'cube', octa: 'octa', dodeca: 'dodeca', icosa: 'icosa', cubect: 'skewb' };
+  const SPECS = { tetra: tetraSpec, tetraet: tetraETSpec, dodecadc: dodecaDeepSpec, cube: cubeSpec, octa: octaSpec, dodeca: dodecaNSpec, icosa: icosaFTSpec, icosadc: icosaNSpec, dodecact: dodecactSpec, cubect: cubectSpec };
   // key of the puzzle for a topology and a size: a built-in key when the combination exists (with its own solver), else a generated 'x:topo:n'
   // Square-n: n = -1 (2 pieces), 0 (4), 0.5 (6) or an integer of 1 or more (4 (n + 1) pieces); every other value is refused
   function squareOk(n) { return n === -1 || n === 0 || n === 0.5 || (Number.isInteger(n) && n >= 1); }
@@ -622,14 +765,14 @@
     n = topo === 'square' ? +n : Math.floor(+n);
     if (TOPOS.indexOf(topo) < 0 || !isFinite(n)) return null;
     if (topo === 'square') { if (!squareOk(n)) return null; }
-    else if (!(n >= MINN[topo] || n === 1) || n > MAXN[topo]) return null;          // n = 1 (below the minimum) is an easter egg: an unscrambled puzzle that is solved at once
+    else if (!(n >= MINN[topo] || n === 1 || false) || n > MAXN[topo]) return null;          // n = 1 (below the minimum) is an easter egg: an unscrambled puzzle that is solved at once
     if (BUILTIN[topo][n]) return BUILTIN[topo][n];
     const key = 'x:' + topo + ':' + n;
-    if (topo === 'square') return key;                  // Square-n has its own page (sq1.html) and engine (sq1-core.js)
+    if (topo === 'square' || topo === 'cubeet' || topo === 'tetraet' || topo === 'octaet' || topo === 'dodecaet' || topo === 'icosaet' || topo === 'octact' || topo === 'icosact') return key;        // Square-n (sq1.html) and the edge-turning cube (heli.html) have their own pages and engines
     if (!META[key]) {
       const bm = META[BASE[topo]];
       META[key] = { key: key, spec: function () { return SPECS[topo](n); }, extras: null, scramble: topo === 'cube' ? Math.min(250, 20 + 10 * (n - 3)) : Math.max(25, Math.min(300, Math.round(n * (topo === 'tetra' ? 12 : topo === 'octa' ? 10 : 24)))),
-        solver: 'history', view: bm.view, colours: bm.colours, topo: topo, size: n, trivial: n === 1 };
+        solver: 'history', view: bm.view, colours: bm.colours, topo: topo, size: n, trivial: n < MINN[topo] };
     }
     return key;
   }
@@ -637,7 +780,7 @@
   // display name of a custom puzzle (KO / EN)
   function nameOf(key, ko) {
     const p = parseKey(key); if (!p) return null;
-    const T = ko ? { tetra: '정사면체', cube: '큐브', octa: '정팔면체', dodeca: '정십이면체', icosa: '정이십면체', skewb: '스큐브', square: '스퀘어' } : { tetra: 'Tetrahedron', cube: 'Cube', octa: 'Octahedron', dodeca: 'Dodecahedron', icosa: 'Icosahedron', skewb: 'Skewb', square: 'Square' };
+    const T = ko ? { dodecact: '정십이면체CT', dodecaet: '정십이면체ET', icosadc: '정이십면체FT-Deepcut', icosact: '정이십면체CT', icosaet: '정이십면체ET', dodecadc: '정십이면체FT-Deepcut', octact: '정팔면체CT', octaet: '정팔면체ET', tetraet: '정사면체ET', tetra: '정사면체FT/CT', cube: '큐브', octa: '정팔면체FT', dodeca: '정십이면체FT', icosa: '정이십면체FT', cubect: '정육면체CT', square: '스퀘어', cubeet: '정육면체ET' } : { dodecact: 'Dodecahedron CT', dodecaet: 'Dodecahedron ET', icosadc: 'Icosahedron FT-Deepcut', icosact: 'Icosahedron CT', icosaet: 'Icosahedron ET', dodecadc: 'Dodecahedron FT-Deepcut', octact: 'Octahedron CT', octaet: 'Octahedron ET', tetraet: 'Tetrahedron ET', tetra: 'Tetrahedron FT/CT', cube: 'Cube', octa: 'Octahedron FT', dodeca: 'Dodecahedron FT', icosa: 'Icosahedron FT', cubect: 'Cube CT', square: 'Square', cubeet: 'Cube ET' };
     if (p.topo === 'square') return T.square + '-' + (p.n < 0 ? '(' + p.n + ')' : p.n);
     return p.topo === 'cube' ? (ko ? '큐브' : 'Cube') + p.n : T[p.topo] + ' (n=' + p.n + ')';
   }
@@ -657,5 +800,5 @@
     if (m.extras) m.extras(P);
     cache[key] = P; return P;
   }
-  root.RBPuzzles = { get: getPuzzle, META: META, customKey: customKey, parseKey: parseKey, nameOf: nameOf, describe: describe, TOPOS: TOPOS, MINN: MINN, MAXN: MAXN, KEYS: ['cube2', 'cube', 'cube4', 'cube5', 'cube6', 'cube7', 'skewb', 'heli', 'tetra', 'octa', 'dodeca', 'icosa'], icosaSpec: icosaSpec, build: E.build };
+  root.RBPuzzles = { get: getPuzzle, META: META, customKey: customKey, parseKey: parseKey, nameOf: nameOf, describe: describe, TOPOS: TOPOS, MINN: MINN, MAXN: MAXN, KEYS: ['cube2', 'cube', 'cube4', 'cube5', 'cube6', 'cube7', 'skewb', 'chop', 'heli', 'bigchop', 'tetra', 'pyramorphix', 'octa', 'dodeca', 'chopasaurus', 'pentult', 'icosa', 'icosamate'], icosaSpec: icosaSpec, build: E.build, _dodecaDs: dodecaDsSpec, _tetraDs: tetraDsSpec };
 })(typeof window !== 'undefined' ? window : globalThis);

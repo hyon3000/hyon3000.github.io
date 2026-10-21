@@ -2,19 +2,23 @@
 // scramble with half turns, auto solve (replays the history backwards) and hint.
 (function () {
   'use strict';
-  const KO = /^ko/i.test(navigator.language || 'ko'), HC = window.HELI, DEG = Math.PI / 180, DC = 6.5, NP = 12;
+  const KO = /^ko/i.test(navigator.language || 'ko'), HC = window.HELI, DEG = Math.PI / 180, DC = 6.5;
+  const QN = new URLSearchParams(location.search).get('n'), NN = QN !== null && isFinite(+QN) ? Math.max(1, Math.floor(+QN)) : 3;     // size n of the edge-turning cube (2 = Little Chop, 3 = Helicopter Cube)
+  const SH = (function () { const q = new URLSearchParams(location.search).get('s'); return q === 'tetra' || q === 'octa' || q === 'dodeca' || q === 'dodecaet' || q === 'icosaet' || q === 'octact' || q === 'icosact' ? q : 'cube'; })();           // the solid: the cube (ET: edge turning) or the tetrahedron (ET)
+  const NP = NN >= 2 ? HC.config(NN, SH).planes.length : 0;
+  const JANG = SH === 'tetra' ? '90' : SH === 'dodeca' ? '72' : (SH === 'dodecaet' || SH === 'icosaet') ? '' : (SH === 'octact' || SH === 'icosact') ? '180' : '70.53';
   const cv = document.getElementById('app'), ctx = cv.getContext('2d');
-  const TX = KO ? { name: '헬리콥터큐브', moves: '이동', time: '시간', best: '최고', solved: '완성!', newRec: '신기록!', again: '새 게임 (F2)', locked: '조각이 걸려 있어 이 면은 돌릴 수 없습니다', none: '이 조각은 돌릴 수 있는 면이 없습니다', next: '다음 수', hintTxt: '빈 곳을 끌면 시점 회전 · 삼각기둥(모서리 쪽 조각)을 끌어 돌리기 · 기본은 180도, 70.53도로 돌리면 모양이 변형됨', scr: '섞는 중...', free: '돌릴 수 있는 면' }
-    : { name: 'Helicopter Cube', moves: 'Moves', time: 'Time', best: 'Best', solved: 'SOLVED!', newRec: 'New best!', again: 'New game (F2)', locked: 'A piece is in the way - this prism is locked', none: 'This piece has no free prism to turn', next: 'Next move', hintTxt: 'Drag empty space to rotate the view · drag a prism (an edge piece) to turn it · 180 degrees normally, a 70.53 degree turn deforms the cube', scr: 'Scrambling...', free: 'Free prisms' };
-  const COL = ['#f2f2f2', '#d91e18', '#0fa34a', '#ffd400', '#ff7f0e', '#1f4fd8'], INNER = '#5a6478';     // tag 0..5 = U R F D L B
+  const TX = KO ? { name: SH === 'octact' ? '정팔면체CT (n=' + NN + ')' : SH === 'icosact' ? '정이십면체CT (n=' + NN + ')' : SH === 'dodecaet' ? (NN === 2 ? '빅촙' : '정십이면체ET (n=' + NN + ')') : SH === 'icosaet' ? '정이십면체ET (n=' + NN + ')' : SH === 'dodeca' ? '정십이면체FT-Deepcut (n=' + NN + ')' : SH === 'octa' ? '정팔면체ET (n=' + NN + ')' : SH === 'tetra' ? (NN === 2 ? '피라몰픽스' : '정사면체ET (n=' + NN + ')') : NN === 2 ? '리틀촙' : NN === 3 ? '헬리콥터큐브' : '정육면체ET (n=' + NN + ')', moves: '이동', time: '시간', best: '최고', solved: '완성!', newRec: '신기록!', again: '새 게임 (F2)', locked: '조각이 걸려 있어 이 면은 돌릴 수 없습니다', none: '이 조각은 돌릴 수 있는 면이 없습니다', next: '다음 수', hintTxt: '빈 곳을 끌면 시점 회전 · 조각을 끌어 층 돌리기 · ' + (SH === 'dodeca' ? '72도씩 돌리며 걸린 면은 잠김' : '기본은 180도, ' + (JANG ? JANG + '도로' : '선이 맞는 각도로') + ' 돌리면 모양이 변형됨'), scr: '섞는 중...', free: '돌릴 수 있는 면' }
+    : { name: SH === 'octact' ? 'Octahedron CT (n=' + NN + ')' : SH === 'icosact' ? 'Icosahedron CT (n=' + NN + ')' : SH === 'dodecaet' ? (NN === 2 ? 'Big Chop' : 'Dodecahedron ET (n=' + NN + ')') : SH === 'icosaet' ? 'Icosahedron ET (n=' + NN + ')' : SH === 'dodeca' ? 'Dodecahedron FT-Deepcut (n=' + NN + ')' : SH === 'octa' ? 'Octahedron ET (n=' + NN + ')' : SH === 'tetra' ? (NN === 2 ? 'Pyramorphix' : 'Tetrahedron ET (n=' + NN + ')') : NN === 2 ? 'Little Chop' : NN === 3 ? 'Helicopter Cube' : 'Cube ET (n=' + NN + ')', moves: 'Moves', time: 'Time', best: 'Best', solved: 'SOLVED!', newRec: 'New best!', again: 'New game (F2)', locked: 'A piece is in the way - this prism is locked', none: 'This piece has no free prism to turn', next: 'Next move', hintTxt: 'Drag empty space to rotate the view · drag a piece to turn its layer · ' + (SH === 'dodeca' ? 'turns of 72 degrees; layers can lock' : '180 degrees normally, ' + (JANG ? 'a ' + JANG + ' degree turn' : 'a turn that lines the cuts up') + ' deforms the shape'), scr: 'Scrambling...', free: 'Free prisms' };
+  const COL = HC.config(Math.max(2, NN), SH).colours, INNER = '#5a6478';     // tag = face of the solid
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
   function fmtTime(s) { const m = Math.floor(s / 60), r = s - m * 60; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1); }
   function rnd() { return Math.random(); }
   function ease(t) { return t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t); }
-  const G = { S: HC.create(), moves: 0, time: 0, started: false, mode: 'play', vis: null, queue: [], auto: false, hint: null, msg: '', msgT: 0, animScr: lsGet('rubik_anim') !== '0', best: null, newRec: false, cheated: false };
+  const G = { S: HC.create(NN, SH), moves: 0, time: 0, started: false, mode: 'play', vis: null, queue: [], auto: false, hint: null, msg: '', msgT: 0, animScr: lsGet('rubik_anim') !== '0', best: null, newRec: false, cheated: false };
   const V = { yaw: 0.6, pitch: 0.5, drag: null, cw: 0, ch: 0, dpr: 1, piece: null };
-  const BEST_KEY = 'heli_best';
+  const BEST_KEY = (SH === 'tetra' ? 'tetraet_best_' : SH === 'octa' ? 'octaet_best_' : SH === 'dodeca' ? 'dodecadc_best_' : SH === 'dodecaet' ? 'dodecaet_best_' : SH === 'icosaet' ? 'icosaet_best_' : SH === 'octact' ? 'octact_best_' : SH === 'icosact' ? 'icosact_best_' : 'heli_best_') + NN;
   try { G.best = JSON.parse(lsGet(BEST_KEY) || 'null'); } catch (e) { G.best = null; }
   function say(t, s) { G.msg = t; G.msgT = (s || 2.4); }
   function setAuto(on) { G.auto = !!on; try { window.parent.postMessage({ rb: 'autoState', on: G.auto }, '*'); } catch (e) {} }
@@ -68,10 +72,11 @@
   }
   function newGame(opt) {
     opt = opt || {};
-    G.S = HC.create(); G.moves = 0; G.time = 0; G.started = false; G.vis = null; V.piece = null; G.queue = []; G.hint = null; G.cheated = false; G.newRec = false; setAuto(false);
-    const cnt = 22 + Math.floor(rnd() * 6);
+    G.S = HC.create(NN, SH); G.moves = 0; G.time = 0; G.started = false; G.vis = null; V.piece = null; G.queue = []; G.hint = null; G.cheated = false; G.newRec = false; setAuto(false);
+    if (NN < 2) { G.mode = 'solved'; return; }                    // n = 1: nothing is cut, the cube is solved at once
+    const cnt = Math.min(90, 22 + 7 * (NN - 3 < 0 ? 0 : NN - 3) + Math.floor(rnd() * 6));
     if (G.animScr && !opt.instant) {
-      const tmp = HC.create(), mvs = HC.scramble(tmp, cnt, rnd);
+      const tmp = HC.create(NN, SH), mvs = HC.scramble(tmp, cnt, rnd);
       if (HC.isSolved(tmp)) return newGame(opt);
       G.mode = 'scramble'; mvs.forEach((m) => enqueue(m, 'scr', 0.14));
     } else { HC.scramble(G.S, cnt, rnd); if (HC.isSolved(G.S)) return newGame(opt); G.mode = 'play'; }
@@ -130,7 +135,7 @@
   let btns = [], lastOut = [], freeSet = [];
   function pieceFaces(i) {                         // world polygons of piece i including the visual turn
     const pc = G.S.pieces[i], v = G.vis;
-    if (v && v.set.indexOf(i) >= 0 && v.x) { const M = HC.rotMat(HC.NORMALS[v.p], v.x); return pc.W.map((f) => f.map((p) => HC.app(M, p))); }
+    if (v && v.set.indexOf(i) >= 0 && v.x) { const M = HC.rotMat(G.S.cfg.planes[v.p].axis, v.x); return pc.W.map((f) => f.map((p) => HC.app(M, p))); }
     return pc.W;
   }
   function draw() {
@@ -210,7 +215,7 @@
   }
   function targetOf(p, x) {                                      // the resting position (angle from home) nearest to where the drag has taken the prism
     const cur = G.S.ang[p], want = cur + x; let best = 0, bd = 1e9;
-    HC.STOPS.forEach((st) => { for (let k = -1; k <= 1; k++) { const t = st + k * 2 * Math.PI, d = Math.abs(t - want); if (d < bd) { bd = d; best = t; } } });
+    G.S.cfg.planes[p].stops.forEach((st) => { for (let k = -1; k <= 1; k++) { const t = st + k * 2 * Math.PI, d = Math.abs(t - want); if (d < bd) { bd = d; best = t; } } });
     return best;
   }
   function allowedAngle(p, x) { const d = targetOf(p, x) - G.S.ang[p]; return Math.abs(d) < 1e-7 ? 0 : d; }   // the turn to make (0 = cancel)
@@ -218,9 +223,9 @@
     const m = [];
     const S = G.S; let bestP = -1, bs = 0.35, bt = null;
     for (let p = 0; p < NP; p++) {
-      if (S.pieces[pk.piece].lim[p][0] < HC.H - 1e-6) continue;
+      if (!HC.inCap(S, pk.piece, p)) continue;
       m.push(p);
-      const ax = HC.NORMALS[p], r = pk.point, T = [ax[1] * r[2] - ax[2] * r[1], ax[2] * r[0] - ax[0] * r[2], ax[0] * r[1] - ax[1] * r[0]], tl = Math.hypot(T[0], T[1], T[2]);
+      const ax = S.cfg.planes[p].axis, r = pk.point, T = [ax[1] * r[2] - ax[2] * r[1], ax[2] * r[0] - ax[0] * r[2], ax[0] * r[1] - ax[1] * r[0]], tl = Math.hypot(T[0], T[1], T[2]);
       if (tl < 0.25) continue;
       const e = 0.02, a = sp2(r), b = sp2([r[0] + T[0] * e, r[1] + T[1] * e, r[2] + T[2] * e]), tx = (b[0] - a[0]) / e, ty = (b[1] - a[1]) / e, ml = Math.hypot(tx, ty) || 1;
       const cs = Math.abs(dx * tx + dy * ty) / (Math.hypot(dx, dy) * ml) * Math.min(1, ml / 60);
