@@ -2660,6 +2660,12 @@ function levelTime(L, n) {
 // unless the column is too cramped; boss-arena flowers stay loose (the fight needs them at once)
 function boxify(L) {
   if (PF.noBox) return;
+  if (L.egg && L.kind !== 'house' && L.tiles) {   // the rare mount egg comes out of a mount block (T.QM) four tiles above its spot instead of lying on the floor
+    var erows = L.rows || ROWS, ec = Math.floor((L.egg.x + 6) / TS), egr = -1, er;
+    for (er = Math.floor((L.egg.y + 6) / TS); er < erows && egr < 0; er++) if (PF.SOL[L.tiles[ec * erows + er]]) egr = er;
+    var eok = egr >= 5; for (er = egr - 5; eok && er < egr; er++) if (L.tiles[ec * erows + er] !== T.AIR) eok = false;
+    if (eok) { L.tiles[ec * erows + egr - 4] = T.QM; L.egg = null; }
+  }
   if (!L.items || !L.items.length || L.kind === 'cannon' || L.kind === 'house') return;
   var rows = L.rows || ROWS, keep = [], fb = L.fixedBox || {};
   for (var i = 0; i < L.items.length; i++) {
