@@ -60,6 +60,8 @@ struct G {
     int nowhb, nexthb, holdhb;
     int bp[4], bpt[4];
     int score, lines, level, asc, monoonly, spinlock, hideblock, hidenext, score2x, speedup, speeddown, holdlock, bombnext, simplify2, pentaForce, reinforce, rfUpgrade;
+    bool pentaEnf = false;   // the giant item was eaten while enforced: 6+ cell blocks at 5x the natural rate
+    double speedupMul = 0.4, speeddownMul = 2.5;   // fall-interval factors fixed when the item was eaten
     bool compactPending, over, items, ovf = false;      // ovf: lines were added and the stack now reaches above the ceiling = game over
     double blindUntil, nowT;
     Rng rng;
@@ -120,7 +122,14 @@ struct G {
         }
         if (monoonly) { b1 = b2 = b3 = b4 = 100; monoonly -= 1; }
         if (simplify2 > 0) { simplify2 -= 1; return ri(4); }
-        if (pentaForce > 0) { pentaForce -= 1; return DIM == 4 ? 11 + ri(26) : 12 + ri(29); }
+        if (pentaForce > 0) {
+            pentaForce -= 1;
+            if (!(pentaEnf && ri(100) < 5 * (100 - b5))) return DIM == 4 ? 11 + ri(26) : 12 + ri(29);
+            int t;      // enforced giant: 6+ cells at 5x the natural rate of this level
+            if (DIM == 4) { int r = ri(3); if (r == 0) { createNewBlock(); t = 56; } else t = 37 + ri(5); }
+            else { if (ri(2)) { createNewBlock(); t = 56; } else t = 41 + ri(15); }
+            return t;
+        }
         int t = ri(100);
         if (t < b1) t = 0;
         else if (t < b2) t = 1;
@@ -437,14 +446,14 @@ struct G {
             else if (code == 124) { tline -= enf ? 6 : 3; blk[id] = 256; }
             else if (code == 125) { tline += enf ? 2 : 1; blk[id] = 256; }
             else if (code == 91) { spinlock += enf ? 20 : 10; blk[id] = 256; }
-            else if (code == 8) { speedup += enf ? 20 : 10; blk[id] = 256; }
-            else if (code == 9) { speeddown += enf ? 20 : 10; blk[id] = 256; }
+            else if (code == 8) { speedup += enf ? 20 : 10; speedupMul = enf ? 0.2 : 0.4; blk[id] = 256; }
+            else if (code == 9) { speeddown += enf ? 20 : 10; speeddownMul = enf ? 5.0 : 2.5; blk[id] = 256; }
             else if (code == 10) { holdlock += enf ? 30 : 15; blk[id] = 256; }
             else if (code == 16) { blindUntil = nowT + (enf ? 20000 : 10000); blk[id] = 256; }
             else if (code == 17) { bombnext += enf ? 12 : 6; blk[id] = 256; }
             else if (code == 20) { compactPending = true; blk[id] = 256; }
             else if (code == 21) { monoonly = 0; pentaForce = 0; simplify2 += enf ? 18 : 9; blk[id] = 256; }
-            else if (code == 22) { monoonly = 0; simplify2 = 0; pentaForce += enf ? 18 : 9; blk[id] = 256; }
+            else if (code == 22) { monoonly = 0; simplify2 = 0; pentaForce += enf ? 18 : 9; pentaEnf = enf; blk[id] = 256; }
             else if (code == 2) { hideblock += enf ? 20 : 10; blk[id] = 256; }
             else if (code == 6) { hidenext += enf ? 40 : 20; blk[id] = 256; }
             else if (code == 5) {
@@ -469,7 +478,7 @@ struct G {
                     }
                 }
                 blk[id] = 256;
-            } else if (code == 204) { reinforce = 20; blk[id] = 256; }
+            } else if (code == 204) { reinforce = reinforce > 0 ? 1000000000 : 20; blk[id] = 256; }
             else if (code == 4) { if (!battle) score2x += enf ? 2 : 1; blk[id] = 256; }
             else if (code == 11) {
                 blk[id] = 256; int count2 = 0;
@@ -799,7 +808,7 @@ struct G {
     }
 
     void initGame() {
-        nowhb = nexthb = holdhb = 0; score = lines = 0; level = 1; asc = 0; monoonly = spinlock = hideblock = hidenext = score2x = speedup = speeddown = holdlock = 0;
+        nowhb = nexthb = holdhb = 0; score = lines = 0; level = 1; asc = 0; monoonly = spinlock = hideblock = hidenext = score2x = speedup = speeddown = holdlock = 0; speedupMul = 0.4; speeddownMul = 2.5; pentaEnf = false;
         bombnext = simplify2 = pentaForce = reinforce = rfUpgrade = 0; compactPending = false; over = false; ovf = false; blindUntil = 0;
         memset(blk, 0, sizeof(blk)); qn = 0; nbq = 0; tie[0] = tie[1] = tie[2] = tie[3] = 0;
         now = 0; nxt = 1; hld = 2;
@@ -833,8 +842,8 @@ struct G {
     }
     double fallInterval() const {
         double fi = 6000.0 / (std::min(level, 12) / 3.0 + 5.0);
-        if (speedup > 0) fi *= reinforce > 0 ? 0.2 : 0.4;
-        if (speeddown > 0) fi *= reinforce > 0 ? 5.0 : 2.5;
+        if (speedup > 0) fi *= speedupMul;
+        if (speeddown > 0) fi *= speeddownMul;
         return fi;
     }
 };

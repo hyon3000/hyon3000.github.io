@@ -99,6 +99,8 @@ struct Env {
   int nowhb, nexthb, holdhb;
   int row, col;
   int monoonly, spinlock, hideblock, hidenext, score2x, speedup, speeddown, holdlock, bombnext, simplify2, pentaForce, reinforce;
+  bool pentaEnf = false;   // the giant item was eaten while enforced: 6+ cell blocks at 5x the natural rate
+  double speedupMul = 0.4, speeddownMul = 2.5;   // fall-interval factors fixed when the item was eaten
   bool compactPending;
   int asc, lines, level, pieces, assignMono, rfUpgrade;
   long long score, serial;
@@ -183,7 +185,13 @@ struct Env {
     else { b1 = 1; b2 = 3; b3 = 15; b4 = 82; b5 = 98; }
     if (monoonly) { b1 = 100; b2 = 100; b3 = 100; b4 = 100; monoonly -= 1; }
     if (simplify2 > 0) { simplify2 -= 1; return randInt(4); }
-    if (pentaForce > 0) { pentaForce -= 1; return 11 + randInt(18); }
+    if (pentaForce > 0) {
+      pentaForce -= 1;
+      if (!(pentaEnf && randInt(100) < 5 * (100 - b5))) return 11 + randInt(18);
+      if (randInt(3) == 0) return -1;
+      int th = 29 + randInt(std::max(1, (int)RAW.size() - 29));
+      return th >= (int)RAW.size() ? -1 : th;      // enforced giant: 6+ cells at 5x the natural rate of this level
+    }
     int t = randInt(100);
     int nraw = (int)RAW.size();
     if (t < b1) t = 0;
@@ -391,7 +399,7 @@ struct Env {
     nowT = f; ts = 0; blindUntil = 0; passiveLines = 0;
     nowhb = nexthb = holdhb = 0;
     level = 1; lines = 0; pieces = 0; score = 0; asc = 0; serial = 0;
-    monoonly = spinlock = hideblock = hidenext = score2x = speedup = speeddown = holdlock = bombnext = simplify2 = pentaForce = reinforce = 0;
+    monoonly = spinlock = hideblock = hidenext = score2x = speedup = speeddown = holdlock = bombnext = simplify2 = pentaForce = reinforce = 0; speedupMul = 0.4; speeddownMul = 2.5; pentaEnf = false;
     compactPending = false; assignMono = 0; rfUpgrade = 0;
     memset(cTrig, 0, sizeof cTrig); memset(cPlaced, 0, sizeof cPlaced); cBoom = cGarb = cHold = 0;
     int hv = 4;
@@ -637,14 +645,14 @@ struct Env {
     else if (code == 124) { tline -= (enf ? 6 : 3); board[r][c] = 256; }
     else if (code == 125) { tline += (enf ? 2 : 1); board[r][c] = 256; }
     else if (code == 91) { spinlock += (enf ? 20 : 10); board[r][c] = 256; }
-    else if (code == 8) { speedup += (enf ? 20 : 10); board[r][c] = 256; }
-    else if (code == 9) { speeddown += (enf ? 20 : 10); board[r][c] = 256; }
+    else if (code == 8) { speedup += (enf ? 20 : 10); speedupMul = enf ? 0.2 : 0.4; board[r][c] = 256; }
+    else if (code == 9) { speeddown += (enf ? 20 : 10); speeddownMul = enf ? 5.0 : 2.5; board[r][c] = 256; }
     else if (code == 10) { holdlock += (enf ? 30 : 15); board[r][c] = 256; }
     else if (code == 16) { blindUntil = nowT + (enf ? 20000 : 10000); board[r][c] = 256; }
     else if (code == 17) { bombnext += (enf ? 12 : 6); board[r][c] = 256; }
     else if (code == 20) { compactPending = true; board[r][c] = 256; }
     else if (code == 21) { monoonly = 0; pentaForce = 0; simplify2 += (enf ? 18 : 9); board[r][c] = 256; }
-    else if (code == 22) { monoonly = 0; simplify2 = 0; pentaForce += (enf ? 18 : 9); board[r][c] = 256; }
+    else if (code == 22) { monoonly = 0; simplify2 = 0; pentaForce += (enf ? 18 : 9); pentaEnf = enf; board[r][c] = 256; }
     else if (code == 2) { hideblock += (enf ? 20 : 10); board[r][c] = 256; }
     else if (code == 6) { hidenext += (enf ? 40 : 20); board[r][c] = 256; }
     else if (code == 5) {
@@ -662,7 +670,7 @@ struct Env {
           if (board[r2][c2] != 0 && board[r2][c2] != 256) board[r2][c2] = 33 + (board[r2][c2] % 31);
       }
       board[r][c] = 256;
-    } else if (code == 204) { reinforce = 20; board[r][c] = 256; }
+    } else if (code == 204) { reinforce = reinforce > 0 ? 1000000000 : 20; board[r][c] = 256; }
     else if (code == 4) { if (!battle) score2x += (enf ? 2 : 1); board[r][c] = 256; }
     else if (code == 11) {
       board[r][c] = 256;
@@ -857,8 +865,8 @@ struct Env {
   static int gravityBase(int level) { static const int g[8] = {800, 717, 633, 550, 467, 383, 300, 217}; return g[std::min(level - 1, 7)]; }
   long long nextFall() const {
     double interval = gravityBase(level), mult = 1;
-    if (speedup > 0 && mult == 1) mult = reinforce > 0 ? 0.2 : 0.4;
-    if (speeddown > 0 && mult == 1) mult = reinforce > 0 ? 5.0 : 2.5;
+    if (speedup > 0) mult *= speedupMul;
+    if (speeddown > 0) mult *= speeddownMul;
     long long tf = (long long)std::floor((double)ts + interval * mult) + 1;
     return std::max(tf, f);
   }

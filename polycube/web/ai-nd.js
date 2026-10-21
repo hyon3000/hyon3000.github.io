@@ -52,7 +52,7 @@
   }
 
   var SCALARS = ['nowhb', 'nexthb', 'holdhb', 'score', 'lines', 'level', 'asc', 'gt', 'ht', 'monoonly', 'spinlock', 'hideblock', 'hidenext', 'score2x',
-    'speedup', 'speeddown', 'holdlock', 'blindboard', 'bombnext', 'compactPending', 'simplify2', 'pentaForce', 'reinforce', '_rfUpgrade', 'timestamp', 'vkspace2'];
+    'speedup', 'speeddown', 'speedupMul', 'speeddownMul', 'holdlock', 'blindboard', 'bombnext', 'compactPending', 'simplify2', 'pentaForce', 'pentaEnf', 'reinforce', '_rfUpgrade', 'timestamp', 'vkspace2'];
   function slotIdx(arr) { return arr === S.b[0] ? 0 : (arr === S.b[1] ? 1 : 2); }
   var SLOTS = [0, 1, 3];
   function snap() {
@@ -247,8 +247,8 @@
   }
   function fallInterval() {
     var fi = 6000 / (Math.min(S.level, 12) / 3 + 5);
-    if (S.speedup > 0) fi *= S.reinforce > 0 ? 0.2 : 0.4;
-    if (S.speeddown > 0) fi *= S.reinforce > 0 ? 5.0 : 2.5;
+    if (S.speedup > 0) fi *= S.speedupMul;
+    if (S.speeddown > 0) fi *= S.speeddownMul;
     return fi;
   }
 

@@ -78,7 +78,7 @@ ul.menu { min-width: 200px; width: max-content; }
             <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="other">　다른 게임</a>
             <ul class="menu">
               <li onclick="return runMenu(function(){ window.location.href='../index.html'; });"><a href="#" data-t="mine">　지뢰찾기</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　폴리큐브</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　폴리큐브(테트리스)</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });"><a href="#">　아타리 브레이크아웃</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../2048/index.html'; });"><a href="#">　2048</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../pinball/index.html'; });"><a href="#">　3D 핀볼</a></li>
@@ -119,8 +119,8 @@ ul.menu { min-width: 200px; width: max-content; }
 <script>
 (function () {
   var KO = /^ko/i.test(navigator.language || 'ko');
-  var T = KO ? { game: '게임', new: '　새 게임(N)', online: '　상대 선택...', undo: '　무르기(U)', cheat: '　치트...', auto: '　자동으로 풀기', hint: '　힌트 제공', theme: '　테마...', full: '　전체화면', exit: '　끝내기(X)', help: '도움말', how: '　게임 방법(H)', other: '　다른 게임', mine: '　지뢰찾기', sudoku: '　스도쿠', poly: '　폴리큐브', howT: '게임 방법', ok: '확인' }
-  : { game: 'Game', online: '　Choose Opponent...', new: '　New Game(N)', undo: '　Undo(U)', cheat: '　Cheat...', auto: '　Solve Automatically', hint: '　Give a Hint', theme: '　Theme...', full: '　Fullscreen', exit: '　Exit(X)', help: 'Help', how: '　How to Play(H)', other: '　Other Games', mine: '　Minesweeper', sudoku: '　Sudoku', poly: '　Polycube', howT: 'How to play', ok: 'OK' };
+  var T = KO ? { game: '게임', new: '　새 게임(N)', online: '　상대 선택...', undo: '　무르기(U)', cheat: '　치트...', auto: '　자동으로 풀기', hint: '　힌트 제공', theme: '　테마...', full: '　전체화면', exit: '　끝내기(X)', help: '도움말', how: '　게임 방법(H)', other: '　다른 게임', mine: '　지뢰찾기', sudoku: '　스도쿠', poly: '　폴리큐브(테트리스)', howT: '게임 방법', ok: '확인' }
+  : { game: 'Game', online: '　Choose Opponent...', new: '　New Game(N)', undo: '　Undo(U)', cheat: '　Cheat...', auto: '　Solve Automatically', hint: '　Give a Hint', theme: '　Theme...', full: '　Fullscreen', exit: '　Exit(X)', help: 'Help', how: '　How to Play(H)', other: '　Other Games', mine: '　Minesweeper', sudoku: '　Sudoku', poly: '　Polycube (Tetris)', howT: 'How to play', ok: 'OK' };
   var HELP = KO ? {
     gostop: '<b>고스톱 (2인 맞고)</b>: 화투 48장, 각자 10장 · 바닥 8장 · 더미 20장. 시작하면 대전 상대 창이 뜹니다(같은 와이파이에서 코드를 주고받아 연결, 같은 브라우저의 두 창은 자동 연결, 또는 「컴퓨터와 플레이」). 상대 변경: 게임 &gt; 상대 선택(F5). 온라인에서는 패가 화면에서만 가려지므로 정직한 플레이를 전제로 합니다.<br>' +
       '<b>진행</b>: 내 패 한 장을 내면 같은 달 바닥 패와 짝이 맞아 가져옵니다(2장이면 하나 선택, 3장이면 4장 모두). 짝이 없으면 바닥에 놓입니다. 이어서 더미 맨 위 패를 뒤집어 같은 방식으로 처리합니다. 패는 두 번 누르거나 끌어서 냅니다.<br>' +
@@ -217,7 +217,7 @@ document.documentElement.lang = KO ? 'ko' : 'en';
 /* "Other games" entries that are not translated by the page itself: English names for non-Korean browsers */
 (function () {
   if (/^ko/i.test(navigator.language || 'ko')) return;
-  var EN = { '큐브 퍼즐': 'Cube Puzzles', '스네이크': 'Snake', '도형 월드': 'Shape World', '스왑 퍼즐': 'Swap Puzzle', '카드게임': 'Card Games', '바둑&오목': 'Go & Gomoku', '체스': 'Chess', '화투': 'Hwatu', '트럼프': 'Trump Cards', '마작': 'Mahjong', '노노그램': 'Nonogram', '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '두들': 'Doodle', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '미로 먹보': 'Maze Chomper', '스왑 퍼즐': 'Swap Puzzle', '지뢰찾기': 'Minesweeper', '폴리큐브': 'Polycube' };
+  var EN = { '큐브 퍼즐': 'Cube Puzzles', '스네이크': 'Snake', '도형 월드': 'Shape World', '스왑 퍼즐': 'Swap Puzzle', '카드게임': 'Card Games', '바둑&오목': 'Go & Gomoku', '체스': 'Chess', '화투': 'Hwatu', '트럼프': 'Trump Cards', '마작': 'Mahjong', '노노그램': 'Nonogram', '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '두들': 'Doodle', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '미로 먹보': 'Maze Chomper', '스왑 퍼즐': 'Swap Puzzle', '지뢰찾기': 'Minesweeper', '폴리큐브(테트리스)': 'Polycube (Tetris)' };
   function run() { [].forEach.call(document.querySelectorAll('.menu a'), function (a) { if (a.children.length) return; var s = a.textContent.replace(/^[\u3000\s]+/, ''); if (EN[s]) a.textContent = '\u3000' + EN[s]; }); }
   if (document.readyState === 'complete') run(); else window.addEventListener('load', run);
 })();

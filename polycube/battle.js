@@ -66,7 +66,7 @@
   B.clear = function () { B.slots = []; };
   // items whose direction is beyond doubt: line/area removal and slow-down are only ever good for the one who uses them on itself, extra lines /
   // speed-up / locks / blindness / obstacles / bombs only ever hurt. The rest (mirror, zigzag, hole, item clear, mono, enforcement ...) is the net's call.
-  var SURE_SELF = { 9: 1, 20: 1, 21: 1, 102: 1, 105: 1, 116: 1, 118: 1, 119: 1, 124: 1, 126: 1 };
+  var SURE_SELF = { 9: 1, 20: 1, 21: 1, 102: 1, 104: 1, 105: 1, 116: 1, 118: 1, 119: 1, 124: 1, 126: 1 };
   var SURE_OPP = { 2: 1, 4: 1, 6: 1, 8: 1, 10: 1, 11: 1, 16: 1, 17: 1, 22: 1, 91: 1, 117: 1, 125: 1, 127: 1 };
   B.forbidden = function (code) { return SURE_SELF[code] ? 2 : SURE_OPP[code] ? 1 : -1; };   // the action (1 = on myself, 2 = on the opponent) that makes no sense for this item
   B.useSeq = 0;   // known from the item names: helpful ones are never given to the opponent, harmful ones never used on myself

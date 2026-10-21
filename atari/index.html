@@ -71,7 +71,7 @@ ul.menu { min-width: 150px; width: max-content; }
             <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="other">　다른 게임</a>
             <ul class="menu">
               <li onclick="return runMenu(function(){ window.location.href='../index.html'; });"><a href="#" data-t="mine">　지뢰찾기</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　폴리큐브</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　폴리큐브(테트리스)</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../2048/index.html'; });"><a href="#">　2048</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../pinball/index.html'; });"><a href="#">　3D 핀볼</a></li>
               <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#">　T-Rex</a></li>
@@ -111,9 +111,9 @@ ul.menu { min-width: 150px; width: max-content; }
 <script>
 (function () {
   var KO = /^ko/i.test(navigator.language || 'ko');
-  var T = KO ? { game: '게임', cheat: '　치트...', auto: '　자동으로 풀기', theme: '　테마...', full: '　전체화면', exit: '　끝내기(X)', help: '도움말', how: '　게임 방법(H)', other: '　다른 게임', mine: '　지뢰찾기', sudoku: '　스도쿠', poly: '　폴리큐브', howT: '게임 방법', ok: '확인',
+  var T = KO ? { game: '게임', cheat: '　치트...', auto: '　자동으로 풀기', theme: '　테마...', full: '　전체화면', exit: '　끝내기(X)', help: '도움말', how: '　게임 방법(H)', other: '　다른 게임', mine: '　지뢰찾기', sudoku: '　스도쿠', poly: '　폴리큐브(테트리스)', howT: '게임 방법', ok: '확인',
     help1: '공을 튕겨 블록을 깨세요. 공은 하나뿐입니다: 처음 쏠 때 점수가 0점에서 시작하고, 공이 떨어지면 그대로 게임 오버이며 점수가 확정됩니다.<br><b>블록</b>: 검정 = 2번, 흰색 = 3번, 회색 = 5번 쳐야 깨집니다. 나머지(채도 100%의 색)는 1번. 맞을 때마다 균열이 생깁니다.<br><b>줄</b>: 항상 5줄이 유지됩니다. 가장 아랫줄을 다 깨면 모든 블록이 한 줄 내려오고 맨 위에 새 줄이 생깁니다(공이 그 자리에 있으면 비켜날 때까지 기다립니다). 점수: 줄을 다 지우면 +100, 블록을 한 번 칠 때마다 +2, 1초가 지날 때마다 −1(점수는 음수가 될 수 있음).<br><b>2D</b>: 판(패들)은 마우스 버튼을 누른 채 드래그할 때(터치는 대고 밀 때)만 움직입니다. 누르고 움직이지 않으면(탭) 발사, Space도 발사입니다.<br><b>3D</b>: 바닥의 판으로 공을 위로 쳐 올립니다. 판 근처를 누르고 밀면 판 이동, 판이 아닌 곳을 누르고 밀면 시점 회전입니다(오른쪽 버튼 드래그도 회전). 왼쪽 아래의 지도는 시점과 함께 회전하는 바닥 지도이고, 지도를 눌러도 판이 그 자리로 갑니다.<br>게임 &gt; 테마에서 2D / 3D를 고릅니다.' }
-  : { game: 'Game', cheat: '　Cheat...', auto: '　Solve Automatically', theme: '　Theme...', full: '　Fullscreen', exit: '　Exit(X)', help: 'Help', how: '　How to Play(H)', other: '　Other Games', mine: '　Minesweeper', sudoku: '　Sudoku', poly: '　Polycube', howT: 'How to play', ok: 'OK',
+  : { game: 'Game', cheat: '　Cheat...', auto: '　Solve Automatically', theme: '　Theme...', full: '　Fullscreen', exit: '　Exit(X)', help: 'Help', how: '　How to Play(H)', other: '　Other Games', mine: '　Minesweeper', sudoku: '　Sudoku', poly: '　Polycube (Tetris)', howT: 'How to play', ok: 'OK',
     help1: 'Bounce the ball and break bricks. There is only one ball: the score starts from 0 when you shoot it, and when it falls the game is over and the score is final.<br><b>Bricks</b>: black = 2 hits, white = 3, gray = 5; every other brick (a fully saturated colour) = 1. Cracks show the damage.<br><b>Rows</b>: five rows are always kept. When the bottom row is cleared every brick moves down one row and a new row appears at the top (if the ball is in that spot the new row waits until it is clear). Score: +100 for every row you clear completely, +2 for every hit on a brick, -1 for every second that passes (the score can go negative).<br><b>2D</b>: the paddle moves only while you hold the mouse button and drag (touch: put a finger down and slide). A tap / click without dragging launches the ball, and so does Space.<br><b>3D</b>: bounce the ball up from the floor paddle. Press near the paddle and slide to move it; press anywhere else and slide to rotate the view (right-button drag rotates too). The map at the bottom left is the floor map: it rotates with the view, and pressing it puts the paddle there.<br>Choose 2D / 3D in Game &gt; Theme.' };
   document.documentElement.lang = KO ? 'ko' : 'en';
   [].forEach.call(document.querySelectorAll('[data-t]'), function (e) { var k = e.getAttribute('data-t'); if (T[k] !== undefined) e.textContent = T[k]; });
@@ -159,7 +159,7 @@ ul.menu { min-width: 150px; width: max-content; }
 /* "Other games" entries that are not translated by the page itself: English names for non-Korean browsers */
 (function () {
   if (/^ko/i.test(navigator.language || 'ko')) return;
-  var EN = { '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '두들': 'Doodle', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '미로 먹보': 'Maze Chomper', '스왑 퍼즐': 'Swap Puzzle', '카드게임': 'Card Games', '바둑&오목': 'Go & Gomoku', '체스': 'Chess', '화투': 'Hwatu', '트럼프': 'Trump Cards', '마작': 'Mahjong', '노노그램': 'Nonogram', '큐브 퍼즐': 'Cube Puzzles', '스네이크': 'Snake', '도형 월드': 'Shape World', '지뢰찾기': 'Minesweeper', '폴리큐브': 'Polycube' };
+  var EN = { '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '두들': 'Doodle', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '미로 먹보': 'Maze Chomper', '스왑 퍼즐': 'Swap Puzzle', '카드게임': 'Card Games', '바둑&오목': 'Go & Gomoku', '체스': 'Chess', '화투': 'Hwatu', '트럼프': 'Trump Cards', '마작': 'Mahjong', '노노그램': 'Nonogram', '큐브 퍼즐': 'Cube Puzzles', '스네이크': 'Snake', '도형 월드': 'Shape World', '지뢰찾기': 'Minesweeper', '폴리큐브(테트리스)': 'Polycube (Tetris)' };
   function run() { [].forEach.call(document.querySelectorAll('.menu a'), function (a) { if (a.children.length) return; var s = a.textContent.replace(/^[\u3000\s]+/, ''); if (EN[s]) a.textContent = '\u3000' + EN[s]; }); }
   if (document.readyState === 'complete') run(); else window.addEventListener('load', run);
 })();

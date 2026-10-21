@@ -4,12 +4,12 @@
   var KO = /^ko/i.test(navigator.language || 'ko');
   var TXT = {
     ko: { game: '게임', new: '　새 게임(N)', beg: '　초급(B) 4×4', int: '　중급(I) 6×6', exp: '　고급(E) 8×8', cus: '　사용자 지정(C)...', best: '　최고 기록(T)...', exit: '　끝내기(X)',
-      help: '도움말', how: '　게임 방법(H)', other: '　다른 게임', cheat: '　치트...', auto: '　자동으로 풀기', hintm: '　힌트 제공', mine: '　지뢰찾기', poly: '　폴리큐브', cusT: '사용자 지정 게임', rows: '높이(H)', cols: '너비(W)', ok: '확인', cancel: '취소', newBtn: '새 게임',
+      help: '도움말', how: '　게임 방법(H)', other: '　다른 게임', cheat: '　치트...', auto: '　자동으로 풀기', hintm: '　힌트 제공', mine: '　지뢰찾기', poly: '　폴리큐브(테트리스)', cusT: '사용자 지정 게임', rows: '높이(H)', cols: '너비(W)', ok: '확인', cancel: '취소', newBtn: '새 게임',
       bestT: '최고 기록', reset: '초기화', howT: '2048 게임 방법', over: '게임 오버', won: '2048 달성! 계속할 수 있어요', retry: '새 게임 버튼 또는 F2',
       hint: '방향키 / WASD / 스와이프로 타일을 밀어 같은 숫자를 합치세요.', lv: ['초급', '중급', '고급', '사용자 지정'], none: '—',
       help1: '방향키(또는 W A S D, 화면 스와이프)로 모든 타일을 한 방향으로 밉니다.<br>같은 숫자 두 타일이 부딪치면 하나로 합쳐지고 합친 값만큼 점수가 오릅니다.<br>한 번 움직일 때마다 새 타일(2 또는 4)이 나타납니다. 큰 판은 한 번에 여러 개가 나타납니다.<br>더 움직일 수 없으면 게임 오버입니다. 2048 타일을 만든 뒤에도 계속할 수 있습니다.<br>F2: 새 게임.' },
     en: { game: 'Game', new: '　New(N)', beg: '　Beginner(B) 4×4', int: '　Intermediate(I) 6×6', exp: '　Expert(E) 8×8', cus: '　Custom(C)...', best: '　Best Scores(T)...', exit: '　Exit(X)',
-      help: 'Help', how: '　How to Play(H)', other: '　Other Games', cheat: '　Cheat...', auto: '　Solve Automatically', hintm: '　Give a Hint', mine: '　Minesweeper', poly: '　Polycube', cusT: 'Custom Game', rows: 'Height(H)', cols: 'Width(W)', ok: 'OK', cancel: 'Cancel', newBtn: 'New Game',
+      help: 'Help', how: '　How to Play(H)', other: '　Other Games', cheat: '　Cheat...', auto: '　Solve Automatically', hintm: '　Give a Hint', mine: '　Minesweeper', poly: '　Polycube (Tetris)', cusT: 'Custom Game', rows: 'Height(H)', cols: 'Width(W)', ok: 'OK', cancel: 'Cancel', newBtn: 'New Game',
       bestT: 'Best Scores', reset: 'Reset', howT: 'How to play 2048', over: 'Game Over', won: '2048! You can keep going', retry: 'New Game button or F2',
       hint: 'Arrow keys / WASD / swipe to slide the tiles and merge equal numbers.', lv: ['Beginner', 'Intermediate', 'Expert', 'Custom'], none: '—',
       help1: 'Slide all tiles in one direction with the arrow keys (or W A S D, or swipe).<br>Two tiles with the same number merge into one and add its value to your score.<br>After every move a new tile (2 or 4) appears; bigger boards add several at once.<br>When nothing can move any more the game is over. You may keep playing after reaching 2048.<br>F2: new game.' }

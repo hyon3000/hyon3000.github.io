@@ -117,6 +117,8 @@ const state = {
   hidenext: 0,
   score2x: 0,
   speedup: 0,
+  speedupMul: 0.4,      // fall-interval factors fixed when the item was eaten (reinforced: 0.2 / 5.0)
+  speeddownMul: 2.5,
   speeddown: 0,
   holdlock: 0,
   blindboard: 0,
@@ -124,6 +126,7 @@ const state = {
   compactPending: false,
   simplify2: 0,
   pentaForce: 0,
+  pentaEnf: false,      // the giant item was eaten while enforced: 6+ cell blocks at 5x the natural rate
   reinforce: 0,
   score: 0,
   lines: 0,
@@ -154,7 +157,7 @@ const ITEM_DESC = _isKo ? {
   102:'상단삭제: 위의 블록 모두 제거', 104:'모노전용: 1칸 블록만', 105:'종렬삭제: 해당 열 삭제', 116:'-2줄: 바닥 2줄 제거', 117:'+2줄: 바닥에 2줄 추가',
   118:'범위삭제: 주변 열 전체삭제', 119:'전체삭제: 판 전체 클리어', 120:'시한폭탄: 3턴후 폭발', 121:'시한폭탄: 2턴후 폭발', 122:'시한폭탄: 1턴후 폭발',
   123:'시한폭탄: 폭발 임박', 124:'-3줄: 바닥 3줄 제거', 125:'+1줄: 바닥에 1줄 추가', 126:'횡렬삭제: 해당 행 삭제', 127:'폭탄변환: 30%확률 폭탄화',
-  204:'강화: 20줄간 아이템 효과 2배',
+  204:'강화: 20줄간 아이템 효과 2배 (강화 중 또 먹으면 게임 끝까지)',
 } : {
   1:'Self-Destruct: 3x3x3 boom', 2:'Conceal: Hide piece 10t', 200:'Mirror: Flip board', 19:'Zigzag: Shuffle each layer', 4:'Score Boost: x4 (stack x16)', 5:'Item Clear: Remove items',
   6:'No Preview: Hide next 20t', 8:'Speed Up: x2.5', 9:'Slow Down: x0.4', 10:'Hold Lock: 15 turns', 11:'Obstacle: 3 random',
@@ -163,7 +166,7 @@ const ITEM_DESC = _isKo ? {
   105:'Col Del: Delete column', 116:'-2 Lines: Remove 2', 117:'+2 Lines: Add 2 lines', 118:'Range Del: 3x3 columns', 119:'Full Clear: Wipe board',
   120:'Time Bomb: 3t to blow', 121:'Time Bomb: 2t to blow', 122:'Time Bomb: 1t to blow', 123:'Time Bomb: Imminent',
   124:'-3 Lines: Remove 3', 125:'+1 Line: Add 1 line', 126:'Row Del: Delete row', 127:'Bomb Convert: 30% bomb',
-  204:'Enforcement: x2 item effects 20 lines',
+  204:'Enforcement: x2 item effects 20 lines (again while active: until game over)',
 };
 // battle mode: the score-boost block steals the items from the opponent's slots (see ../battle.js)
 if (BATTLE) ITEM_DESC[4] = _isKo ? '강탈: 상대에게 쓰면 상대 슬롯 아이템을 전부 뺏음' : 'Steal: on the opponent = take all its slot items';
@@ -519,14 +522,14 @@ function initBlockState() {
   state.hideblock = 0;
   state.hidenext = 0;
   state.score2x = 0;
-  state.speedup = 0;
+  state.speedup = 0; state.speedupMul = 0.4; state.speeddownMul = 2.5;
   state.speeddown = 0;
   state.holdlock = 0;
   state.blindboard = 0;
   state.bombnext = 0;
   state.compactPending = false;
   state.simplify2 = 0;
-  state.pentaForce = 0;
+  state.pentaForce = 0; state.pentaEnf = false;
   state.reinforce = 0;
   state.nowblock = state.b[0];
   state.nextblock = state.b[1];
@@ -579,7 +582,8 @@ function chooseBaseBlockIndex() {
   }
   if (state.pentaForce > 0) {
     state.pentaForce -= 1;
-    return 12 + randInt(29); // penta+ (index 12-40)
+    if (!(state.pentaEnf && randInt(100) < 5 * (100 - b5))) return 12 + randInt(29); // penta+ (index 12-40)
+    return hexaPlusIndex();   // enforced giant: 6+ cells at 5x the natural rate of this level
   }
   let t = randInt(100);
   if (t < b1) t = 0;
@@ -587,15 +591,16 @@ function chooseBaseBlockIndex() {
   else if (t < b3) t = 2 + randInt(2);
   else if (t < b4) t = 4 + randInt(8);
   else if (t < b5) t = 12 + randInt(29);
-  else {
-    if (randInt(2)) {
-      createNewBlock();
-      t = 56;
-    } else {
-      t = 41 + randInt(15);
-    }
-  }
+  else return hexaPlusIndex();
   return t;
+}
+
+function hexaPlusIndex() {
+  if (randInt(2)) {
+    createNewBlock();
+    return 56;
+  }
+  return 41 + randInt(15);
 }
 
 function applySpecialAging() {
@@ -1143,14 +1148,14 @@ function applyItemCell(code, x, y, z, cells) {
     else if (code === 124) { cells.tline -= _enf ? 6 : 3; state.blk[x][y][z] = 256; }
     else if (code === 125) { cells.tline += _enf ? 2 : 1; state.blk[x][y][z] = 256; }
     else if (code === 91) { state.spinlock += _enf ? 20 : 10; state.blk[x][y][z] = 256; }
-    else if (code === 8) { state.speedup += _enf ? 20 : 10; state.blk[x][y][z] = 256; }
-    else if (code === 9) { state.speeddown += _enf ? 20 : 10; state.blk[x][y][z] = 256; }
+    else if (code === 8) { state.speedup += _enf ? 20 : 10; state.speedupMul = _enf ? 0.2 : 0.4; state.blk[x][y][z] = 256; }
+    else if (code === 9) { state.speeddown += _enf ? 20 : 10; state.speeddownMul = _enf ? 5.0 : 2.5; state.blk[x][y][z] = 256; }
     else if (code === 10) { state.holdlock += _enf ? 30 : 15; state.blk[x][y][z] = 256; }
     else if (code === 16) { state.blindboard = now() + (_enf ? 20000 : 10000); state.blk[x][y][z] = 256; }
     else if (code === 17) { state.bombnext += _enf ? 12 : 6; state.blk[x][y][z] = 256; }
     else if (code === 20) { state.compactPending = true; state.blk[x][y][z] = 256; }
     else if (code === 21) { state.monoonly = 0; state.pentaForce = 0; state.simplify2 += _enf ? 18 : 9; state.blk[x][y][z] = 256; }
-    else if (code === 22) { state.monoonly = 0; state.simplify2 = 0; state.pentaForce += _enf ? 18 : 9; state.blk[x][y][z] = 256; }
+    else if (code === 22) { state.monoonly = 0; state.simplify2 = 0; state.pentaForce += _enf ? 18 : 9; state.pentaEnf = !!_enf; state.blk[x][y][z] = 256; }
     else if (code === 2) { state.hideblock += _enf ? 20 : 10; state.blk[x][y][z] = 256; }
     else if (code === 6) { state.hidenext += _enf ? 40 : 20; state.blk[x][y][z] = 256; }
     else if (code === 5) {
@@ -1188,7 +1193,7 @@ function applyItemCell(code, x, y, z, cells) {
       }
       state.blk[x][y][z] = 256;
     } else if (code === 204) {
-      state.reinforce = 20;
+      state.reinforce = state.reinforce > 0 ? 1e9 : 20;   // eaten again while enforced: lasts until the game ends
       state.blk[x][y][z] = 256;
     } else if (code === 4) { if (!BATTLE) state.score2x += _enf ? 2 : 1; state.blk[x][y][z] = 256; }   // battle mode: no score effect (used on the opponent it steals the items in its slots)
     // code 200 (mirror) handled by pre-scan above
@@ -1765,8 +1770,8 @@ function handleTouches() {
 
 function updateFallingLogic() {
   let fallInterval = 6000 / (Math.min(state.level, 12) / 3 + 5);
-  if (state.speedup > 0) fallInterval *= state.reinforce > 0 ? 0.2 : 0.4;
-  if (state.speeddown > 0) fallInterval *= state.reinforce > 0 ? 5.0 : 2.5;
+  if (state.speedup > 0) fallInterval *= state.speedupMul;
+  if (state.speeddown > 0) fallInterval *= state.speeddownMul;
   if (state.vkspace2) fallInterval *= 0.05; // soft drop: 20× speed (Tetris guideline)
   if (state.timestamp + fallInterval < now()) {
     if (move(2, -1)) {
