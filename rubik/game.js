@@ -1,4 +1,4 @@
-// Cube Puzzles - game page: software Canvas2D 3D renderer (painter's algorithm), input, game flow, solvers glue.
+// Cube - game page: software Canvas2D 3D renderer (painter's algorithm), input, game flow, solvers glue.
 (function () {
   'use strict';
   const KO = /^ko/i.test(navigator.language || 'ko');

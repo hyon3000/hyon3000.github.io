@@ -1,4 +1,4 @@
-// Shooter auto-player: every few frames it simulates nine short plans (hold left / stay / right, then again) with the real rules (core.js, new shots and dives
+// Bullet Shot auto-player: every few frames it simulates nine short plans (hold left / stay / right, then again) with the real rules (core.js, new shots and dives
 // switched off, a safety margin around the ship) and takes the plan that kills the most and survives; a plan that ends in a hit costs a lot.
 (function (root) {
   'use strict';

@@ -1,4 +1,4 @@
-// Shooter - the rules of a fixed-step (60 Hz) vertical shooter; no DOM, so the same code runs in the page (game.js) and in the auto-player's look-ahead (ai.js).
+// Bullet Shot - the rules of a fixed-step (60 Hz) vertical shooter; no DOM, so the same code runs in the page (game.js) and in the auto-player's look-ahead (ai.js).
 //   s = Shooter.newState(seed);  Shooter.step(s, { l, r, f, tx })   (move left / right, fire, optional target x for pointer control)
 // 40 enemies fly in on curved paths in five groups, settle into a swaying formation, and from time to time single enemies (or a boss with two escorts) dive at the player.
 // s.sim = true switches off everything random that starts new threats (new dives, new shots) and the effects: used for look-ahead only.

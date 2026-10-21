@@ -98,28 +98,58 @@ ul.menu { min-width: 150px; width: max-content; }
           <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
             <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="other">　다른 게임</a>
             <ul class="menu">
-              <li onclick="return runMenu(function(){ window.location.href='../index.html'; });"><a href="#" data-t="mine">　지뢰찾기</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　폴리큐브(테트리스)</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });"><a href="#">　아타리 브레이크아웃</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../pinball/index.html'; });"><a href="#">　3D 핀볼</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#">　T-Rex</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../nonogram/index.html'; });"><a href="#">　노노그램</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../platformer/index.html'; });"><a href="#">　도형 월드</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../doodle/index.html'; });"><a href="#">　두들</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=mahjong'; });"><a href="#">　마작</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../chomper/index.html'; });"><a href="#">　미로 먹보</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../board/index.html?set=baduk'; });"><a href="#">　바둑&amp;오목</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../bubble/index.html'; });"><a href="#">　버블 슈터</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../boxpush/index.html'; });"><a href="#">　상자 밀기</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../snake/index.html'; });"><a href="#">　스네이크</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../sudoku/index.html'; });"><a href="#">　스도쿠</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../swap/index.html'; });"><a href="#">　스왑 퍼즐</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../shooter/index.html'; });"><a href="#">　슈터</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../board/index.html?set=janggi'; });"><a href="#">　장기</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../board/index.html?set=chess'; });"><a href="#">　체스</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../rubik/index.html'; });"><a href="#">　큐브 퍼즐</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=trump'; });"><a href="#">　트럼프</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=hwatu'; });"><a href="#">　화투</a></li>
+              <li class="menu-cat menu-cat-logic" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+                <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-cat="논리">　논리</a>
+                <ul class="menu">
+                  <li onclick="return runMenu(function(){ window.location.href='../index.html'; });"><a href="#" data-t="mine">　지뢰찾기</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../nonogram/index.html'; });"><a href="#">　노노그램</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../boxpush/index.html'; });"><a href="#">　상자 밀기</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../sudoku/index.html'; });"><a href="#">　스도쿠</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../doodle/index.html'; });"><a href="#">　두들</a></li>
+                </ul>
+              </li>
+              <li class="menu-cat menu-cat-block" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+                <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-cat="블록">　블록</a>
+                <ul class="menu">
+                  <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　폴리큐브(테트리스)</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../swap/index.html'; });"><a href="#">　스왑 퍼즐</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../rubik/index.html'; });"><a href="#">　큐브</a></li>
+                </ul>
+              </li>
+              <li class="menu-cat menu-cat-shoot" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+                <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-cat="슈팅·볼">　슈팅·볼</a>
+                <ul class="menu">
+                  <li onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });"><a href="#">　아타리 브레이크아웃</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../pinball/index.html'; });"><a href="#">　3D 핀볼</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../bubble/index.html'; });"><a href="#">　버블 슈터</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../shooter/index.html'; });"><a href="#">　총알쏘기</a></li>
+                </ul>
+              </li>
+              <li class="menu-cat menu-cat-action" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+                <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-cat="액션">　액션</a>
+                <ul class="menu">
+                  <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#">　T-Rex</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../platformer/index.html'; });"><a href="#">　도형 월드</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../chomper/index.html'; });"><a href="#">　미로 먹보</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../snake/index.html'; });"><a href="#">　스네이크</a></li>
+                </ul>
+              </li>
+              <li class="menu-cat menu-cat-board" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+                <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-cat="보드">　보드</a>
+                <ul class="menu">
+                  <li onclick="return runMenu(function(){ window.location.href='../board/index.html?set=baduk'; });"><a href="#">　바둑&amp;오목</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../board/index.html?set=janggi'; });"><a href="#">　장기</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../board/index.html?set=chess'; });"><a href="#">　체스</a></li>
+                </ul>
+              </li>
+              <li class="menu-cat menu-cat-card" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+                <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-cat="카드·패">　카드·패</a>
+                <ul class="menu">
+                  <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=mahjong'; });"><a href="#">　마작</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=trump'; });"><a href="#">　트럼프</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=hwatu'; });"><a href="#">　화투</a></li>
+                </ul>
+              </li>
             </ul>
           </li>
         </ul>
@@ -183,8 +213,17 @@ ul.menu { min-width: 150px; width: max-content; }
 /* "Other games" entries that are not translated by the page itself: English names for non-Korean browsers */
 (function () {
   if (/^ko/i.test(navigator.language || 'ko')) return;
-  var EN = { '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '두들': 'Doodle', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '미로 먹보': 'Maze Chomper', '스왑 퍼즐': 'Swap Puzzle', '카드게임': 'Card Games', '바둑&오목': 'Go & Gomoku', '체스': 'Chess', '장기': 'Janggi', '슈터': 'Shooter', '상자 밀기': 'Box Push', '화투': 'Hwatu', '트럼프': 'Trump Cards', '마작': 'Mahjong', '노노그램': 'Nonogram', '큐브 퍼즐': 'Cube Puzzles', '스네이크': 'Snake', '도형 월드': 'Shape World', '지뢰찾기': 'Minesweeper', '폴리큐브(테트리스)': 'Polycube (Tetris)' };
+  var EN = { '스도쿠': 'Sudoku', '아타리 브레이크아웃': 'Atari Breakout', '3D 핀볼': '3D Pinball', '두들': 'Doodle', '보드게임': 'Board Games', '버블 슈터': 'Bubble Shooter', '미로 먹보': 'Maze Chomper', '스왑 퍼즐': 'Swap Puzzle', '카드게임': 'Card Games', '바둑&오목': 'Go & Gomoku', '체스': 'Chess', '장기': 'Janggi', '총알쏘기': 'Bullet Shot', '상자 밀기': 'Box Push', '화투': 'Hwatu', '트럼프': 'Trump Cards', '마작': 'Mahjong', '노노그램': 'Nonogram', '큐브': 'Cube', '스네이크': 'Snake', '도형 월드': 'Shape World', '지뢰찾기': 'Minesweeper', '폴리큐브(테트리스)': 'Polycube (Tetris)' };
   function run() { [].forEach.call(document.querySelectorAll('.menu a'), function (a) { if (a.children.length) return; var s = a.textContent.replace(/^[\u3000\s]+/, ''); if (EN[s]) a.textContent = '\u3000' + EN[s]; }); }
+  if (document.readyState === 'complete') run(); else window.addEventListener('load', run);
+})();
+</script>
+<script>
+/* category names of the Other Games menu for non-Korean browsers */
+(function () {
+  if (/^ko/i.test(navigator.language || 'ko')) return;
+  var EN = { '논리': 'Logic', '블록': 'Blocks', '슈팅·볼': 'Shooting & Ball', '액션': 'Action', '보드': 'Boards', '카드·패': 'Cards & Tiles' };
+  function run() { [].forEach.call(document.querySelectorAll('.menu a[data-cat]'), function (a) { var k = a.getAttribute('data-cat'); if (EN[k]) a.textContent = '\u3000' + EN[k]; }); }
   if (document.readyState === 'complete') run(); else window.addEventListener('load', run);
 })();
 </script>

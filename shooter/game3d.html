@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Bullet Shot 3D</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#05060f;-webkit-user-select:none;user-select:none}
+#box{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+#cv{display:block;touch-action:none;image-rendering:pixelated;cursor:crosshair}
+</style>
+<script>window.__errs=[];window.addEventListener("error",function(e){window.__errs.push(String(e.message)+" @"+e.filename+":"+e.lineno)});</script>
+</head>
+<body>
+<div id="box"><canvas id="cv"></canvas></div>
+<script src="core3d.js"></script>
+<script src="ai3d.js"></script>
+<script src="sprites.js"></script>
+<script src="game3d.js"></script>
+</body>
+</html>

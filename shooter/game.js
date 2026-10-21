@@ -1,40 +1,15 @@
-// Shooter page: canvas drawing (pixel sprites drawn from small bitmaps), keyboard / pointer input, fixed 60 Hz loop, sound, auto-player hook.
+// Bullet Shot page: canvas drawing (pixel sprites drawn from small bitmaps), keyboard / pointer input, fixed 60 Hz loop, sound, auto-player hook.
 (function () {
   'use strict';
   var SH = window.Shooter, AI = window.ShooterAI, W = SH.W, H = SH.H, PY = SH.PY;
   var KO = /^ko/i.test(navigator.language || 'ko');
-  var TX = KO ? { title: '슈터', start: '클릭 / 스페이스로 시작', keys: '← → 이동 · 스페이스 발사 · P 일시정지', stage: '스테이지', over: '게임 오버', acc: '명중률', paused: '일시정지', score: '점수', hi: '최고', auto: '자동', clear: '스테이지 클리어!' }
-    : { title: 'SHOOTER', start: 'Click / Space to start', keys: 'Arrows move · Space fire · P pause', stage: 'STAGE', over: 'GAME OVER', acc: 'Accuracy', paused: 'PAUSED', score: 'SCORE', hi: 'HI', auto: 'AUTO', clear: 'Stage clear!' };
+  var TX = KO ? { title: '총알쏘기', start: '클릭 / 스페이스로 시작', keys: '← → 이동 · 스페이스 발사 · P 일시정지', stage: '스테이지', over: '게임 오버', acc: '명중률', paused: '일시정지', score: '점수', hi: '최고', auto: '자동', clear: '스테이지 클리어!' }
+    : { title: 'BULLET SHOT', start: 'Click / Space to start', keys: 'Arrows move · Space fire · P pause', stage: 'STAGE', over: 'GAME OVER', acc: 'Accuracy', paused: 'PAUSED', score: 'SCORE', hi: 'HI', auto: 'AUTO', clear: 'Stage clear!' };
   var cv = document.getElementById('cv'), ctx = cv.getContext('2d'), S = 1, dpr = window.devicePixelRatio || 1;
   var s = SH.newState((Math.random() * 1e9) | 0), keys = {}, ptr = null, autoOn = false, paused = false, soundOn = true, hintT = 0;
   var hi = 0; try { hi = +localStorage.getItem('shooter_hi') || 0; } catch (e) {}
 
-  /* ---------- sprites: '.' empty, other characters index into the palette ---------- */
-  function mk(rows, pal) {
-    var c = document.createElement('canvas'); c.width = rows[0].length; c.height = rows.length;
-    var g = c.getContext('2d');
-    for (var y = 0; y < rows.length; y++) for (var x = 0; x < rows[y].length; x++) { var ch = rows[y][x]; if (ch !== '.' && pal[ch]) { g.fillStyle = pal[ch]; g.fillRect(x, y, 1, 1); } }
-    return c;
-  }
-  var SHIP = mk(['.....w.....', '.....w.....', '....www....', '....wbw....', '.r.wwbww.r.', '.r.wwwww.r.', 'wwwwwwwwwww', 'ww.wwrww.ww', 'w...rrr...w'], { w: '#e8eef8', b: '#46a0ff', r: '#ff4a3a' });
-  function beeF(wing, p) {
-    return wing ? mk(['.y.....y.', '.yy...yy.', '.yyyyyyy.', 'yy.yyy.yy', 'yyyyyyyyy', '.bybybyb.', '..b...b..', '.b.....b.'], p)
-                : mk(['.........', 'y.y...y.y', 'yyyyyyyyy', 'yy.yyy.yy', 'yyyyyyyyy', '.bybybyb.', '..b...b..', '..b...b..'], p);
-  }
-  function flyF(wing, p) {
-    return wing ? mk(['r.r.....r.r', 'rrr.....rrr', 'rrrrrrrrrrr', '.rrwrrrwrr.', '.rrrrrrrrr.', '..rrw.wrr..', '...r...r...', '..r.....r..'], p)
-                : mk(['...........', 'r.r.....r.r', 'rrrrrrrrrrr', 'rrrwrrrwrrr', '.rrrrrrrrr.', '..rrw.wrr..', '..r.....r..', '...........'], p);
-  }
-  function bossF(wing, p) {
-    return wing ? mk(['g.g.....g.g', 'ggg.ggg.ggg', 'ggggggggggg', 'gwwgggggwwg', 'ggwgggggwgg', '.ggggpgggg.', '..gg.p.gg..', '.gg..p..gg.', '.g.......g.'], p)
-                : mk(['...g...g...', 'g.ggg.ggg.g', 'ggggggggggg', 'gwwgggggwwg', 'ggwgggggwgg', '.ggggpgggg.', '..gg.p.gg..', '..g..p..g..', '...........'], p);
-  }
-  var PB = { bee: { y: '#ffd23c', b: '#3c8cff', w: '#fff' }, fly: { r: '#ff3c3c', w: '#fff' }, boss: { g: '#38d05a', w: '#fff', p: '#c050ff' }, bossHit: { g: '#8a6cff', w: '#fff', p: '#ffd23c' } };
-  var SPR = {
-    ship: SHIP,
-    e: [[beeF(0, PB.bee), beeF(1, PB.bee)], [flyF(0, PB.fly), flyF(1, PB.fly)], [bossF(0, PB.boss), bossF(1, PB.boss)]],
-    boss2: [bossF(0, PB.bossHit), bossF(1, PB.bossHit)]
-  };
+  var SPR = window.ShooterSprites;
   var stars = []; for (var i = 0; i < 70; i++) stars.push({ x: Math.random() * W, y: Math.random() * H, v: 0.2 + Math.random() * 0.9, c: 120 + (Math.random() * 120 | 0) });
 
   /* ---------- sound ---------- */

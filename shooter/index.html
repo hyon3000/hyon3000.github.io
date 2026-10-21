@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Shooter</title>
-<meta name="description" content="Shooter: a vertical shooter with curved enemy waves and diving attackers in a Windows 98 frame, with an auto-player.">
+<title>Bullet Shot</title>
+<meta name="description" content="Bullet Shot: a vertical shooter with curved enemy waves and diving attackers in a Windows 98 frame, with an auto-player.">
 <link href="win98.css" media="screen" rel="stylesheet" type="text/css">
 <style>
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #fff; }
@@ -33,7 +33,7 @@ ul.menu { min-width: 150px; width: max-content; }
   <div class="window has-menu a-window" id="mainwin">
     <div class="title-bar">
       <div class="title-icon" id="ticon" style="background-image:url(icon.png)"></div>
-      <div class="title" id="ttitle">Shooter</div>
+      <div class="title" id="ttitle">Bullet Shot</div>
       <div class="title-button-group">
         <div class="title-button minimize"></div>
         <div class="title-button maximize disabled" onclick="event.preventDefault();event.stopPropagation();return false;"></div>
@@ -48,6 +48,13 @@ ul.menu { min-width: 150px; width: max-content; }
           <li onclick="return runMenu(function(){ togglePause(); });"><a href="#"><span class="mi-label" data-t="pause">　일시정지</span><span class="mi-key">P</span></a></li>
           <li class="separator"></li>
           <li class="menu-sound" onclick="return runMenu(function(){ toggleSound(); });"><a href="#"><span class="mi-label" data-t="snd">✓ 소리</span></a></li>
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="theme">　테마...</a>
+            <ul class="menu">
+              <li class="th th2d" onclick="return runMenu(function(){ setTheme('2d'); });"><a href="#">✓ 2D</a></li>
+              <li class="th th3d" onclick="return runMenu(function(){ setTheme('3d'); });"><a href="#">　3D</a></li>
+            </ul>
+          </li>
           <li onclick="return runMenu(function(){ goFullscreen(); });"><a href="#" data-t="full">　전체화면</a></li>
           <li class="separator"></li>
           <li onclick="return runMenu(function(){ document.getElementById('mainwin').style.visibility='hidden'; });"><a href="#" data-t="exit">　끝내기(X)</a></li>
@@ -69,28 +76,58 @@ ul.menu { min-width: 150px; width: max-content; }
           <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
             <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="other">　다른 게임</a>
             <ul class="menu">
-              <li onclick="return runMenu(function(){ window.location.href='../index.html'; });"><a href="#" data-t="mine">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });"><a href="#" data-t="atari">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../2048/index.html'; });"><a href="#" data-t="g2048">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../pinball/index.html'; });"><a href="#" data-t="pinball">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#" data-t="trex">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../nonogram/index.html'; });"><a href="#" data-t="nono">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../platformer/index.html'; });"><a href="#" data-t="platformer">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../doodle/index.html'; });"><a href="#" data-t="doodle">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=mahjong'; });"><a href="#" data-t="mahjong">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../chomper/index.html'; });"><a href="#" data-t="chomper">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../board/index.html?set=baduk'; });"><a href="#" data-t="baduk">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../bubble/index.html'; });"><a href="#" data-t="bubble">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../boxpush/index.html'; });"><a href="#" data-t="boxpush">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../snake/index.html'; });"><a href="#" data-t="snake">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../sudoku/index.html'; });"><a href="#" data-t="sudoku">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../swap/index.html'; });"><a href="#" data-t="swap">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../board/index.html?set=janggi'; });"><a href="#" data-t="janggi">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../board/index.html?set=chess'; });"><a href="#" data-t="chess">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../rubik/index.html'; });"><a href="#" data-t="cube">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=trump'; });"><a href="#" data-t="trump">　</a></li>
-              <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=hwatu'; });"><a href="#" data-t="hwatu">　</a></li>
+              <li class="menu-cat menu-cat-logic" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+                <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-cat="논리">　논리</a>
+                <ul class="menu">
+                  <li onclick="return runMenu(function(){ window.location.href='../index.html'; });"><a href="#" data-t="mine">　</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../nonogram/index.html'; });"><a href="#" data-t="nono">　</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../boxpush/index.html'; });"><a href="#" data-t="boxpush">　</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../sudoku/index.html'; });"><a href="#" data-t="sudoku">　</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../doodle/index.html'; });"><a href="#" data-t="doodle">　</a></li>
+                </ul>
+              </li>
+              <li class="menu-cat menu-cat-block" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+                <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-cat="블록">　블록</a>
+                <ul class="menu">
+                  <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../2048/index.html'; });"><a href="#" data-t="g2048">　</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../swap/index.html'; });"><a href="#" data-t="swap">　</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../rubik/index.html'; });"><a href="#" data-t="cube">　</a></li>
+                </ul>
+              </li>
+              <li class="menu-cat menu-cat-shoot" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+                <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-cat="슈팅·볼">　슈팅·볼</a>
+                <ul class="menu">
+                  <li onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });"><a href="#" data-t="atari">　</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../pinball/index.html'; });"><a href="#" data-t="pinball">　</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../bubble/index.html'; });"><a href="#" data-t="bubble">　</a></li>
+                </ul>
+              </li>
+              <li class="menu-cat menu-cat-action" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+                <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-cat="액션">　액션</a>
+                <ul class="menu">
+                  <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#" data-t="trex">　</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../platformer/index.html'; });"><a href="#" data-t="platformer">　</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../chomper/index.html'; });"><a href="#" data-t="chomper">　</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../snake/index.html'; });"><a href="#" data-t="snake">　</a></li>
+                </ul>
+              </li>
+              <li class="menu-cat menu-cat-board" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+                <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-cat="보드">　보드</a>
+                <ul class="menu">
+                  <li onclick="return runMenu(function(){ window.location.href='../board/index.html?set=baduk'; });"><a href="#" data-t="baduk">　</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../board/index.html?set=janggi'; });"><a href="#" data-t="janggi">　</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../board/index.html?set=chess'; });"><a href="#" data-t="chess">　</a></li>
+                </ul>
+              </li>
+              <li class="menu-cat menu-cat-card" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+                <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-cat="카드·패">　카드·패</a>
+                <ul class="menu">
+                  <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=mahjong'; });"><a href="#" data-t="mahjong">　</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=trump'; });"><a href="#" data-t="trump">　</a></li>
+                  <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=hwatu'; });"><a href="#" data-t="hwatu">　</a></li>
+                </ul>
+              </li>
             </ul>
           </li>
         </ul>
@@ -113,8 +150,8 @@ ul.menu { min-width: 150px; width: max-content; }
 <script>
 (function () {
   var KO = /^ko/i.test(navigator.language || 'ko');
-  var T = KO ? { title: "슈터", game: "게임", newg: "　새 게임", pause: "　일시정지", snd: "✓ 소리", full: "　전체화면", exit: "　끝내기(X)", help: "도움말", cheat: "　치트...", auto: "　자동으로 풀기", hint: "　힌트 보기", how: "　게임 방법(H)", other: "　다른 게임", mine: "　지뢰찾기", poly: "　폴리큐브(테트리스)", atari: "　아타리 브레이크아웃", g2048: "　2048", pinball: "　3D 핀볼", trex: "　T-Rex", nono: "　노노그램", mahjong: "　마작", chomper: "　미로 먹보", baduk: "　바둑&오목", bubble: "　버블 슈터", snake: "　스네이크", platformer: "　도형 월드", sudoku: "　스도쿠", swap: "　스왑 퍼즐", chess: "　체스", janggi: "　장기", cube: "　큐브 퍼즐", trump: "　트럼프", hwatu: "　화투", doodle: "　두들", boxpush: "　상자 밀기", howT: "게임 방법", ok: "확인", help1: "<b>슈터</b>: 아래의 우주선으로 적 편대를 모두 격추하면 다음 스테이지로 넘어갑니다. 적은 곡선을 그리며 날아와 편대를 이루고, 때때로 한 마리씩(또는 대장과 호위 둘) 플레이어를 향해 급강하하며 탄을 쏩니다. 탄에 맞거나 적과 부딪히면 우주선을 잃고, 3대를 모두 잃으면 끝납니다.<br><b>조작</b>: ← → (또는 A D)로 이동, 스페이스(Z, ↑)로 발사(화면에는 탄이 최대 2발), P 일시정지. 마우스/터치는 누르고 있는 동안 우주선이 손가락을 따라가며 자동 발사합니다.<br><b>점수</b>: 편대 안의 적은 일벌 50 · 나비 80 · 대장 150(두 번 맞혀야 함), 급강하 중인 적은 100 · 160 · 400점입니다. 2만 점, 그 뒤 7만 점마다 우주선이 하나 늘어납니다.<br>도움말 &gt; 치트: 자동으로 풀기(F3)는 컴퓨터가 대신 조종하고(몇 프레임 앞을 미리 시뮬레이션해서 피하며 쏨), 힌트 보기(F4)는 잠시 컴퓨터가 추천하는 위치를 표시합니다." }
-  : { title: "Shooter", game: "Game", newg: "　New Game", pause: "　Pause", snd: "✓ Sound", full: "　Fullscreen", exit: "　Exit(X)", help: "Help", cheat: "　Cheat...", auto: "　Solve Automatically", hint: "　Give a Hint", how: "　How to Play(H)", other: "　Other Games", mine: "　Minesweeper", poly: "　Polycube (Tetris)", atari: "　Atari Breakout", g2048: "　2048", pinball: "　3D Pinball", trex: "　T-Rex", nono: "　Nonogram", mahjong: "　Mahjong", chomper: "　Maze Chomper", baduk: "　Go & Gomoku", bubble: "　Bubble Shooter", snake: "　Snake", platformer: "　Shape World", sudoku: "　Sudoku", swap: "　Swap Puzzle", chess: "　Chess", janggi: "　Janggi", cube: "　Cube Puzzles", trump: "　Trump Cards", hwatu: "　Hwatu", doodle: "　Doodle", boxpush: "　Box Push", howT: "How to play", ok: "OK", help1: "<b>Shooter</b>: shoot down the whole enemy formation with your ship at the bottom to reach the next stage. The enemies fly in on curved paths and settle into a formation; from time to time single enemies (or a boss with two escorts) dive at you and shoot. A hit or a collision costs a ship; when all three are gone the game is over.<br><b>Controls</b>: \u2190 \u2192 (or A D) move, Space (Z, \u2191) fires (two shots on screen at most), P pauses. With mouse / touch the ship follows your finger while it is down and fires automatically.<br><b>Score</b>: enemies in formation: bee 50 / butterfly 80 / boss 150 (two hits); diving enemies: 100 / 160 / 400. An extra ship at 20,000 points and then every 70,000.<br>Help > Cheat: Solve Automatically (F3) lets the computer fly (it simulates a few frames ahead to dodge and shoot); Give a Hint (F4) briefly marks the position the computer recommends." };
+  var T = KO ? { title: "총알쏘기", game: "게임", newg: "　새 게임", pause: "　일시정지", snd: "✓ 소리", full: "　전체화면", exit: "　끝내기(X)", theme: "　테마...", help: "도움말", cheat: "　치트...", auto: "　자동으로 풀기", hint: "　힌트 보기", how: "　게임 방법(H)", other: "　다른 게임", mine: "　지뢰찾기", poly: "　폴리큐브(테트리스)", atari: "　아타리 브레이크아웃", g2048: "　2048", pinball: "　3D 핀볼", trex: "　T-Rex", nono: "　노노그램", mahjong: "　마작", chomper: "　미로 먹보", baduk: "　바둑&오목", bubble: "　버블 슈터", snake: "　스네이크", platformer: "　도형 월드", sudoku: "　스도쿠", swap: "　스왑 퍼즐", chess: "　체스", janggi: "　장기", cube: "　큐브", trump: "　트럼프", hwatu: "　화투", doodle: "　두들", boxpush: "　상자 밀기", howT: "게임 방법", ok: "확인", help1: "<b>총알쏘기</b>: 아래의 우주선으로 적 편대를 모두 격추하면 다음 스테이지로 넘어갑니다. 적은 곡선을 그리며 날아와 편대를 이루고, 때때로 한 마리씩(또는 대장과 호위 둘) 플레이어를 향해 급강하하며 탄을 쏩니다. 탄에 맞거나 적과 부딪히면 우주선을 잃고, 3대를 모두 잃으면 끝납니다.<br><b>조작</b>: ← → (또는 A D)로 이동, 스페이스(Z, ↑)로 발사(화면에는 탄이 최대 2발), P 일시정지. 마우스/터치는 누르고 있는 동안 우주선이 손가락을 따라가며 자동 발사합니다.<br><b>점수</b>: 편대 안의 적은 일벌 50 · 나비 80 · 대장 150(두 번 맞혀야 함), 급강하 중인 적은 100 · 160 · 400점입니다. 2만 점, 그 뒤 7만 점마다 우주선이 하나 늘어납니다.<br>도움말 &gt; 치트: 자동으로 풀기(F3)는 컴퓨터가 대신 조종하고(몇 프레임 앞을 미리 시뮬레이션해서 피하며 쏨), 힌트 보기(F4)는 잠시 컴퓨터가 추천하는 위치를 표시합니다.<br><b>3D 테마</b>(게임 &gt; 테마): 우주선을 뒤에서 본 3차원 화면입니다. 우주선은 화면 평면(위·아래·좌·우)에서 움직이며 앞(깊이)으로 쏘고, 적은 깊은 곳에서 곡선으로 날아와 편대를 이룬 뒤 우주선 쪽으로 급강하합니다. 방향키(WASD) 4방향 이동, 스페이스 발사, 마우스/터치는 누른 위치로 따라가며 자동 발사합니다. 녹색 점선은 발사 방향입니다." }
+  : { title: "Bullet Shot", game: "Game", newg: "　New Game", pause: "　Pause", snd: "✓ Sound", full: "　Fullscreen", exit: "　Exit(X)", theme: "　Theme...", help: "Help", cheat: "　Cheat...", auto: "　Solve Automatically", hint: "　Give a Hint", how: "　How to Play(H)", other: "　Other Games", mine: "　Minesweeper", poly: "　Polycube (Tetris)", atari: "　Atari Breakout", g2048: "　2048", pinball: "　3D Pinball", trex: "　T-Rex", nono: "　Nonogram", mahjong: "　Mahjong", chomper: "　Maze Chomper", baduk: "　Go & Gomoku", bubble: "　Bubble Shooter", snake: "　Snake", platformer: "　Shape World", sudoku: "　Sudoku", swap: "　Swap Puzzle", chess: "　Chess", janggi: "　Janggi", cube: "　Cube", trump: "　Trump Cards", hwatu: "　Hwatu", doodle: "　Doodle", boxpush: "　Box Push", howT: "How to play", ok: "OK", help1: "<b>Bullet Shot</b>: shoot down the whole enemy formation with your ship at the bottom to reach the next stage. The enemies fly in on curved paths and settle into a formation; from time to time single enemies (or a boss with two escorts) dive at you and shoot. A hit or a collision costs a ship; when all three are gone the game is over.<br><b>Controls</b>: \u2190 \u2192 (or A D) move, Space (Z, \u2191) fires (two shots on screen at most), P pauses. With mouse / touch the ship follows your finger while it is down and fires automatically.<br><b>Score</b>: enemies in formation: bee 50 / butterfly 80 / boss 150 (two hits); diving enemies: 100 / 160 / 400. An extra ship at 20,000 points and then every 70,000.<br>Help > Cheat: Solve Automatically (F3) lets the computer fly (it simulates a few frames ahead to dodge and shoot); Give a Hint (F4) briefly marks the position the computer recommends.<br><b>3D theme</b> (Game > Theme): a 3D view from behind the ship. The ship moves in the screen plane (up / down / left / right) and shoots into the depth; the enemies fly in from far away on curves, hang in a formation and then dive at the ship. Arrows (WASD) move in four directions, Space fires; mouse / touch follows the pressed position and fires automatically. The green dotted line shows the firing line." };
   document.documentElement.lang = KO ? 'ko' : 'en';
   document.title = T.title; document.getElementById('ttitle').textContent = T.title;
   [].forEach.call(document.querySelectorAll('[data-t]'), function (e) { var k = e.getAttribute('data-t'); if (T[k] !== undefined) e.textContent = T[k]; });
@@ -125,7 +162,13 @@ ul.menu { min-width: 150px; width: max-content; }
     win.style.width = Math.floor(gw + 14) + 'px'; win.style.height = Math.floor(gh + chrome + 8) + 'px';
   }
   resize(); window.addEventListener('resize', resize);
-  document.getElementById('game').src = 'game.html';
+  var NAME = T.title, theme = '2d';
+  window.setTheme = function (t) {
+    theme = t; markAuto(false); document.getElementById('game').src = t === '3d' ? 'game3d.html' : 'game.html';
+    var tt = NAME + ' ' + t.toUpperCase(); document.getElementById('ttitle').textContent = tt; document.title = tt;
+    ['2d', '3d'].forEach(function (k) { var a = document.querySelector('.th' + k + ' a'); a.textContent = (k === t ? '\u2713 ' : '\u3000') + k.toUpperCase(); });
+  };
+  setTheme(new URLSearchParams(location.search).get('theme') === '3d' ? '3d' : '2d');
   function closeMenus() {
     var mb = $('.menu-bar'); try { mb.menubar('collapseAll'); } catch (e) {}
     mb.find('.ui-state-open').removeClass('ui-state-open'); mb.find('> li').removeClass('ui-state-active ui-state-hover ui-state-focus');
@@ -169,6 +212,15 @@ ul.menu { min-width: 150px; width: max-content; }
     }
     document.getElementById('game').addEventListener('load', hookFrame); hookFrame(); setInterval(hookFrame, 400);
   });
+})();
+</script>
+<script>
+/* category names of the Other Games menu for non-Korean browsers */
+(function () {
+  if (/^ko/i.test(navigator.language || 'ko')) return;
+  var EN = { '논리': 'Logic', '블록': 'Blocks', '슈팅·볼': 'Shooting & Ball', '액션': 'Action', '보드': 'Boards', '카드·패': 'Cards & Tiles' };
+  function run() { [].forEach.call(document.querySelectorAll('.menu a[data-cat]'), function (a) { var k = a.getAttribute('data-cat'); if (EN[k]) a.textContent = '\u3000' + EN[k]; }); }
+  if (document.readyState === 'complete') run(); else window.addEventListener('load', run);
 })();
 </script>
 </body>

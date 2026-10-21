@@ -4,38 +4,40 @@
 //   (level.solution is the reverse of those pulls; the A* solver below usually finds a much shorter one).
 (function (root) {
   'use strict';
-  var DX = [0, 0, -1, 1], DY = [-1, 1, 0, 0], DL = 'UDLR';
+  var DX = [0, 0, -1, 1, 0, 0], DY = [-1, 1, 0, 0, 0, 0], DZ = [0, 0, 0, 0, 1, -1], DL = 'UDLRFB';      // U/D = y-/y+, L/R = x-/x+, F/B = z+/z- (3D levels only)
+  function ND(L) { return L.d > 1 ? 6 : 4; }
+  function NC(L) { return L.w * L.h * (L.d || 1); }
 
   function rng(seed) {
     var a = seed | 0;
     return function () { a = (a + 0x6D2B79F5) | 0; var t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   }
   function nb(L, c, d) {                     // neighbour cell in direction d, -1 outside
-    var x = c % L.w + DX[d], y = ((c / L.w) | 0) + DY[d];
-    return (x < 0 || y < 0 || x >= L.w || y >= L.h) ? -1 : y * L.w + x;
+    var x = c % L.w + DX[d], y = (((c / L.w) | 0) % L.h) + DY[d], z = ((c / (L.w * L.h)) | 0) + DZ[d];
+    return (x < 0 || y < 0 || z < 0 || x >= L.w || y >= L.h || z >= (L.d || 1)) ? -1 : (z * L.h + y) * L.w + x;
   }
   function isFloor(L, c) { return c >= 0 && !L.wall[c]; }
 
   // cells the player can reach (boxes block); returns Uint8Array
   function reach(L, boxes, player) {
-    var seen = new Uint8Array(L.w * L.h), bx = new Uint8Array(L.w * L.h), q = [player], i, d, n;
+    var seen = new Uint8Array(NC(L)), bx = new Uint8Array(NC(L)), q = [player], i, d, n;
     for (i = 0; i < boxes.length; i++) bx[boxes[i]] = 1;
     seen[player] = 1;
-    for (i = 0; i < q.length; i++) for (d = 0; d < 4; d++) { n = nb(L, q[i], d); if (n >= 0 && !L.wall[n] && !bx[n] && !seen[n]) { seen[n] = 1; q.push(n); } }
+    for (i = 0; i < q.length; i++) for (d = 0; d < ND(L); d++) { n = nb(L, q[i], d); if (n >= 0 && !L.wall[n] && !bx[n] && !seen[n]) { seen[n] = 1; q.push(n); } }
     return seen;
   }
   // shortest walk (letters) from a to b without pushing; null if none
   function walk(L, boxes, a, b) {
     if (a === b) return '';
-    var prev = new Int32Array(L.w * L.h).fill(-2), bx = new Uint8Array(L.w * L.h), q = [a], i, d, n;
+    var prev = new Int32Array(NC(L)).fill(-2), bx = new Uint8Array(NC(L)), q = [a], i, d, n;
     for (i = 0; i < boxes.length; i++) bx[boxes[i]] = 1;
     prev[a] = -1;
     for (i = 0; i < q.length; i++) {
-      for (d = 0; d < 4; d++) {
+      for (d = 0; d < ND(L); d++) {
         n = nb(L, q[i], d);
         if (n < 0 || L.wall[n] || bx[n] || prev[n] !== -2) continue;
-        prev[n] = q[i] * 4 + d; q.push(n);
-        if (n === b) { var s = ''; while (prev[n] >= 0) { s = DL[prev[n] & 3] + s; n = prev[n] >> 2; } return s; }
+        prev[n] = q[i] * 8 + d; q.push(n);
+        if (n === b) { var s = ''; while (prev[n] >= 0) { s = DL[prev[n] & 7] + s; n = prev[n] >> 3; } return s; }
       }
     }
     return null;
@@ -67,27 +69,28 @@
   function solved(P) { for (var i = 0; i < P.boxes.length; i++) if (P.L.goals.indexOf(P.boxes[i]) < 0) return false; return true; }
 
   /* ---------- generator ---------- */
-  function gen(seed, w, h, nBoxes, density) {
+  function gen(seed, w, h, nBoxes, density, dd) {
     var R = rng(seed), tries = 0;
+    dd = dd || 1;
     for (;;) {
-      var L = tryGen(R, w, h, nBoxes, density);
+      var L = tryGen(R, w, h, nBoxes, density, dd);
       if (L && (L.pushes >= nBoxes * 4 || tries > 40)) return L;
-      if (++tries > 80) { w++; h++; tries = 0; }          // (a board too small for that many boxes: grow it)
+      if (++tries > 80) { w++; h++; if (dd > 1) dd++; tries = 0; }          // (a board too small for that many boxes: grow it)
     }
   }
-  function tryGen(R, w, h, nBoxes, density) {
-    var L = { w: w, h: h, wall: new Array(w * h).fill(0), goals: [], boxes: [], player: 0, solution: '' }, i, c;
-    for (i = 0; i < w * h; i++) { var x = i % w, y = (i / w) | 0; if (x === 0 || y === 0 || x === w - 1 || y === h - 1 || R() < density) L.wall[i] = 1; }
+  function tryGen(R, w, h, nBoxes, density, dd) {
+    var L = { w: w, h: h, d: dd, wall: new Array(w * h * dd).fill(0), goals: [], boxes: [], player: 0, solution: '' }, i, c, NN = w * h * dd;
+    for (i = 0; i < NN; i++) { var x = i % w, y = ((i / w) | 0) % h; if ((dd === 1 && (x === 0 || y === 0 || x === w - 1 || y === h - 1)) || R() < density) L.wall[i] = 1; }
     // keep one connected floor region (the biggest); fill the rest
-    var seen = new Int32Array(w * h).fill(-1), best = -1, bestN = 0, reg = 0, cnt = [];
-    for (i = 0; i < w * h; i++) {
+    var seen = new Int32Array(NN).fill(-1), best = -1, bestN = 0, reg = 0, cnt = [];
+    for (i = 0; i < NN; i++) {
       if (L.wall[i] || seen[i] >= 0) continue;
       var q = [i], k; seen[i] = reg;
-      for (k = 0; k < q.length; k++) for (var d = 0; d < 4; d++) { var n = nb(L, q[k], d); if (n >= 0 && !L.wall[n] && seen[n] < 0) { seen[n] = reg; q.push(n); } }
+      for (k = 0; k < q.length; k++) for (var d = 0; d < ND(L); d++) { var n = nb(L, q[k], d); if (n >= 0 && !L.wall[n] && seen[n] < 0) { seen[n] = reg; q.push(n); } }
       cnt[reg] = q.length; if (q.length > bestN) { bestN = q.length; best = reg; } reg++;
     }
     var floor = [];
-    for (i = 0; i < w * h; i++) { if (!L.wall[i] && seen[i] !== best) L.wall[i] = 1; if (!L.wall[i]) floor.push(i); }
+    for (i = 0; i < NN; i++) { if (!L.wall[i] && seen[i] !== best) L.wall[i] = 1; if (!L.wall[i]) floor.push(i); }
     if (floor.length < nBoxes * 5 + 6) return null;
     // goals / boxes
     var pool = floor.slice(), goals = [];
@@ -97,7 +100,7 @@
     var want = nBoxes * 24 + w * 3, att = 0, lastBox = -1;
     while (pulls.length < want && att++ < want * 6) {
       var rc = reach(L, P.boxes, P.player), cand = [];
-      for (var bi = 0; bi < P.boxes.length; bi++) for (d = 0; d < 4; d++) {
+      for (var bi = 0; bi < P.boxes.length; bi++) for (d = 0; d < ND(L); d++) {
         var cb = P.boxes[bi], qq = nb(L, cb, d ^ 1), q2 = qq >= 0 ? nb(L, qq, d ^ 1) : -1;     // player stands at qq (behind the box), steps back to q2 dragging the box to qq
         if (qq >= 0 && q2 >= 0 && rc[qq] && isFloor(L, q2) && P.boxes.indexOf(q2) < 0) cand.push([bi, d, qq, q2]);
       }
@@ -125,15 +128,16 @@
 
   /* ---------- solver (A* over pushes) ---------- */
   function deadTable(L) {                     // push distance of a box on each cell to the nearest goal (-1: cannot reach any goal)
-    var dist = new Int32Array(L.w * L.h).fill(-1), q = [], i, d;
+    var dist = new Int32Array(NC(L)).fill(-1), q = [], i, d;
     for (i = 0; i < L.goals.length; i++) { dist[L.goals[i]] = 0; q.push(L.goals[i]); }
-    for (i = 0; i < q.length; i++) for (d = 0; d < 4; d++) {
+    for (i = 0; i < q.length; i++) for (d = 0; d < ND(L); d++) {
       var prev = nb(L, q[i], d ^ 1), stand = prev >= 0 ? nb(L, prev, d ^ 1) : -1;      // a box at prev pushed in direction d lands on q[i]
       if (prev >= 0 && stand >= 0 && !L.wall[prev] && !L.wall[stand] && dist[prev] < 0) { dist[prev] = dist[q[i]] + 1; q.push(prev); }
     }
     return dist;
   }
-  function frozen(L, bx, c) {                 // a 2x2 block of walls / boxes around c that is not all goals
+  function frozen(L, bx, c) {                 // a 2x2 block of walls / boxes around c that is not all goals (2D levels only)
+    if (L.d > 1) return false;
     var x = c % L.w, y = (c / L.w) | 0, sx, sy;
     function blocked(xx, yy) { if (xx < 0 || yy < 0 || xx >= L.w || yy >= L.h) return true; var k = yy * L.w + xx; return L.wall[k] || bx[k]; }
     for (sx = -1; sx <= 1; sx += 2) for (sy = -1; sy <= 1; sy += 2) {
@@ -146,7 +150,7 @@
     return false;
   }
   function solve(L, boxes0, player0, limitMs) {
-    var dist = deadTable(L), t0 = Date.now(), n = L.w * L.h;
+    var dist = deadTable(L), t0 = Date.now(), n = NC(L);
     function hOf(boxes) { var s = 0; for (var i = 0; i < boxes.length; i++) { var d = dist[boxes[i]]; if (d < 0) return -1; s += d; } return s; }
     var h0 = hOf(boxes0); if (h0 < 0) return null;
     var nodes = [], heap = [], seen = Object.create(null);
@@ -162,7 +166,7 @@
       if (h === 0) { goalNode = ci; break; }
       var rc = reach(L, nd.boxes, nd.player), bxset = new Uint8Array(n), i, d;
       for (i = 0; i < nd.boxes.length; i++) bxset[nd.boxes[i]] = 1;
-      for (i = 0; i < nd.boxes.length; i++) for (d = 0; d < 4; d++) {
+      for (i = 0; i < nd.boxes.length; i++) for (d = 0; d < ND(L); d++) {
         var b = nd.boxes[i], stand = nb(L, b, d ^ 1), dest = nb(L, b, d);
         if (stand < 0 || dest < 0 || !rc[stand] || L.wall[dest] || bxset[dest] || dist[dest] < 0) continue;
         bxset[b] = 0; bxset[dest] = 1;
@@ -191,18 +195,19 @@
     return out;
   }
 
-  root.BoxPush = { DL: DL, nb: nb, newPlay: newPlay, move: move, undo: undo, solved: solved, gen: gen, solve: solve, walk: walk, reach: reach,
+  root.BoxPush = { DL: DL, ND: ND, NC: NC, nb: nb, newPlay: newPlay, move: move, undo: undo, solved: solved, gen: gen, solve: solve, walk: walk, reach: reach,
     params: function (lv) { var size = Math.min(12, 7 + Math.floor((lv - 1) / 3)), boxes = Math.min(9, 1 + Math.floor((lv - 1) / 2)); return { w: size, h: size, boxes: boxes, density: Math.min(0.2, 0.08 + lv * 0.005) }; },
     // a level of the given difficulty; candidates are generated until the solver shows that the best solution needs enough pushes
-    level: function (lv, variant) {
-      var p = root.BoxPush.params(lv), want = 4 + 3 * p.boxes, best = null, bestPush = -1, base = (lv * 7919 + 13 + (variant || 0) * 104729) | 0;
+    params3: function (lv) { var z = Math.min(7, 4 + Math.floor((lv - 1) / 4)); return { w: z, h: z, d: Math.min(6, 3 + Math.floor((lv - 1) / 5)), boxes: Math.min(5, 1 + Math.floor((lv - 1) / 3)), density: 0.07 }; },
+    level: function (lv, variant, is3d) {
+      var p = is3d ? root.BoxPush.params3(lv) : root.BoxPush.params(lv), want = is3d ? 3 + 2 * p.boxes : 4 + 3 * p.boxes, best = null, bestPush = -1, base = (lv * 7919 + 13 + (variant || 0) * 104729 + (is3d ? 5 : 0)) | 0;
       for (var a = 0; a < 40; a++) {
-        var L = gen((base + a * 977) | 0, p.w, p.h, p.boxes, p.density), sol = solve(L, L.boxes, L.player, 250);
+        var L = gen((base + a * 977) | 0, p.w, p.h, p.boxes, p.density, is3d ? p.d : 1), sol = solve(L, L.boxes, L.player, 250);
         if (!sol) continue;
         var P = newPlay(L); for (var i = 0; i < sol.length; i++) move(P, DL.indexOf(sol[i]));
         if (P.pushes > bestPush) { bestPush = P.pushes; best = L; L.solution = sol; L.minPushes = P.pushes; }
         if (bestPush >= want) break;
       }
-      return best || gen(base, p.w, p.h, p.boxes, p.density);
+      return best || gen(base, p.w, p.h, p.boxes, p.density, is3d ? p.d : 1);
     } };
 })(typeof self !== 'undefined' ? self : this);
