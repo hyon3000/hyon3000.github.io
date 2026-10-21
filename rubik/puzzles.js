@@ -30,9 +30,8 @@
       }
     });
     const bounds = []; for (let k = 0; k < nl - 1; k++) bounds.push(-(nl - 2) + 2 * k);     // slab boundaries, e.g. -1, 1 or -3, -1, 1, 3
-    const bands = [{ lo: bounds[nl - 2], hi: INF }];
-    for (let k = nl - 2; k > 0; k--) bands.push({ lo: bounds[k - 1], hi: bounds[k] });
-    bands.push({ lo: -INF, hi: bounds[0] });
+    const bands = nl === 1 ? [{ lo: -INF, hi: INF }] : [{ lo: bounds[nl - 2], hi: INF }];
+    if (nl > 1) { for (let k = nl - 2; k > 0; k--) bands.push({ lo: bounds[k - 1], hi: bounds[k] }); bands.push({ lo: -INF, hi: bounds[0] }); }
     const lines = [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map((ax) => ({ axis: ax, n: 4, bands: bands }));
     return { name: nl === 3 ? 'cube' : 'cube' + nl, facets: facets, stickers: stickers, lines: lines, scale: 1 / (nl * Math.sqrt(3)), gap: nl === 3 ? 0.08 : 0.07 };
   }
@@ -195,6 +194,24 @@
       }
       return S;
     };
+  }
+
+  // ---------------- helicopter cube ----------------
+  // A cube cut by the six planes through its centre that contain two opposite edges (x = +-y, x = +-z, y = +-z): every face is split by its two diagonals into 4 triangles (24
+  // stickers). A turn flips one half of the cube by 180 degrees about the axis through the midpoints of two opposite edges (the normal of the cut plane).
+  function heliSpec() {
+    const facets = [], stickers = [], h = Math.SQRT1_2;
+    FACE_ORDER.forEach((nm, fi) => {
+      const n = FACE[nm], u = Math.abs(n[1]) === 1 ? [1, 0, 0] : [0, 1, 0], w = V.cross(n, u), P = (a, b) => V.add(n, V.add(V.mul(u, a), V.mul(w, b)));
+      const cs = [P(1, 1), P(-1, 1), P(-1, -1), P(1, -1)], ms = [P(0, 1), P(-1, 0), P(0, -1), P(1, 0)], c = P(0, 0);
+      facets.push({ verts: cs, normal: n });
+      for (let k = 0; k < 4; k++) stickers.push({ facet: fi, verts: [cs[k], ms[k], ms[(k + 3) % 4]], kind: 't' });
+      for (let k = 0; k < 4; k++) stickers.push({ facet: fi, verts: [c, ms[k], ms[(k + 1) % 4]], kind: 'i' });
+    });
+    // three central planes (quarter turns of a half) and the twelve planes through the edge midpoints x+-y = +-1 ... (half turns of the edge cap)
+    const lines = [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map((ax) => ({ axis: ax, n: 4, bands: [{ lo: 0, hi: INF }, { lo: -INF, hi: 0 }] }));
+    [[1, -1, 0], [1, 1, 0], [1, 0, -1], [1, 0, 1], [0, 1, -1], [0, 1, 1]].forEach((ax) => lines.push({ axis: ax, n: 2, bands: [{ lo: h, hi: INF }, { lo: -INF, hi: -h }] }));
+    return { name: 'heli', facets: facets, stickers: stickers, lines: lines, scale: 1 / Math.sqrt(3), gap: 0.05 };
   }
 
   // ---------------- skewb ----------------
@@ -493,7 +510,7 @@
   // faces between all planes, a turn rotates one slab (the n slabs of an axis are listed from its positive end).
   function layeredSpec(name, facets, axes, n, order, scale, gap, maxStickers) {
     const planes = [];
-    axes.forEach((ax) => { for (let k = 1; k < n; k++) planes.push({ n: ax.u, d: ax.D * (2 * k / n - 1) }); });
+    axes.forEach((ax) => { const ds = ax.ds || (() => { const a = []; for (let k = 1; k < n; k++) a.push(ax.D * (2 * k / n - 1)); return a; })(); ds.forEach((d) => planes.push({ n: ax.u, d: d })); });
     const stickers = [];
     facets.forEach((f, fi) => {
       let cells = [f.verts];
@@ -509,7 +526,7 @@
       if (maxStickers && stickers.length > maxStickers) throw new Error('too many stickers');
     });
     const lines = axes.map((ax) => {
-      const lv = []; for (let k = n - 1; k >= 1; k--) lv.push(ax.D * (2 * k / n - 1));
+      const lv = ax.ds ? ax.ds.slice().sort((x, y) => y - x) : []; if (!ax.ds) for (let k = n - 1; k >= 1; k--) lv.push(ax.D * (2 * k / n - 1));
       const bands = []; let hi = INF;
       lv.forEach((p) => { bands.push({ lo: p, hi: hi }); hi = p; });
       bands.push({ lo: -INF, hi: hi });
@@ -563,7 +580,13 @@
       const nn = FACE[nm], u = Math.abs(nn[1]) === 1 ? [1, 0, 0] : [0, 1, 0], w = V.cross(nn, u), P = (a, b) => V.add(nn, V.add(V.mul(u, a), V.mul(w, b)));
       facets.push({ verts: [P(1, 1), P(-1, 1), P(-1, -1), P(1, -1)], normal: nn });
     });
-    const axes = [[1, 1, 1], [1, 1, -1], [1, -1, 1], [-1, 1, 1]].map((a) => ({ u: V.norm(a), D: Math.sqrt(3) * 0.85 }));
+    // n = number of pieces a face diagonal passes through (3 = the usual skewb).  Every body diagonal (tetrahedron vertices) has parallel cut planes n.p = d:
+    // odd n = 2r + 1: r planes spaced 2 / r apart, symmetric about the centre; even n = 2j + 2: j + 1 planes 1, 1 - e, 1 - 2e ... with e = 4 / (2j + 1) (the first one
+    // runs along the other diagonal of every face, the rest cut two squares and two triangles out of the diagonal)
+    const ds = [];
+    if (n % 2) { const r = (n - 1) / 2, e = 2 / r; for (let k = 0; k < r; k++) ds.push((k - (r - 1) / 2) * e); }
+    else { const j = (n - 2) / 2, e = 4 / (2 * j + 1); for (let k = 0; k <= j; k++) ds.push(1 - k * e); }
+    const axes = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]].map((a) => ({ u: V.norm(a), ds: ds.map((d) => d / Math.sqrt(3)) }));
     return layeredSpec('skewb' + n, facets, axes, n, 3, 1 / Math.sqrt(3), 0.04, 0);
   }
 
@@ -581,36 +604,41 @@
   [2, 4, 6, 7].forEach(function (n) {
     META['cube' + n] = { key: 'cube' + n, spec: function () { return cubeSpec(n); }, extras: n === 2 ? cube2Extras : null, scramble: { 2: 15, 4: 45, 6: 80, 7: 100 }[n], solver: n === 2 ? 'table' : 'history', view: { yaw: 0.55, pitch: 0.5 }, colours: META.cube.colours };
   });
+  META.heli = { key: 'heli', spec: heliSpec, extras: null, scramble: 24, solver: 'history', view: { yaw: 0.55, pitch: 0.5 }, colours: META.cube.colours };
   META.skewb = { key: 'skewb', spec: skewbSpec, extras: null, scramble: 25, solver: 'history', view: { yaw: 0.55, pitch: 0.5 }, colours: META.cube.colours };
   META.icosa = { key: 'icosa', spec: function () { return icosaSpec(ICOSA_H); }, extras: null, scramble: 40, solver: 'history', view: { yaw: 0.4, pitch: 0.3 },
     colours: ['#f2f2f2', '#ffd400', '#d41f26', '#ff7f0e', '#0f9d58', '#1a4fd6', '#7b2fbe', '#ff78b4', '#9be000', '#00c2d6', '#8c8c8c', '#9c5a2e', '#0b1f6b', '#00796b', '#7a0f2e', '#e6c88f', '#2b2b2b', '#b9a6ff', '#6b7a00', '#8fd0ff'] };
   // ---------------- custom puzzles: topology + size ----------------
   const TOPOS = ['tetra', 'cube', 'octa', 'dodeca', 'icosa', 'skewb', 'square'];
-  const MINN = { tetra: 2, cube: 2, octa: 2, dodeca: 2, icosa: 2, skewb: 2, square: 1 };
+  const MINN = { tetra: 2, cube: 2, octa: 2, dodeca: 2, icosa: 2, skewb: 3, square: -1 };
   const MAXN = { tetra: Infinity, cube: Infinity, octa: Infinity, dodeca: Infinity, icosa: Infinity, skewb: Infinity, square: Infinity };      // no upper limit on the size
-  const BUILTIN = { cube: { 2: 'cube2', 3: 'cube', 4: 'cube4', 5: 'cube5', 6: 'cube6', 7: 'cube7' }, tetra: { 3: 'tetra' }, octa: { 3: 'octa' }, icosa: { 2: 'icosa' }, skewb: { 2: 'skewb' }, dodeca: {}, square: { 1: 'sq1' } };
+  const BUILTIN = { cube: { 2: 'cube2', 3: 'cube', 4: 'cube4', 5: 'cube5', 6: 'cube6', 7: 'cube7' }, tetra: { 3: 'tetra' }, octa: { 3: 'octa' }, icosa: { 2: 'icosa' }, skewb: { 3: 'skewb' }, dodeca: {}, square: { 1: 'sq1' } };
   const BASE = { tetra: 'tetra', cube: 'cube', octa: 'octa', dodeca: 'dodeca', icosa: 'icosa', skewb: 'skewb' };
   const SPECS = { tetra: tetraSpec, cube: cubeSpec, octa: octaSpec, dodeca: dodecaNSpec, icosa: icosaNSpec, skewb: skewbNSpec };
   // key of the puzzle for a topology and a size: a built-in key when the combination exists (with its own solver), else a generated 'x:topo:n'
+  // Square-n: n = -1 (2 pieces), 0 (4), 0.5 (6) or an integer of 1 or more (4 (n + 1) pieces); every other value is refused
+  function squareOk(n) { return n === -1 || n === 0 || n === 0.5 || (Number.isInteger(n) && n >= 1); }
   function customKey(topo, n) {
-    n = Math.floor(+n);
-    if (TOPOS.indexOf(topo) < 0 || !(n >= MINN[topo]) || n > MAXN[topo]) return null;
+    n = topo === 'square' ? +n : Math.floor(+n);
+    if (TOPOS.indexOf(topo) < 0 || !isFinite(n)) return null;
+    if (topo === 'square') { if (!squareOk(n)) return null; }
+    else if (!(n >= MINN[topo] || n === 1) || n > MAXN[topo]) return null;          // n = 1 (below the minimum) is an easter egg: an unscrambled puzzle that is solved at once
     if (BUILTIN[topo][n]) return BUILTIN[topo][n];
     const key = 'x:' + topo + ':' + n;
     if (topo === 'square') return key;                  // Square-n has its own page (sq1.html) and engine (sq1-core.js)
     if (!META[key]) {
       const bm = META[BASE[topo]];
       META[key] = { key: key, spec: function () { return SPECS[topo](n); }, extras: null, scramble: topo === 'cube' ? Math.min(250, 20 + 10 * (n - 3)) : Math.max(25, Math.min(300, Math.round(n * (topo === 'tetra' ? 12 : topo === 'octa' ? 10 : 24)))),
-        solver: 'history', view: bm.view, colours: bm.colours, topo: topo, size: n };
+        solver: 'history', view: bm.view, colours: bm.colours, topo: topo, size: n, trivial: n === 1 };
     }
     return key;
   }
-  function parseKey(key) { const m = /^x:(\w+):(\d+)$/.exec(key || ''); return m ? { topo: m[1], n: +m[2] } : null; }
+  function parseKey(key) { const m = /^x:(\w+):(-?\d+(?:\.\d+)?)$/.exec(key || ''); return m ? { topo: m[1], n: +m[2] } : null; }
   // display name of a custom puzzle (KO / EN)
   function nameOf(key, ko) {
     const p = parseKey(key); if (!p) return null;
     const T = ko ? { tetra: '정사면체', cube: '큐브', octa: '정팔면체', dodeca: '정십이면체', icosa: '정이십면체', skewb: '스큐브', square: '스퀘어' } : { tetra: 'Tetrahedron', cube: 'Cube', octa: 'Octahedron', dodeca: 'Dodecahedron', icosa: 'Icosahedron', skewb: 'Skewb', square: 'Square' };
-    if (p.topo === 'square') return T.square + '-' + p.n;
+    if (p.topo === 'square') return T.square + '-' + (p.n < 0 ? '(' + p.n + ')' : p.n);
     return p.topo === 'cube' ? (ko ? '큐브' : 'Cube') + p.n : T[p.topo] + ' (n=' + p.n + ')';
   }
   // the key a built-in puzzle has as a (topology, size) pair, or null
@@ -629,5 +657,5 @@
     if (m.extras) m.extras(P);
     cache[key] = P; return P;
   }
-  root.RBPuzzles = { get: getPuzzle, META: META, customKey: customKey, parseKey: parseKey, nameOf: nameOf, describe: describe, TOPOS: TOPOS, MINN: MINN, MAXN: MAXN, KEYS: ['cube2', 'cube', 'cube4', 'cube5', 'cube6', 'cube7', 'skewb', 'tetra', 'octa', 'dodeca', 'icosa'], icosaSpec: icosaSpec, build: E.build };
+  root.RBPuzzles = { get: getPuzzle, META: META, customKey: customKey, parseKey: parseKey, nameOf: nameOf, describe: describe, TOPOS: TOPOS, MINN: MINN, MAXN: MAXN, KEYS: ['cube2', 'cube', 'cube4', 'cube5', 'cube6', 'cube7', 'skewb', 'heli', 'tetra', 'octa', 'dodeca', 'icosa'], icosaSpec: icosaSpec, build: E.build };
 })(typeof window !== 'undefined' ? window : globalThis);
