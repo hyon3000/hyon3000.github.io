@@ -2657,7 +2657,32 @@ function levelTime(L, n) {
   return Math.max(50, Math.ceil(minSec * 1.3 * mult / 50) * 50);
 }
 // Loose pickups are the exception: every item that lies on the floor (puzzle segments) is moved into a question block four tiles above its spot,
-// unless the column is too cramped; boss-arena flowers stay loose (the fight needs them at once)
+// (three tiles up under a low ceiling) unless the column is too cramped, puzzle gear and boss-arena items included: the validator / planner bump the block (a small hero keeps a boxed flower as a flower, see sim.js bump); the mount egg becomes a T.QM block
+// Castles get rotating maces and swinging flails: flat stretches of floor with five free rows above (away from the start, the goal and the boss arena) get a spiked ball on a chain, a five-ball fire bar or a swinging flail; more of them as the level number grows. They are real hazards only with enemies on, so the validator ignores them
+function addCastleMaces(L, seed, n) {
+  if (L.kind !== 'castle' || PF.noMace || L.maces && L.maces.length) return;
+  var rows = L.rows || ROWS, W = L.w, spots = [], c = 1, r = rng(hash(seed, n, 7301)), want = Math.min(10, 2 + Math.floor(n / 6) + (hash(seed, n, 7302) % 3));
+  var ar = L.arena, aLo = ar ? ar.c0 - 4 : W, aHi = ar ? ar.c1 + 4 : W, sx = Math.floor(L.start.x / TS) + 8;
+  function top(col) { for (var q = 2; q < rows; q++) if (PF.SOL[L.tiles[col * rows + q]]) return q; return -1; }
+  while (c < W - 8) {
+    var t0 = top(c), len = 0; if (t0 < (L.vertical ? 5 : 7)) { c++; continue; }
+    while (c + len < W && top(c + len) === t0) len++;
+    var ok = len >= (L.vertical ? 4 : 6) && c > sx && (c + len < aLo || c > aHi) && !(L.vgoal && Math.abs(c * TS - L.vgoal.x) < 120);
+    for (var q = c; ok && q < c + len; q++) for (var rr = t0 - (L.vertical ? 4 : 6); rr < t0; rr++) if (L.tiles[q * rows + rr] !== T.AIR) ok = false;
+    if (ok && ar && ar.y0 !== undefined && (t0 * TS < ar.y0 - 40 || t0 * TS > ar.y1 + 40) === false) ok = false;
+    if (ok) spots.push({ c: c, len: len, row: t0 });
+    c += Math.max(1, len);
+  }
+  for (var i = spots.length - 1; i > 0; i--) { var j = Math.floor(r() * (i + 1)), tmp = spots[i]; spots[i] = spots[j]; spots[j] = tmp; }
+  L.maces = []; var used = [];
+  for (i = 0; i < spots.length && L.maces.length < want; i++) {
+    var sp = spots[i], cx = (sp.c + sp.len / 2) * TS, near = used.some(function (u) { return Math.abs(u - cx) < 7 * TS; }); if (near) continue; used.push(cx);
+    var kk = r();
+    if (kk < 0.4) L.maces.push({ cx: cx, cy: sp.row * TS - (L.vertical ? 40 : 62), len: L.vertical ? 34 : 54, n: 1, swing: 1.0, per: 200 + Math.floor(r() * 80), ph: r() * 6, w: 0 });   // swinging flail
+    else if (kk < 0.75) L.maces.push({ cx: cx, cy: sp.row * TS - (L.vertical ? 26 : 34), len: L.vertical ? 32 : 44, n: 5, per: 340 + Math.floor(r() * 120), ph: r() * 6, dir: r() < 0.5 ? 1 : -1 });   // fire bar
+    else L.maces.push({ cx: cx, cy: sp.row * TS - (L.vertical ? 30 : 40), len: L.vertical ? 28 : 34, n: 1, per: 270, ph: r() * 6, dir: r() < 0.5 ? 1 : -1 });   // spiked ball circling on a chain
+  }
+}
 function boxify(L) {
   if (PF.noBox) return;
   if (L.egg && L.kind !== 'house' && L.tiles) {   // the rare mount egg comes out of a mount block (T.QM) four tiles above its spot instead of lying on the floor
@@ -2754,7 +2779,7 @@ function generate(seed, n, o) {
   for (var a = 0; a < 16; a++) {
     var oo = o; if (a >= 6 || Date.now() - t0 > 2500) { oo = {}; for (var k in (o || {})) oo[k] = o[k]; oo.boss = 0; }   // fallback: simpler boss arena
     // flystep levels carry their own verified script (L.plan) and failed kinds skip validation; everything else goes through validate()
-    L = build(seed, n, a, oo); boxify(L); swellWater(L, seed, n); v = L.plan ? { ok: !!L.planOk, script: L.plan, nodes: 0 } : (L.kindFail ? { ok: false } : validate(L));
+    L = build(seed, n, a, oo); boxify(L); addCastleMaces(L, seed, n); swellWater(L, seed, n); v = L.plan ? { ok: !!L.planOk, script: L.plan, nodes: 0 } : (L.kindFail ? { ok: false } : validate(L));
     // rising-lava speed derives from the solver's frame count: the climb is possible but tight
     if (v.ok && L.rise) { var climb = L.rows * TS - 100, frames = v.script.length; L.rise.v = Math.max(0.06, Math.min(0.5, climb / (frames * 1.9))); L.rise.delay = 240; }
     // success path: replay, then containment, then crumbs (not for planned levels); gauntlet levels get a time cap from the script length
