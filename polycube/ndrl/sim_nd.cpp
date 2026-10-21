@@ -124,8 +124,9 @@ struct G {
         if (simplify2 > 0) { simplify2 -= 1; return ri(4); }
         if (pentaForce > 0) {
             pentaForce -= 1;
-            if (!(pentaEnf && ri(100) < 5 * (100 - b5))) return DIM == 4 ? 11 + ri(26) : 12 + ri(29);
-            int t;      // enforced giant: 6+ cells at 5x the natural rate of this level
+            int pw = b5 - b4, hw = (100 - b5) * (pentaEnf ? 5 : 1);      // giant: 5-cell and 6+ cell blocks keep their natural weights (enforced: 6+ weighs 5x)
+            if (!(hw > 0 && ri(pw + hw) < hw)) return DIM == 4 ? 11 + ri(26) : 12 + ri(29);
+            int t;
             if (DIM == 4) { int r = ri(3); if (r == 0) { createNewBlock(); t = 56; } else t = 37 + ri(5); }
             else { if (ri(2)) { createNewBlock(); t = 56; } else t = 41 + ri(15); }
             return t;

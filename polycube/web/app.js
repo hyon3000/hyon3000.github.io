@@ -126,7 +126,7 @@ const state = {
   compactPending: false,
   simplify2: 0,
   pentaForce: 0,
-  pentaEnf: false,      // the giant item was eaten while enforced: 6+ cell blocks at 5x the natural rate
+  pentaEnf: false,      // the giant item was eaten while enforced: 6+ cell blocks weigh 5x
   reinforce: 0,
   score: 0,
   lines: 0,
@@ -582,8 +582,10 @@ function chooseBaseBlockIndex() {
   }
   if (state.pentaForce > 0) {
     state.pentaForce -= 1;
-    if (!(state.pentaEnf && randInt(100) < 5 * (100 - b5))) return 12 + randInt(29); // penta+ (index 12-40)
-    return hexaPlusIndex();   // enforced giant: 6+ cells at 5x the natural rate of this level
+    // giant: no block under 5 cells; 5-cell and 6+ cell blocks keep their natural weights of this level (enforced: 6+ cells weigh 5x)
+    const _pw = b5 - b4, _hw = (100 - b5) * (state.pentaEnf ? 5 : 1);
+    if (_hw > 0 && randInt(_pw + _hw) < _hw) return hexaPlusIndex();
+    return 12 + randInt(29); // penta+ (index 12-40)
   }
   let t = randInt(100);
   if (t < b1) t = 0;

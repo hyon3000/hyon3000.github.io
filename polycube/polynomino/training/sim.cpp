@@ -187,10 +187,11 @@ struct Env {
     if (simplify2 > 0) { simplify2 -= 1; return randInt(4); }
     if (pentaForce > 0) {
       pentaForce -= 1;
-      if (!(pentaEnf && randInt(100) < 5 * (100 - b5))) return 11 + randInt(18);
+      int pw = b5 - b4, hw = (100 - b5) * (pentaEnf ? 5 : 1);      // giant: 5-cell and 6+ cell blocks keep their natural weights (enforced: 6+ weighs 5x)
+      if (!(hw > 0 && randInt(pw + hw) < hw)) return 11 + randInt(18);
       if (randInt(3) == 0) return -1;
       int th = 29 + randInt(std::max(1, (int)RAW.size() - 29));
-      return th >= (int)RAW.size() ? -1 : th;      // enforced giant: 6+ cells at 5x the natural rate of this level
+      return th >= (int)RAW.size() ? -1 : th;
     }
     int t = randInt(100);
     int nraw = (int)RAW.size();
