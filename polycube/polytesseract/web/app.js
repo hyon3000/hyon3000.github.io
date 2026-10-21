@@ -2174,12 +2174,17 @@ function drawDigitString(originX, originY, scale, text, count, color = [1, 1, 1,
   const str = String(text);
   // C++ ilog alignment: ilog(x) = 9 - floor(log10(x)), offset = floor(ilog/2)
   const num = parseInt(str, 10) || 0;
-  const ilog = count - Math.floor(Math.log10(num > 0 ? num : 1));
+  const ilog = str[0] === '-' ? count - (str.length - 1) : count - Math.floor(Math.log10(num > 0 ? num : 1));
   const offset = Math.floor(ilog / 2);
   for (let i = 0; i < str.length; i += 1) {
     const ch = str[i];
     if (/\d/.test(ch)) {
       drawDigitAt(originX + (12 + 2 * (i + offset)) * scale, originY, scale, ch, color);
+    } else if (ch === "-") {
+      // Draw - sign (the battle total may be negative)
+      const px = originX + (12.5 + 2 * (i + offset)) * scale;
+      const py = originY - scale;
+      lines([[px - scale * 0.5, py, 0], [px + scale * 0.5, py, 0]], color);
     } else if (ch === "+") {
       // Draw + sign
       const px = originX + (12.5 + 2 * (i + offset)) * scale;

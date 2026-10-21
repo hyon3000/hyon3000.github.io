@@ -45,7 +45,7 @@
   // Cumulative score (replaces the high score in battle mode): after every game the winner is credited the sum of both scores, the loser 0.
   var gid = /polynomino/i.test(root.location.pathname) ? 'polynomino' : (/polytesseract/i.test(root.location.pathname) ? 'polytesseract' : 'polycube'), totalKey = gid + '_battle_total';
   B.total = 0;
-  try { var tv = parseInt(root.localStorage.getItem(totalKey), 10); if (tv > 0) B.total = Math.min(tv, 999999999); } catch (_) {}
+  try { var tv = parseInt(root.localStorage.getItem(totalKey), 10); if (!isNaN(tv)) B.total = Math.max(-999999999, Math.min(tv, 999999999)); } catch (_) {}
   function saveTotal() { try { root.localStorage.setItem(totalKey, String(B.total)); } catch (_) {} }
   if (!battle) { B.store = function () { return false; }; B.begin = function (cb) { cb(); }; B.attach = function () {}; B.clear = function () {}; B.aiUseSlots = function () {}; return; }
 
@@ -568,7 +568,8 @@
       var res = B.result();
       if (res && now - creditT > 400) {
         B.credited = true;
-        if (res === 'win') { B.total = Math.min(999999999, B.total + Math.max(0, (B.api.stats && B.api.stats().score) || 0) + Math.max(0, B.opp.score || 0)); saveTotal(); }
+        var pts = Math.max(0, (B.api.stats && B.api.stats().score) || 0) + Math.max(0, B.opp.score || 0);       // a win adds both scores to the total, a loss subtracts them (the total may go negative)
+        if (res === 'win' || res === 'lose') { B.total = Math.max(-999999999, Math.min(999999999, B.total + (res === 'win' ? pts : -pts))); saveTotal(); }
       }
     }
     B.phase = ph;

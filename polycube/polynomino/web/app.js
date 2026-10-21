@@ -1770,6 +1770,7 @@ function drawLineChar(ctx, x, y, scale, char, color) {
     'Z': [[0,0,w,0],[w,0,0,h],[0,h,w,h]],
     ':': [],
     '+': [[w/2,h*0.2,w/2,h*0.8],[w*0.1,h/2,w*0.9,h/2]],
+    '-': [[w*0.1,h/2,w*0.9,h/2]],
     ' ': [],
   };
   const s = segs[char];
@@ -2726,7 +2727,7 @@ function drawLineStringCentered(ctx, cx, y, scale, str, color) {
 
 function drawCenteredDigits(ctx, cx, y, scale, num, count, color) {
   const s = String(num);
-  const offset = Math.floor((count - Math.floor(Math.log10(num > 0 ? num : 1) + 1)) / 2);
+  const offset = Math.floor((count - s.length) / 2);
   const spacing = scale * 0.85;
   const totalW = count * spacing;
   const startX = cx - totalW / 2 + offset * spacing;
