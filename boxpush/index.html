@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Box Push</title>
+<meta name="description" content="Box Push: push every crate onto a goal. Endless generated levels with an auto-solver, in a Windows 98 frame.">
+<link href="win98.css" media="screen" rel="stylesheet" type="text/css">
+<style>
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #fff; }
+.windows { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.a-window { position: relative; display: flex; flex-direction: column; }
+.a-window .title-bar .title-icon { background-size: 16px 16px; image-rendering: pixelated !important; }
+.a-window .window-content { flex: 1; overflow: hidden; box-sizing: border-box; width: auto; padding: 0; border-left: 3px solid #808080; border-top: 3px solid #808080; border-right: 3px solid #fff; border-bottom: 3px solid #fff; background: #000; }
+.a-window .window-content iframe { width: 100%; height: 100%; border: none; display: block; }
+.windows-98 .window.gdialog { position: fixed; left: 50%; top: 60px; transform: translateX(-50%); z-index: 100; display: none; width: 360px; max-width: 96vw; }
+.gdialog .window-content { padding: 10px; box-sizing: border-box; width: auto; background: silver; }
+.gdialog .row { margin: 8px 0 0; text-align: center; }
+/* menu items with a shortcut: the label on the left, the shortcut (F2 ...) pushed to the right edge (same as the Minesweeper page) */
+.menu .ui-menu-item > a { display: flex; align-items: center; gap: 16px; }
+.menu .ui-menu-item > a .mi-label { flex: 1 1 auto; text-align: left; }
+.menu .ui-menu-item > a .mi-key { margin-left: auto; flex: 0 0 auto; min-width: 3ch; text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; opacity: .9; }
+.menu, .menu .ui-menu-item > a, .menu .mi-label, .menu .mi-key { white-space: nowrap !important; }
+ul.menu { min-width: 150px; width: max-content; }
+/* the submenu arrow must not take room in the item (it sits at the right edge, like on the Minesweeper page) */
+.menu .ui-menu-item > a { position: relative; }
+.menu .ui-menu-icon.ui-icon { position: absolute !important; right: 4px; top: 50%; transform: translateY(-50%); margin: 0 !important; flex: 0 0 auto !important; pointer-events: none; }
+</style>
+<script>window.__errs=[];window.addEventListener("error",function(e){window.__errs.push(String(e.message)+" @"+e.filename+":"+e.lineno)});</script>
+</head>
+<body>
+<div class="windows windows-98">
+  <div class="window has-menu a-window" id="mainwin">
+    <div class="title-bar">
+      <div class="title-icon" id="ticon" style="background-image:url(icon.png)"></div>
+      <div class="title" id="ttitle">Box Push</div>
+      <div class="title-button-group">
+        <div class="title-button minimize"></div>
+        <div class="title-button maximize disabled" onclick="event.preventDefault();event.stopPropagation();return false;"></div>
+        <div class="title-button close"></div>
+      </div>
+    </div>
+    <ul class="menu-bar">
+      <li>
+        <a href="#" data-access-key="g" data-t="game">게임</a>
+        <ul class="menu">
+          <li onclick="return runMenu(function(){ newGame(); });"><a href="#"><span class="mi-label" data-t="newg">　새 게임</span><span class="mi-key">F2</span></a></li>
+          <li onclick="return runMenu(function(){ restartLevel(); });"><a href="#"><span class="mi-label" data-t="restart">　다시 시작(R)</span><span class="mi-key">R</span></a></li>
+          <li onclick="return runMenu(function(){ undoMove(); });"><a href="#"><span class="mi-label" data-t="undo">　무르기(U)</span><span class="mi-key">U</span></a></li>
+          <li class="separator"></li>
+          <li onclick="return runMenu(function(){ prevLevel(); });"><a href="#"><span class="mi-label" data-t="prev">　이전 레벨</span><span class="mi-key">[</span></a></li>
+          <li onclick="return runMenu(function(){ nextLevel(); });"><a href="#"><span class="mi-label" data-t="nextl">　다음 레벨</span><span class="mi-key">]</span></a></li>
+          <li class="separator"></li>
+          <li onclick="return runMenu(function(){ goFullscreen(); });"><a href="#" data-t="full">　전체화면</a></li>
+          <li class="separator"></li>
+          <li onclick="return runMenu(function(){ document.getElementById('mainwin').style.visibility='hidden'; });"><a href="#" data-t="exit">　끝내기(X)</a></li>
+        </ul>
+      </li>
+      <li>
+        <a href="#" data-access-key="h" data-t="help">도움말</a>
+        <ul class="menu">
+          <li onclick="return runMenu(function(){ openDlg('helpWin'); });"><a href="#" data-t="how">　게임 방법(H)</a></li>
+          <li class="separator"></li>
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="cheat">　치트...</a>
+            <ul class="menu">
+              <li class="menu-autosolve" onclick="return runMenu(function(){ toggleAuto(); });"><a href="#"><span class="mi-label" data-t="auto">　자동으로 풀기</span><span class="mi-key">F3</span></a></li>
+              <li class="menu-hint" onclick="return runMenu(function(){ giveHint(); });"><a href="#"><span class="mi-label" data-t="hint">　힌트 보기</span><span class="mi-key">F4</span></a></li>
+            </ul>
+          </li>
+          <li class="separator"></li>
+          <li onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;">
+            <a href="#" onclick="event.preventDefault();event.stopPropagation();return false;" style="cursor:default;" data-t="other">　다른 게임</a>
+            <ul class="menu">
+              <li onclick="return runMenu(function(){ window.location.href='../index.html'; });"><a href="#" data-t="mine">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../polycube/index.html'; });"><a href="#" data-t="poly">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../atari/index.html'; });"><a href="#" data-t="atari">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../2048/index.html'; });"><a href="#" data-t="g2048">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../pinball/index.html'; });"><a href="#" data-t="pinball">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../dino/index.html'; });"><a href="#" data-t="trex">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../nonogram/index.html'; });"><a href="#" data-t="nono">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../platformer/index.html'; });"><a href="#" data-t="platformer">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../doodle/index.html'; });"><a href="#" data-t="doodle">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=mahjong'; });"><a href="#" data-t="mahjong">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../chomper/index.html'; });"><a href="#" data-t="chomper">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../board/index.html?set=baduk'; });"><a href="#" data-t="baduk">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../bubble/index.html'; });"><a href="#" data-t="bubble">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../snake/index.html'; });"><a href="#" data-t="snake">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../sudoku/index.html'; });"><a href="#" data-t="sudoku">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../swap/index.html'; });"><a href="#" data-t="swap">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../shooter/index.html'; });"><a href="#" data-t="shooter">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../board/index.html?set=janggi'; });"><a href="#" data-t="janggi">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../board/index.html?set=chess'; });"><a href="#" data-t="chess">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../rubik/index.html'; });"><a href="#" data-t="cube">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=trump'; });"><a href="#" data-t="trump">　</a></li>
+              <li onclick="return runMenu(function(){ window.location.href='../card/index.html?set=hwatu'; });"><a href="#" data-t="hwatu">　</a></li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+    <div class="window-content"><iframe id="game" src="about:blank"></iframe></div>
+  </div>
+
+  <div class="window gdialog" id="helpWin">
+    <div class="title-bar"><div class="title-icon" style="background-image:url(icon.png);background-size:16px 16px"></div><div class="title" data-t="howT">게임 방법</div>
+      <div class="title-button-group"><div class="title-button close" onclick="closeDlg('helpWin')"></div></div></div>
+    <div class="window-content"><div id="helpTxt" style="font-size:12px;line-height:1.5;max-height:calc(100vh - 210px);overflow-y:auto;padding-right:4px"></div>
+      <div class="row"><button type="button" class="title-button" style="padding:2px 10px;" onclick="closeDlg('helpWin')" data-t="ok">확인</button></div></div>
+  </div>
+</div>
+<script src="vendor/jquery.min.js"></script>
+<script src="vendor/jquery-ui.min.js"></script>
+<script src="jquery.mswin.js"></script>
+<script src="jquery.mswin.menu.js"></script>
+<script>
+(function () {
+  var KO = /^ko/i.test(navigator.language || 'ko');
+  var T = KO ? { title: "상자 밀기", game: "게임", newg: "　새 게임", restart: "　다시 시작(R)", undo: "　무르기(U)", prev: "　이전 레벨", nextl: "　다음 레벨", full: "　전체화면", exit: "　끝내기(X)", help: "도움말", cheat: "　치트...", auto: "　자동으로 풀기", hint: "　힌트 보기", how: "　게임 방법(H)", other: "　다른 게임", mine: "　지뢰찾기", poly: "　폴리큐브(테트리스)", atari: "　아타리 브레이크아웃", g2048: "　2048", pinball: "　3D 핀볼", trex: "　T-Rex", nono: "　노노그램", mahjong: "　마작", chomper: "　미로 먹보", baduk: "　바둑&오목", bubble: "　버블 슈터", snake: "　스네이크", platformer: "　도형 월드", sudoku: "　스도쿠", swap: "　스왑 퍼즐", chess: "　체스", janggi: "　장기", cube: "　큐브 퍼즐", trump: "　트럼프", hwatu: "　화투", doodle: "　두들", shooter: "　슈터", howT: "게임 방법", ok: "확인", help1: "<b>상자 밀기</b>: 일꾼(파란 공)이 상자를 밀어 모든 목표 지점(붉은 점)에 올리면 클리어입니다. 상자는 밀기만 할 수 있고 당길 수 없으며, 상자 두 개를 한꺼번에 밀 수는 없습니다. 레벨은 끝없이 자동 생성되며(항상 풀 수 있게 만들어짐) 레벨이 오를수록 판이 커지고 상자가 많아집니다.<br><b>조작</b>: 방향키(WASD)로 이동, U / Backspace / Ctrl+Z 무르기, R 다시 시작, [ ] 이전/다음 레벨, Enter 클리어 후 다음 레벨. 마우스/터치: 빈 칸을 누르면 그곳까지 걸어가고, 옆 칸을 누르거나 화면을 쓸어 넘기면(스와이프) 한 칸씩 이동·밀기합니다.<br>도움말 &gt; 치트: 자동으로 풀기(F3)는 컴퓨터가 풀이를 찾아 대신 움직이고(클리어하면 다음 레벨로 계속), 힌트 보기(F4)는 다음에 밀 상자와 그 도착 칸을 잠시 표시합니다. 새 게임(F2)은 같은 레벨 난이도에서 다른 판을 만듭니다." }
+  : { title: "Box Push", game: "Game", newg: "　New Game", restart: "　Restart(R)", undo: "　Undo(U)", prev: "　Previous Level", nextl: "　Next Level", full: "　Fullscreen", exit: "　Exit(X)", help: "Help", cheat: "　Cheat...", auto: "　Solve Automatically", hint: "　Give a Hint", how: "　How to Play(H)", other: "　Other Games", mine: "　Minesweeper", poly: "　Polycube (Tetris)", atari: "　Atari Breakout", g2048: "　2048", pinball: "　3D Pinball", trex: "　T-Rex", nono: "　Nonogram", mahjong: "　Mahjong", chomper: "　Maze Chomper", baduk: "　Go & Gomoku", bubble: "　Bubble Shooter", snake: "　Snake", platformer: "　Shape World", sudoku: "　Sudoku", swap: "　Swap Puzzle", chess: "　Chess", janggi: "　Janggi", cube: "　Cube Puzzles", trump: "　Trump Cards", hwatu: "　Hwatu", doodle: "　Doodle", shooter: "　Shooter", howT: "How to play", ok: "OK", help1: "<b>Box Push</b>: push every crate onto a goal (red dot) with the worker (the blue ball). Crates can only be pushed, never pulled, and two crates cannot be pushed at once. Levels are generated endlessly (always solvable); the board grows and gets more crates as the level rises.<br><b>Controls</b>: arrow keys (WASD) move, U / Backspace / Ctrl+Z undo, R restart, [ ] previous / next level, Enter next level after a clear. Mouse / touch: tap an empty cell to walk there, tap an adjacent cell or swipe to move / push one step.<br>Help > Cheat: Solve Automatically (F3) lets the computer find a solution and play it (and go on with the next level); Give a Hint (F4) briefly marks the next crate to push and where it goes. New Game (F2) makes another board of the same level." };
+  document.documentElement.lang = KO ? 'ko' : 'en';
+  document.title = T.title; document.getElementById('ttitle').textContent = T.title;
+  [].forEach.call(document.querySelectorAll('[data-t]'), function (e) { var k = e.getAttribute('data-t'); if (T[k] !== undefined) e.textContent = T[k]; });
+  document.getElementById('helpTxt').innerHTML = T.help1;
+  function resize() {
+    var vw = window.innerWidth, vh = window.innerHeight, win = document.getElementById('mainwin'), chrome = 46, ratio = 1, gw, gh;
+    if (vw / (vh - chrome) < ratio) { gw = vw - 14; gh = gw / ratio; } else { gh = vh - chrome - 8; gw = gh * ratio; }
+    win.style.width = Math.floor(gw + 14) + 'px'; win.style.height = Math.floor(gh + chrome + 8) + 'px';
+  }
+  resize(); window.addEventListener('resize', resize);
+  document.getElementById('game').src = 'game.html';
+  function closeMenus() {
+    var mb = $('.menu-bar'); try { mb.menubar('collapseAll'); } catch (e) {}
+    mb.find('.ui-state-open').removeClass('ui-state-open'); mb.find('> li').removeClass('ui-state-active ui-state-hover ui-state-focus');
+    mb.find('.menu').hide().attr('aria-hidden', 'true').attr('aria-expanded', 'false');
+  }
+  window.runMenu = function (fn) { closeMenus(); setTimeout(fn, 0); return false; };
+  window.closeDlg = function (id) { document.getElementById(id).style.display = 'none'; };
+  window.openDlg = function (id) { document.getElementById(id).style.display = 'block'; };
+  // the game frame is called directly; if the browser forbids that (file:// pages in Chrome are cross-origin) a message is sent instead
+  window.callGame = function (name, arg) {
+    var fr = document.getElementById('game'), r;
+    try { var w = fr.contentWindow; if (typeof w[name] !== 'function') throw new Error('x'); r = w[name](arg); } catch (e) { try { fr.contentWindow.postMessage({ ngCmd: name, v: arg }, '*'); } catch (e2) {} return undefined; }
+    return r;
+  };
+  window.newGame = function () { markAuto(false); callGame('newGame'); };
+  window.giveHint = function () { callGame('giveHint'); };
+  window.toggleAuto = function () { var on = callGame('toggleAuto'); if (on !== undefined) markAuto(!!on); };
+  window.markAuto = markAuto; window.setAutoMark = markAuto;
+  function markAuto(on) { var a = document.querySelector('.menu-autosolve .mi-label'); if (a) a.textContent = (on ? '\u2713 ' : '\u3000') + a.textContent.replace(/^[\u2713\u2714]\s*/, '').replace(/^\u3000/, ''); }
+  window.restartLevel = function () { callGame('restartLevel'); };
+  window.undoMove = function () { callGame('undoMove'); };
+  window.prevLevel = function () { callGame('prevLevel'); };
+  window.nextLevel = function () { callGame('nextLevel'); };
+  window.goFullscreen = function () { var el = document.getElementById('mainwin'); if (el.requestFullscreen) el.requestFullscreen(); };
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'F2') { e.preventDefault(); window.newGame(); } else if (e.key === 'F3') { e.preventDefault(); window.toggleAuto(); } else if (e.key === 'F4') { e.preventDefault(); window.giveHint(); }
+  });
+  $(function () {
+    if ($('.menu-bar').length) $('.menu-bar').menubar();
+    $('.window').draggable({ handle: '.title' });
+    $('#mainwin .title-button.minimize').on('click', function () { $('#mainwin').hide(); });
+    $('#mainwin .title-button.close').on('click', function () { $('#mainwin').css('visibility', 'hidden'); });
+    // close the menus when the game frame is clicked and forward F2 from inside the frame; hooked by polling (a frame reload gets a new document)
+    function hookFrame() {
+      try {
+        var fw = document.getElementById('game').contentWindow, fd = fw.document; if (!fd) return;
+        if (!fd.__hooked) {
+          fd.__hooked = 1;
+          fd.addEventListener('pointerdown', closeMenus);
+          fd.addEventListener('keydown', function (e) { if (/^F[234]$/.test(e.key)) { e.preventDefault(); document.dispatchEvent(new KeyboardEvent('keydown', { key: e.key })); } });
+        }
+      } catch (e) {}
+    }
+    document.getElementById('game').addEventListener('load', hookFrame); hookFrame(); setInterval(hookFrame, 400);
+  });
+})();
+</script>
+</body>
+</html>
