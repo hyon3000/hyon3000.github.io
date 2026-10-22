@@ -250,7 +250,7 @@
   }
   function isFree(S, p) { return members(S, p) !== null; }
   // fully functional cuboid: a turn is refused when it leaves a cell (or a group) cut off from the rest (the cells are joined by faces, positions on the lattice) or when a sticker face
-  // would touch another cell afterwards (an inner black face may never meet an outer sticker face).  Returns '' when the turn is fine.
+  // would touch an inner face of another cell afterwards (an inner black face may never meet an outer sticker face).  Returns '' when the turn is fine.
   function ffProblem(S, pl, m, a) {
     const sc = S.cfg.sc, Rm = rotMat(pl.axis, a), C = pl.center || [0, 0, 0], inM = new Set(m), idx = new Map(), pos = [], rots = []; let off = false;
     const ri = (x) => Math.round(x / sc);
@@ -267,11 +267,13 @@
       for (let d = 0; d < 3; d++) for (const sg of [-2, 2]) { const q = p.slice(); q[d] += sg; const j = idx.get(q.join(',')); if (j !== undefined && !seen.has(j)) { seen.add(j); stack.push(j); } }
     }
     if (seen.size !== S.pieces.length) return 'detach';
+    // a sticker face may not touch an inner face; sticker against sticker and inner against inner are fine (exposed faces are fine too)
+    const dirIdx = (v) => (Math.abs(v[0]) > 0.5 ? (v[0] > 0 ? 0 : 1) : Math.abs(v[1]) > 0.5 ? (v[1] > 0 ? 2 : 3) : (v[2] > 0 ? 4 : 5)), DV = [[2, 0, 0], [-2, 0, 0], [0, 2, 0], [0, -2, 0], [0, 0, 2], [0, 0, -2]];
+    const kind = S.pieces.map((pc, i) => { const k = [false, false, false, false, false, false]; for (const f of pc.home) { if (f.tag < 0) continue; k[dirIdx(app(rots[i], FACES[f.tag]))] = true; } return k; });
     for (let i = 0; i < S.pieces.length; i++) {
-      for (const f of S.pieces[i].home) {
-        if (f.tag < 0) continue;
-        const nv = app(rots[i], FACES[f.tag]), q = [pos[i][0] + 2 * Math.round(nv[0]), pos[i][1] + 2 * Math.round(nv[1]), pos[i][2] + 2 * Math.round(nv[2])];
-        if (idx.has(q.join(','))) return 'cover';
+      for (let d = 0; d < 6; d++) {
+        const q = [pos[i][0] + DV[d][0], pos[i][1] + DV[d][1], pos[i][2] + DV[d][2]], j = idx.get(q.join(','));
+        if (j !== undefined && kind[i][d] !== kind[j][d ^ 1]) return 'cover';
       }
     }
     return '';
