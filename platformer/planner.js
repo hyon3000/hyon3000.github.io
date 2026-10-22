@@ -366,6 +366,17 @@ function scriptStage(L, st, i0, pred, needGround, ext) {
   return null;
 }
 // Navigator: nv.decide(st, budgetMs) returns a key mask for this frame, or null while a budgeted search is still thinking.
+// The scripted walks (to a mushroom / a block) ignore lightning: hold back before a marked strike column and step out of one the hero stands in
+function hzGuard(st, m) {
+  var p = st.p, pcx = p.x + p.w / 2, mv = m & (IN_R | IN_L);
+  for (var i = 0; i < st.hz.length; i++) {
+    var o = st.hz[i]; if (o.k !== 'bolt' || !(o.wt > 0 || o.sk > 0)) continue;
+    var d = o.x - pcx, ad = Math.abs(d);
+    if (ad < 16) return (d > 0 ? IN_L : IN_R) | PF.IN.RUN;
+    if (ad < 46 && mv && ((d > 0) === ((m & IN_R) !== 0))) return 0;
+  }
+  return m;
+}
 function makeNavigator() {
   var fb = makePlanner(), now = function () { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }, nv = { fb: fb, seq: null, i: 0, stage: -1, wait: 0, st: { plans: 0, fails: 0, ms: 0 } };
   // True when the hero can plan from here: standing, or afloat on swim levels.
@@ -433,12 +444,15 @@ function makeNavigator() {
       if (Math.abs(rgs.x - hxs) + Math.abs(rgs.y - hys) > 260) for (var rj = st.stage - 1; rj >= 0; rj--) { var rw = L.route[rj]; if (Math.abs(rw.y - hys) < 10 && Math.abs(rw.x - hxs) < 70) { if (rj < st.stage - 1) { st.stage = rj; nv.seq = null; nv.job = null; } break; } } }
     // Mushroom attraction: a shrunken hero walks to a nearby mushroom pickup (hopping obstacles, running when far) before a boss fight.
     // (and a hero who lost his flame walks back to a spare flower when a fire-armoured boss is near: only fireballs hurt it)
+    var thr = false;   // a diving / charging boss or a spark close by: the scripted walks below give way to the look-ahead planner
+    for (var thi = 0; thi < st.en.length && !thr; thi++) { var the = st.en[thi]; if (the.t !== 8 || the.alive === false) continue; var tdx = Math.abs(the.x + the.w / 2 - st.p.x - st.p.w / 2), tdy = Math.abs(the.y + the.h / 2 - st.p.y - st.p.h / 2); if ((tdx < 64 && tdy < 64) || ((the.v === 4 && the.s === 1 || the.v > 4 && the.s === 1) && tdx < 170 && tdy < 90)) thr = true; }
+    for (var thj = 0; thj < st.ep.length && !thr; thj++) { var tp = st.ep[thj]; if (Math.abs(tp.x - st.p.x - st.p.w / 2) < 56 && Math.abs(tp.y - st.p.y - st.p.h / 2) < 56) thr = true; }
     var wantK = st.p.mini || st.p.pw === 0 ? 0 : -1;   // a small hero also wants a mushroom (e.g. one that rolled out of a block)
     if (wantK < 0 && st.boss > 0 && st.p.pw !== 2) for (var fbi = 0; fbi < st.en.length; fbi++) { var fbe = st.en[fbi]; if (fbe.t === 8 && fbe.alive && fbe.imm && fbe.immKind === 'fire' && Math.abs(fbe.x - st.p.x) < 420) wantK = 1; }
-    if (st.boss > 0 && wantK >= 0) for (var mi = 0; mi < st.it.length; mi++) { var mu = st.it[mi]; if (mu.alive && mu.k === wantK && mu.x > st.p.x - (wantK === 1 ? 260 : 220) && mu.x < st.p.x + (wantK === 1 ? 260 : 220) && Math.abs(mu.y - st.p.y) < (wantK === 1 ? 44 : 40) && st.p.ground) { nv.seq = null; nv.job = null; var mdx = mu.x + 6 - (st.p.x + st.p.w / 2); if (Math.abs(mdx) < 2) return 0; var mdir = mdx > 0 ? PF.IN.R : PF.IN.L, mc = Math.floor((mdx > 0 ? st.p.x + st.p.w + 2 : st.p.x - 2) / PF.TS), mr = Math.floor((st.p.y + st.p.h - 4) / PF.TS), mt = PF.tileAt(st, mc, mr); return mdir | (PF.SOL[mt] || PF.tileAt(st, mc, mr - 1) === 0 && PF.SOL[PF.tileAt(st, mc, mr + 1)] && false ? PF.IN.J : 0) | (Math.abs(mdx) > 24 ? PF.IN.RUN : 0); } }   // a shrunken hero must grow back before an arena fight: the mushroom at the entrance
+    if (!thr && st.boss > 0 && wantK >= 0) for (var mi = 0; mi < st.it.length; mi++) { var mu = st.it[mi]; if (mu.alive && (mu.k === wantK || wantK === 0 && mu.k === 1) && mu.x > st.p.x - (wantK === 1 ? 260 : 220) && mu.x < st.p.x + (wantK === 1 ? 260 : 220) && Math.abs(mu.y - st.p.y) < (mu.vy > 0.2 && !mu.ground ? 76 : wantK === 1 ? 44 : 40) && st.p.ground) { nv.seq = null; nv.job = null; var mdx = mu.x + 6 - (st.p.x + st.p.w / 2); if (Math.abs(mdx) < 2) return 0; var mdir = mdx > 0 ? PF.IN.R : PF.IN.L, mc = Math.floor((mdx > 0 ? st.p.x + st.p.w + 2 : st.p.x - 2) / PF.TS), mr = Math.floor((st.p.y + st.p.h - 4) / PF.TS), mt = PF.tileAt(st, mc, mr); return hzGuard(st, mdir | (PF.SOL[mt] ? PF.IN.J : 0) | (Math.abs(mdx) > 24 ? PF.IN.RUN : 0)); } }   // a shrunken hero must grow back before an arena fight: the mushroom at the entrance
     // The same wish when the pickup lies inside a '?' block (items are moved into blocks): walk under the unopened block and jump to hit it
-    if (st.boss > 0 && (wantK >= 0 || st.p.pw === 0) && L.fixedBox && st.p.ground) { var bbx = -1, bbd = 1e9, bkey, wk = wantK >= 0 ? wantK : 0; for (bkey in L.fixedBox) { var bkk = L.fixedBox[bkey]; if (wk === 0 ? !(bkk === 0 || bkk === 1 || bkk === 2) : !(bkk === 1 || bkk === 2)) continue; var bpp = bkey.split(','), bcc = +bpp[0], brr = +bpp[1]; if (PF.tileAt(st, bcc, brr) !== PF.T.QP) continue; var bxx = bcc * PF.TS + 8, bdd = Math.abs(bxx - st.p.x - st.p.w / 2); if (bdd < bbd && bdd < (wk === 1 ? 260 : 130) && Math.abs(brr * PF.TS + 8 - st.p.y) < 90) { bbd = bdd; bbx = bxx; } }
-      if (bbx >= 0) { nv.seq = null; nv.job = null; var bdx = bbx - (st.p.x + st.p.w / 2); if (Math.abs(bdx) < 3) return PF.IN.J; var bmc = Math.floor((bdx > 0 ? st.p.x + st.p.w + 2 : st.p.x - 2) / PF.TS), bmr = Math.floor((st.p.y + st.p.h - 4) / PF.TS); return (bdx > 0 ? PF.IN.R : PF.IN.L) | (PF.SOL[PF.tileAt(st, bmc, bmr)] && (st.f & 7) < 5 ? PF.IN.J : 0) | (Math.abs(bdx) > 24 ? PF.IN.RUN : 0); } }   // hop the steps on the way to the block
+    if (!thr && st.boss > 0 && (wantK >= 0 || st.p.pw === 0) && L.fixedBox && st.p.ground) { var bbx = -1, bbd = 1e9, bkey, wk = wantK >= 0 ? wantK : 0; for (bkey in L.fixedBox) { var bkk = L.fixedBox[bkey]; if (wk === 0 ? !(bkk === 0 || bkk === 1 || bkk === 2) : !(bkk === 1 || bkk === 2)) continue; var bpp = bkey.split(','), bcc = +bpp[0], brr = +bpp[1]; if (PF.tileAt(st, bcc, brr) !== PF.T.QP) continue; var bxx = bcc * PF.TS + 8, bdd = Math.abs(bxx - st.p.x - st.p.w / 2); if (bdd < bbd && bdd < (wk === 1 ? 260 : 130) && Math.abs(brr * PF.TS + 8 - st.p.y) < 90) { bbd = bdd; bbx = bxx; } }
+      if (bbx >= 0) { nv.seq = null; nv.job = null; var bdx = bbx - (st.p.x + st.p.w / 2); if (Math.abs(bdx) < 3) return PF.IN.J; var bmc = Math.floor((bdx > 0 ? st.p.x + st.p.w + 2 : st.p.x - 2) / PF.TS), bmr = Math.floor((st.p.y + st.p.h - 4) / PF.TS); return hzGuard(st, (bdx > 0 ? PF.IN.R : PF.IN.L) | (PF.SOL[PF.tileAt(st, bmc, bmr)] && (st.f & 7) < 5 ? PF.IN.J : 0) | (Math.abs(bdx) > 24 ? PF.IN.RUN : 0)); } }   // hop the steps on the way to the block
     // Winged hero: the macro stage search explodes (a flight can last for hundreds of frames), so the reactive look-ahead planner drives alone.
     if (st.p.wing > 0) { nv.seq = null; nv.job = null; return fb.decide(st); }
     // No route data: only the reactive planner can drive.

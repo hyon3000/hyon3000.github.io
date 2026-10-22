@@ -103,7 +103,6 @@
     const r = parseInt(hex.substr(1, 2), 16), g = parseInt(hex.substr(3, 2), 16), b = parseInt(hex.substr(5, 2), 16);
     return 'rgb(' + Math.round(Math.min(255, r * k)) + ',' + Math.round(Math.min(255, g * k)) + ',' + Math.round(Math.min(255, b * k)) + ')';
   }
-  const LIGHT = [-0.35, 0.8, -0.5];
 
   /* ---------- faces ---------- */
   function buildFaces() {
@@ -236,7 +235,7 @@
       const A = c3[0], B = c3[1], C = c3[2], ux = B[0] - A[0], uy = B[1] - A[1], uz = B[2] - A[2], vx = C[0] - A[0], vy = C[1] - A[1], vz = C[2] - A[2];
       let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
       if (nx * nn[0] + ny * nn[1] + nz * nn[2] < 0) { nx = -nx; ny = -ny; nz = -nz; }
-      const l = Math.hypot(nx, ny, nz) || 1, lit = 0.62 + 0.38 * Math.max(0, (nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2]) / l), back = nx * ctr[0] + ny * ctr[1] + nz * (ctr[2] + DC) >= 0;
+      const l = Math.hypot(nx, ny, nz) || 1, lit = 0.8 + 0.22 * Math.max(0, (nx * -0.25 + ny * 0.5 - nz * 0.82) / l), back = nx * ctr[0] + ny * ctr[1] + nz * (ctr[2] + DC) >= 0;
       if (gl) {
         // every face of every piece goes to the depth buffer (fan triangles; all faces are convex)
         const rgb = hexRGB(f.color), r = Math.min(1, rgb[0] * lit), g = Math.min(1, rgb[1] * lit), b = Math.min(1, rgb[2] * lit);

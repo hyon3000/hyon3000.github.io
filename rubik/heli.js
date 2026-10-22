@@ -4,13 +4,24 @@
   'use strict';
   const KO = /^ko/i.test(navigator.language || 'ko'), HC = window.HELI, DEG = Math.PI / 180, DC = 6.5;
   const QN = new URLSearchParams(location.search).get('n'), NN = QN !== null && isFinite(+QN) ? Math.max(1, Math.floor(+QN)) : 3;     // size n of the edge-turning cube (2 = Little Chop, 3 = Helicopter Cube)
-  const SH = (function () { const q = new URLSearchParams(location.search).get('s'); return q === 'tetra' || q === 'octa' || q === 'dodeca' || q === 'dodecaet' || q === 'icosaet' || q === 'octact' || q === 'icosact' || q === 'dodecaft' || q === 'cuboidff' || q === 'cuboidx' ? q : 'cube'; })();           // the solid: the cube (ET: edge turning) or the tetrahedron (ET)
+  const SH = (function () { const q = new URLSearchParams(location.search).get('s'); return q === 'tetra' || q === 'octa' || q === 'dodeca' || q === 'dodecaet' || q === 'icosaet' || q === 'octact' || q === 'icosact' || q === 'dodecaft' || q === 'cuboidff' || q === 'cuboidx' || q === 'starft' || q === 'starct' || q === 'skewbult' || q === 'qjdodeca' || q === 'cubemix' || q === 'cubefisher' || q === 'ccclover' || q === 'cccurvy' || q === 'cubewindmill' ? q : 'cube'; })();           // the solid: the cube (ET: edge turning) or the tetrahedron (ET)
   const ABC = (new URLSearchParams(location.search).get('abc') || '1,1,2').split(',').map((x) => Math.max(1, Math.floor(+x) || 1)), ISCUB = SH === 'cuboidff' || SH === 'cuboidx', NX = ISCUB ? ABC : NN;          // the extended cuboid: sizes a,b,c
   const NP = ISCUB || NN >= 2 ? HC.config(NX, SH).planes.length : 0;
   const JANG = SH === 'tetra' || ISCUB ? '90' : SH === 'dodeca' || SH === 'dodecaft' ? '72' : (SH === 'dodecaet' || SH === 'icosaet') ? '' : (SH === 'octact' || SH === 'icosact') ? '180' : '70.53';
   const cv = document.getElementById('app'), ctx = cv.getContext('2d');
-  const TX = KO ? { name: SH === 'cuboidx' ? ABC.join('×') + ' 익스텐디드 큐보이드' : SH === 'cuboidff' ? ({ '1,1,2': '얼간이큐브', '1,3,3': '플로피큐브', '2,2,3': '슬림타워' }[ABC.join(',')] || ABC.join('×') + ' 풀리펑셔널 큐보이드') : SH === 'dodecaft' ? '정십이면체FT (n=' + NN + ')' : SH === 'octact' ? '정팔면체CT (n=' + NN + ')' : SH === 'icosact' ? '정이십면체CT (n=' + NN + ')' : SH === 'dodecaet' ? (NN === 2 ? '빅촙' : '정십이면체ET (n=' + NN + ')') : SH === 'icosaet' ? '정이십면체ET (n=' + NN + ')' : SH === 'dodeca' ? '정십이면체FT-Deepcut (n=' + NN + ')' : SH === 'octa' ? '정팔면체ET (n=' + NN + ')' : SH === 'tetra' ? (NN === 2 ? '피라몰픽스' : '정사면체ET (n=' + NN + ')') : NN === 2 ? '리틀촙' : NN === 3 ? '헬리콥터큐브' : '정육면체ET (n=' + NN + ')', moves: '이동', time: '시간', best: '최고', solved: '완성!', newRec: '신기록!', again: '새 게임 (F2)', locked: '조각이 걸려 있어 이 면은 돌릴 수 없습니다', detach: '큐브 셀이 따로 떨어져서 돌릴 수 없습니다', cover: '스티커 면이 다른 셀의 내부(검은) 면에 닿게 되어 돌릴 수 없습니다', stuck: '이 층은 90도로 돌리면 걸립니다 (180도만 가능)', none: '이 조각은 돌릴 수 있는 면이 없습니다', next: '다음 수', hintTxt: '빈 곳을 끌면 시점 회전 · 조각을 끌어 층 돌리기 · ' + (SH === 'cuboidff' ? '회전축은 층의 가운데를 지남. 모든 층이 90도로 돌지만 직사각형 층은 모양을 변형하고, 칸이 어긋나면 다른 층이 걸림(점블링). 큐브가 떨어지거나 스티커 면이 다른 셀의 내부 면에 닿으면 불가' : SH === 'dodeca' || SH === 'dodecaft' ? '72도씩 돌림' : '기본은 180도, ' + (JANG ? JANG + '도로' : '선이 맞는 각도로') + ' 돌리면 모양이 변형됨'), scr: '섞는 중...', free: '돌릴 수 있는 면' }
-    : { name: SH === 'cuboidx' ? ABC.join('×') + ' Extended Cuboid' : SH === 'cuboidff' ? ({ '1,1,2': 'Boobcube', '1,3,3': 'Floppy Cube', '2,2,3': 'Slim Tower' }[ABC.join(',')] || ABC.join('×') + ' Fully Functional Cuboid') : SH === 'dodecaft' ? 'Dodecahedron FT (n=' + NN + ')' : SH === 'octact' ? 'Octahedron CT (n=' + NN + ')' : SH === 'icosact' ? 'Icosahedron CT (n=' + NN + ')' : SH === 'dodecaet' ? (NN === 2 ? 'Big Chop' : 'Dodecahedron ET (n=' + NN + ')') : SH === 'icosaet' ? 'Icosahedron ET (n=' + NN + ')' : SH === 'dodeca' ? 'Dodecahedron FT-Deepcut (n=' + NN + ')' : SH === 'octa' ? 'Octahedron ET (n=' + NN + ')' : SH === 'tetra' ? (NN === 2 ? 'Pyramorphix' : 'Tetrahedron ET (n=' + NN + ')') : NN === 2 ? 'Little Chop' : NN === 3 ? 'Helicopter Cube' : 'Cube ET (n=' + NN + ')', moves: 'Moves', time: 'Time', best: 'Best', solved: 'SOLVED!', newRec: 'New best!', again: 'New game (F2)', locked: 'A piece is in the way - this prism is locked', detach: 'The turn would cut a cell off - not possible', cover: 'A sticker face would touch an inner face - not possible', stuck: 'This layer jams at 90 degrees (only 180 degrees)', none: 'This piece has no free prism to turn', next: 'Next move', hintTxt: 'Drag empty space to rotate the view · drag a piece to turn its layer · ' + (SH === 'cuboidff' ? 'every axis goes through the middle of the layer; every layer turns by 90 degrees, a rectangular one deforms the shape and if the cells end up off the lattice the other layers jam (jumbling); a turn that cuts a cell off or presses a sticker face against an inner face is not possible' : SH === 'dodeca' || SH === 'dodecaft' ? 'turns of 72 degrees' : '180 degrees normally, ' + (JANG ? 'a ' + JANG + ' degree turn' : 'a turn that lines the cuts up') + ' deforms the shape'), scr: 'Scrambling...', free: 'Free prisms' };
+  const TX = KO ? { name: SH === 'cuboidx' ? ABC.join('×') + ' 익스텐디드 큐보이드' : SH === 'cuboidff' ? ({ '1,1,2': '얼간이큐브', '1,3,3': '플로피큐브', '2,2,3': '슬림타워' }[ABC.join(',')] || ABC.join('×') + ' 풀리펑셔널 큐보이드') : SH === 'dodecaft' ? '정십이면체FT (n=' + NN + ')' : SH === 'octact' ? '정팔면체CT (n=' + NN + ')' : SH === 'icosact' ? '정이십면체CT (n=' + NN + ')' : SH === 'dodecaet' ? (NN === 2 ? '빅촙' : '정십이면체ET (n=' + NN + ')') : SH === 'icosaet' ? '정이십면체ET (n=' + NN + ')' : SH === 'dodeca' ? '정십이면체FT-Deepcut (n=' + NN + ')' : SH === 'octa' ? '정팔면체ET (n=' + NN + ')' : SH === 'tetra' ? (NN === 2 ? '피라몰픽스' : '정사면체ET (n=' + NN + ')') : NN === 2 ? '리틀촙' : NN === 3 ? '헬리콥터큐브' : '정육면체ET (n=' + NN + ')', moves: '이동', time: '시간', best: '최고', solved: '완성!', newRec: '신기록!', again: '새 게임 (F2)', locked: '조각이 걸려 있어 이 면은 돌릴 수 없습니다', detach: '내부면 결합이 끊겨 본체가 갈라지므로 돌릴 수 없습니다', cover: '스티커 면이 다른 셀의 내부(검은) 면에 닿게 되어 돌릴 수 없습니다', stuck: '이 층은 90도로 돌리면 걸립니다 (180도만 가능)', none: '이 조각은 돌릴 수 있는 면이 없습니다', next: '다음 수', hintTxt: '빈 곳을 끌면 시점 회전 · 조각을 끌어 층 돌리기 · ' + (SH === 'cuboidff' ? '회전축은 층의 가운데를 지남. 모든 층이 90도로 돌지만 직사각형 층은 모양을 변형하고, 칸이 어긋나면 다른 층이 걸림(점블링). 내부면끼리의 결합으로 본체가 둘로 갈라지면 불가' : SH === 'dodeca' || SH === 'dodecaft' ? '72도씩 돌림' : '기본은 180도, ' + (JANG ? JANG + '도로' : '선이 맞는 각도로') + ' 돌리면 모양이 변형됨'), scr: '섞는 중...', free: '돌릴 수 있는 면' }
+    : { name: SH === 'cuboidx' ? ABC.join('×') + ' Extended Cuboid' : SH === 'cuboidff' ? ({ '1,1,2': 'Boobcube', '1,3,3': 'Floppy Cube', '2,2,3': 'Slim Tower' }[ABC.join(',')] || ABC.join('×') + ' Fully Functional Cuboid') : SH === 'dodecaft' ? 'Dodecahedron FT (n=' + NN + ')' : SH === 'octact' ? 'Octahedron CT (n=' + NN + ')' : SH === 'icosact' ? 'Icosahedron CT (n=' + NN + ')' : SH === 'dodecaet' ? (NN === 2 ? 'Big Chop' : 'Dodecahedron ET (n=' + NN + ')') : SH === 'icosaet' ? 'Icosahedron ET (n=' + NN + ')' : SH === 'dodeca' ? 'Dodecahedron FT-Deepcut (n=' + NN + ')' : SH === 'octa' ? 'Octahedron ET (n=' + NN + ')' : SH === 'tetra' ? (NN === 2 ? 'Pyramorphix' : 'Tetrahedron ET (n=' + NN + ')') : NN === 2 ? 'Little Chop' : NN === 3 ? 'Helicopter Cube' : 'Cube ET (n=' + NN + ')', moves: 'Moves', time: 'Time', best: 'Best', solved: 'SOLVED!', newRec: 'New best!', again: 'New game (F2)', locked: 'A piece is in the way - this prism is locked', detach: 'The turn would split the body (inner-face bonds break) - not possible', cover: 'A sticker face would touch an inner face - not possible', stuck: 'This layer jams at 90 degrees (only 180 degrees)', none: 'This piece has no free prism to turn', next: 'Next move', hintTxt: 'Drag empty space to rotate the view · drag a piece to turn its layer · ' + (SH === 'cuboidff' ? 'every axis goes through the middle of the layer; every layer turns by 90 degrees, a rectangular one deforms the shape and if the cells end up off the lattice the other layers jam (jumbling); a turn that splits the body in two (only inner-against-inner faces hold it together) is not possible' : SH === 'dodeca' || SH === 'dodecaft' ? 'turns of 72 degrees' : '180 degrees normally, ' + (JANG ? 'a ' + JANG + ' degree turn' : 'a turn that lines the cuts up') + ' deforms the shape'), scr: 'Scrambling...', free: 'Free prisms' };
+  const SPN = { starft: ['정십이면체FT-starminx', 'Dodecahedron FT-starminx', '스타밍크스 FT', 'Starminx FT'], starct: ['정십이면체CT-starminx', 'Dodecahedron CT-starminx', '스타밍크스 CT', 'Starminx CT'], skewbult: ['정십이면체FT-skewb ultimate', 'Dodecahedron FT-skewb ultimate', '스큐브 얼티밋', 'Skewb Ultimate'], qjdodeca: ['정십이면체FT-QJ', 'Dodecahedron FT-QJ', 'QJ 정십이면체', 'QJ Dodecahedron'], cubemix: ['정육면체FT-mixup', 'Cube FT-mixup', '믹스업큐브', 'Mixup Cube'], cubefisher: ['정육면체FT-fisher', 'Cube FT-fisher', '피셔큐브', 'Fisher Cube'] }[SH];          // the special solids; n = 2 (mixup / fisher cube: n = 3) is the named original
+  const SPN0 = { starft: 2, starct: 2, skewbult: 2, qjdodeca: 2, cubemix: 3, cubefisher: 3, cubewindmill: 3 }[SH];
+  if (SPN) {
+    TX.name = NN === SPN0 ? SPN[KO ? 2 : 3] : SPN[KO ? 0 : 1] + ' (n=' + NN + ')';
+    const hn = { starft: ['면을 끌어 72도씩 돌립니다', 'drag a face to turn it by 72 degrees'], starct: ['꼭짓점 쪽 조각을 끌어 120도씩 돌립니다', 'drag a corner to turn it by 120 degrees'], skewbult: ['조각을 끌어 퍼즐의 절반을 120도씩 돌립니다', 'drag a piece to turn half of the puzzle by 120 degrees'],
+      qjdodeca: ['층을 90도 단위로 돌릴 수 있고 모양이 변형됩니다 (점블링: 선이 어긋나면 다른 층이 걸림)', 'layers turn in steps of 90 degrees and deform the solid (jumbling: layers jam when the cuts do not line up)'], cubemix: ['안쪽 층이 √2배 두꺼워 45도 단위로 돌릴 수 있고 선이 어긋나면 다른 층이 걸립니다 (점블링)', 'the inner layers are sqrt2 thicker, so layers turn in steps of 45 degrees; layers jam when the cuts do not line up (jumbling)'],
+      cubewindmill: ['세로 절단면이 풍차 모양(약 33.7도 기울기)으로 놓여 옆면은 한쪽 칸 폭이 0이고 반대쪽이 두 배이며 모양이 변형됩니다 (점블링)', 'the vertical cuts form a pinwheel (tilted by about 33.7 degrees): on a side face one cell has no width and the opposite one is twice as wide; the cube deforms (jumbling)'],
+      cubefisher: ['세로 절단면이 45도 돌려져 있어 세로 층은 면 대각선 축으로 돌며 모양이 변형됩니다 (점블링)', 'the vertical cuts are turned by 45 degrees: the vertical layers turn about the face diagonals and deform the cube (jumbling)'] }[SH];
+    TX.hintTxt = (KO ? '빈 곳을 끌면 시점 회전 · 조각을 끌어 층 돌리기 · ' : 'Drag empty space to rotate the view · drag a piece to turn its layer · ') + hn[KO ? 0 : 1];
+  }
+  if (SH === 'ccclover' || SH === 'cccurvy') TX.name = NN === 2 ? (SH === 'ccclover' ? (KO ? '클로바큐브' : 'Clover Cube') : (KO ? '커비큐브' : 'Curvy Cube')) : (KO ? '정육면체ET-' : 'Cube ET-') + (SH === 'ccclover' ? 'clover' : 'curvy') + ' (n=' + NN + ')';
   const COL = HC.config(ISCUB ? NX : Math.max(2, NN), SH).colours, INNER = '#0a0d14';     // tag = face of the solid
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
@@ -19,7 +30,7 @@
   function ease(t) { return t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t); }
   const G = { S: HC.create(NX, SH), moves: 0, time: 0, started: false, mode: 'play', vis: null, queue: [], auto: false, hint: null, msg: '', msgT: 0, animScr: lsGet('rubik_anim') !== '0', autoScr: lsGet('rubik_autoscr') !== '0', best: null, newRec: false, cheated: false };
   const V = { yaw: 0.6, pitch: 0.5, drag: null, cw: 0, ch: 0, dpr: 1, piece: null };
-  const BEST_KEY = (SH === 'tetra' ? 'tetraet_best_' : SH === 'octa' ? 'octaet_best_' : SH === 'dodeca' ? 'dodecadc_best_' : SH === 'dodecaet' ? 'dodecaet_best_' : SH === 'icosaet' ? 'icosaet_best_' : SH === 'dodecaft' ? 'dodecaft_best_' : ISCUB ? SH + '_best_' + ABC.join('x') + '_' : SH === 'octact' ? 'octact_best_' : SH === 'icosact' ? 'icosact_best_' : 'heli_best_') + NN;
+  const BEST_KEY = (SH === 'ccclover' || SH === 'cccurvy' || SPN ? SH + '_best_' : SH === 'tetra' ? 'tetraet_best_' : SH === 'octa' ? 'octaet_best_' : SH === 'dodeca' ? 'dodecadc_best_' : SH === 'dodecaet' ? 'dodecaet_best_' : SH === 'icosaet' ? 'icosaet_best_' : SH === 'dodecaft' ? 'dodecaft_best_' : ISCUB ? SH + '_best_' + ABC.join('x') + '_' : SH === 'octact' ? 'octact_best_' : SH === 'icosact' ? 'icosact_best_' : 'heli_best_') + NN;
   try { G.best = JSON.parse(lsGet(BEST_KEY) || 'null'); } catch (e) { G.best = null; }
   function say(t, s) { G.msg = t; G.msgT = (s || 2.4); }
   function setAuto(on) { G.auto = !!on; try { window.parent.postMessage({ rb: 'autoState', on: G.auto }, '*'); } catch (e) {} }
@@ -29,7 +40,7 @@
   function startMove(mv, src, dur) {
     const set = HC.members(G.S, mv.p); if (!set) { if (src === 'user') say(TX.locked); return false; }
     const x0 = (G.vis && G.vis.live && G.vis.p === mv.p ? G.vis.x : 0) - mv.a;
-    if (!HC.apply(G.S, mv)) { if (src === 'user') say(SH === 'cuboidff' ? (G.S.fail === 'cover' ? TX.cover : TX.detach) : TX.locked); return false; }          // (a fully functional cuboid: the turn would cut a cell off)
+    if (!HC.apply(G.S, mv)) { if (src === 'user') say(G.S.fail === 'detach' ? TX.detach : TX.locked); return false; }          // (a fully functional cuboid: the turn would cut a cell off)
     G.vis = { p: mv.p, set: set, x: x0, x0: x0, t: 0, dur: dur || 0.2 + 0.1 * Math.min(1, Math.abs(mv.a) / Math.PI), src: src };
     if (src === 'user') { G.moves++; G.started = true; }
     return true;
@@ -75,7 +86,7 @@
     opt = opt || {};
     G.S = HC.create(NX, SH); G.moves = 0; G.time = 0; G.started = false; G.vis = null; V.piece = null; G.queue = []; G.hint = null; G.cheated = false; G.newRec = false; setAuto(false);
     if (ISCUB ? !G.S.cfg.planes.length : NN < 2) { G.mode = 'solved'; return; }                    // n = 1: nothing is cut, the cube is solved at once
-    const cnt = ISCUB ? Math.min(90, 12 + 3 * (ABC[0] + ABC[1] + ABC[2]) + Math.floor(rnd() * 6)) : Math.min(90, 22 + 7 * (NN - 3 < 0 ? 0 : NN - 3) + Math.floor(rnd() * 6));
+    const cnt = SPN && { starft: 1, starct: 1, skewbult: 1, qjdodeca: 1 }[SH] ? Math.min(140, { starft: 50, starct: 45, skewbult: 30, qjdodeca: 40 }[SH] + 15 * (NN - 2) + Math.floor(rnd() * 6)) : ISCUB ? Math.min(90, 12 + 3 * (ABC[0] + ABC[1] + ABC[2]) + Math.floor(rnd() * 6)) : Math.min(90, 22 + 7 * (NN - 3 < 0 ? 0 : NN - 3) + Math.floor(rnd() * 6));
     if (!G.autoScr) { G.mode = 'play'; return; }          // no automatic scramble: the player scrambles it; a solved state does not count before the first move
     if (G.animScr && !opt.instant) {
       const tmp = HC.create(NX, SH), mvs = HC.scramble(tmp, cnt, rnd);
@@ -91,7 +102,6 @@
   function proj(c) { const f = DC / (DC + c[2]); return [ox + c[0] * f * scale, oyy - c[1] * f * scale]; }
   function sp2(p) { return proj(tr(p)); }
   function hexRGB(h) { return [parseInt(h.substr(1, 2), 16) / 255, parseInt(h.substr(3, 2), 16) / 255, parseInt(h.substr(5, 2), 16) / 255]; }
-  const LIGHT = [-0.35, 0.8, -0.5];
 
   /* ---------- WebGL ---------- */
   const glc = document.getElementById('gl');
@@ -165,7 +175,28 @@
         const p = Q[(i + Q.length - 1) % Q.length], vv = Q[i], q = Q[(i + 1) % Q.length], m1 = cr(N, nz(sub3(vv, p))), m2 = cr(N, nz(sub3(q, vv))), f = g / Math.max(0.25, 1 + m1[0] * m2[0] + m1[1] * m2[1] + m1[2] * m2[2]);
         out.push([vv[0] + (m1[0] + m2[0]) * f, vv[1] + (m1[1] + m2[1]) * f, vv[2] + (m1[2] + m2[2]) * f]);
       }
-      return out;
+      return Q === P ? out : out.reverse();          // the same corner order as P (the triangulation of a patch is made once)
+    }
+    function triOf(hf) {          // ear clipping of a non-convex patch (once per face); null = a fan is fine
+      if (hf.tri !== undefined) return hf.tri;
+      const P = hf.v, n = P.length; hf.tri = null; if (!G.S.cfg.shell || n <= 4) return null;
+      let nw = [0, 0, 0]; for (let i = 0; i < n; i++) { const a = P[i], b = P[(i + 1) % n]; nw = [nw[0] + (a[1] - b[1]) * (a[2] + b[2]), nw[1] + (a[2] - b[2]) * (a[0] + b[0]), nw[2] + (a[0] - b[0]) * (a[1] + b[1])]; }
+      const k = Math.abs(nw[0]) > Math.abs(nw[1]) && Math.abs(nw[0]) > Math.abs(nw[2]) ? 0 : Math.abs(nw[1]) > Math.abs(nw[2]) ? 1 : 2, i1 = (k + 1) % 3, i2 = (k + 2) % 3, sg = nw[k] >= 0 ? 1 : -1;
+      const X = P.map((p) => [p[i1], p[i2] * sg]), idx = X.map((_, i) => i), tri = [], cr = (a, b, c) => (X[b][0] - X[a][0]) * (X[c][1] - X[a][1]) - (X[b][1] - X[a][1]) * (X[c][0] - X[a][0]);
+      let area = 0; for (let i = 0; i < n; i++) { const a = X[i], b = X[(i + 1) % n]; area += a[0] * b[1] - b[0] * a[1]; } const o = area >= 0 ? 1 : -1;
+      let guard = 0;
+      while (idx.length > 3 && guard++ < 4 * n * n) {
+        let found = -1; const m = idx.length;
+        for (let t = 0; t < m && found < 0; t++) {
+          const a = idx[(t + m - 1) % m], b = idx[t], c = idx[(t + 1) % m]; if (o * cr(a, b, c) <= 1e-12) continue;
+          let ok = true; for (let u = 0; u < m && ok; u++) { const d = idx[u]; if (d === a || d === b || d === c) continue; if (o * cr(a, b, d) >= -1e-12 && o * cr(b, c, d) >= -1e-12 && o * cr(c, a, d) >= -1e-12) ok = false; }
+          if (ok) found = t;
+        }
+        if (found < 0) found = 0;          // a degenerate corner: clip it anyway
+        const m2 = idx.length; tri.push([idx[(found + m2 - 1) % m2], idx[found], idx[(found + 1) % m2]]); idx.splice(found, 1);
+      }
+      if (idx.length === 3) tri.push([idx[0], idx[1], idx[2]]);
+      return (hf.tri = tri);
     }
     const dragP = V.piece && V.piece.p !== undefined ? V.piece.p : -1;
     G.S.pieces.forEach((pc, i) => {
@@ -175,15 +206,17 @@
         const A = c3[0], B = c3[1], C = c3[2], ux = B[0] - A[0], uy = B[1] - A[1], uz = B[2] - A[2], vx = C[0] - A[0], vy = C[1] - A[1], vz = C[2] - A[2];
         let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
         const w0 = pieceFaces(i)[k], cen = [0, 0, 0]; w0.forEach((p) => { cen[0] += p[0] / w0.length; cen[1] += p[1] / w0.length; cen[2] += p[2] / w0.length; });
-        const pcen = [0, 0, 0]; let tot = 0; pieceFaces(i).forEach((f) => f.forEach((p) => { pcen[0] += p[0]; pcen[1] += p[1]; pcen[2] += p[2]; tot++; }));
+        const pcen = [0, 0, 0]; let tot = 0; (G.S.cfg.shell ? [W[k], W[k ^ 1]] : pieceFaces(i)).forEach((f) => f.forEach((p) => { pcen[0] += p[0]; pcen[1] += p[1]; pcen[2] += p[2]; tot++; }));          // a shell patch: outwards from its own pair of polygons
         const pc3 = tr([pcen[0] / tot, pcen[1] / tot, pcen[2] / tot]);
         if (nx * (ctr[0] - pc3[0]) + ny * (ctr[1] - pc3[1]) + nz * (ctr[2] - pc3[2]) < 0) { nx = -nx; ny = -ny; nz = -nz; }          // outward from the piece
-        const l = Math.hypot(nx, ny, nz) || 1, lit = 0.6 + 0.4 * Math.max(0, (nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2]) / l), back = nx * ctr[0] + ny * ctr[1] + nz * (ctr[2] + DC) >= 0;
+        const l = Math.hypot(nx, ny, nz) || 1, lit = 0.8 + 0.22 * Math.max(0, (nx * -0.25 + ny * 0.5 - nz * 0.82) / l), back = nx * ctr[0] + ny * ctr[1] + nz * (ctr[2] + DC) >= 0;
         const outer = hf.tag >= 0, rgb = hexRGB(outer ? COL[hf.tag] : INNER), kk = outer ? lit : lit * 0.8;
         const r = Math.min(1, rgb[0] * kk), g = Math.min(1, rgb[1] * kk), b = Math.min(1, rgb[2] * kk);
         const ci = outer ? insetPoly(c3, [nx / l, ny / l, nz / l]) : c3;
         if (gl) {
-          for (let q = 1; q + 1 < ci.length; q++) [ci[0], ci[q], ci[q + 1]].forEach((p) => { fv.push(p[0], p[1], p[2], r, g, b); });
+          const tl = triOf(hf);
+          if (tl) tl.forEach((t3) => t3.forEach((q) => { const p = ci[q]; fv.push(p[0], p[1], p[2], r, g, b); }));
+          else for (let q = 1; q + 1 < ci.length; q++) [ci[0], ci[q], ci[q + 1]].forEach((p) => { fv.push(p[0], p[1], p[2], r, g, b); });
           if (outer) for (let q = 0; q < c3.length; q++) ribbon(c3[q], c3[(q + 1) % c3.length], GAP * 0.9, 0.01, [0, 0, 0]);          // every edge is drawn black, also along the outline
         }
         if (outer && !back) out.push({ pts: ci.map(proj), z: ctr[2], piece: i, world: W[k], n: [nx / l, ny / l, nz / l], col: lit, tag: hf.tag, c3: ci });
@@ -272,7 +305,18 @@
       pc.p = ch.p; pc.t = ch.t; pc.set = set;
     }
     const t = pc.t, x = 1.6 * (dx * t.tx + dy * t.ty) / (t.ml * t.ml);                    // radians of turn along the drag
-    G.vis = { p: pc.p, set: pc.set, x: Math.max(-2 * Math.PI, Math.min(2 * Math.PI, x)), x0: 0, t: 0, dur: 0.2, live: true, src: 'user' };
+    let xx = Math.max(-2 * Math.PI, Math.min(2 * Math.PI, x));
+    if (G.S.cfg.bond && xx !== 0) {          // a turn that way would split the body (at the end or on the way): the layer does not move (it stays at the last turn that works, no temporary turn beyond it)
+      pc.blk = pc.blk || {};
+      const sg = xx > 0 ? 1 : -1, k1 = 'q' + sg; if (pc.blk[k1] === undefined) pc.blk[k1] = HC.splits(G.S, pc.p, sg * Math.PI / 2);
+      if (pc.blk[k1]) { xx = 0; say(TX.detach); }          // the first quarter turn that way is not possible: no temporary turn either
+      const tg = xx === 0 ? 0 : targetOf(pc.p, xx) - G.S.ang[pc.p];
+      if (Math.abs(tg) > 1e-7) {
+        const key = Math.round(tg * 1000); if (pc.blk[key] === undefined) pc.blk[key] = HC.splits(G.S, pc.p, tg);
+        if (pc.blk[key]) { xx = Math.sign(xx) * Math.max(0, Math.abs(tg) - Math.PI / 2); say(TX.detach); }
+      }
+    }
+    G.vis = { p: pc.p, set: pc.set, x: xx, x0: 0, t: 0, dur: 0.2, live: true, src: 'user' };
   });
   function endDrag(e) {
     V.drag = null;

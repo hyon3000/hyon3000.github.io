@@ -165,10 +165,84 @@
   const TSTOPS = [0, HALFPI, Math.PI, 3 * HALFPI];        // tetrahedron: the cut planes of the three axes are mutually perpendicular, a quarter turn lines them up
   const OSTOPS = STOPS, OCOL = ['#f2f2f2', '#ffd400', '#d91e18', '#ff7f0e', '#0fa34a', '#1f4fd8', '#8b2fc9', '#00c4d4'];       // the octahedron has the same six edge axes as the cube: the cuts line up at 70.53 / 109.47 degrees
   const DSTOPS = [0, 1, 2, 3, 4].map((k) => k * 2 * Math.PI / 5), DCOL = ['#f2f2f2', '#ffe000', '#d41f26', '#ff8000', '#0f9d58', '#1a4fd6', '#7b2fbe', '#ff78b4', '#9be000', '#00c2d6', '#8c8c8c', '#9c5a2e'];
-  const ICOL = ['#f2f2f2', '#ffd400', '#d91e18', '#ff7f0e', '#0fa34a', '#1f4fd8', '#8b2fc9', '#00c4d4', '#ff78b4', '#9be000', '#8c8c8c', '#9c5a2e', '#0b1f6b', '#00796b', '#7a0f2e', '#e6c88f', '#2b2b2b', '#b9a6ff', '#6b7a00', '#8fd0ff'];
+  const ICOL = ['#f2f2f2', '#ffd400', '#d41f26', '#ff7f0e', '#0f9d58', '#1a4fd6', '#7b2fbe', '#ff78b4', '#9be000', '#00c2d6', '#8c8c8c', '#9c5a2e', '#0b1f6b', '#00796b', '#7a0f2e', '#e6c88f', '#2b2b2b', '#b9a6ff', '#6b7a00', '#8fd0ff'];          // the same palette as the discrete engine (puzzles.js META.icosa)
   const CCOL = ['#f2f2f2', '#d91e18', '#0fa34a', '#ffd400', '#ff7f0e', '#1f4fd8'], TCOL = ['#d91e18', '#0fa34a', '#1f4fd8', '#ffd400'];
+  // special solids: Starminx FT / CT, Skewb Ultimate and QJ Dodecahedron (n = 2 is the original, n more layers) and the Mixup cube (cube FT-mixup, n layers: the outer layers are 1 wide, the inner ones sqrt2)
+  // and the Fisher cube (cube FT-fisher, the vertical cuts turned by 45 degrees)
+  const SPEC = { starft: 1, starct: 1, skewbult: 1, qjdodeca: 1, cubemix: 1, cubefisher: 1, cubewindmill: 1 };
+  function specialConfig(n, shape) {
+    const ck = shape + n; if (CFG[ck]) return CFG[ck];
+    const dod = shape !== 'cubemix' && shape !== 'cubefisher' && shape !== 'cubewindmill', cuts = [], moves = [], vs = [], neg = (v) => v.map((x) => -x), nrm = (v) => { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; };
+    DOD.faces.forEach((f) => f.v.forEach((p) => { if (!vs.some((q) => Math.abs(q[0] - p[0]) + Math.abs(q[1] - p[1]) + Math.abs(q[2] - p[2]) < 1e-6)) vs.push(p); }));
+    const L = Math.max(1, Math.floor(n));
+    let axes, stops = DSTOPS, step = 2 * Math.PI / 5, mult = 4, noJ = true;
+    // caps on both sides of the centre and the slabs below them (pos = the positive plane depths, outermost first); the middle part stays put
+    const sides = (i, pos) => { const nv = axes[i]; pos.forEach((v) => cuts.push({ n: nv, d: v }, { n: nv, d: -v })); [1, -1].forEach((sg) => pos.forEach((v, k) => moves.push({ ax: i, n: nv, d: sg * v, sg: sg, depth: v, hi: k === 0 ? undefined : pos[k - 1], axis: sg > 0 ? nv : neg(nv), center: [0, 0, 0] }))); };
+    // every layer between the planes of an axis (bounds ascending), the whole puzzle is layered
+    const layers = (i, bounds) => { const nv = axes[i]; bounds.forEach((v) => cuts.push({ n: nv, d: v })); for (let k = 0; k <= bounds.length; k++) moves.push({ ax: i, n: nv, d: k === 0 ? -9 : bounds[k - 1], sg: 1, depth: k === 0 ? -9 : bounds[k - 1], hi: k === bounds.length ? undefined : bounds[k], axis: nv, center: [0, 0, 0] }); };
+    const spread = (top) => { const a = []; for (let k = 0; k < L - 1; k++) a.push(top * (1 - k / (L - 1))); return a; };          // L - 1 depths from top towards the centre
+    const sym = (s, m) => { const a = []; if (m === 1) return [0]; for (let k = 0; k < m; k++) a.push(s * (-1 + 2 * k / (m - 1))); return a; };          // m depths between -s and s
+    if (L >= 2) {
+      if (shape === 'starft') {          // face turning: the plane of the face cap goes through the five vertices of the ring below the face (the diagonals of the five neighbouring faces)
+        axes = DOD.axes; const hs = []; vs.forEach((v) => { const h = dot(v, axes[0]); if (!hs.some((x) => Math.abs(x - h) < 1e-6)) hs.push(h); }); hs.sort((a, b) => b - a);
+        axes.forEach((_, i) => sides(i, spread(hs[1])));
+      } else if (shape === 'starct') {          // corner turning: the plane of the corner cap goes through the three neighbours of the corner (a diagonal in each of its faces)
+        axes = []; const el = Math.min.apply(null, vs.slice(1).map((v) => Math.hypot(v[0] - vs[0][0], v[1] - vs[0][1], v[2] - vs[0][2]))); let dN = 0;
+        vs.forEach((v) => { const u = nrm(v); if (axes.some((w) => Math.abs(Math.abs(dot(w, u)) - 1) < 1e-6)) return; axes.push(u); const nb = vs.find((w) => Math.abs(Math.hypot(w[0] - v[0], w[1] - v[1], w[2] - v[2]) - el) < 1e-6); dN = dot(nb, u); });
+        axes.forEach((_, i) => sides(i, spread(dN))); stops = [0, 2 * Math.PI / 3, 4 * Math.PI / 3]; step = 2 * Math.PI / 3; mult = 2;
+      } else if (shape === 'skewbult') {          // planes perpendicular to the body diagonals of the inscribed cube (n = 2: all through the centre); a layer turns by 120 degrees
+        axes = [[1, 1, 1], [1, 1, -1], [1, -1, 1], [-1, 1, 1]].map(nrm);
+        axes.forEach((_, i) => layers(i, sym(0.4, L - 1))); stops = [0, 2 * Math.PI / 3, 4 * Math.PI / 3]; step = 2 * Math.PI / 3; mult = 2;
+      } else if (shape === 'qjdodeca') {          // planes x, y, z = d (n planes between -0.4 and 0.4, the pyritohedron axes); the layers turn by 90 degrees and deform the solid
+        axes = TAXES; axes.forEach((_, i) => layers(i, sym(0.4, L))); stops = TSTOPS; step = HALFPI; mult = 3; noJ = false;
+      } else if (shape === 'cubemix') {          // n layers per axis, outer ones 1, inner ones sqrt2 wide
+        axes = TAXES; const w = []; for (let i = 0; i < L; i++) w.push(i === 0 || i === L - 1 ? 1 : Math.SQRT2);
+        const W = w.reduce((a, b) => a + b, 0), b = [-1]; for (let i = 0; i < L; i++) b.push(b[i] + 2 * w[i] / W);
+        axes.forEach((_, i) => layers(i, b.slice(1, L))); stops = []; for (let k = 0; k < 8; k++) stops.push(k * Math.PI / 4); step = Math.PI / 4; mult = 7; noJ = false;
+      } else if (shape === 'cubewindmill') {          // the horizontal layers (y = +-1/sqrt13, the same boundaries as on the other two axes), the vertical cuts turned by atan(2/3) instead of 45 degrees (a pinwheel): n1 = (3, 0, -2) / sqrt13, n2 = (2, 0, 3) / sqrt13 at the offsets +-1/sqrt13:
+        // on a side face the cuts land at x = -1 (the left cell has no width) and x = -1/3 (the right cell is twice the middle one); the top face has nine pieces (a square in the middle, four trapezoids, four triangles), 90 degree symmetric
+        const r13 = Math.sqrt(13); axes = [[0, 1, 0], [3 / r13, 0, -2 / r13], [2 / r13, 0, 3 / r13]]; const a13 = 1 / r13;          // the page shows x to the right, y up, z away from the viewer: seen from above (X = x, Y = z) the top face lines are (0,0)-(2/3,1), (1/3,0)-(1,1), (0,1)-(1,1/3), (0,2/3)-(1,0) in the unit square; the front face (z = -1) has the cuts x = -1, -1/3: widths 0, 1, 2
+        layers(0, [-a13, a13]); layers(1, [-a13, a13]); layers(2, [-a13, a13]);          // the same layer boundaries on all three axes: every layer turns by 90 degrees like in the ordinary cube
+        stops = TSTOPS; moves.forEach((m) => { m.stops = alignStops(cuts.concat([{ n: m.axis, d: 99, axis: m.axis }]), cuts.length); }); noJ = false;
+      } else {          // cubefisher: n horizontal layers (axis y); the vertical cuts are turned by 45 degrees: layers perpendicular to u = (1,0,1), v = (1,0,-1)
+        const R2 = Math.SQRT1_2; axes = [[0, 1, 0], [R2, 0, R2], [R2, 0, -R2]]; const b = []; for (let k = 1; k < L; k++) b.push(-1 + 2 * k / L); stops = TSTOPS;
+        axes.forEach((_, i) => layers(i, b)); moves.forEach((m) => { m.stops = alignStops(cuts.concat([{ n: m.axis, d: 99, axis: m.axis }]), cuts.length); }); noJ = false;
+      }
+    } else axes = shape === 'cubemix' || shape === 'cubefisher' || shape === 'qjdodeca' ? TAXES : DOD.axes;
+    let cells = [dod ? dodecaPoly() : cubePoly()];
+    cuts.forEach((pl) => { const next = []; cells.forEach((c) => { const a = clip(c, pl.n, pl.d), bb = clip(c, [-pl.n[0], -pl.n[1], -pl.n[2]], -pl.d); if (a && bb) { next.push(a); next.push(bb); } else next.push(c); }); cells = next; });
+    moves.forEach((m) => { if (!m.stops) m.stops = stops.slice(); });
+    return (CFG[ck] = { n: n, shape: shape, planes: moves, cells: cells, axes: axes, stops: stops, colours: dod ? DCOL : CCOL, faceN: dod ? DOD.DN : FACES, faceD: dod ? DOD.DD : 1, noJumble: noJ, faceDs: null, step: step, mult: mult, sc: 1, surf: shape === 'cubemix', bond: !noJ && shape !== 'cubemix' ? 'face' : false });
+  }
+  // Clover / curvy cube (cube ET with spherical cuts): the pieces are the patches of the surface (thin shells: the outer polygon and an inner one just below it); a move turns the patches inside a ball
+  // (a shell for n > 2) about the edge axis through its centre.  Like the helicopter cube the turn is 180 degrees or the jumbling turn of 70.53 degrees (the angles at which the edge centres line up);
+  // a ball can turn only while no patch is cut by its sphere.
+  function ccConfig(n, shape) {
+    const ck = shape + n; if (CFG[ck]) return CFG[ck];
+    const info = window.RBPuzzles.ccSpec(shape === 'cccurvy', n), sp = info.info, planes = [], TH = 0.05, byCell = new Map();
+    const sigOf = (q) => sp.spheres.map((s) => (((q[0] - s.c[0]) * (q[0] - s.c[0]) + (q[1] - s.c[1]) * (q[1] - s.c[1]) + (q[2] - s.c[2]) * (q[2] - s.c[2])) < s.r * s.r ? '1' : '0')).join('');
+    const cellOf = (sig) => { if (!byCell.has(sig)) { const c = []; c.samp = []; c.cloud = []; byCell.set(sig, c); } return byCell.get(sig); };
+    info.stickers.forEach((s) => {          // the patches of one solid cell (equal "inside which spheres" signature) are one rigid piece
+      const nf = info.facets[s.facet].normal, tag = FACES.findIndex((q) => Math.abs(q[0] - nf[0]) + Math.abs(q[1] - nf[1]) + Math.abs(q[2] - nf[2]) < 1e-6), cell = cellOf(s.sig);
+      cell.push({ v: s.verts.map((v) => v.slice()), tag: tag }, { v: s.verts.map((v) => [v[0] - nf[0] * TH, v[1] - nf[1] * TH, v[2] - nf[2] * TH]), tag: -1 });
+      cell.samp.push(s.pt.slice()); s.samp.forEach((q) => cell.samp.push(q));
+    });
+    const G = 16; for (let i = 0; i < G; i++) for (let j = 0; j < G; j++) for (let k = 0; k < G; k++) { const q = [-1 + (2 * i + 1) / G, -1 + (2 * j + 1) / G, -1 + (2 * k + 1) / G]; cellOf(sigOf(q)).cloud.push(q); }          // the solid: grid points per cell
+    const cells = []; byCell.forEach((c) => {
+      if (!c.cloud.length) c.cloud = c.samp.slice();          // a thin cell without a grid point: its surface points stand for it
+      if (!c.samp.length) { const m = [0, 0, 0]; c.cloud.forEach((q) => { m[0] += q[0] / c.cloud.length; m[1] += q[1] / c.cloud.length; m[2] += q[2] / c.cloud.length; }); c.samp = [m]; }          // an inner cell: its middle
+      cells.push(c);
+    });
+    sp.axes.forEach((e) => [1, -1].forEach((sg) => {
+      const M = e.map((x) => x * sg), u = M.map((x) => x / Math.hypot(M[0], M[1], M[2]));
+      sp.radii.forEach((r1, q) => planes.push({ ax: 0, n: u, d: 0, sg: 1, depth: 0, axis: u, center: [0, 0, 0], sph: { c: M.map((x) => x * sp.a), r0: q ? sp.radii[q - 1] : 0, r1: r1 }, stops: STOPS.slice() }));
+    }));
+    return (CFG[ck] = { n: n, shape: shape, planes: planes, cells: cells, axes: [], stops: STOPS, colours: CCOL, faceN: FACES, faceD: 1, noJumble: false, faceDs: null, step: null, sc: 1, shell: true, bond: 'cloud' });
+  }
   function config(n, shape) {
     shape = shape || 'cube';
+    if (shape === 'ccclover' || shape === 'cccurvy') return ccConfig(n, shape);
+    if (SPEC[shape]) return specialConfig(n, shape);
     const ck = shape + (Array.isArray(n) ? n.join('x') : n); if (CFG[ck]) return CFG[ck];
     const tet = shape === 'tetra', oct = shape === 'octa', dod = shape === 'dodeca', dft = shape === 'dodecaft', dte = shape === 'dodecaet', ice = shape === 'icosaet', oct2 = shape === 'octact', ice2 = shape === 'icosact', ff = shape === 'cuboidff', ex = shape === 'cuboidx', cub = ff || ex, big = dte || ice || oct2 || ice2;
     const dims = cub ? n : null, sc = ff ? S3 / Math.hypot(dims[0], dims[1], dims[2]) : 1;          // the box is scaled so that its radius is sqrt3 like the other solids
@@ -213,7 +287,7 @@
       planes = moves;
     }
     planes.forEach((pl, i) => { if (!pl.stops) pl.stops = (big || tet) ? alignStops(planes, i) : cub ? TSTOPS : tet ? TSTOPS : oct ? OSTOPS : dod || dft ? DSTOPS : STOPS; });
-    return (CFG[ck] = { n: n, shape: shape, planes: planes, cells: cells, axes: axes, stops: planes.length ? planes[0].stops : STOPS, colours: tet ? TCOL : oct || oct2 ? OCOL : dod || dft || dte ? DCOL : ice || ice2 ? ICOL : CCOL, faceN: tet ? TFACES : oct || oct2 ? OFACES : dod || dft || dte ? DOD.DN : ice || ice2 ? ICO.DN : FACES, faceD: tet || oct || oct2 ? 1 / S3 : dod || dft || dte ? DOD.DD : ice || ice2 ? ICO.DD : 1, noJumble: dod || dft || ff, faceDs: ff ? [dims[1] * sc, dims[0] * sc, dims[2] * sc, dims[1] * sc, dims[0] * sc, dims[2] * sc] : null, step: ff ? Math.PI / 2 : null, sc: sc });
+    return (CFG[ck] = { n: n, shape: shape, planes: planes, cells: cells, axes: axes, stops: planes.length ? planes[0].stops : STOPS, colours: tet ? TCOL : oct || oct2 ? OCOL : dod || dft || dte ? DCOL : ice || ice2 ? ICOL : CCOL, faceN: tet ? TFACES : oct || oct2 ? OFACES : dod || dft || dte ? DOD.DN : ice || ice2 ? ICO.DN : FACES, faceD: tet || oct || oct2 ? 1 / S3 : dod || dft || dte ? DOD.DD : ice || ice2 ? ICO.DD : 1, bond: ff ? 'ff' : dod || dft ? false : 'face', noJumble: dod || dft || ff, faceDs: ff ? [dims[1] * sc, dims[0] * sc, dims[2] * sc, dims[1] * sc, dims[0] * sc, dims[2] * sc] : null, step: ff ? Math.PI / 2 : null, sc: sc });
   }
   const I3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
   function rotMat(n, a) {
@@ -225,32 +299,93 @@
 
   function world(S, i) { const pc = S.pieces[i], T = pc.T; return pc.home.map((f) => f.v.map((p) => { const q = app(pc.R, p); return [q[0] + T[0], q[1] + T[1], q[2] + T[2]]; })); }
   function qr(l, pl) { return pl.sg > 0 ? l : [-l[1], -l[0]]; }
-  function refresh(S, i) { S.pieces[i].W = world(S, i); const W = S.pieces[i].W; let mn = [], mx = []; S.pieces[i].lim = S.cfg.axes.map((n) => { let lo = 1e9, hi = -1e9; W.forEach((f) => f.forEach((p) => { const d = dot(n, p); if (d < lo) lo = d; if (d > hi) hi = d; })); return [lo, hi]; }); }
+  function refresh(S, i) { S.pieces[i].W = world(S, i); S.pieces[i].IF = null; if (S.pieces[i].samp) { const pc = S.pieces[i]; pc.SW = pc.samp.map((p) => { const q = app(pc.R, p); return [q[0] + pc.T[0], q[1] + pc.T[1], q[2] + pc.T[2]]; }); } const W = S.pieces[i].W; let mn = [], mx = []; S.pieces[i].lim = S.cfg.axes.map((n) => { let lo = 1e9, hi = -1e9; W.forEach((f) => f.forEach((p) => { const d = dot(n, p); if (d < lo) lo = d; if (d > hi) hi = d; })); return [lo, hi]; })
+    if (S.cfg.surf) {          // the mixup cube: only the lines on the six surfaces count (the outer faces of the piece), a piece without an outer face has no limits
+      const pc = S.pieces[i], os = []; pc.home.forEach((f, k) => { if (f.tag >= 0) os.push(W[k]); });
+      pc.slim = os.length ? S.cfg.axes.map((n) => { let lo = 1e9, hi = -1e9; os.forEach((f) => f.forEach((p) => { const d = dot(n, p); if (d < lo) lo = d; if (d > hi) hi = d; })); return [lo, hi]; }) : null;
+    }
+  }
   function create(n, shape) {
     const cfg = config(n === undefined ? 3 : n, shape);
-    const S = { cfg: cfg, pieces: cfg.cells.map((c) => ({ home: c, R: I3.slice(), T: [0, 0, 0], W: null, lim: null })), hist: [], ang: new Array(cfg.planes.length).fill(0) };
+    const S = { cfg: cfg, pieces: cfg.cells.map((c) => ({ home: c, samp: c.samp || null, cloud: c.cloud || null, IF: null, R: I3.slice(), T: [0, 0, 0], W: null, lim: null, SW: null })), hist: [], ang: new Array(cfg.planes.length).fill(0) };
     for (let i = 0; i < S.pieces.length; i++) refresh(S, i);
     return S;
   }
   // the pieces in the cap of plane p (null when a piece straddles it: the plane is locked)
+  // the range of piece i along the axis of plane pl (oriented); for the mixup cube the range of its outer faces only; a piece without outer face: its middle (mid = true)
+  function rangeOf(S, i, pl) {
+    const pc = S.pieces[i];
+    if (S.cfg.surf) { if (!pc.slim) { const l = qr(pc.lim[pl.ax], pl); return { l: l, m: (l[0] + l[1]) / 2, mid: true }; } return { l: qr(pc.slim[pl.ax], pl), mid: false }; }
+    return { l: qr(pc.lim[pl.ax], pl), mid: false };
+  }
+  // the pieces in the cap of plane p (null when a piece straddles it: the plane is locked)
+  // ball move (clover / curvy cube): is the patch inside the ball (shell), is it cut by its sphere
+  function sphIn(S, i, pl) { const q = S.pieces[i].SW[0], d = Math.hypot(q[0] - pl.sph.c[0], q[1] - pl.sph.c[1], q[2] - pl.sph.c[2]); return d < pl.sph.r1 && d >= pl.sph.r0; }
+  function sphCut(S, i, pl) {
+    const E = 2e-3, bs = pl.sph.r0 > 0 ? [pl.sph.r0, pl.sph.r1] : [pl.sph.r1];
+    return bs.some((b) => { let lo = false, hi = false; S.pieces[i].SW.forEach((q) => { const d = Math.hypot(q[0] - pl.sph.c[0], q[1] - pl.sph.c[1], q[2] - pl.sph.c[2]); if (d < b - E) lo = true; else if (d > b + E) hi = true; }); return lo && hi; });
+  }
   function inCap(S, i, p) {
-    const pl = S.cfg.planes[p], l = qr(S.pieces[i].lim[pl.ax], pl);
+    const pl = S.cfg.planes[p]; if (pl.sph) return sphIn(S, i, pl);
+    const r = rangeOf(S, i, pl), l = r.l;
+    if (r.mid) return r.m > pl.depth - EPS && (pl.hi === undefined || r.m < pl.hi + EPS);
     if (pl.free) { const m = (l[0] + l[1]) / 2; return m > pl.depth - EPS && m < pl.hi + EPS; }
     return l[0] >= pl.depth - EPS && (pl.hi === undefined || l[1] <= pl.hi + EPS);
   }
   function members(S, p) {
     const pl = S.cfg.planes[p], out = [];
+    if (pl.sph) { for (let i = 0; i < S.pieces.length; i++) { if (sphCut(S, i, pl)) return null; if (sphIn(S, i, pl)) out.push(i); } return out; }
     if (pl.free) { for (let i = 0; i < S.pieces.length; i++) if (inCap(S, i, p)) out.push(i); return out; }          // fully functional: the pieces at this place turn, nothing blocks
     for (let i = 0; i < S.pieces.length; i++) {
-      const l = qr(S.pieces[i].lim[pl.ax], pl);
+      const r = rangeOf(S, i, pl), l = r.l;
+      if (r.mid) { if (inCap(S, i, p)) out.push(i); continue; }
       if (l[0] >= pl.depth - EPS && (pl.hi === undefined || l[1] <= pl.hi + EPS)) out.push(i);
       else if ((l[0] < pl.depth - EPS && l[1] > pl.depth + EPS) || (pl.hi !== undefined && l[0] < pl.hi - EPS && l[1] > pl.hi + EPS)) return null;
     }
     return out;
   }
   function isFree(S, p) { return members(S, p) !== null; }
-  // fully functional cuboid: a turn is refused when it leaves a cell (or a group) cut off from the rest (the cells are joined by faces, positions on the lattice) or when a sticker face
-  // would touch an inner face of another cell afterwards (an inner black face may never meet an outer sticker face).  Returns '' when the turn is fine.
+  // fully functional cuboid: a turn is refused when it leaves a cell (or a group) cut off from the rest (only inner face against inner face holds cells together; a sticker face touching anything is no bond).  Returns '' when the turn is fine.
+  // while the layer turns (fully functional cuboid): at every angle of the turn the body must stay in one piece through inner face against inner face contacts: the contacts inside the turning
+  // layer and inside the rest are fixed, the contacts across the layer's plane slide (the two squares must still overlap).  true = the bond breaks somewhere on the way
+  function sqPoly(cx, cy, h, th) { const c = Math.cos(th), s = Math.sin(th); return [[-h, -h], [h, -h], [h, h], [-h, h]].map((q) => [cx + c * q[0] - s * q[1], cy + s * q[0] + c * q[1]]); }
+  function overlapArea(P, Q) {
+    let out = P;
+    for (let i = 0; i < Q.length && out.length; i++) {
+      const a = Q[i], b = Q[(i + 1) % Q.length], inp = out, side = (p) => (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]); out = [];
+      for (let j = 0; j < inp.length; j++) { const p = inp[j], q = inp[(j + 1) % inp.length], sp = side(p), sq = side(q); if (sp >= 0) out.push(p); if ((sp > 0 && sq < 0) || (sp < 0 && sq > 0)) { const tt = sp / (sp - sq); out.push([p[0] + (q[0] - p[0]) * tt, p[1] + (q[1] - p[1]) * tt]); } }
+    }
+    let A = 0; for (let i = 0; i < out.length; i++) { const p = out[i], q = out[(i + 1) % out.length]; A += p[0] * q[1] - q[0] * p[1]; } return Math.abs(A) / 2;
+  }
+  function ffMid(S, pl, m, a) {
+    const sc = S.cfg.sc, N = S.pieces.length, k = pl.axis.findIndex((x) => Math.abs(x) > 0.5), u = (k + 1) % 3, v = (k + 2) % 3, C = pl.center || [0, 0, 0], sa = pl.axis[k] > 0 ? 1 : -1, inM = new Set(m), TOL = 1e-5;
+    const dirIdx = (w) => (Math.abs(w[0]) > 0.5 ? (w[0] > 0 ? 0 : 1) : Math.abs(w[1]) > 0.5 ? (w[1] > 0 ? 2 : 3) : (w[2] > 0 ? 4 : 5));
+    const cen = S.pieces.map((pc) => [(pc.lim[0][0] + pc.lim[0][1]) / 2, (pc.lim[1][0] + pc.lim[1][1]) / 2, (pc.lim[2][0] + pc.lim[2][1]) / 2]);
+    const kind = S.pieces.map((pc) => { const q = [false, false, false, false, false, false]; for (const f of pc.home) { if (f.tag < 0) continue; q[dirIdx(app(pc.R, FACES[f.tag]))] = true; } return q; });
+    const par = new Array(N), find = (x) => { while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; };
+    const fixed = [], cross = [];
+    for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
+      const di = [0, 1, 2].map((d) => Math.abs(cen[i][d] - cen[j][d]));
+      for (let d = 0; d < 3; d++) {
+        if (Math.abs(di[d] - 2 * sc) > TOL || di[(d + 1) % 3] > 2 * sc - TOL || di[(d + 2) % 3] > 2 * sc - TOL) continue;          // touching along axis d with a positive contact area (no turn yet)
+        const sg = cen[j][d] > cen[i][d] ? 0 : 1;
+        if (kind[i][2 * d + sg] || kind[j][2 * d + (sg ^ 1)]) continue;          // a sticker face is no bond
+        if (inM.has(i) === inM.has(j)) fixed.push([i, j]); else if (d === k) cross.push(inM.has(i) ? [i, j] : [j, i]);
+      }
+    }
+    const steps = Math.max(2, Math.ceil(Math.abs(a) / (15 * Math.PI / 180) - 1e-9));
+    for (let s = 1; s < steps; s++) {
+      const th = sa * a * s / steps; for (let i = 0; i < N; i++) par[i] = i;
+      fixed.forEach((e) => { par[find(e[0])] = find(e[1]); });
+      const c = Math.cos(th), sn = Math.sin(th);
+      cross.forEach((e) => {
+        const ci = cen[e[0]], cj = cen[e[1]], x = ci[u] - C[u], y = ci[v] - C[v];
+        if (overlapArea(sqPoly(C[u] + c * x - sn * y, C[v] + sn * x + c * y, sc, th), sqPoly(cj[u], cj[v], sc, 0)) > 1e-6 * sc * sc) par[find(e[0])] = find(e[1]);
+      });
+      const r = find(0); for (let i = 1; i < N; i++) if (find(i) !== r) return true;
+    }
+    return false;
+  }
   function ffProblem(S, pl, m, a) {
     const sc = S.cfg.sc, Rm = rotMat(pl.axis, a), C = pl.center || [0, 0, 0], inM = new Set(m), idx = new Map(), pos = [], rots = []; let off = false;
     const ri = (x) => Math.round(x / sc);
@@ -260,27 +395,104 @@
       for (let d = 0; d < 3; d++) { const t = v[d] / sc; if (Math.abs(t - Math.round(t)) > 1e-5 || (((Math.round(t) - (S.cfg.n[d] - 1)) % 2) + 2) % 2 !== 0) off = true; }          // not on the lattice of the cells (half a cell off)
       const p = [ri(v[0]), ri(v[1]), ri(v[2])]; pos.push(p); rots.push(R); idx.set(p.join(','), i);
     });
-    if (off) return '';          // half a cell off the lattice: the cells no longer touch face to face, only the jamming of the other layers counts
+    if (off) return ffMid(S, pl, m, a) ? 'detach' : '';          // half a cell off the lattice: the cells no longer touch face to face, only the jamming of the other layers counts
+    const dirIdx = (v) => (Math.abs(v[0]) > 0.5 ? (v[0] > 0 ? 0 : 1) : Math.abs(v[1]) > 0.5 ? (v[1] > 0 ? 2 : 3) : (v[2] > 0 ? 4 : 5));
+    const kind = S.pieces.map((pc, i) => { const k = [false, false, false, false, false, false]; for (const f of pc.home) { if (f.tag < 0) continue; k[dirIdx(app(rots[i], FACES[f.tag]))] = true; } return k; });          // kind[i][d]: the face of cell i towards d carries a sticker
     const seen = new Set([0]), stack = [0];
     while (stack.length) {
       const i = stack.pop(), p = pos[i];
-      for (let d = 0; d < 3; d++) for (const sg of [-2, 2]) { const q = p.slice(); q[d] += sg; const j = idx.get(q.join(',')); if (j !== undefined && !seen.has(j)) { seen.add(j); stack.push(j); } }
+      for (let d = 0; d < 3; d++) for (const sg of [-2, 2]) { const q = p.slice(); q[d] += sg; const j = idx.get(q.join(',')); const e = d * 2 + (sg > 0 ? 0 : 1); if (j !== undefined && !seen.has(j) && !kind[i][e] && !kind[j][e ^ 1]) { seen.add(j); stack.push(j); } }          // only an inner face against an inner face holds cells together
     }
     if (seen.size !== S.pieces.length) return 'detach';
-    // a sticker face may not touch an inner face; sticker against sticker and inner against inner are fine (exposed faces are fine too)
-    const dirIdx = (v) => (Math.abs(v[0]) > 0.5 ? (v[0] > 0 ? 0 : 1) : Math.abs(v[1]) > 0.5 ? (v[1] > 0 ? 2 : 3) : (v[2] > 0 ? 4 : 5)), DV = [[2, 0, 0], [-2, 0, 0], [0, 2, 0], [0, -2, 0], [0, 0, 2], [0, 0, -2]];
-    const kind = S.pieces.map((pc, i) => { const k = [false, false, false, false, false, false]; for (const f of pc.home) { if (f.tag < 0) continue; k[dirIdx(app(rots[i], FACES[f.tag]))] = true; } return k; });
-    for (let i = 0; i < S.pieces.length; i++) {
-      for (let d = 0; d < 6; d++) {
-        const q = [pos[i][0] + DV[d][0], pos[i][1] + DV[d][1], pos[i][2] + DV[d][2]], j = idx.get(q.join(','));
-        if (j !== undefined && kind[i][d] !== kind[j][d ^ 1]) return 'cover';
-      }
+    return ffMid(S, pl, m, a) ? 'detach' : '';
+  }
+  // ---- the rotation constraint of every jumbling puzzle (as in the fully functional cuboid): the body may not fall apart, after the turn and on the way ----
+  // 'face' (cells with flat cut faces): only an inner face against an inner face holds cells together (same plane, opposite normals, positive overlap); inside the turning group and inside the rest the contacts are fixed, the
+  // contacts across the plane of the turn slide (the faces must still overlap at every angle, tested every 15 degrees).  'cloud' (clover / curvy cube): the cells are point clouds of their solid, two cells hold when
+  // enough points of the two lie close together.
+  function newellN(P) { let n = [0, 0, 0]; for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length]; n = [n[0] + (a[1] - b[1]) * (a[2] + b[2]), n[1] + (a[2] - b[2]) * (a[0] + b[0]), n[2] + (a[0] - b[0]) * (a[1] + b[1])]; } const l = Math.hypot(n[0], n[1], n[2]) || 1; return [n[0] / l, n[1] / l, n[2] / l]; }
+  function innerFaces(S, i) {
+    const pc = S.pieces[i]; if (pc.IF) return pc.IF;
+    const out = [], W = pc.W; let cen = [0, 0, 0], cnt = 0; W.forEach((f) => f.forEach((p) => { cen[0] += p[0]; cen[1] += p[1]; cen[2] += p[2]; cnt++; })); cen = cen.map((x) => x / (cnt || 1));
+    pc.home.forEach((hf, k) => {
+      if (hf.tag >= 0) return;
+      const P = W[k]; let n = newellN(P); const fc = [0, 0, 0]; P.forEach((p) => { fc[0] += p[0] / P.length; fc[1] += p[1] / P.length; fc[2] += p[2] / P.length; });
+      if (n[0] * (fc[0] - cen[0]) + n[1] * (fc[1] - cen[1]) + n[2] * (fc[2] - cen[2]) < 0) n = [-n[0], -n[1], -n[2]];
+      out.push({ n: n, d: dot(n, P[0]), P: P });
+    });
+    return (pc.IF = out);
+  }
+  const rkey = (x) => Math.round(x * 1e3 + 0.37);
+  function faceOverlap(a, b) {          // overlap area of two coplanar convex polygons (a.n = -b.n)
+    const t = Math.abs(a.n[0]) < 0.8 ? [1, 0, 0] : [0, 1, 0], e1 = cross(a.n, t), l1 = Math.hypot(e1[0], e1[1], e1[2]), u = [e1[0] / l1, e1[1] / l1, e1[2] / l1], v = cross(a.n, u);
+    const pr = (P) => { const q = P.map((p) => [dot(p, u), dot(p, v)]); let s = 0; for (let i = 0; i < q.length; i++) { const x = q[i], y = q[(i + 1) % q.length]; s += x[0] * y[1] - y[0] * x[1]; } return s < 0 ? q.reverse() : q; }, A = pr(a.P), B = pr(b.P);          // both counter-clockwise
+    return overlapArea(A, B);
+  }
+  function faceContacts(F) {          // F[i] = the inner faces of piece i; returns the pairs of pieces in contact
+    const byKey = new Map(), edges = [];
+    F.forEach((fl, i) => fl.forEach((f) => { const k = rkey(f.n[0]) + ',' + rkey(f.n[1]) + ',' + rkey(f.n[2]) + ',' + rkey(f.d); if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push([i, f]); }));
+    F.forEach((fl, i) => fl.forEach((f) => {
+      const k = rkey(-f.n[0]) + ',' + rkey(-f.n[1]) + ',' + rkey(-f.n[2]) + ',' + rkey(-f.d), l = byKey.get(k); if (!l) return;
+      l.forEach((e) => { if (e[0] <= i) return; if (Math.abs(dot(f.n, e[1].n) + 1) > 1e-6 || Math.abs(f.d + e[1].d) > 1e-4) return; if (faceOverlap(f, e[1]) > 1e-6) edges.push([i, e[0]]); });
+    }));
+    return edges;
+  }
+  function connectedAll(N, edges) {
+    const par = new Array(N); for (let i = 0; i < N; i++) par[i] = i; const find = (x) => { while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; };
+    edges.forEach((e) => { par[find(e[0])] = find(e[1]); }); const r = find(0); for (let i = 1; i < N; i++) if (find(i) !== r) return false; return true;
+  }
+  function rotFace(f, R, C) { const P = f.P.map((p) => { const q = app(R, [p[0] - C[0], p[1] - C[1], p[2] - C[2]]); return [q[0] + C[0], q[1] + C[1], q[2] + C[2]]; }), n = app(R, f.n); return { n: n, d: dot(n, P[0]), P: P }; }
+  function faceBondBroken(S, pl, m, a) {
+    const N = S.pieces.length, inM = new Set(m), C = pl.center || [0, 0, 0], ax = pl.axis;
+    const F0 = S.pieces.map((_, i) => innerFaces(S, i));
+    const R1 = rotMat(ax, a), F1 = F0.map((fl, i) => (inM.has(i) ? fl.map((f) => rotFace(f, R1, C)) : fl));
+    if (!connectedAll(N, faceContacts(F1))) return true;          // the body would fall apart after the turn
+    const fixedE = faceContacts(F0).filter((e) => inM.has(e[0]) === inM.has(e[1]));
+    const t = Math.abs(ax[0]) < 0.8 ? [1, 0, 0] : [0, 1, 0], e1c = cross(ax, t), l1 = Math.hypot(e1c[0], e1c[1], e1c[2]), e1 = [e1c[0] / l1, e1c[1] / l1, e1c[2] / l1], e2 = cross(ax, e1);          // (e1, e2, ax) right handed
+    const rot = [], fix = [];
+    F0.forEach((fl, i) => fl.forEach((f) => { const al = dot(f.n, ax); if (Math.abs(Math.abs(al) - 1) > 1e-6) return; (inM.has(i) ? rot : fix).push({ i: i, s: dot(f.P[0], ax), sg: al > 0 ? 1 : -1, f: f }); }));
+    const pr = (P) => { const q = P.map((p) => [dot(p, e1), dot(p, e2)]); let s = 0; for (let i = 0; i < q.length; i++) { const x = q[i], y = q[(i + 1) % q.length]; s += x[0] * y[1] - y[0] * x[1]; } return s < 0 ? q.reverse() : q; }, c2 = [dot(C, e1), dot(C, e2)], pairs = [];
+    rot.forEach((r) => fix.forEach((g) => { if (r.sg === -g.sg && Math.abs(r.s - g.s) < 1e-4) pairs.push({ i: r.i, j: g.i, A: pr(r.f.P), B: pr(g.f.P) }); }));
+    if (!pairs.length) return false;
+    const steps = Math.max(1, Math.ceil(Math.abs(a) / (15 * Math.PI / 180) - 1e-9));
+    for (let s = 1; s < steps; s++) {
+      const th = a * s / steps, c = Math.cos(th), sn = Math.sin(th), E = fixedE.slice();
+      pairs.forEach((q) => { const A = q.A.map((p) => [c2[0] + c * (p[0] - c2[0]) - sn * (p[1] - c2[1]), c2[1] + sn * (p[0] - c2[0]) + c * (p[1] - c2[1])]); if (overlapArea(A, q.B) > 1e-6) E.push([q.i, q.j]); });
+      if (!connectedAll(N, E)) return true;
     }
-    return '';
+    return false;
+  }
+  function cloudBroken(S, pl, m, a) {
+    const N = S.pieces.length, inM = new Set(m), ax = pl.axis, D = 0.2, thr = 3, steps = Math.max(1, Math.ceil(Math.abs(a) / (15 * Math.PI / 180) - 1e-9));
+    const hashOf = (q) => Math.floor(q[0] / D) + ',' + Math.floor(q[1] / D) + ',' + Math.floor(q[2] / D);
+    const W = S.pieces.map((pc) => pc.cloud.map((p) => { const q = app(pc.R, p); return [q[0] + pc.T[0], q[1] + pc.T[1], q[2] + pc.T[2]]; }));
+    const all = [], gridAll = new Map(), gridFix = new Map();
+    W.forEach((pts, i) => pts.forEach((p) => { const e = [p, i], k = hashOf(p); all.push(e); const l = gridAll.get(k); if (l) l.push(e); else gridAll.set(k, [e]); if (!inM.has(i)) { const l2 = gridFix.get(k); if (l2) l2.push(e); else gridFix.set(k, [e]); } }));
+    const near = (grid, q, fn) => { const bx = Math.floor(q[0] / D), by = Math.floor(q[1] / D), bz = Math.floor(q[2] / D); for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) { const l = grid.get((bx + x) + ',' + (by + y) + ',' + (bz + z)); if (l) for (let t = 0; t < l.length; t++) { const f = l[t], dx = f[0][0] - q[0], dy = f[0][1] - q[1], dz = f[0][2] - q[2]; if (dx * dx + dy * dy + dz * dz <= D * D) fn(f[1]); } } };
+    const count = (cnt, i, j) => { const kk = Math.min(i, j) * N + Math.max(i, j); cnt.set(kk, (cnt.get(kk) || 0) + 1); };
+    const fixedCnt = new Map();          // contacts inside the turning group and inside the rest (they stay)
+    all.forEach((e) => near(gridAll, e[0], (j) => { if (j !== e[1] && inM.has(j) === inM.has(e[1])) count(fixedCnt, e[1], j); }));
+    const edgesOf = (cnt, k) => { const E = []; cnt.forEach((v, kk) => { if (v >= k) E.push([Math.floor(kk / N), kk % N]); }); return E; };
+    const fixedE = edgesOf(fixedCnt, 2 * thr);          // every pair is counted from both sides
+    const test = (th) => {
+      const R = rotMat(ax, th), cnt = new Map();
+      m.forEach((i) => W[i].forEach((p) => { const q = app(R, p); near(gridFix, q, (j) => count(cnt, i, j)); }));
+      return connectedAll(N, fixedE.concat(edgesOf(cnt, thr)));
+    };
+    if (!test(a)) return true;
+    for (let s = 1; s < steps; s++) if (!test(a * s / steps)) return true;
+    return false;
+  }
+  function bondBroken(S, pl, m, a) {
+    const bk = S.cfg.bond;
+    if (bk === 'ff') return ffProblem(S, pl, m, a) !== '';
+    if (bk === 'face') return faceBondBroken(S, pl, m, a);
+    if (bk === 'cloud') return cloudBroken(S, pl, m, a);
+    return false;
   }
   function apply(S, mv) {
     const m = members(S, mv.p); if (!m) return false;
-    if (S.cfg.shape === 'cuboidff') { const why = ffProblem(S, S.cfg.planes[mv.p], m, mv.a); S.fail = why; if (why) return false; }
+    S.fail = ''; if (S.cfg.bond) { if (S.cfg.bond === 'ff') { const why = ffProblem(S, S.cfg.planes[mv.p], m, mv.a); S.fail = why; if (why) return false; } else if (bondBroken(S, S.cfg.planes[mv.p], m, mv.a)) { S.fail = 'detach'; return false; } }
     const Rm = rotMat(S.cfg.planes[mv.p].axis, mv.a);
     const C = S.cfg.planes[mv.p].center || [0, 0, 0], RC = app(Rm, C);
     m.forEach((i) => { const pc = S.pieces[i], t = app(Rm, pc.T); pc.R = mul(Rm, pc.R); pc.T = [t[0] + C[0] - RC[0], t[1] + C[1] - RC[1], t[2] + C[2] - RC[2]]; refresh(S, i); });
@@ -329,7 +541,7 @@
     const mvs = []; let last = -1; const NPL = S.cfg.planes.length; if (!NPL) return mvs;
     for (let i = 0; i < cnt; i++) {
       let p; do { p = Math.floor(rnd() * NPL); } while (p === last && NPL > 1);
-      last = p; const mv = { p: p, a: S.cfg.noJumble ? (1 + Math.floor(rnd() * (S.cfg.step ? 3 : 4))) * (S.cfg.step || 2 * Math.PI / 5) : Math.PI };
+      last = p; const mv = { p: p, a: S.cfg.noJumble ? (1 + Math.floor(rnd() * (S.cfg.mult || (S.cfg.step ? 3 : 4)))) * (S.cfg.step || 2 * Math.PI / 5) : Math.PI };
       if (apply(S, mv)) mvs.push(mv);
     }
     let nj = S.cfg.noJumble ? 0 : jum === undefined ? 1 + Math.floor(rnd() * 4) : jum;
@@ -341,5 +553,5 @@
     }
     return mvs;
   }
-  (typeof window !== 'undefined' ? window : globalThis).HELI = { NORMALS: NORMALS, config: config, inCap: inCap, H: H, FACES: FACES, STOPS: STOPS, normAng: normAng, ANG: ANG, create: create, members: members, isFree: isFree, apply: apply, inverse: inverse, isSolved: isSolved, scramble: scramble, rotMat: rotMat, app: app };
+  (typeof window !== 'undefined' ? window : globalThis).HELI = { NORMALS: NORMALS, config: config, inCap: inCap, H: H, FACES: FACES, STOPS: STOPS, normAng: normAng, ANG: ANG, create: create, members: members, isFree: isFree, splits: function (S, p, a) { const m = members(S, p); return !!m && !!S.cfg.bond && bondBroken(S, S.cfg.planes[p], m, a); }, apply: apply, _refresh: refresh, inverse: inverse, isSolved: isSolved, scramble: scramble, rotMat: rotMat, app: app };
 })();

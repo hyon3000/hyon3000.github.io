@@ -6,11 +6,11 @@
   const canvas = document.getElementById('app'), ctx = canvas.getContext('2d');
   const D = 4.4;                                         // camera distance (puzzle radius = 1)
   const T = KO ? {
-    names: { cube2: '미니큐브', cube4: '리벤지큐브', cube5: '큐브5', cube6: '큐브6', cube7: '큐브7', skewb: '스큐브', heli: '헬리콥터큐브', icosa: '정이십면체', cube: '루빅스큐브 (3x3x3)', tetra: '피라밍크스', octa: '다이아몬드', dodeca: '메가밍크스', pentult: '펜튤티메이트' },
+    names: { cube2: '미니큐브', cube4: '리벤지큐브', cube5: '큐브5', cube6: '큐브6', cube7: '큐브7', skewb: '스큐브', rex: 'Rex큐브', penrose: '펜로즈큐브', ivy: 'Ivy큐브', redi: '레디큐브', clover: '클로바큐브', curvy: '커비큐브', heli: '헬리콥터큐브', cube: '루빅스큐브 (3x3x3)', tetra: '피라밍크스', octa: '다이아몬드', dodeca: '메가밍크스', pentult: '펜튤티메이트' },
     moves: '이동', time: '시간', best: '최고', solved: '완성!', newRec: '신기록!', again: '새 게임 (F2)',
     wait: '해법 계산 중...', prep: '해법 계산기 준비 중...', hint: '빈 곳을 끌어 돌려 보기 · 조각을 밀어 층 돌리기', keys: 'F2 새 게임 · F3 자동 풀기 · F4 힌트', scr: '섞는 중...',
   } : {
-    names: { cube2: 'Mini Cube', cube4: 'Revenge Cube', cube5: 'Cube5', cube6: 'Cube6', cube7: 'Cube7', skewb: 'Skewb', heli: 'Helicopter Cube', icosa: 'Icosahedron', cube: 'Rubik\'s Cube (3x3x3)', tetra: 'Pyraminx', octa: 'Diamond', dodeca: 'Megaminx', pentult: 'Pentultimate' },
+    names: { cube2: 'Mini Cube', cube4: 'Revenge Cube', cube5: 'Cube5', cube6: 'Cube6', cube7: 'Cube7', skewb: 'Skewb', rex: 'Rex Cube', penrose: 'Penrose Cube', ivy: 'Ivy Cube', redi: 'Redi Cube', clover: 'Clover Cube', curvy: 'Curvy Cube', heli: 'Helicopter Cube', cube: 'Rubik\'s Cube (3x3x3)', tetra: 'Pyraminx', octa: 'Diamond', dodeca: 'Megaminx', pentult: 'Pentultimate' },
     moves: 'Moves', time: 'Time', best: 'Best', solved: 'SOLVED!', newRec: 'New best!', again: 'New game (F2)',
     wait: 'Computing solution...', prep: 'Preparing the solver...', hint: 'Drag empty space to rotate the view · swipe a piece to turn its layer', keys: 'F2 new game · F3 auto-solve · F4 hint', scr: 'Scrambling...',
   };
@@ -39,7 +39,7 @@
     S.rgb = G.P.meta.colours.map(hex2rgb);
     lsSet('rubik_theme', key);
     document.title = nameOf(key);
-    if (key === 'cube') cubeInit();
+    if (G.P.meta.solver === 'kociemba') cubeInit();          // the ordinary cube and every puzzle that uses its solver (penrose)
     if (key === 'tetra' || key === 'cube2') setTimeout(function () { try { G.P.initSolver(); } catch (e) {} }, 30);
     newGame();
   }
@@ -333,13 +333,13 @@
 
   // ------------------------------------------------------------------ input
   function pos(e) { const r = canvas.getBoundingClientRect(), d = S.dpr; return { x: (e.clientX - r.left) * d, y: (e.clientY - r.top) * d }; }
-  function pointIn(pts, x, y) {
-    let sgn = 0;
-    for (let i = 0; i < pts.length; i++) {
-      const a = pts[i], b = pts[(i + 1) % pts.length], c = (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]);
-      if (c !== 0) { const sg = c > 0 ? 1 : -1; if (sgn && sg !== sgn) return false; sgn = sg; }
+  function pointIn(pts, x, y) {          // even-odd ray casting (the regions of the rex cube are not convex)
+    let c = false;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const a = pts[i], b = pts[j];
+      if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) c = !c;
     }
-    return true;
+    return c;
   }
   function pick(x, y) {            // visible sticker under the point (rest geometry)
     const P = G.P; let best = -1, bz = -1e9;

@@ -266,7 +266,7 @@ function bump(st, r) {
     if (t2 === T.QP && ((best * 7 + r * 13) % 5 === 0)) { k = 6 + ((best + r * 3) % 4); if (k === 8 && (best * 11 + r * 7) % 7 !== 0) k = 9; }   // wings are very rare (a clock instead)
     if (st.L.fixedBox && st.L.fixedBox[best + ',' + r] !== undefined) k = st.L.fixedBox[best + ',' + r];   // a loose pickup that was moved into a block
     if (p.pw === 0 && k !== 3 && k !== 6 && !(st.L.fixedBox && st.L.fixedBox[best + ',' + r] !== undefined && (k === 1 || k === 2 || k === 11))) k = 0;   // a small hero always gets the mushroom first (only a star may come out of a block; a flower that was moved into a block from the floor stays a flower: puzzle gear)
-    st.it.push({ k: k, x: best * TS + 2, y: y, w: 12, h: 12, vx: (k === 1 || k === 2) && !(st.L.arena && best >= st.L.arena.c0 - 14 && best <= st.L.arena.c1) ? 0 : 0.7, vy: 0, em: 14, alive: true, ground: false });   // boss-arena flowers slide off their block onto the floor where the hero can reach them
+    st.it.push({ k: k, x: best * TS + 2, y: y, w: 12, h: 12, vx: (k === 1 || k === 2) && !(st.L.arena && best >= st.L.arena.c0 - 14 && best <= st.L.arena.c1 + 14) ? 0 : 0.7, vy: 0, em: 14, alive: true, ground: false });   // boss-arena flowers slide off their block onto the floor where the hero can reach them
     ev(st, 'item', x, y - 4);
   }
   else if (t2 === T.PSW) { setTile(st, best, r, T.USED); st.sw = 480; ev(st, 'pswitch', x, y); }

@@ -1007,7 +1007,7 @@ function buildRaw(seed, n, a, o) {
         bossDef.imm = 1; bossDef.immKind = imm;
         // shell: beetles wait at the arena entrance to be kicked (shellPass lets the validator use them); fire: fire flowers lie before and inside the arena
         if (imm === 'shell') { shellPassF = true; for (var bq = 0; bq < 4; bq++) enemiesX.push({ t: E.BEETLE, x: (arenaC0 + 1 + bq * 2) * TS, y: g * TS - 13, w: 12, h: 13, spd: 0.4, dir: bq % 2 ? -1 : 1, mn: arenaC0 * TS, mx: (arenaC0 + 9) * TS }); }
-        else { bossItems.push({ k: 1, x: (arenaC0 - 4) * TS + 2, y: g * TS - 12 }); bossItems.push({ k: 1, x: (arenaC0 + 1) * TS + 2, y: g * TS - 12 }); bossItems.push({ k: 1, x: (arenaC0 + 9) * TS + 2, y: g * TS - 12 }); bossItems.push({ k: 1, x: (arenaC0 + 17) * TS + 2, y: g * TS - 12 }); }   // spare flowers inside the arena: a hit that costs the power must not lock the fight
+        else { bossItems.push({ k: 1, x: (arenaC0 - 4) * TS + 2, y: g * TS - 12 }); bossItems.push({ k: 1, x: (arenaC0 + 1) * TS + 2, y: g * TS - 12 }); bossItems.push({ k: 1, x: (arenaC0 + 9) * TS + 2, y: g * TS - 12 }); bossItems.push({ k: 1, x: (arenaC0 + 17) * TS + 2, y: g * TS - 12 }); bossItems.push({ k: 1, x: (arenaC0 + 5) * TS + 2, y: g * TS - 12 }); bossItems.push({ k: 1, x: (arenaC0 + 13) * TS + 2, y: g * TS - 12 }); bossItems.push({ k: 1, x: (arenaC0 + 21) * TS + 2, y: g * TS - 12 }); }   // spare flowers inside the arena: a hit that costs the power must not lock the fight
       }
       poleCol = arenaC0 + AL - 2; goalCol = poleCol;
     }
@@ -2569,7 +2569,7 @@ function buildCastleChain(seed, n, a, o, shape) {
   if (imm) {
     boss.imm = 1; boss.immKind = imm;
     if (imm === 'shell') { shellPassF = true; for (var bq = 0; bq < 4; bq++) enemies.push({ t: 3, x: arCol(1 + bq * 2) * TS, y: rE * TS - 13, w: 12, h: 13, spd: 0.4, dir: bq % 2 ? -1 : 1, mn: Math.min(arCol(0), arCol(9)) * TS, mx: Math.max(arCol(0), arCol(9)) * TS }); }
-    else [-4, 1, 9, 17].forEach(function (off) { bossItems.push({ k: 1, x: arCol(off) * TS + 2, y: rE * TS - 12 }); });
+    else [-4, -1, 1, 5, 9, 13, 17, 21].forEach(function (off) { bossItems.push({ k: 1, x: arCol(off) * TS + 2, y: rE * TS - 12 }); });
   }
   // ---- hazards and ground life on the ledges; the waypoints of the route (one per ledge, on the arrival side)
   var route = [], coins = [], cannons = [], wanted = ledges.length;

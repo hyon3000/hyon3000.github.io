@@ -41,7 +41,12 @@
       const N = facets[s.facet].normal;
       let nw = [0, 0, 0]; for (let q = 0; q < verts.length; q++) nw = V.add(nw, V.cross(verts[q], verts[(q + 1) % verts.length]));        // Newell normal (a star has reflex corners)
       if (V.dot(nw, N) < 0) verts = verts.slice().reverse();
-      const c = V.avg(verts);
+      let c = s.flat ? V.avg(s.flat.map((v) => V.mul(v, k))) : V.avg(verts);          // a bent sticker (rounded edge) keeps the centre of its flat slot
+      if (spec.areaC) {          // a non-convex region: the centre of the area (the average of the corners may lie outside)
+        let A = 0, cc = [0, 0, 0];
+        for (let q = 1; q < verts.length - 1; q++) { const t = V.cross(V.sub(verts[q], verts[0]), V.sub(verts[q + 1], verts[0])), a = V.dot(t, N) / 2; A += a; cc = V.add(cc, V.mul(V.avg([verts[0], verts[q], verts[q + 1]]), a)); }
+        if (Math.abs(A) > 1e-12) c = V.mul(cc, 1 / A);
+      }
       // distance from the centroid to the nearest edge (used for marks / minimum size)
       let rad = 1e9;
       for (let i = 0; i < verts.length; i++) {
@@ -54,7 +59,8 @@
         const p = verts[(i + verts.length - 1) % verts.length], v = verts[i], q = verts[(i + 1) % verts.length];
         const m1 = V.cross(N, V.norm(V.sub(v, p))), m2 = V.cross(N, V.norm(V.sub(q, v)));
         const f = gap / (1 + V.dot(m1, m2));
-        ins.push(V.add(v, V.mul(V.add(m1, m2), f)));
+        let off = V.mul(V.add(m1, m2), f); const ol = V.len(off); if (ol > 6 * gap && ol > 0) off = V.mul(off, 6 * gap / ol);          // a very sharp tip (a cusp) is cut back instead of shooting out
+        ins.push(V.add(v, off));
       }
       return { i: idx, verts: verts, ins: ins, c: c, n: N, facet: s.facet, colour: facets[s.facet].colour, rad: rad, kind: s.kind || '' };
     });

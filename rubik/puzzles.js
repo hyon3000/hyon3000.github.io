@@ -736,6 +736,231 @@
     return layeredSpec('cubect' + n, facets, axes, n, 3, 1 / Math.sqrt(3), 0.04, 0);
   }
 
+
+  // Rex cube (cube CT-rex): the cube turns about its eight corners like the skewb, but the cuts are spheres: a sphere about a corner whose radius is the edge length for n = 2 (it passes through
+  // the three neighbours of the corner), so every face is cut by quarter circles about its four corners (the lens of two spheres about the two ends of a body diagonal looks like "( )").
+  // Larger n adds nested spheres (the radii follow the planes of the skewb family).  The surface is tiled by regions of equal "inside which sphere" signature: they are found on a fine grid of
+  // the face (a pixel staircase outline, exactly symmetric), turned into stickers and copied to the other five faces.
+  // a cube whose surface is cut by spheres (given as {c: centre, r: radius}): the surface is tiled by the regions of equal "inside which sphere" signature (found on a fine grid of a face, their
+  // outlines moved onto the true circles); the caller gives the turn axes with their bands (a band = the stickers whose interior point satisfies fn)
+  function sphereCubeSpec(name, spheres, mkLines, gap) {
+    const SQ3 = Math.sqrt(3), facets = [], stickers = [];
+    FACE_ORDER.forEach((nm) => {
+      const nn = FACE[nm], u = Math.abs(nn[1]) === 1 ? [1, 0, 0] : [0, 1, 0], w = V.cross(nn, u), P = (a, b) => V.add(nn, V.add(V.mul(u, a), V.mul(w, b)));
+      facets.push({ verts: [P(1, 1), P(-1, 1), P(-1, -1), P(1, -1)], normal: nn, u: u, w: w });
+    });
+    if (!spheres.length) {          // nothing is cut
+      facets.forEach((f, fi) => stickers.push({ facet: fi, verts: f.verts.map((v) => v.slice()), pt: f.verts[0].map((x, i) => x * 0.5 + f.normal[i] * 0.5) }));
+      return { name: name, facets: facets, stickers: stickers, lines: [], scale: 1 / SQ3, gap: 0.03, loose: true };
+    }
+    const N = 160, gx = (i) => -1 + 2 * i / N, cx = (i) => -1 + (2 * i + 1) / N;
+    // the regions of one face (in its own frame (u, w) with the point  normal + u x + w y): cells of equal "inside which sphere" signature, their outlines moved onto the true circles
+    function faceStickers(f, fi) {
+      const sig = new Array(N * N), to3 = (a, b) => V.add(f.normal, V.add(V.mul(f.u, a), V.mul(f.w, b)));
+      for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+        const q = to3(cx(i), cx(j)); let key = '';
+        spheres.forEach((s) => { const c = s.c, d2 = (q[0] - c[0]) * (q[0] - c[0]) + (q[1] - c[1]) * (q[1] - c[1]) + (q[2] - c[2]) * (q[2] - c[2]); key += d2 < s.r * s.r ? '1' : '0'; });
+        sig[j * N + i] = key;
+      }
+      const comp = new Int32Array(N * N).fill(-1), regions = [];
+      for (let s0 = 0; s0 < N * N; s0++) {
+        if (comp[s0] >= 0) continue;
+        const id = regions.length, cells = [s0], key = sig[s0]; comp[s0] = id;
+        for (let h = 0; h < cells.length; h++) {
+          const c = cells[h], i = c % N, j = (c - i) / N;
+          [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach((d) => { const a = i + d[0], b = j + d[1]; if (a < 0 || b < 0 || a >= N || b >= N) return; const t = b * N + a; if (comp[t] < 0 && sig[t] === key) { comp[t] = id; cells.push(t); } });
+        }
+        regions.push(cells);
+      }
+      const circ = spheres.map((s) => { const dn = 1 - V.dot(s.c, f.normal), r2 = s.r * s.r - dn * dn; return { x: V.dot(s.c, f.u), y: V.dot(s.c, f.w), r: r2 > 1e-9 ? Math.sqrt(r2) : 0 }; });
+      function smooth(i, j) {
+        const x = gx(i), y = gx(j), sg = [];
+        [[i - 1, j - 1], [i, j - 1], [i - 1, j], [i, j]].forEach((q) => { if (q[0] >= 0 && q[1] >= 0 && q[0] < N && q[1] < N) sg.push(sig[q[1] * N + q[0]]); });
+        const D = []; for (let b = 0; b < sg[0].length; b++) if (sg.some((s) => s[b] !== sg[0][b]) && circ[b].r > 0) D.push(b);
+        const bx = i === 0 || i === N, by = j === 0 || j === N;
+        if (bx && by) return [x, y];
+        if (D.length === 1) {
+          const c = circ[D[0]];
+          if (bx) { const t = c.r * c.r - (x - c.x) * (x - c.x); if (t < 0) return [x, y]; const s = Math.sqrt(t), y1 = c.y + s, y2 = c.y - s; return [x, Math.abs(y1 - y) < Math.abs(y2 - y) ? y1 : y2]; }
+          if (by) { const t = c.r * c.r - (y - c.y) * (y - c.y); if (t < 0) return [x, y]; const s = Math.sqrt(t), x1 = c.x + s, x2 = c.x - s; return [Math.abs(x1 - x) < Math.abs(x2 - x) ? x1 : x2, y]; }
+          const dx = x - c.x, dy = y - c.y, l = Math.hypot(dx, dy) || 1; return [c.x + c.r * dx / l, c.y + c.r * dy / l];
+        }
+        if (D.length === 2 && !bx && !by) {
+          const a = circ[D[0]], b = circ[D[1]], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+          if (d < 1e-9 || d > a.r + b.r || d < Math.abs(a.r - b.r)) return [x, y];
+          const l = (a.r * a.r - b.r * b.r + d * d) / (2 * d), h2 = a.r * a.r - l * l; if (h2 < 0) return [x, y];
+          const h = Math.sqrt(h2), mx = a.x + dx * l / d, my = a.y + dy * l / d, p1 = [mx + h * dy / d, my - h * dx / d], p2 = [mx - h * dy / d, my + h * dx / d];
+          return Math.hypot(p1[0] - x, p1[1] - y) < Math.hypot(p2[0] - x, p2[1] - y) ? p1 : p2;
+        }
+        return [x, y];
+      }
+      regions.forEach((cells, id) => {
+        if (cells.length < 4) return;          // a speck of the grid
+        const out = new Map(), add = (a, b, c2, d) => { const kk = a + ',' + b; if (!out.has(kk)) out.set(kk, []); out.get(kk).push([c2, d]); };
+        cells.forEach((c) => {
+          const i = c % N, j = (c - i) / N, inC = (a, b) => a >= 0 && b >= 0 && a < N && b < N && comp[b * N + a] === id;
+          if (!inC(i, j - 1)) add(i, j, i + 1, j); if (!inC(i + 1, j)) add(i + 1, j, i + 1, j + 1); if (!inC(i, j + 1)) add(i + 1, j + 1, i, j + 1); if (!inC(i - 1, j)) add(i, j + 1, i, j);
+        });
+        let best = null, bestA = -1;
+        while (out.size) {
+          const k0 = out.keys().next().value, loop = [], parts = k0.split(',').map(Number); let cur = parts;
+          for (let guard = 0; guard < 4 * N * N; guard++) {
+            loop.push(cur); const kk = cur[0] + ',' + cur[1], l = out.get(kk); if (!l) break;
+            const e = l.pop(); if (!l.length) out.delete(kk); cur = e; if (cur[0] === parts[0] && cur[1] === parts[1]) break;
+          }
+          let A = 0; for (let q = 0; q < loop.length; q++) { const a = loop[q], b = loop[(q + 1) % loop.length]; A += a[0] * b[1] - b[0] * a[1]; }
+          if (Math.abs(A) > bestA) { bestA = Math.abs(A); best = loop; }
+        }
+        const L = best.length, keep = best.filter((q, t) => { const a = best[(t + L - 1) % L], b = best[(t + 1) % L]; return (q[0] - a[0]) * (b[1] - q[1]) - (q[1] - a[1]) * (b[0] - q[0]) !== 0; });
+        const sm = keep.map((q) => smooth(q[0], q[1])), res = sm.filter((q, t) => { const o = sm[(t + sm.length - 1) % sm.length]; return Math.hypot(q[0] - o[0], q[1] - o[1]) > 2e-4; });
+        const c0 = cells[0], i0 = c0 % N, j0 = (c0 - i0) / N;
+        const st = Math.max(1, Math.floor(cells.length / 12)), samp = []; for (let t = 0; t < cells.length; t += st) { const ci = cells[t] % N; samp.push(to3(cx(ci), cx((cells[t] - ci) / N))); }          // interior points of the region (grid cell centres)
+        stickers.push({ facet: fi, verts: res.map((q) => to3(q[0], q[1])), pt: to3(cx(i0), cx(j0)), samp: samp, sig: sig[c0] });
+      });
+    }
+    facets.forEach((f, fi) => faceStickers(f, fi));
+    return { name: name, facets: facets, stickers: stickers, lines: mkLines(), scale: 1 / SQ3, gap: gap, loose: true, areaC: true };
+  }
+  function rexSpec(n, ivy) {
+    const SQ3 = Math.sqrt(3), H = SQ3, k = 2 / SQ3;
+    const pos = []; if (n === 2) pos.push(0); else for (let q = 0; q <= n - 2; q++) { const d = (1 - 2 * q / (n - 2)) / SQ3; if (d > -1e-12) pos.push(Math.max(0, d)); }
+    const radii = pos.map((d) => (H - d) * k).sort((a, b) => a - b), corners = [], spheres = [];
+    [1, -1].forEach((a) => [1, -1].forEach((b) => [1, -1].forEach((c) => { if (!ivy || a * b * c > 0) corners.push([a, b, c]); })));          // ivy: only one end of every body diagonal (the 4 corners of a tetrahedron)
+    corners.forEach((c) => radii.forEach((r) => spheres.push({ c: c, r: r })));
+    return sphereCubeSpec('cubectrex' + (ivy ? 'i' : '') + n, spheres, function () {
+      const lines = [], INFB = 1e9;
+      [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]].forEach((a) => {
+        const ends = ivy ? [a] : [a, a.map((x) => -x)], bands = [];
+        ends.forEach((A) => {
+          for (let q = 0; q < radii.length; q++) { const r0 = q ? radii[q - 1] : -1, r1 = radii[q]; bands.push({ lo: INFB, hi: 2 * INFB, name: 'rex', fn: (s) => { const d = Math.hypot(s.pt[0] - A[0], s.pt[1] - A[1], s.pt[2] - A[2]); return d >= r0 && d < r1; } }); }
+        });
+        lines.push({ axis: V.norm(a), n: 3, bands: bands });
+      });
+      return lines;
+    }, 0.02);
+  }
+  // Curvy clover (cube ET with spherical cuts): a sphere about every edge midpoint pushed out by the factor a (a = 1: clover, the radius is half an edge, every face is cut into 8 pieces; a > 1: curvy, the
+  // centre is outside the cube and the sphere still passes through the centres of the two faces at the edge, so the circles on a face meet in its centre; 12 pieces).  The ball about an edge turns by 180 degrees.
+  function cloverSpec(a, n) {
+    const R = Math.hypot(a - 1, a), dist = (a - 1) * Math.SQRT2, edges = [], spheres = [], radii = [];
+    for (let q = 1; q <= n - 1; q++) { const r = R * q / (n - 1); if (r > dist + 0.05) radii.push(r); }          // concentric shells (nested balls) about every edge: n = 2 is the single ball
+    [[1, 1, 0], [1, -1, 0], [1, 0, 1], [1, 0, -1], [0, 1, 1], [0, 1, -1]].forEach((e) => { edges.push(e); edges.push(e.map((x) => -x)); });
+    edges.forEach((e) => radii.forEach((r) => spheres.push({ c: e.map((x) => x * a), r: r })));
+    const spec = sphereCubeSpec('cubeetcc' + a + 'n' + n, spheres, function () {
+      const lines = [], INFB = 1e9;
+      [[1, 1, 0], [1, -1, 0], [1, 0, 1], [1, 0, -1], [0, 1, 1], [0, 1, -1]].forEach((e) => {
+        const bands = [];
+        [e, e.map((x) => -x)].forEach((M) => { for (let q = 0; q < radii.length; q++) { const r0 = q ? radii[q - 1] : -1, r1 = radii[q]; bands.push({ lo: INFB, hi: 2 * INFB, name: 'cc', fn: (s) => { const d = Math.hypot(s.pt[0] - M[0] * a, s.pt[1] - M[1] * a, s.pt[2] - M[2] * a); return d >= r0 && d < r1; } }); } });
+        lines.push({ axis: V.norm(e), n: 2, bands: bands });
+      });
+      return lines;
+    }, 0.02);
+    spec.info = { a: a, R: R, radii: radii, spheres: spheres, axes: [[1, 1, 0], [1, -1, 0], [1, 0, 1], [1, 0, -1], [0, 1, 1], [0, 1, -1]] };          // for the 3D piece engine (heli.html)
+    return spec;
+  }
+  // Redi cube (cube CT-redi): corner turning with planar cuts.  D = floor(n / 2) caps per corner A (n = 2: 1, 4: 2, 6: 3; odd n like the even n below it but with a square in the middle of every face).  The cube has D + 2 layers
+  // per side (grid planes at -1 + 2 i / (D + 2), h = 2 / (D + 2)); cap k = 0 .. D - 1 is {A_i x_i >= -1 + h + k h for the three coordinates} cut by the diagonal plane A.x >= 1 + (k + e) h (e = 0 for an even n, 1/2 for an odd n):
+  // the farthest diagonal plane (s = 1, through the centres of the three faces at the corner) starts nearer than the opposite end, the others follow one layer apart towards the corner.  n = 2: every face has four corner squares
+  // and four pentagons (an edge square of the 3 x 3 grid joined with the triangle of the X-split centre pointing at it), a turn moves a corner with its three edges (on a face one square and two pentagons); with an odd n
+  // the four diagonal lines near the face centre make a square instead of the X.  The stickers are the regions of equal "inside which cap" signature (exact: the face is cut by all the boundary lines, equal cells are merged);
+  // the nested caps give the shells cap k without cap k + 1.  A sticker belongs to a band by its interior point.
+  function rediSpec(n) {
+    const facets = [], stickers = [], caps = [], EPSG = 1e-9;
+    FACE_ORDER.forEach((nm) => {
+      const nn = FACE[nm], u = Math.abs(nn[1]) === 1 ? [1, 0, 0] : [0, 1, 0], w = V.cross(nn, u), P = (a, b) => V.add(nn, V.add(V.mul(u, a), V.mul(w, b)));
+      facets.push({ verts: [P(1, 1), P(-1, 1), P(-1, -1), P(1, -1)], normal: nn, u: u, w: w });
+    });
+    const corners = []; [1, -1].forEach((a) => [1, -1].forEach((b) => [1, -1].forEach((c) => corners.push([a, b, c]))));
+    const D = n >= 2 ? Math.floor(n / 2) : 0, hh = 2 / (D + 2), odd = n % 2 === 1, capOf = (A, k) => ({ A: A, b: -1 + hh + k * hh, s: 1 + (k + (odd ? 0.5 : 0)) * hh });          // D caps per corner (0 is the largest): D + 2 layers, the grid plane and the diagonal plane move towards the corner by one layer per step; an odd n shifts the diagonals by half a layer (a square in the middle of every face)
+    if (D >= 1) corners.forEach((A, ci) => { for (let k = 0; k < D; k++) caps.push(capOf(A, k)); });
+    const inCap = (c, p) => c.A[0] * p[0] >= c.b - EPSG && c.A[1] * p[1] >= c.b - EPSG && c.A[2] * p[2] >= c.b - EPSG && c.A[0] * p[0] + c.A[1] * p[1] + c.A[2] * p[2] >= c.s - EPSG;
+    const polyArea2 = (q) => { let s = 0; for (let i = 0; i < q.length; i++) { const a = q[i], b = q[(i + 1) % q.length]; s += a[0] * b[1] - b[0] * a[1]; } return s / 2; };
+    function splitBy(poly, A, B, C) {          // the parts of a convex polygon with A x + B y + C > 0 and < 0
+      const pos = [], neg = [];
+      for (let i = 0; i < poly.length; i++) {
+        const p = poly[i], q = poly[(i + 1) % poly.length], sp = A * p[0] + B * p[1] + C, sq = A * q[0] + B * q[1] + C;
+        if (sp >= -1e-12) pos.push(p); if (sp <= 1e-12) neg.push(p);
+        if ((sp > 1e-12 && sq < -1e-12) || (sp < -1e-12 && sq > 1e-12)) { const t = sp / (sp - sq), r = [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]; pos.push(r); neg.push(r); }
+      }
+      return [pos, neg];
+    }
+    facets.forEach((f, fi) => {
+      const to3 = (a, b) => V.add(f.normal, V.add(V.mul(f.u, a), V.mul(f.w, b)));
+      if (!caps.length) { stickers.push({ facet: fi, verts: f.verts.map((v) => v.slice()), pt: to3(0.5, 0.5) }); return; }
+      // the lines of all the cap boundaries on this face
+      const lines = [], seen = new Set();
+      const addLine = (nu, h) => { const A = V.dot(nu, f.u), B = V.dot(nu, f.w), C = V.dot(nu, f.normal) - h, l = Math.hypot(A, B); if (l < 1e-9) return; const a = A / l, b = B / l, c = C / l, key = [a, b, c].map((x) => Math.round(x * 1e6 + 0.37)).join(','), key2 = [-a, -b, -c].map((x) => Math.round(x * 1e6 + 0.37)).join(','); if (seen.has(key) || seen.has(key2)) return; seen.add(key); lines.push([a, b, c]); };
+      caps.forEach((c) => { for (let i = 0; i < 3; i++) { const nu = [0, 0, 0]; nu[i] = c.A[i]; addLine(nu, c.b); } addLine(c.A, c.s); });
+      let cells = [[[1, 1], [-1, 1], [-1, -1], [1, -1]]];
+      lines.forEach((L) => { const next = []; cells.forEach((cl) => { const s = splitBy(cl, L[0], L[1], L[2]); if (s[0].length >= 3 && s[1].length >= 3 && Math.abs(polyArea2(s[0])) > 1e-9 && Math.abs(polyArea2(s[1])) > 1e-9) next.push(s[0], s[1]); else next.push(cl); }); cells = next; });
+      const cen = cells.map((cl) => { let x = 0, y = 0; cl.forEach((q) => { x += q[0] / cl.length; y += q[1] / cl.length; }); return [x, y]; });
+      const sig = cells.map((cl, i) => { const p = to3(cen[i][0], cen[i][1]); return caps.map((c) => (inCap(c, p) ? '1' : '0')).join(''); });
+      // equal neighbouring cells (sharing an edge) are one sticker
+      const qk = (q) => Math.round(q[0] * 1e6 + 0.37) + ',' + Math.round(q[1] * 1e6 + 0.37), edgeOwner = new Map();
+      cells.forEach((cl, i) => { for (let t = 0; t < cl.length; t++) { const a = qk(cl[t]), b = qk(cl[(t + 1) % cl.length]); edgeOwner.set(a + '>' + b, i); } });
+      const comp = new Array(cells.length).fill(-1), groups = [];
+      for (let i0 = 0; i0 < cells.length; i0++) {
+        if (comp[i0] >= 0) continue; const id = groups.length, mem = [i0]; comp[i0] = id;
+        for (let h = 0; h < mem.length; h++) { const cl = cells[mem[h]]; for (let t = 0; t < cl.length; t++) { const a = qk(cl[t]), b = qk(cl[(t + 1) % cl.length]), o = edgeOwner.get(b + '>' + a); if (o !== undefined && comp[o] < 0 && sig[o] === sig[i0]) { comp[o] = id; mem.push(o); } } }
+        groups.push(mem);
+      }
+      groups.forEach((mem) => {
+        const inG = new Set(mem), out = new Map();
+        mem.forEach((i) => { const cl = cells[i]; for (let t = 0; t < cl.length; t++) { const a = cl[t], b = cl[(t + 1) % cl.length], o = edgeOwner.get(qk(b) + '>' + qk(a)); if (o !== undefined && inG.has(o)) continue; const k = qk(a); if (!out.has(k)) out.set(k, []); out.get(k).push([a, b]); } });
+        let best = null, bestA = -1;
+        while (out.size) {
+          const k0 = out.keys().next().value, first = out.get(k0)[0][0], loop = []; let cur = first;
+          for (let guard = 0; guard < 10000; guard++) { loop.push(cur); const l = out.get(qk(cur)); if (!l) break; const e = l.pop(); if (!l.length) out.delete(qk(cur)); cur = e[1]; if (qk(cur) === qk(first)) break; }
+          const ar = Math.abs(polyArea2(loop)); if (ar > bestA) { bestA = ar; best = loop; }
+        }
+        const L = best.length, keep = best.filter((q, t) => { const a = best[(t + L - 1) % L], b = best[(t + 1) % L]; return Math.abs((q[0] - a[0]) * (b[1] - q[1]) - (q[1] - a[1]) * (b[0] - q[0])) > 1e-9; });
+        let bi = mem[0], ba = -1; mem.forEach((i) => { const ar = Math.abs(polyArea2(cells[i])); if (ar > ba) { ba = ar; bi = i; } });
+        stickers.push({ facet: fi, verts: keep.map((q) => to3(q[0], q[1])), pt: to3(cen[bi][0], cen[bi][1]) });
+      });
+    });
+    const lines = [], INFB = 1e9;
+    if (caps.length) [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]].forEach((a) => {
+      const bands = [];
+      [a, a.map((x) => -x)].forEach((A) => { for (let k = 0; k < D; k++) { const cj = capOf(A, k), cn = k < D - 1 ? capOf(A, k + 1) : null; bands.push({ lo: INFB, hi: 2 * INFB, name: 'redi', fn: (s) => inCap(cj, s.pt) && !(cn && inCap(cn, s.pt)) }); } });
+      lines.push({ axis: V.norm(a), n: 3, bands: bands });
+    });
+    return { name: 'cubectredi' + n, facets: facets, stickers: stickers, lines: lines, scale: 1 / Math.sqrt(3), gap: 0.04, loose: true };
+  }
+  // Penrose cube (cube FT-penrose): the ordinary cube (the same moves, the same solver) with three colours: every colour is on two neighbouring faces (U+R, F+D, L+B: the three joining edges are skew to each
+  // other) and these three edges are rounded (fillet).  The rounding is only in the drawing: the slots keep their flat centres (the permutations are those of the cube), the identity of a sticker is still the face
+  // it belongs to (the solver needs it), only the palette shows the pairs in one colour.
+  function penroseSpec(nl) {
+    const sp = cubeSpec(nl), H = nl, r = 0.3 * nl, PAIRS = [['U', 'R'], ['F', 'D'], ['L', 'B']], partner = {}, axisOf = (nm) => { const v = FACE[nm], a = v[0] ? 0 : v[1] ? 1 : 2; return [a, v[a]]; };
+    PAIRS.forEach((pr) => { partner[pr[0]] = pr[1]; partner[pr[1]] = pr[0]; });
+    const sOf = (pt, X, Y) => H - Y[1] * pt[Y[0]];          // distance from the rounded edge along the face X
+    const bend = (pt, X, Y) => { const s = sOf(pt, X, Y); if (s >= r - 1e-9) return pt.slice(); const u = Math.PI / 4 * (1 - s / r), q = pt.slice(); q[X[0]] = X[1] * (H - r + r * Math.cos(u)); q[Y[0]] = Y[1] * (H - r + r * Math.sin(u)); return q; };
+    const refine = (poly, X, Y) => {          // points on the edges of the polygon where the distance to the rounded edge passes r, 3/4 r, 1/2 r, 1/4 r
+      const out = [];
+      poly.forEach((p0, i) => {
+        const q0 = poly[(i + 1) % poly.length], s0 = sOf(p0, X, Y), s1 = sOf(q0, X, Y), ts = [];
+        out.push(p0);
+        if (Math.abs(s0 - s1) > 1e-9) [1, 0.75, 0.5, 0.25].forEach((L) => { const t = (s0 - L * r) / (s0 - s1); if (t > 1e-9 && t < 1 - 1e-9) ts.push(t); });
+        ts.sort((a, b) => a - b).forEach((t) => out.push([p0[0] + (q0[0] - p0[0]) * t, p0[1] + (q0[1] - p0[1]) * t, p0[2] + (q0[2] - p0[2]) * t]));
+      });
+      return out;
+    };
+    const round = (poly, nm) => { const X = axisOf(nm), Y = axisOf(partner[nm]); return refine(poly, X, Y).map((q) => bend(q, X, Y)); };
+    const facets = sp.facets.map((f, i) => { const nm = FACE_ORDER[i]; let v = round(f.verts, nm); const X = axisOf(nm), Y = axisOf(partner[nm]), k0 = v.findIndex((q) => sOf(q, X, Y) >= r - 1e-9); if (k0 > 0) v = v.slice(k0).concat(v.slice(0, k0)); return { verts: v, normal: f.normal }; });          // the dark body is rounded too (its first corner stays flat: it fixes the plane)
+    const stickers = sp.stickers.map((s) => ({ facet: s.facet, verts: round(s.verts, FACE_ORDER[s.facet]), flat: s.verts }));
+    return { name: 'penrose' + nl, facets: facets, stickers: stickers, lines: sp.lines, scale: sp.scale, gap: sp.gap };
+  }
+  const PENROSE_COLOURS = ['#d91e18', '#d91e18', '#1f4fd8', '#1f4fd8', '#ffd400', '#ffd400'];          // U R F D L B: the pairs U+R, F+D, L+B
+  function penroseExtras(n) {
+    return function (P) {
+      if (n === 3) cubeExtras(P);
+      const pairOf = [0, 0, 1, 1, 2, 2];          // the solved state: the two faces of a pair show one colour (the engine itself needs the identity, so the check is here)
+      P.isSolved = function (col) {
+        for (let g = 0; g < 3; g++) for (let q = 0; q < 2; q++) { const f = g * 2 + q, l = P.facetStk[f]; for (let t = 0; t < l.length; t++) if (pairOf[col[l[t]]] !== g) return false; }
+        return true;
+      };
+    };
+  }
+  const CURVY_A = 1.5;          // the centres of the curvy spheres: 1.5 times as far out as the edge midpoints (x = +-1: centre (-1.5, 0)); the circle passes through the face centre
   const META = {
     cube: { key: 'cube', spec: cubeSpec, extras: cubeExtras, scramble: 25, solver: 'kociemba', view: { yaw: 0.55, pitch: 0.5 },
       colours: ['#f2f2f2', '#d91e18', '#0fa34a', '#ffd400', '#ff7f0e', '#1f4fd8'] },
@@ -753,6 +978,12 @@
   META.heli = { key: 'heli', spec: heliSpec, extras: null, scramble: 24, solver: 'history', view: { yaw: 0.55, pitch: 0.5 }, colours: META.cube.colours };
   META.pentult = { key: 'pentult', spec: pentultSpec, extras: null, scramble: 40, solver: 'history', view: { yaw: 0.4, pitch: 0.35 }, colours: META.dodeca.colours };
   META.pyramorphix = { key: 'pyramorphix', spec: function () { return tetraETSpec(2); }, extras: null, scramble: 14, solver: 'history', view: META.tetra.view, colours: META.tetra.colours };
+  META.rex = { key: 'rex', spec: function () { return rexSpec(2); }, extras: null, scramble: 25, solver: 'history', view: { yaw: 0.55, pitch: 0.5 }, colours: META.cube.colours };
+  META.ivy = { key: 'ivy', spec: function () { return rexSpec(2, true); }, extras: null, scramble: 25, solver: 'history', view: { yaw: 0.55, pitch: 0.5 }, colours: META.cube.colours };
+  META.clover = { key: 'clover', spec: function () { return cloverSpec(1, 2); }, extras: null, scramble: 25, solver: 'history', view: { yaw: 0.55, pitch: 0.5 }, colours: META.cube.colours };
+  META.curvy = { key: 'curvy', spec: function () { return cloverSpec(CURVY_A, 2); }, extras: null, scramble: 25, solver: 'history', view: { yaw: 0.55, pitch: 0.5 }, colours: META.cube.colours };
+  META.redi = { key: 'redi', spec: function () { return rediSpec(2); }, extras: null, scramble: 25, solver: 'history', view: { yaw: 0.55, pitch: 0.5 }, colours: META.cube.colours };
+  META.penrose = { key: 'penrose', spec: function () { return penroseSpec(3); }, extras: penroseExtras(3), scramble: 25, solver: 'kociemba', view: { yaw: 0.55, pitch: 0.5 }, colours: PENROSE_COLOURS, topo: 'cubepenrose', size: 3, trivial: false };
   META.skewb = { key: 'skewb', spec: skewbSpec, extras: null, scramble: 25, solver: 'history', view: { yaw: 0.55, pitch: 0.5 }, colours: META.cube.colours };
   META.icosa = { key: 'icosa', spec: function () { return icosaSpec(ICOSA_H); }, extras: null, scramble: 40, solver: 'history', view: { yaw: 0.4, pitch: 0.3 },
     colours: ['#f2f2f2', '#ffd400', '#d41f26', '#ff7f0e', '#0f9d58', '#1a4fd6', '#7b2fbe', '#ff78b4', '#9be000', '#00c2d6', '#8c8c8c', '#9c5a2e', '#0b1f6b', '#00796b', '#7a0f2e', '#e6c88f', '#2b2b2b', '#b9a6ff', '#6b7a00', '#8fd0ff'] };
@@ -802,29 +1033,37 @@
     d.sort((x, y) => x - y);
     return d[0] === d[2] ? customKey('cube', d[0]) : 'x:cuboidx:' + d.join(':');
   }
-  const TOPOS = ['tetra', 'tetraet', 'cube', 'cuboidff', 'cuboidx', 'cubeet', 'octa', 'octact', 'octaet', 'dodeca', 'dodecadc', 'dodecact', 'dodecaet', 'icosact', 'icosadc', 'icosaet', 'cubect', 'square'];
+  const TOPOS = ['tetra', 'tetraet', 'cube', 'cubectrex', 'cubeetclover', 'cubemix', 'cubefisher', 'cuboidff', 'cuboidx', 'cubeet', 'starft', 'starct', 'skewbult', 'qjdodeca', 'octa', 'octact', 'octaet', 'dodeca', 'dodecadc', 'dodecact', 'dodecaet', 'icosact', 'icosadc', 'icosaet', 'cubect', 'square'];
   META.chopasaurus = { key: 'chopasaurus', spec: function () { return dodecactSpec(2); }, extras: null, scramble: 40, solver: 'history', view: META.dodeca.view, colours: META.dodeca.colours };
   META.icosamate = { key: 'icosamate', spec: function () { return icosadcSpec(2); }, extras: null, scramble: 40, solver: 'history', view: META.icosa.view, colours: META.icosa.colours };
   META.icosaminx = { key: 'icosaminx', spec: function () { return icosactSpec(2); }, extras: null, scramble: 40, solver: 'history', view: META.icosa.view, colours: META.icosa.colours };
-  const MINN = { cuboidx: 1, cuboidff: 1, icosadc: 2, dodecact: 2, dodecaet: 2, icosact: 2, icosaet: 2, dodecadc: 2, tetra: 2, tetraet: 2, octact: 3, octaet: 2, cube: 2, cubeet: 2, octa: 2, dodeca: 2, cubect: 2, square: -1 };
-  const MAXN = { cuboidx: Infinity, cuboidff: Infinity, icosadc: Infinity, dodecact: Infinity, dodecaet: Infinity, icosact: Infinity, icosaet: Infinity, dodecadc: Infinity, tetra: Infinity, tetraet: Infinity, octact: Infinity, octaet: Infinity, cube: Infinity, cubeet: Infinity, octa: Infinity, dodeca: Infinity, cubect: Infinity, square: Infinity };      // no upper limit on the size
-  const BUILTIN = { cuboidx: {}, cuboidff: {}, cube: { 2: 'cube2', 3: 'cube', 4: 'cube4', 5: 'cube5', 6: 'cube6', 7: 'cube7' }, tetra: { 3: 'tetra' }, tetraet: { 2: 'pyramorphix' }, octact: {}, octaet: {}, dodecadc: { 2: 'pentult' }, dodecact: { 2: 'chopasaurus' }, dodecaet: { 2: 'bigchop' }, icosact: { 2: 'icosaminx' }, icosadc: { 2: 'icosamate' }, icosaet: {}, octa: { 3: 'octa' }, cubect: { 2: 'skewb' }, dodeca: { 3: 'dodeca' }, square: { 1: 'sq1' }, cubeet: { 2: 'chop', 3: 'heli' } };
-  const BASE = { tetra: 'tetra', tetraet: 'tetra', octact: 'octa', octaet: 'octa', dodecadc: 'dodeca', dodecact: 'dodeca', dodecaet: 'dodeca', icosact: 'icosa', icosadc: 'icosa', icosaet: 'icosa', cube: 'cube', octa: 'octa', dodeca: 'dodeca', cubect: 'skewb' };
-  const SPECS = { tetra: tetraSpec, tetraet: tetraETSpec, dodecadc: dodecaDeepSpec, cube: cubeSpec, octa: octaSpec, dodeca: dodecaNSpec, icosact: icosactSpec, icosadc: icosadcSpec, octact: octactSpec, dodecact: dodecactSpec, cubect: cubectSpec };
+  const MINN = { cubepenrose: 2, cubewindmill: 3, cubectredi: 2, cubeetclover: 2, cubeetcurvy: 2, cubectivy: 2, cubectrex: 2, cubemix: 3, cubefisher: 2, starft: 2, starct: 2, skewbult: 2, qjdodeca: 2, cuboidx: 1, cuboidff: 1, icosadc: 2, dodecact: 2, dodecaet: 2, icosact: 2, icosaet: 2, dodecadc: 2, tetra: 2, tetraet: 2, octact: 3, octaet: 2, cube: 2, cubeet: 2, octa: 2, dodeca: 2, cubect: 2, square: -1 };
+  const MAXN = { cubepenrose: Infinity, cubewindmill: 3, cubectredi: Infinity, cubeetclover: Infinity, cubeetcurvy: Infinity, cubectivy: Infinity, cubectrex: Infinity, cubemix: Infinity, cubefisher: Infinity, starft: Infinity, starct: Infinity, skewbult: Infinity, qjdodeca: Infinity, cuboidx: Infinity, cuboidff: Infinity, icosadc: Infinity, dodecact: Infinity, dodecaet: Infinity, icosact: Infinity, icosaet: Infinity, dodecadc: Infinity, tetra: Infinity, tetraet: Infinity, octact: Infinity, octaet: Infinity, cube: Infinity, cubeet: Infinity, octa: Infinity, dodeca: Infinity, cubect: Infinity, square: Infinity };      // no upper limit on the size
+  const BUILTIN = { cubepenrose: { 3: 'penrose' }, cubewindmill: { 3: 'windmill' }, cubectredi: { 2: 'redi' }, cubeetclover: { 2: 'clover' }, cubeetcurvy: { 2: 'curvy' }, cubectivy: { 2: 'ivy' }, cubectrex: { 2: 'rex' }, cubemix: { 3: 'mixup' }, cubefisher: { 3: 'fisher' }, starft: { 2: 'starminxft' }, starct: { 2: 'starminxct' }, skewbult: { 2: 'skewbult' }, qjdodeca: { 2: 'qjdodeca' }, cuboidx: {}, cuboidff: {}, cube: { 2: 'cube2', 3: 'cube', 4: 'cube4', 5: 'cube5', 6: 'cube6', 7: 'cube7' }, tetra: { 3: 'tetra' }, tetraet: { 2: 'pyramorphix' }, octact: {}, octaet: {}, dodecadc: { 2: 'pentult' }, dodecact: { 2: 'chopasaurus' }, dodecaet: { 2: 'bigchop' }, icosact: { 2: 'icosaminx' }, icosadc: { 2: 'icosamate' }, icosaet: {}, octa: { 3: 'octa' }, cubect: { 2: 'skewb' }, dodeca: { 3: 'dodeca' }, square: { 1: 'sq1' }, cubeet: { 2: 'chop', 3: 'heli' } };
+  const BASE = { tetra: 'tetra', tetraet: 'tetra', octact: 'octa', octaet: 'octa', dodecadc: 'dodeca', dodecact: 'dodeca', dodecaet: 'dodeca', icosact: 'icosa', icosadc: 'icosa', icosaet: 'icosa', cube: 'cube', octa: 'octa', dodeca: 'dodeca', cubect: 'skewb', cubectrex: 'skewb', cubectivy: 'skewb', cubeetclover: 'cube', cubeetcurvy: 'cube', cubectredi: 'skewb' };
+  const SPECS = { cubectredi: rediSpec, cubeetclover: function (n) { return cloverSpec(1, n); }, cubeetcurvy: function (n) { return cloverSpec(CURVY_A, n); }, cubectivy: function (n) { return rexSpec(n, true); }, cubectrex: rexSpec, tetra: tetraSpec, tetraet: tetraETSpec, dodecadc: dodecaDeepSpec, cube: cubeSpec, octa: octaSpec, dodeca: dodecaNSpec, icosact: icosactSpec, icosadc: icosadcSpec, octact: octactSpec, dodecact: dodecactSpec, cubect: cubectSpec };
   // key of the puzzle for a topology and a size: a built-in key when the combination exists (with its own solver), else a generated 'x:topo:n'
   // Square-n: n = -1 (2 pieces), 0 (4), 0.5 (6) or an integer of 1 or more (4 (n + 1) pieces); every other value is refused
   function squareOk(n) { return n === -1 || n === 0 || n === 0.5 || (Number.isInteger(n) && n >= 1); }
   function customKey(topo, n) {
     if (topo === 'cuboidff') return cuboidKey(n);
     if (topo === 'cuboidx') return cuboidXKey(n);
+    if (topo === 'cubepenrose') {
+      n = Math.floor(+n); if (!isFinite(n) || !(n >= 2 || n === 1)) return null;
+      if (n === 3) return 'penrose';
+      const key = 'x:cubepenrose:' + n;
+      if (!META[key]) META[key] = { key: key, spec: function () { return penroseSpec(n); }, extras: penroseExtras(n), scramble: n === 1 ? 1 : Math.min(250, 20 + 10 * (n - 3)), solver: 'history', view: { yaw: 0.55, pitch: 0.5 }, colours: PENROSE_COLOURS, topo: 'cubepenrose', size: n, trivial: n < 2 };
+      return key;
+    }
     n = topo === 'square' ? +n : Math.floor(+n);
-    if (TOPOS.indexOf(topo) < 0 || !isFinite(n)) return null;
+    if ((TOPOS.indexOf(topo) < 0 && topo !== 'cubectivy' && topo !== 'cubectredi' && topo !== 'cubewindmill' && topo !== 'cubeetcurvy') || !isFinite(n)) return null;
+    if (topo === 'cubemix' && n % 2 === 0) return null;          // the mixup cube: odd sizes only
     if (topo === 'square') { if (!squareOk(n)) return null; }
     else if (!(n >= MINN[topo] || n === 1 || (n === 2 && (topo === 'octact' || topo === 'icosact'))) || n > MAXN[topo]) return null;          // n = 1 (below the minimum) is an easter egg: an unscrambled puzzle that is solved at once
     if (BUILTIN[topo][n]) return BUILTIN[topo][n];
     if (topo === 'dodeca' && n % 2 === 0) return 'x:dodeca:' + n;          // the even sizes (pentagram faces with gaps) are modelled by the 3D piece engine (heli.html, face turns only)
     const key = 'x:' + topo + ':' + n;
-    if (topo === 'square' || topo === 'cubeet' || topo === 'tetraet' || topo === 'octaet' || topo === 'dodecaet' || topo === 'icosaet') return key;        // Square-n (sq1.html) and the edge-turning cube (heli.html) have their own pages and engines
+    if (topo === 'square' || topo === 'cubemix' || topo === 'cubefisher' || topo === 'cubewindmill' || topo === 'starft' || topo === 'starct' || topo === 'skewbult' || topo === 'qjdodeca' || topo === 'cubeet' || topo === 'tetraet' || topo === 'octaet' || topo === 'dodecaet' || topo === 'icosaet') return key;        // Square-n (sq1.html) and the edge-turning cube (heli.html) have their own pages and engines
     if (!META[key]) {
       const bm = META[BASE[topo]];
       META[key] = { key: key, spec: function () { return SPECS[topo](n); }, extras: null, scramble: topo === 'cube' ? Math.min(250, 20 + 10 * (n - 3)) : Math.max(25, Math.min(300, Math.round(n * (topo === 'tetra' ? 12 : topo === 'octa' ? 10 : 24)))),
@@ -836,7 +1075,7 @@
   // display name of a custom puzzle (KO / EN)
   function nameOf(key, ko) {
     const p = parseKey(key); if (!p) return null;
-    const T = ko ? { dodecact: '정십이면체CT', dodecaet: '정십이면체ET', icosact: '정이십면체CT/FT', icosadc: '정이십면체CT/FT-Deepcut', icosaet: '정이십면체ET', dodecadc: '정십이면체FT-Deepcut', octact: '정팔면체CT', octaet: '정팔면체ET', tetraet: '정사면체ET', tetra: '정사면체FT/CT', cube: '큐브', octa: '정팔면체FT', dodeca: '정십이면체FT', cubect: '정육면체CT', square: '스퀘어', cubeet: '정육면체ET' } : { dodecact: 'Dodecahedron CT', dodecaet: 'Dodecahedron ET', icosact: 'Icosahedron CT/FT', icosadc: 'Icosahedron CT/FT-Deepcut', icosaet: 'Icosahedron ET', dodecadc: 'Dodecahedron FT-Deepcut', octact: 'Octahedron CT', octaet: 'Octahedron ET', tetraet: 'Tetrahedron ET', tetra: 'Tetrahedron FT/CT', cube: 'Cube', octa: 'Octahedron FT', dodeca: 'Dodecahedron FT', cubect: 'Cube CT', square: 'Square', cubeet: 'Cube ET' };
+    const T = ko ? { dodecact: '정십이면체CT', dodecaet: '정십이면체ET', icosact: '정이십면체CT/FT', icosadc: '정이십면체CT/FT-Deepcut', icosaet: '정이십면체ET', dodecadc: '정십이면체FT-Deepcut', octact: '정팔면체CT', octaet: '정팔면체ET', tetraet: '정사면체ET', tetra: '정사면체FT/CT', cube: '큐브', octa: '정팔면체FT', dodeca: '정십이면체FT', cubect: '정육면체CT', square: '스퀘어', cubeet: '정육면체ET', cubectrex: '정육면체CT-rex', cubectivy: '정육면체CT-ivy', cubectredi: '정육면체CT-redi', cubeetclover: '정육면체ET-clover', cubeetcurvy: '정육면체ET-curvy', cubemix: '정육면체FT-mixup', cubefisher: '정육면체FT-fisher', cubewindmill: '정육면체FT-windmill', cubepenrose: '정육면체FT-penrose', starft: '정십이면체FT-starminx', starct: '정십이면체CT-starminx', skewbult: '정십이면체FT-skewb ultimate', qjdodeca: '정십이면체FT-QJ' } : { dodecact: 'Dodecahedron CT', dodecaet: 'Dodecahedron ET', icosact: 'Icosahedron CT/FT', icosadc: 'Icosahedron CT/FT-Deepcut', icosaet: 'Icosahedron ET', dodecadc: 'Dodecahedron FT-Deepcut', octact: 'Octahedron CT', octaet: 'Octahedron ET', tetraet: 'Tetrahedron ET', tetra: 'Tetrahedron FT/CT', cube: 'Cube', octa: 'Octahedron FT', dodeca: 'Dodecahedron FT', cubect: 'Cube CT', square: 'Square', cubeet: 'Cube ET', cubectrex: 'Cube CT-rex', cubectivy: 'Cube CT-ivy', cubectredi: 'Cube CT-redi', cubeetclover: 'Cube ET-clover', cubeetcurvy: 'Cube ET-curvy', cubemix: 'Cube FT-mixup', cubefisher: 'Cube FT-fisher', cubewindmill: 'Cube FT-windmill', cubepenrose: 'Cube FT-penrose', starft: 'Dodecahedron FT-starminx', starct: 'Dodecahedron CT-starminx', skewbult: 'Dodecahedron FT-skewb ultimate', qjdodeca: 'Dodecahedron FT-QJ' };
     if (p.topo === 'cuboidx') return p.abc.join('×') + (ko ? ' 익스텐디드 큐보이드' : ' Extended Cuboid');
     if (p.topo === 'cuboidff') return p.abc.join('×') + (ko ? ' 풀리펑셔널 큐보이드' : ' Fully Functional Cuboid');
     if (p.topo === 'square') return T.square + '-' + (p.n < 0 ? '(' + p.n + ')' : p.n);
@@ -846,7 +1085,7 @@
   function describe(key) {
     const p = parseKey(key); if (p) return p;
     for (const k in CUBOID_THEMES) if (CUBOID_THEMES[k] === key) { const d = k.split(',').map(Number); return { topo: 'cuboidff', n: d[0], abc: d }; }
-    for (const t of TOPOS) for (const n in BUILTIN[t]) if (BUILTIN[t][n] === key) return { topo: t, n: +n };
+    for (const t in BUILTIN) for (const n in BUILTIN[t]) if (BUILTIN[t][n] === key) return { topo: t, n: +n };
     return null;
   }
   const cache = {};
@@ -859,5 +1098,5 @@
     if (m.extras) m.extras(P);
     cache[key] = P; return P;
   }
-  root.RBPuzzles = { get: getPuzzle, META: META, customKey: customKey, parseKey: parseKey, nameOf: nameOf, describe: describe, TOPOS: TOPOS, MINN: MINN, MAXN: MAXN, KEYS: ['cube2', 'cube', 'cube4', 'cube5', 'cube6', 'cube7', 'cuboid112', 'cuboid133', 'cuboid223', 'skewb', 'chop', 'heli', 'bigchop', 'tetra', 'pyramorphix', 'octa', 'dodeca', 'chopasaurus', 'pentult', 'icosa', 'icosamate', 'icosaminx'], icosaSpec: icosaSpec, build: E.build, _dodecaDs: dodecaDsSpec, _icosaVDs: function (ds) { const g = icosaFacets(), va = vertexAxes(g.facets); return layeredSpec('icosaV', g.facets, va.axes.map((u) => ({ u: u, ds: ds })), 2, 5, 1 / g.radius, 0.02, 0); }, _icosaDs: function (ds) { const g = icosaFacets(); return layeredSpec('icosaX', g.facets, oppositePairs(g.facets).map((f) => ({ u: f.normal, ds: ds })), 2, 3, 1 / g.radius, 0.02, 0); }, _icosaGeom: function () { const g = icosaFacets(); const f = g.facets; const n0 = f[0].normal; const D = V.dot(n0, f[0].verts[0]); const adj = f.filter((q) => Math.abs(V.dot(q.normal, n0) - Math.sqrt(5) / 3) < 1e-6); const L = V.len(V.sub(f[0].verts[0], f[0].verts[1])); return { D: D, c: V.dot(n0, adj[0].normal), L: L, nAdj: adj.length }; }, _tetraDs: tetraDsSpec };
+  root.RBPuzzles = { ccSpec: function (curvy, n) { return cloverSpec(curvy ? CURVY_A : 1, n); }, get: getPuzzle, META: META, customKey: customKey, parseKey: parseKey, nameOf: nameOf, describe: describe, TOPOS: TOPOS, MINN: MINN, MAXN: MAXN, KEYS: ['cube2', 'cube', 'cube4', 'cube5', 'cube6', 'cube7', 'cuboid112', 'cuboid133', 'cuboid223', 'skewb', 'chop', 'heli', 'bigchop', 'tetra', 'pyramorphix', 'octa', 'dodeca', 'chopasaurus', 'pentult', 'icosamate', 'icosaminx', 'rex', 'ivy', 'redi', 'clover', 'curvy', 'mixup', 'fisher', 'windmill', 'penrose', 'starminxft', 'starminxct', 'skewbult', 'qjdodeca'], icosaSpec: icosaSpec, build: E.build, _dodecaDs: dodecaDsSpec, _icosaVDs: function (ds) { const g = icosaFacets(), va = vertexAxes(g.facets); return layeredSpec('icosaV', g.facets, va.axes.map((u) => ({ u: u, ds: ds })), 2, 5, 1 / g.radius, 0.02, 0); }, _icosaDs: function (ds) { const g = icosaFacets(); return layeredSpec('icosaX', g.facets, oppositePairs(g.facets).map((f) => ({ u: f.normal, ds: ds })), 2, 3, 1 / g.radius, 0.02, 0); }, _icosaGeom: function () { const g = icosaFacets(); const f = g.facets; const n0 = f[0].normal; const D = V.dot(n0, f[0].verts[0]); const adj = f.filter((q) => Math.abs(V.dot(q.normal, n0) - Math.sqrt(5) / 3) < 1e-6); const L = V.len(V.sub(f[0].verts[0], f[0].verts[1])); return { D: D, c: V.dot(n0, adj[0].normal), L: L, nAdj: adj.length }; }, _tetraDs: tetraDsSpec };
 })(typeof window !== 'undefined' ? window : globalThis);
