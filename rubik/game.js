@@ -6,11 +6,11 @@
   const canvas = document.getElementById('app'), ctx = canvas.getContext('2d');
   const D = 4.4;                                         // camera distance (puzzle radius = 1)
   const T = KO ? {
-    names: { cube2: '미니큐브', cube4: '리벤지큐브', cube5: '큐브5', cube6: '큐브6', cube7: '큐브7', skewb: '스큐브', rex: 'Rex큐브', penrose: '펜로즈큐브', ivy: 'Ivy큐브', redi: '레디큐브', clover: '클로바큐브', curvy: '커비큐브', heli: '헬리콥터큐브', cube: '루빅스큐브 (3x3x3)', tetra: '피라밍크스', octa: '다이아몬드', dodeca: '메가밍크스', pentult: '펜튤티메이트' },
+    names: { cube2: '미니큐브', cube4: '리벤지큐브', cube5: '큐브5', cube6: '큐브6', cube7: '큐브7', skewb: '스큐브', rex: 'Rex큐브', penrose: '펜로즈큐브', pandora: '판도라큐브', ivy: 'Ivy큐브', redi: '레디큐브', clover: '클로바큐브', curvy: '커비큐브', heli: '헬리콥터큐브', cube: '루빅스큐브 (3x3x3)', tetra: '피라밍크스', octa: '다이아몬드', dodeca: '메가밍크스', pentult: '펜튤티메이트' },
     moves: '이동', time: '시간', best: '최고', solved: '완성!', newRec: '신기록!', again: '새 게임 (F2)',
     wait: '해법 계산 중...', prep: '해법 계산기 준비 중...', hint: '빈 곳을 끌어 돌려 보기 · 조각을 밀어 층 돌리기', keys: 'F2 새 게임 · F3 자동 풀기 · F4 힌트', scr: '섞는 중...',
   } : {
-    names: { cube2: 'Mini Cube', cube4: 'Revenge Cube', cube5: 'Cube5', cube6: 'Cube6', cube7: 'Cube7', skewb: 'Skewb', rex: 'Rex Cube', penrose: 'Penrose Cube', ivy: 'Ivy Cube', redi: 'Redi Cube', clover: 'Clover Cube', curvy: 'Curvy Cube', heli: 'Helicopter Cube', cube: 'Rubik\'s Cube (3x3x3)', tetra: 'Pyraminx', octa: 'Diamond', dodeca: 'Megaminx', pentult: 'Pentultimate' },
+    names: { cube2: 'Mini Cube', cube4: 'Revenge Cube', cube5: 'Cube5', cube6: 'Cube6', cube7: 'Cube7', skewb: 'Skewb', rex: 'Rex Cube', penrose: 'Penrose Cube', pandora: 'Pandora Cube', ivy: 'Ivy Cube', redi: 'Redi Cube', clover: 'Clover Cube', curvy: 'Curvy Cube', heli: 'Helicopter Cube', cube: 'Rubik\'s Cube (3x3x3)', tetra: 'Pyraminx', octa: 'Diamond', dodeca: 'Megaminx', pentult: 'Pentultimate' },
     moves: 'Moves', time: 'Time', best: 'Best', solved: 'SOLVED!', newRec: 'New best!', again: 'New game (F2)',
     wait: 'Computing solution...', prep: 'Preparing the solver...', hint: 'Drag empty space to rotate the view · swipe a piece to turn its layer', keys: 'F2 new game · F3 auto-solve · F4 hint', scr: 'Scrambling...',
   };
@@ -29,13 +29,13 @@
     key: 'cube', P: null, col: null, hist: [], queue: [], anim: null, mode: 'play', moves: 0, time: 0, started: false, cheated: false, auto: false,
     hint: null, applied: 0, newRec: false, animScramble: lsGet('rubik_anim') !== '0', autoScr: lsGet('rubik_autoscr') !== '0', lastSolveMs: 0,
   };
-  const S = { cw: 0, ch: 0, dpr: 1, yaw: 0.5, pitch: 0.4, f: 1, cx: 0, cy: 0, down: null, drag: null, held: { l: 0, r: 0, u: 0, d: 0 }, rgb: [], btn: null, ptr: null };
+  const S = { cw: 0, ch: 0, dpr: 1, yaw: 0.5, pitch: 0.4, M: null, f: 1, cx: 0, cy: 0, down: null, drag: null, held: { l: 0, r: 0, u: 0, d: 0 }, rgb: [], btn: null, ptr: null };
   let sigCache = '';
 
   function nameOf(key) { return T.names[key] || PZ.nameOf(key, KO) || key; }
   function setTheme(key) {
     if (!PZ.META[key]) { const pk = PZ.parseKey(key); key = (pk && PZ.customKey(pk.topo, pk.abc || pk.n)) || 'cube'; }
-    G.key = key; G.P = PZ.get(key); S.yaw = G.P.meta.view.yaw; S.pitch = G.P.meta.view.pitch;
+    G.key = key; G.P = PZ.get(key); S.yaw = G.P.meta.view.yaw; S.pitch = G.P.meta.view.pitch; S.M = null;
     S.rgb = G.P.meta.colours.map(hex2rgb);
     lsSet('rubik_theme', key);
     document.title = nameOf(key);
@@ -214,14 +214,21 @@
     S.f = R * D; S.cx = S.cw / 2; S.cy = S.ch * 0.5;
   }
   window.addEventListener('resize', resize);
-  function tv(p) {
+  // the view is a rotation matrix (a trackball): a drag turns it about the screen axes, so the pole is no obstacle (no yaw / pitch with a limit, no gimbal lock); S.M = null means "from S.yaw / S.pitch"
+  function mul3(A, B) { const R = new Array(9); for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) R[i * 3 + j] = A[i * 3] * B[j] + A[i * 3 + 1] * B[3 + j] + A[i * 3 + 2] * B[6 + j]; return R; }
+  function curM() {
+    if (S.M) return S.M;
     const cY = Math.cos(S.yaw), sY = Math.sin(S.yaw), cP = Math.cos(S.pitch), sP = Math.sin(S.pitch);
-    const x1 = p[0] * cY + p[2] * sY, z1 = -p[0] * sY + p[2] * cY;
-    return [x1, p[1] * cP - z1 * sP, p[1] * sP + z1 * cP];
+    return (S.M = [cY, 0, sY, sP * sY, cP, -sP * cY, -cP * sY, sP, cP * cY]);
   }
+  function turned(M, da, db) {          // M turned by da about the vertical and db about the horizontal screen axis (a drag right turns the front to the right, a drag down turns the front down)
+    const c = Math.cos(da), s = Math.sin(da), c2 = Math.cos(db), s2 = Math.sin(db);
+    return mul3([1, 0, 0, 0, c2, -s2, 0, s2, c2], mul3([c, 0, s, 0, 1, 0, -s, 0, c], M));
+  }
+  function tv(p) { const M = curM(); return [M[0] * p[0] + M[1] * p[1] + M[2] * p[2], M[3] * p[0] + M[4] * p[1] + M[5] * p[2], M[6] * p[0] + M[7] * p[1] + M[8] * p[2]]; }
   function pj(v) { const k = S.f / (D - v[2]); return [S.cx + v[0] * k, S.cy - v[1] * k]; }
   function stepView(dt) {
-    S.yaw += (S.held.r - S.held.l) * 1.8 * dt; S.pitch = Math.max(-1.45, Math.min(1.45, S.pitch + (S.held.d - S.held.u) * 1.2 * dt));
+    const da = (S.held.r - S.held.l) * 1.8 * dt, db = (S.held.d - S.held.u) * 1.2 * dt; if (da || db) S.M = turned(curM(), da, db);
   }
 
   // ------------------------------------------------------------------ drawing
@@ -374,7 +381,7 @@
     const p = pos(e);
     if (G.mode === 'solved' && S.btn && p.x >= S.btn.x && p.x <= S.btn.x + S.btn.w && p.y >= S.btn.y && p.y <= S.btn.y + S.btn.h) { newGame(); return; }
     if (G.auto) setAuto(false);
-    const view = () => { S.drag = { x: p.x, y: p.y, yaw: S.yaw, pitch: S.pitch }; S.down = null; };
+    const view = () => { S.drag = { x: p.x, y: p.y, M: curM() }; S.down = null; };
     if ((e.pointerType === 'mouse' && e.button === 2) || busy() || G.mode !== 'play' || G.hint) { view(); return; }
     const c = pick(p.x, p.y);
     if (c >= 0) { S.down = { c: c, x: p.x, y: p.y, done: false }; S.drag = null; } else view();
@@ -387,10 +394,10 @@
       d.done = true;
       const mv = moveForSwipe(d.c, dx, dy);
       if (mv && G.mode === 'play' && !busy()) { enqueue(mv.b, mv.d, 'user', userDur()); S.down = null; S.swiped = true; }
-      else { S.down = null; S.drag = { x: d.x, y: d.y, yaw: S.yaw, pitch: S.pitch }; }
+      else { S.down = null; S.drag = { x: d.x, y: d.y, M: curM() }; }
     }
     const g = S.drag;
-    if (g) { S.yaw = g.yaw + (p.x - g.x) / S.cw * 3.4; S.pitch = Math.max(-1.45, Math.min(1.45, g.pitch + (p.y - g.y) / S.ch * 2.6)); }
+    if (g) S.M = turned(g.M, (p.x - g.x) / S.cw * 3.4, (p.y - g.y) / S.ch * 2.6);
   });
   window.addEventListener('message', function (e) { const m = e.data; if (m && m.rbCmd && typeof window[m.rbCmd] === 'function') window[m.rbCmd](); });
   window.addEventListener('pointerup', function () { S.down = null; S.drag = null; });

@@ -28,6 +28,8 @@ var BOSS_EXTRA = (function () { var c = []; [RR, R, N, Lf].forEach(function (d) 
 // Extra candidates that start by going left; only added on puzzle levels where the route may need backtracking.
 var LEFT_EXTRA = (function () { var c = []; var LL = Lf | IN.RUN; [Lf, LL].forEach(function (a) { [a, N].forEach(function (b) { [0, 4, 8, 12, 16, 20, 26, 32].forEach(function (s) { c.push({ a: a, b: b, s: s, h: -1 }); [99, 12].forEach(function (h) { c.push({ a: a, b: b, s: s, h: h }); }); }); }); }); return c; })();
 // True when a living boss (enemy type 8) is within 260 px of the hero: switches to the longer horizon and the boss-fight scoring.
+// a live boss within d pixels on both axes (chain castles: the climb below the arena is not a boss fight)
+function bossClose(st, d) { for (var i = 0; i < st.en.length; i++) { var e = st.en[i]; if (e.t === 8 && e.alive && Math.abs(e.x - st.p.x) < d && Math.abs(e.y - st.p.y) < d) return true; } return false; }
 function bossNear(st) { if (st.boss <= 0) return false; for (var i = 0; i < st.en.length; i++) { var e = st.en[i]; if (e.t === 8 && e.alive && Math.abs(e.x - st.p.x) < 260 && (!st.L.vgoal || Math.abs(e.y - st.p.y) < 200)) return true; } return false; }
 // Key mask of candidate c at frame k: optional left lead-in (l), then a until s, then b (or c after t), with Jump OR-ed in during the hold window.
 function inputAt(c, k) { if (c.l) { if (k < c.l) return Lf; k -= c.l; } var m = k < c.s ? c.a : (c.t !== undefined && k >= c.s + c.t ? c.c : c.b); var s0 = c.s + (c.w || 0); if (c.h > 0 && k >= s0 && k < s0 + c.h) m |= IN.J; return m; }
@@ -446,6 +448,7 @@ function makeNavigator() {
     // (and a hero who lost his flame walks back to a spare flower when a fire-armoured boss is near: only fireballs hurt it)
     var thr = false;   // a diving / charging boss or a spark close by: the scripted walks below give way to the look-ahead planner
     for (var thi = 0; thi < st.en.length && !thr; thi++) { var the = st.en[thi]; if (the.t !== 8 || the.alive === false) continue; var tdx = Math.abs(the.x + the.w / 2 - st.p.x - st.p.w / 2), tdy = Math.abs(the.y + the.h / 2 - st.p.y - st.p.h / 2); if ((tdx < 64 && tdy < 64) || ((the.v === 4 && the.s === 1 || the.v > 4 && the.s === 1) && tdx < 170 && tdy < 90)) thr = true; }
+    for (var tdi = 0; tdi < st.en.length; tdi++) { var tde = st.en[tdi]; if (tde.t === 8 && tde.alive !== false && tde.v === 4 && tde.s === 1 && st.p.ground && tde.tx !== undefined && Math.abs(tde.x + tde.w / 2 - st.p.x - st.p.w / 2) < 230) { var tdd = st.p.x + st.p.w / 2 - tde.tx; if (Math.abs(tdd) < 56) { nv.seq = null; nv.job = null; return (tdd < 0 ? IN_L : IN_R) | PF.IN.RUN; } } }   // the storm bird dives at where the hero stood: step out of that column instead of jumping into the dive
     for (var thj = 0; thj < st.ep.length && !thr; thj++) { var tp = st.ep[thj]; if (Math.abs(tp.x - st.p.x - st.p.w / 2) < 56 && Math.abs(tp.y - st.p.y - st.p.h / 2) < 56) thr = true; }
     var wantK = st.p.mini || st.p.pw === 0 ? 0 : -1;   // a small hero also wants a mushroom (e.g. one that rolled out of a block)
     if (wantK < 0 && st.boss > 0 && st.p.pw !== 2) for (var fbi = 0; fbi < st.en.length; fbi++) { var fbe = st.en[fbi]; if (fbe.t === 8 && fbe.alive && fbe.imm && fbe.immKind === 'fire' && Math.abs(fbe.x - st.p.x) < 420) wantK = 1; }
@@ -463,7 +466,7 @@ function makeNavigator() {
     nv.sb = !!shellBoss;   // armoured boss: from the arena entrance on
     if (shellBoss) return shellBossMask(st, shellBoss, fb);   // armoured boss: only kicked shells hurt it
     // Boss arenas (and boss-rush levels): drop any macro plan, the reactive planner handles the fight.
-    if (st.boss > 0 && ((bossNear(st) && (!L.arena || L.vgoal || st.p.x > L.arena.c0 * PF.TS - 90)) || (L.vgoal && PF.inArena(st)) || nv.job === null && L.kind === 'bossrush')) { nv.seq = null; nv.job = null; return fb.decide(st); }   // boss arenas: the reactive look-ahead planner dodges and stomps   // boss arenas: the reactive look-ahead planner dodges and stomps
+    if (st.boss > 0 && ((bossNear(st) && (L.vgoal ? bossClose(st, 110) : !L.arena || st.p.x > L.arena.c0 * PF.TS - 90)) || (L.vgoal && PF.inArena(st)) || nv.job === null && L.kind === 'bossrush' && L.arena && st.p.x > L.arena.c0 * PF.TS - 200)) { nv.seq = null; nv.job = null; return fb.decide(st); }   // boss arenas: the reactive look-ahead planner dodges and stomps   // boss arenas: the reactive look-ahead planner dodges and stomps
     // Keep playing the macro sequence found for the current stage.
     if (nv.seq && nv.i < nv.seq.length && (nv.stage === st.stage || (L.snow && !st.p.ground))) { pipe(st); return nv.seq[nv.i++]; }   // frost levels: a stage that completes in mid-air (the ice forms during the jump) does not cut the jump short
     nv.seq = null;

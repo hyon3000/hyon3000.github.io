@@ -15,7 +15,7 @@
   function rnd() { return Math.random(); }
 
   const G = { S: SQ.create(PN), sel: 0, moves: 0, time: 0, started: false, mode: 'play', anim: null, queue: [], auto: false, hint: null, msg: '', msgT: 0, animScr: lsGet('rubik_anim') !== '0', autoScr: lsGet('rubik_autoscr') !== '0', best: null, newRec: false, cheated: false };
-  const V = { yaw: 0.6, pitch: 0.75, drag: null, cw: 0, ch: 0, dpr: 1 };
+  const V = { yaw: 0.6, pitch: 0.75, M: null, drag: null, cw: 0, ch: 0, dpr: 1 };
   const BEST_KEY = 'sq1_best_' + NV;
   try { G.best = JSON.parse(lsGet(BEST_KEY) || 'null'); } catch (e) { G.best = null; }
   function say(t, s) { G.msg = t; G.msgT = (s || 2.2); }
@@ -92,11 +92,15 @@
   /* ---------- projection ---------- */
   let cy = 1, sy = 0, cp = 1, sp = 0, scale = 100, ox = 0, oyy = 0;
   const DC = 6.5;
+  function mul3(A, B) { const R = new Array(9); for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) R[i * 3 + j] = A[i * 3] * B[j] + A[i * 3 + 1] * B[3 + j] + A[i * 3 + 2] * B[6 + j]; return R; }
+  // the view is a rotation matrix (a trackball): a drag turns it about the screen axes, so the pole is no obstacle (no limit, no gimbal lock); V.M = null means "from V.yaw / V.pitch"
+  function curM() { if (V.M) return V.M; const c1 = Math.cos(V.yaw), s1 = Math.sin(V.yaw), c2 = Math.cos(V.pitch), s2 = Math.sin(V.pitch); return (V.M = [c1, 0, -s1, s2 * s1, c2, s2 * c1, c2 * s1, -s2, c2 * c1]); }
+  function turnView(da, db) { const c = Math.cos(da), s = Math.sin(da), c2 = Math.cos(db), s2 = Math.sin(db); V.M = mul3([1, 0, 0, 0, c2, s2, 0, -s2, c2], mul3([c, 0, -s, 0, 1, 0, s, 0, c], curM())); }
   function tr(p, extra) {
     let x = p[0], y = p[1], z = p[2];
     if (extra) { const c = Math.cos(extra), s = Math.sin(extra), nx = x * c - y * s, ny = x * s + y * c; x = nx; y = ny; }
-    const xr = x * cy - z * sy, zr = x * sy + z * cy;
-    return [xr, y * cp + zr * sp, -y * sp + zr * cp];
+    const M = curM();
+    return [M[0] * x + M[1] * y + M[2] * z, M[3] * x + M[4] * y + M[5] * z, M[6] * x + M[7] * y + M[8] * z];
   }
   function proj(c) { const f = DC / (DC + c[2]); return [ox + c[0] * f * scale, oyy - c[1] * f * scale]; }
   function shadeCol(hex, k) {
@@ -214,7 +218,6 @@
   function draw() {
     const cw = V.cw, ch = V.ch; if (cw < 80 || ch < 120) return;
     ctx.setTransform(V.dpr, 0, 0, V.dpr, 0, 0);
-    cy = Math.cos(V.yaw); sy = Math.sin(V.yaw); cp = Math.cos(V.pitch); sp = Math.sin(V.pitch);
     const areaH = ch - 130; scale = Math.min(cw * 0.30, areaH * 0.31); ox = cw / 2; oyy = 64 + areaH / 2;
     const faces = buildFaces(), out = [], fv = [], lv = [];
     function hexRGB(h) { return [parseInt(h.substr(1, 2), 16) / 255, parseInt(h.substr(3, 2), 16) / 255, parseInt(h.substr(5, 2), 16) / 255]; }
@@ -311,7 +314,7 @@
     else if (pk) { G.sel = pk.l; V.mid = null; V.piece = { pk: pk, x0: x, y0: y, m: pieceMetrics(pk) }; V.drag = null; }
     else { V.piece = null; V.mid = null; V.drag = { x: e.clientX, y: e.clientY }; }
   });
-  cv.addEventListener('pointermove', function (e) { if (!V.drag) return; V.yaw -= (e.clientX - V.drag.x) * 0.01; V.pitch = Math.max(0.15, Math.min(1.45, V.pitch + (e.clientY - V.drag.y) * 0.008)); V.drag.x = e.clientX; V.drag.y = e.clientY; });
+  cv.addEventListener('pointermove', function (e) { if (!V.drag) return; turnView(-(e.clientX - V.drag.x) * 0.01, (e.clientY - V.drag.y) * 0.008); V.drag.x = e.clientX; V.drag.y = e.clientY; });
   function endDrag(e) {
     V.drag = null;
     const md = V.mid; V.mid = null;

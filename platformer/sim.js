@@ -922,7 +922,7 @@ function step(st, inp) {
     if (stomping && p.mini && e.t !== 8) { p.vy = jump ? -7.6 : -4.6; p.y = Math.min(p.y, e.y - p.h); p.coy = 0; ev(st, 'bump', e.x + e.w / 2, e.y); continue; }
     // normal stomp: bosses lose hp (unless armoured), beetles retreat into their shell, others die and the hero bounces (higher when jump is held)
     if (stomping) {
-      if (e.t === 8) { if (e.imm) { p.vy = -6.2; p.coy = 0; ev(st, 'bump', e.x + e.w / 2, e.y); } else if (hitBoss(st, e, 1)) { p.vy = -6.2; } continue; }   // imm: armoured top, only shells and fireballs hurt it
+      if (e.t === 8) { if (e.imm) { p.vy = -6.2; p.coy = 0; ev(st, 'bump', e.x + e.w / 2, e.y); } else { hitBoss(st, e, 1); p.vy = -6.2; p.coy = 0; } continue; }   // a stomp on a boss in its hit-flash still bounces the hero (it used to sink him into the boss)   // imm: armoured top, only shells and fireballs hurt it
       if (e.t === 36) { e.t = 3; e.sh = 1; e.bomb = 1; e.y += 4; e.h = 9; e.vx = 0; p.vy = jump ? -6.8 : -4.2; st.score += 100; ev(st, 'stomp', e.x + e.w / 2, e.y); p.coy = 0; continue; }   // a stomped bomb bug is a lit bomb: kick it (it cracks walls and kills enemies like a shell)
       if (e.t === 3) { if (e.sh === 2) { e.sh = 1; e.vx = 0; } else { e.sh = 1; e.y += 4; e.h = 9; e.vx = 0; } p.vy = jump ? -6.8 : -4.2; st.score += 100; ev(st, 'stomp', e.x + e.w / 2, e.y); p.coy = 0; continue; }
       e.alive = false; e.dt = 30; dropLoot(st, e); p.vy = jump ? -7.2 : -4.2; p.coy = 0; st.score += 100; ev(st, 'stomp', e.x + e.w / 2, e.y); if (e.t === 1) ev(st, 'spinkill', e.x, e.y); continue;
