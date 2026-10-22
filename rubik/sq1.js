@@ -14,7 +14,7 @@
   function fmtTime(s) { const m = Math.floor(s / 60), r = s - m * 60; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1); }
   function rnd() { return Math.random(); }
 
-  const G = { S: SQ.create(PN), sel: 0, moves: 0, time: 0, started: false, mode: 'play', anim: null, queue: [], auto: false, hint: null, msg: '', msgT: 0, animScr: lsGet('rubik_anim') !== '0', best: null, newRec: false, cheated: false };
+  const G = { S: SQ.create(PN), sel: 0, moves: 0, time: 0, started: false, mode: 'play', anim: null, queue: [], auto: false, hint: null, msg: '', msgT: 0, animScr: lsGet('rubik_anim') !== '0', autoScr: lsGet('rubik_autoscr') !== '0', best: null, newRec: false, cheated: false };
   const V = { yaw: 0.6, pitch: 0.75, drag: null, cw: 0, ch: 0, dpr: 1 };
   const BEST_KEY = 'sq1_best_' + NV;
   try { G.best = JSON.parse(lsGet(BEST_KEY) || 'null'); } catch (e) { G.best = null; }
@@ -57,7 +57,7 @@
   function nextSolveMove() { const h = G.S.hist; return h.length ? SQ.inverse(h[h.length - 1]) : null; }
   function setAuto(on) { G.auto = !!on; try { window.parent.postMessage({ rb: 'autoState', on: G.auto }, '*'); } catch (e) {} }
   function checkSolved() {
-    if (G.mode !== 'play' || !SQ.isSolved(G.S)) return;
+    if (G.mode !== 'play' || !(G.started || G.cheated) || !SQ.isSolved(G.S)) return;
     G.S.hist = []; G.mode = 'solved'; setAuto(false);
     if (!G.cheated && G.moves > 0) {
       const b = G.best;
@@ -81,6 +81,7 @@
     opt = opt || {};
     G.S = SQ.create(PN); G.sel = 0; G.moves = 0; G.time = 0; G.started = false; G.anim = null; G.queue = []; G.hint = null; G.cheated = false; G.newRec = false; setAuto(false);
     const cnt = Math.min(200, 16 + Math.round(1.3 * SEC));
+    if (!G.autoScr) { G.mode = 'play'; return; }          // no automatic scramble: the player scrambles it; a solved state does not count before the first move
     if (G.animScr && !opt.instant) {
       const tmp = SQ.create(PN), mvs = SQ.scramble(tmp, cnt, rnd);
       if (SQ.isSolved(tmp)) return newGame(opt);
@@ -339,6 +340,8 @@
   window.giveHint = function () { if (G.mode !== 'play' || G.anim || G.queue.length || G.hint) return; const nm = nextSolveMove(); if (!nm) return; if (nm.t === 'r') G.sel = nm.l; G.hint = { t: 0, mv: nm }; };
   window.toggleScrambleAnim = function () { G.animScr = !G.animScr; lsSet('rubik_anim', G.animScr ? '1' : '0'); return G.animScr; };
   window.getScrambleAnim = function () { return G.animScr; };
+  window.toggleAutoScramble = function () { G.autoScr = !G.autoScr; lsSet('rubik_autoscr', G.autoScr ? '1' : '0'); return G.autoScr; };
+  window.getAutoScramble = function () { return G.autoScr; };
   window.addEventListener('message', function (e) { const m = e.data; if (m && m.rbCmd && typeof window[m.rbCmd] === 'function') window[m.rbCmd](); });
   window.__sq = { G: G, SQ: SQ, step: function (dt) { update(dt); }, LY: LY, V: V, out: function () { return lastOut; }, metrics: function (pk) { return pieceMetrics(pk); }, wom: function (x, y) { return worldOnMid(x, y); }, slice: function (h, dir) { doSlice(h, dir); }, tr: tr, proj: proj, hit: function (x, y) { return hitTest(x, y); } };
 

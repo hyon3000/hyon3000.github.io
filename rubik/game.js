@@ -27,7 +27,7 @@
   // ------------------------------------------------------------------ state
   const G = {
     key: 'cube', P: null, col: null, hist: [], queue: [], anim: null, mode: 'play', moves: 0, time: 0, started: false, cheated: false, auto: false,
-    hint: null, applied: 0, newRec: false, animScramble: lsGet('rubik_anim') !== '0', lastSolveMs: 0,
+    hint: null, applied: 0, newRec: false, animScramble: lsGet('rubik_anim') !== '0', autoScr: lsGet('rubik_autoscr') !== '0', lastSolveMs: 0,
   };
   const S = { cw: 0, ch: 0, dpr: 1, yaw: 0.5, pitch: 0.4, f: 1, cx: 0, cy: 0, down: null, drag: null, held: { l: 0, r: 0, u: 0, d: 0 }, rgb: [], btn: null, ptr: null };
   let sigCache = '';
@@ -84,6 +84,7 @@
     setAuto(false); G.queue = []; G.anim = null; G.hint = null; CS.plan = null;
     G.col = P.solvedCol.slice(); G.hist = []; G.moves = 0; G.time = 0; G.started = false; G.cheated = false; G.newRec = false; G.applied = 0;
     if (P.meta.trivial) { G.mode = 'solved'; return true; }          // easter egg (size 1): nothing to scramble, solved at once
+    if (!G.autoScr) { G.mode = 'play'; return true; }          // no automatic scramble: the player scrambles it; a solved state does not count before the first move
     const seq = genScramble(o.n || P.meta.scramble);
     G.mode = 'scramble';
     if (o.instant || !G.animScramble) {
@@ -114,6 +115,8 @@
   window.newGame = function () { newGame(); return true; };
   window.toggleScrambleAnim = function () { G.animScramble = !G.animScramble; lsSet('rubik_anim', G.animScramble ? '1' : '0'); return G.animScramble; };
   window.getScrambleAnim = function () { return G.animScramble; };
+  window.toggleAutoScramble = function () { G.autoScr = !G.autoScr; lsSet('rubik_autoscr', G.autoScr ? '1' : '0'); return G.autoScr; };
+  window.getAutoScramble = function () { return G.autoScr; };
   window.setTheme = setTheme;
 
   // ------------------------------------------------------------------ solvers

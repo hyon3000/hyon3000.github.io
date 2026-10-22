@@ -204,10 +204,10 @@
       axes.forEach((nv, ax) => {
         const L = dims[ax]; if (L < 2) return;
         const o = [0, 1, 2].filter((i) => i !== ax), pu = (dims[o[0]] - 1) & 1, pv = (dims[o[1]] - 1) & 1, cen = [0, 0, 0];
-        if (ff && pu !== pv) cen[o[0]] = sc;          // an off-centre axis keeps the pieces on the lattice
+        // every axis goes through the middle of the layer (the middle of the puzzle); a 90 degree turn keeps the cells on the lattice only if both section sizes have the same parity
         for (let k = 0; k < L; k++) {
           const lo = ff ? (-L + 2 * k) * sc : -1 + 2 * k / L, hi = ff ? (-L + 2 * k + 2) * sc : -1 + 2 * (k + 1) / L;
-          moves.push({ stops: null, ax: ax, n: nv, d: lo, sg: 1, depth: lo, hi: hi, axis: nv, free: ff, center: cen, square: dims[o[0]] === dims[o[1]] });
+          moves.push({ stops: null, ax: ax, n: nv, d: lo, sg: 1, depth: lo, hi: hi, axis: nv, free: false, center: cen, square: dims[o[0]] === dims[o[1]], quarter: pu === pv });
         }
       });
       planes = moves;
@@ -249,25 +249,36 @@
     return out;
   }
   function isFree(S, p) { return members(S, p) !== null; }
-  // fully functional cuboid: a turn is possible unless it leaves a cell (or a group) of the cuboid cut off from the rest: the cells are joined by faces, positions on the lattice
-  function ffConnected(S, pl, m, a) {
-    const sc = S.cfg.sc, Rm = rotMat(pl.axis, a), C = pl.center || [0, 0, 0], inM = new Set(m), idx = new Map(), keys = [];
-    const kf = (v) => Math.round(v[0] / sc) + ',' + Math.round(v[1] / sc) + ',' + Math.round(v[2] / sc);
+  // fully functional cuboid: a turn is refused when it leaves a cell (or a group) cut off from the rest (the cells are joined by faces, positions on the lattice) or when a sticker face
+  // would touch another cell afterwards (an inner black face may never meet an outer sticker face).  Returns '' when the turn is fine.
+  function ffProblem(S, pl, m, a) {
+    const sc = S.cfg.sc, Rm = rotMat(pl.axis, a), C = pl.center || [0, 0, 0], inM = new Set(m), idx = new Map(), pos = [], rots = []; let off = false;
+    const ri = (x) => Math.round(x / sc);
     S.pieces.forEach((pc, i) => {
-      let v = [(pc.lim[0][0] + pc.lim[0][1]) / 2, (pc.lim[1][0] + pc.lim[1][1]) / 2, (pc.lim[2][0] + pc.lim[2][1]) / 2];
-      if (inM.has(i)) { const q = app(Rm, [v[0] - C[0], v[1] - C[1], v[2] - C[2]]); v = [q[0] + C[0], q[1] + C[1], q[2] + C[2]]; }
-      const k = kf(v); keys.push(k); idx.set(k, i);
+      let v = [(pc.lim[0][0] + pc.lim[0][1]) / 2, (pc.lim[1][0] + pc.lim[1][1]) / 2, (pc.lim[2][0] + pc.lim[2][1]) / 2], R = pc.R;
+      if (inM.has(i)) { const q = app(Rm, [v[0] - C[0], v[1] - C[1], v[2] - C[2]]); v = [q[0] + C[0], q[1] + C[1], q[2] + C[2]]; R = mul(Rm, pc.R); }
+      for (let d = 0; d < 3; d++) { const t = v[d] / sc; if (Math.abs(t - Math.round(t)) > 1e-5 || (((Math.round(t) - (S.cfg.n[d] - 1)) % 2) + 2) % 2 !== 0) off = true; }          // not on the lattice of the cells (half a cell off)
+      const p = [ri(v[0]), ri(v[1]), ri(v[2])]; pos.push(p); rots.push(R); idx.set(p.join(','), i);
     });
+    if (off) return '';          // half a cell off the lattice: the cells no longer touch face to face, only the jamming of the other layers counts
     const seen = new Set([0]), stack = [0];
     while (stack.length) {
-      const i = stack.pop(), p = keys[i].split(',').map(Number);
+      const i = stack.pop(), p = pos[i];
       for (let d = 0; d < 3; d++) for (const sg of [-2, 2]) { const q = p.slice(); q[d] += sg; const j = idx.get(q.join(',')); if (j !== undefined && !seen.has(j)) { seen.add(j); stack.push(j); } }
     }
-    return seen.size === S.pieces.length;
+    if (seen.size !== S.pieces.length) return 'detach';
+    for (let i = 0; i < S.pieces.length; i++) {
+      for (const f of S.pieces[i].home) {
+        if (f.tag < 0) continue;
+        const nv = app(rots[i], FACES[f.tag]), q = [pos[i][0] + 2 * Math.round(nv[0]), pos[i][1] + 2 * Math.round(nv[1]), pos[i][2] + 2 * Math.round(nv[2])];
+        if (idx.has(q.join(','))) return 'cover';
+      }
+    }
+    return '';
   }
   function apply(S, mv) {
     const m = members(S, mv.p); if (!m) return false;
-    if (S.cfg.planes[mv.p].free && !ffConnected(S, S.cfg.planes[mv.p], m, mv.a)) return false;
+    if (S.cfg.shape === 'cuboidff') { const why = ffProblem(S, S.cfg.planes[mv.p], m, mv.a); S.fail = why; if (why) return false; }
     const Rm = rotMat(S.cfg.planes[mv.p].axis, mv.a);
     const C = S.cfg.planes[mv.p].center || [0, 0, 0], RC = app(Rm, C);
     m.forEach((i) => { const pc = S.pieces[i], t = app(Rm, pc.T); pc.R = mul(Rm, pc.R); pc.T = [t[0] + C[0] - RC[0], t[1] + C[1] - RC[1], t[2] + C[2] - RC[2]]; refresh(S, i); });
@@ -302,7 +313,7 @@
       last = p; const mv = { p: p, a: pls[p].square ? [Math.PI / 2, -Math.PI / 2, Math.PI][Math.floor(rnd() * 3)] : Math.PI };
       if (apply(S, mv)) mvs.push(mv);
     }
-    const rect = []; pls.forEach((pl, i) => { if (!pl.square) rect.push(i); });
+    const rect = []; pls.forEach((pl, i) => { if (!pl.square) rect.push(i); });          // layers whose 90 degree turn deforms the shape
     let nj = rect.length ? 1 + Math.floor(rnd() * 3) : 0;
     for (let tries = 0; nj > 0 && tries < 60; tries++) {
       const p = rect[Math.floor(rnd() * rect.length)]; if (p === last && rect.length > 1) continue;
