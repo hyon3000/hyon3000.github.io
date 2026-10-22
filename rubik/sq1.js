@@ -223,11 +223,11 @@
       const nx = -dy / len * hw, ny = dx / len * hw, z0 = P[2] - bias, z1 = Q[2] - bias, a1 = [P[0] + nx, P[1] + ny, z0], a2 = [P[0] - nx, P[1] - ny, z0], b1 = [Q[0] + nx, Q[1] + ny, z1], b2 = [Q[0] - nx, Q[1] - ny, z1];
       [a1, a2, b1, a2, b2, b1].forEach((v) => { lv.push(v[0], v[1], v[2], col[0], col[1], col[2]); });
     }
-    const SEAM = [0.016, 0.022, 0.05], CORE = [0.78, 0.8, 0.88], SELC = [1, 0.9, 0.35];
+    const SEAM = [0, 0, 0];                // every line is black and as thick as the gap between the tiles of the other puzzles
     faces.forEach((f) => {
       if (f.line) {
         const a3 = tr(f.w[0], f.extra), b3 = tr(f.w[1], f.extra);
-        if (gl) { ribbon(a3, b3, f.strong ? 0.02 : 0.01, 0.012, SEAM); ribbon(a3, b3, f.strong ? 0.0065 : 0.003, 0.02, CORE); }
+        if (gl) ribbon(a3, b3, f.strong ? 0.024 : 0.016, 0.012, SEAM);
         return;
       }
       const c3 = f.w.map((p) => tr(p, f.extra)), o0 = tr([0, 0, 0], f.extra), n3 = tr(f.outward, f.extra), nn = [n3[0] - o0[0], n3[1] - o0[1], n3[2] - o0[2]];
@@ -242,7 +242,7 @@
         for (let i = 1; i + 1 < c3.length; i++) [c3[0], c3[i], c3[i + 1]].forEach((p) => { fv.push(p[0], p[1], p[2], r, g, b); });
         if (!f.flat) for (let i = 0; i < c3.length; i++) {
           const P = c3[i], Q = c3[(i + 1) % c3.length];
-          ribbon(P, Q, 0.011, 0.01, SEAM); ribbon(P, Q, f.sel ? 0.0055 : 0.0035, 0.018, f.sel ? SELC : CORE);
+          ribbon(P, Q, 0.016, 0.01, SEAM);
         }
       }
       if (!back) out.push({ pts: c3.map(proj), z: ctr[2], color: shadeCol(f.color, lit), sel: f.sel, flat: f.flat, pick: f.pick, grp: f.grp, kind: f.outward[1] > 0.5 ? 2 : (f.outward[1] < -0.5 ? 0 : 1) });
@@ -257,7 +257,7 @@
         ctx.beginPath(); f.pts.forEach((p, i) => { if (i) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); }); ctx.closePath();
         ctx.fillStyle = f.color; ctx.fill();
         if (f.flat) { ctx.lineWidth = 1; ctx.strokeStyle = f.color; ctx.stroke(); }
-        else { ctx.lineJoin = 'round'; ctx.lineWidth = 3.6; ctx.strokeStyle = 'rgba(4,6,12,.95)'; ctx.stroke(); ctx.lineWidth = f.sel ? 2 : 1.3; ctx.strokeStyle = f.sel ? 'rgba(255,230,90,.95)' : 'rgba(255,255,255,.5)'; ctx.stroke(); }
+        else { ctx.lineJoin = 'round'; ctx.lineWidth = 7; ctx.strokeStyle = '#000'; ctx.stroke(); }
       });
     }
     txt(TX.name, cw / 2, 24, 22, '#e8eefc', 'center', true);

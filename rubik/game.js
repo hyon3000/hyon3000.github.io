@@ -34,7 +34,7 @@
 
   function nameOf(key) { return T.names[key] || PZ.nameOf(key, KO) || key; }
   function setTheme(key) {
-    if (!PZ.META[key]) { const pk = PZ.parseKey(key); key = (pk && PZ.customKey(pk.topo, pk.n)) || 'cube'; }
+    if (!PZ.META[key]) { const pk = PZ.parseKey(key); key = (pk && PZ.customKey(pk.topo, pk.abc || pk.n)) || 'cube'; }
     G.key = key; G.P = PZ.get(key); S.yaw = G.P.meta.view.yaw; S.pitch = G.P.meta.view.pitch;
     S.rgb = G.P.meta.colours.map(hex2rgb);
     lsSet('rubik_theme', key);
@@ -69,11 +69,12 @@
     }
   }
   function genScramble(n) {
-    const P = G.P, out = []; let lastLine = -1;
+    const P = G.P, out = []; let lastLine = -1, lastBand = -1;
+    const lines = new Set(P.scrambleBands.map((b) => P.bands[b].line)).size;          // a puzzle with a single turn axis (e.g. 1x1x2) must still be able to scramble
     while (out.length < n) {
       const b = P.scrambleBands[Math.floor(rand() * P.scrambleBands.length)], line = P.bands[b].line;
-      if (line === lastLine) continue;
-      lastLine = line; out.push({ b: b, d: rand() < 0.5 ? 1 : -1 });
+      if (lines > 1 ? line === lastLine : (b === lastBand && P.scrambleBands.length > 1)) continue;
+      lastLine = line; lastBand = b; out.push({ b: b, d: rand() < 0.5 ? 1 : -1 });
     }
     return out;
   }
@@ -292,7 +293,6 @@
       poly(it.pts); ctx.fillStyle = shade(rgb, it.nv, it.hl ? 55 + 40 * pulse : 0); ctx.fill();
       ctx.lineWidth = it.hl ? Math.max(2, S.cw * 0.006) : Math.max(1, S.cw * 0.0018); ctx.strokeStyle = it.hl ? 'rgba(255,255,255,' + (0.6 + 0.4 * pulse) + ')' : 'rgba(0,0,0,0.55)'; ctx.stroke();
       const k = S.f / (D - it.cv[2]), r = it.rad * k * 0.5 * Math.sqrt(Math.max(0.3, it.nv[2]));
-      if (r > 3.2) { const c = pj(it.cv); drawMark(it.col, c[0], c[1], Math.min(r, S.cw * 0.03), lum(rgb) > 0.5 ? 'rgba(15,15,15,0.85)' : 'rgba(255,255,255,0.92)'); }
     }
   }
 

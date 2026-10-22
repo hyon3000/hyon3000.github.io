@@ -100,6 +100,22 @@
     }
     return out.sort((x, y) => x - y);
   }
+  // face-turning dodecahedron with an even n (the pentagram faces): the middle of a face is the pentagon inside the pentagram, the five spikes of the pentagram are gaps (pieces left out)
+  function dodecaFTInfo() {
+    const D = DOD.DD, d2 = D / PHI; return { D: D, d2: d2 };
+  }
+  function pointIn2D(P, p, nrm) {
+    const t = Math.abs(nrm[0]) < 0.8 ? [1, 0, 0] : [0, 1, 0], u0 = cross(nrm, t), ul = Math.hypot(u0[0], u0[1], u0[2]), u = [u0[0] / ul, u0[1] / ul, u0[2] / ul], w = cross(nrm, u);
+    const pt = [dot(p, u), dot(p, w)], q = P.map((v) => [dot(v, u), dot(v, w)]); let c = false;
+    for (let i = 0, j = q.length - 1; i < q.length; j = i++) if ((q[i][1] > pt[1]) !== (q[j][1] > pt[1]) && pt[0] < (q[j][0] - q[i][0]) * (pt[1] - q[i][1]) / (q[j][1] - q[i][1]) + q[i][0]) c = !c;
+    return c;
+  }
+  function starOfFace(fi) {            // the pentagram of the chords joining the midpoints of non-adjacent edges: [10 points tip, notch, ...]
+    const v = DOD.faces[fi].v, M = v.map((q, i) => [(q[0] + v[(i + 1) % 5][0]) / 2, (q[1] + v[(i + 1) % 5][1]) / 2, (q[2] + v[(i + 1) % 5][2]) / 2]);
+    const inter = (a, b, c2, d) => { const d1 = sub(b, a), d2v = sub(d, c2), cr = cross(d1, d2v), t = dot(cross(sub(c2, a), d2v), cr) / dot(cr, cr); return [a[0] + d1[0] * t, a[1] + d1[1] * t, a[2] + d1[2] * t]; };
+    const out = []; for (let i = 0; i < 5; i++) { out.push(M[i]); out.push(inter(M[i], M[(i + 2) % 5], M[(i + 4) % 5], M[(i + 1) % 5])); }
+    return out;
+  }
   function dodecaPoly() { return DOD.faces.map((f) => ({ v: f.v.map((p) => p.slice()), tag: f.tag })); }
   function cubePoly() {
     const faces = [];
@@ -153,21 +169,51 @@
   const CCOL = ['#f2f2f2', '#d91e18', '#0fa34a', '#ffd400', '#ff7f0e', '#1f4fd8'], TCOL = ['#d91e18', '#0fa34a', '#1f4fd8', '#ffd400'];
   function config(n, shape) {
     shape = shape || 'cube';
-    const ck = shape + n; if (CFG[ck]) return CFG[ck];
-    const tet = shape === 'tetra', oct = shape === 'octa', dod = shape === 'dodeca', dte = shape === 'dodecaet', ice = shape === 'icosaet', oct2 = shape === 'octact', ice2 = shape === 'icosact', big = dte || ice || oct2 || ice2;
-    const axes = tet ? TAXES : dod ? DOD.axes : dte ? DODE.axes : ice ? ICOE.axes : oct2 ? OCTTW : ice2 ? ICOTW : NORMALS;
-    const depths = dod ? (n < 2 ? [] : Array.from({ length: n - 1 }, (_, k) => -DOD.DD * k / (n - 1))) : planeDepths(n, tet ? 0.25 : oct ? 1 / (2 * Math.SQRT2) : dte ? DODE.re / 2 : ice ? ICOE.re / 2 : oct2 ? 0.5 : ice2 ? ICO_O : H, tet);
+    const ck = shape + (Array.isArray(n) ? n.join('x') : n); if (CFG[ck]) return CFG[ck];
+    const tet = shape === 'tetra', oct = shape === 'octa', dod = shape === 'dodeca', dft = shape === 'dodecaft', dte = shape === 'dodecaet', ice = shape === 'icosaet', oct2 = shape === 'octact', ice2 = shape === 'icosact', ff = shape === 'cuboidff', ex = shape === 'cuboidx', cub = ff || ex, big = dte || ice || oct2 || ice2;
+    const dims = cub ? n : null, sc = ff ? S3 / Math.hypot(dims[0], dims[1], dims[2]) : 1;          // the box is scaled so that its radius is sqrt3 like the other solids
+    const axes = tet || cub ? TAXES : dod || dft ? DOD.axes : dte ? DODE.axes : ice ? ICOE.axes : oct2 ? OCTTW : ice2 ? ICOTW : NORMALS;
+    const depths = cub ? [] : dft ? (function () { const info = dodecaFTInfo(), vals = [info.d2], m = n / 2; for (let k = 1; k <= m - 1; k++) vals.push(info.d2 + (info.D - info.d2) * k / m); return vals.concat(vals.map((x) => -x)).sort((a, b) => b - a); })() : dod ? (n < 2 ? [] : Array.from({ length: n - 1 }, (_, k) => -DOD.DD * k / (n - 1))) : planeDepths(n, tet ? 0.25 : oct ? 1 / (2 * Math.SQRT2) : dte ? DODE.re / 2 : ice ? ICOE.re / 2 : oct2 ? 0.5 : ice2 ? ICO_O : H, tet);
     // plane = a cut n.p = d; the cap it turns is the side away from the centre (for d = 0 the positive side); axis = unit normal pointing into that side
-    const planes = [];
+    let planes = [];
     axes.forEach((nv, ax) => depths.forEach((d) => { const sg = d < 0 ? -1 : 1; planes.push({ stops: null, ax: ax, n: nv, d: d, sg: sg, depth: Math.abs(d), axis: [nv[0] * sg, nv[1] * sg, nv[2] * sg] }); }));
-    let cells = [tet ? tetraPoly() : oct || oct2 ? octaPoly() : dod || dte ? dodecaPoly() : ice || ice2 ? icosaPoly() : cubePoly()];
+    if (cub) { axes.forEach((nv, ax) => { const L = dims[ax]; for (let k = 1; k < L; k++) planes.push({ stops: null, ax: ax, n: nv, d: ff ? (-L + 2 * k) * sc : -1 + 2 * k / L, sg: 1, depth: 0, axis: nv }); }); }
+    let cells = [ff ? cubePoly().map((f) => ({ v: f.v.map((p) => [p[0] * dims[0] * sc, p[1] * dims[1] * sc, p[2] * dims[2] * sc]), tag: f.tag })) : ex ? cubePoly() : tet ? tetraPoly() : oct || oct2 ? octaPoly() : dod || dft || dte ? dodecaPoly() : ice || ice2 ? icosaPoly() : cubePoly()];
     planes.forEach((pl) => {
       const next = [];
       cells.forEach((c) => { const a = clip(c, pl.n, pl.d), b = clip(c, [-pl.n[0], -pl.n[1], -pl.n[2]], -pl.d); if (a && b) { next.push(a); next.push(b); } else next.push(c); });
       cells = next;
     });
-    planes.forEach((pl, i) => { if (!pl.stops) pl.stops = (big || tet) ? alignStops(planes, i) : tet ? TSTOPS : oct ? OSTOPS : dod ? DSTOPS : STOPS; });
-    return (CFG[ck] = { n: n, shape: shape, planes: planes, cells: cells, axes: axes, stops: planes.length ? planes[0].stops : STOPS, colours: tet ? TCOL : oct || oct2 ? OCOL : dod || dte ? DCOL : ice || ice2 ? ICOL : CCOL, faceN: tet ? TFACES : oct || oct2 ? OFACES : dod || dte ? DOD.DN : ice || ice2 ? ICO.DN : FACES, faceD: tet || oct || oct2 ? 1 / S3 : dod || dte ? DOD.DD : ice || ice2 ? ICO.DD : 1, noJumble: dod });
+    if (dft) {              // leave the spikes of the pentagrams out: a piece with an outer face centred inside a pentagram but not holding the middle of the face is removed
+      const stars = DOD.faces.map((f, fi) => starOfFace(fi)), cen = DOD.faces.map((f) => { const c = [0, 0, 0]; f.v.forEach((p) => { c[0] += p[0] / 5; c[1] += p[1] / 5; c[2] += p[2] / 5; }); return c; });
+      cells = cells.filter((cell) => !cell.some((f) => {
+        if (f.tag < 0) return false;
+        const m = [0, 0, 0]; f.v.forEach((p) => { m[0] += p[0] / f.v.length; m[1] += p[1] / f.v.length; m[2] += p[2] / f.v.length; });
+        return pointIn2D(stars[f.tag], m, DOD.DN[f.tag]) && !pointIn2D(f.v, cen[f.tag], DOD.DN[f.tag]);
+      }));
+    }
+    if (dft) {              // the moves: independent layers (slabs) of every axis, from the outside: the cap beyond the first plane, then the slab between the first and the second plane, ...
+      const pos = depths.filter((d) => d > 1e-9).sort((a, b) => b - a), moves = [];
+      axes.forEach((nv, ax) => [1, -1].forEach((sg) => pos.forEach((v, k) => moves.push({ stops: null, ax: ax, n: nv, d: sg * v, sg: sg, depth: v, hi: k === 0 ? undefined : pos[k - 1], axis: [nv[0] * sg, nv[1] * sg, nv[2] * sg] }))));
+      planes = moves;
+    }
+    if (cub) {              // the moves: every layer (slab) of every axis with at least two layers.  Fully functional (ff): the box of cubes, a layer turns by 90 degrees at any time (no piece ever blocks it,
+      // pieces may stick out; the layer holds the pieces that are at its place now); a layer whose two sections differ in parity turns about a lattice axis next to the middle.  Extended (ex): the cube with
+      // a, b, c layers along the axes (cells are bricks): a turn is allowed when no cut is in the way, 90 degrees leaves the other layers jammed (jumbling).
+      const moves = [];
+      axes.forEach((nv, ax) => {
+        const L = dims[ax]; if (L < 2) return;
+        const o = [0, 1, 2].filter((i) => i !== ax), pu = (dims[o[0]] - 1) & 1, pv = (dims[o[1]] - 1) & 1, cen = [0, 0, 0];
+        if (ff && pu !== pv) cen[o[0]] = sc;          // an off-centre axis keeps the pieces on the lattice
+        for (let k = 0; k < L; k++) {
+          const lo = ff ? (-L + 2 * k) * sc : -1 + 2 * k / L, hi = ff ? (-L + 2 * k + 2) * sc : -1 + 2 * (k + 1) / L;
+          moves.push({ stops: null, ax: ax, n: nv, d: lo, sg: 1, depth: lo, hi: hi, axis: nv, free: ff, center: cen, square: dims[o[0]] === dims[o[1]] });
+        }
+      });
+      planes = moves;
+    }
+    planes.forEach((pl, i) => { if (!pl.stops) pl.stops = (big || tet) ? alignStops(planes, i) : cub ? TSTOPS : tet ? TSTOPS : oct ? OSTOPS : dod || dft ? DSTOPS : STOPS; });
+    return (CFG[ck] = { n: n, shape: shape, planes: planes, cells: cells, axes: axes, stops: planes.length ? planes[0].stops : STOPS, colours: tet ? TCOL : oct || oct2 ? OCOL : dod || dft || dte ? DCOL : ice || ice2 ? ICOL : CCOL, faceN: tet ? TFACES : oct || oct2 ? OFACES : dod || dft || dte ? DOD.DN : ice || ice2 ? ICO.DN : FACES, faceD: tet || oct || oct2 ? 1 / S3 : dod || dft || dte ? DOD.DD : ice || ice2 ? ICO.DD : 1, noJumble: dod || dft || ff, faceDs: ff ? [dims[1] * sc, dims[0] * sc, dims[2] * sc, dims[1] * sc, dims[0] * sc, dims[2] * sc] : null, step: ff ? Math.PI / 2 : null, sc: sc });
   }
   const I3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
   function rotMat(n, a) {
@@ -177,31 +223,54 @@
   const mul = (A, B) => { const R = new Array(9); for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) R[i * 3 + j] = A[i * 3] * B[j] + A[i * 3 + 1] * B[3 + j] + A[i * 3 + 2] * B[6 + j]; return R; };
   const app = (M, p) => [M[0] * p[0] + M[1] * p[1] + M[2] * p[2], M[3] * p[0] + M[4] * p[1] + M[5] * p[2], M[6] * p[0] + M[7] * p[1] + M[8] * p[2]];
 
-  function world(S, i) { const pc = S.pieces[i]; return pc.home.map((f) => f.v.map((p) => app(pc.R, p))); }
+  function world(S, i) { const pc = S.pieces[i], T = pc.T; return pc.home.map((f) => f.v.map((p) => { const q = app(pc.R, p); return [q[0] + T[0], q[1] + T[1], q[2] + T[2]]; })); }
   function qr(l, pl) { return pl.sg > 0 ? l : [-l[1], -l[0]]; }
   function refresh(S, i) { S.pieces[i].W = world(S, i); const W = S.pieces[i].W; let mn = [], mx = []; S.pieces[i].lim = S.cfg.axes.map((n) => { let lo = 1e9, hi = -1e9; W.forEach((f) => f.forEach((p) => { const d = dot(n, p); if (d < lo) lo = d; if (d > hi) hi = d; })); return [lo, hi]; }); }
   function create(n, shape) {
     const cfg = config(n === undefined ? 3 : n, shape);
-    const S = { cfg: cfg, pieces: cfg.cells.map((c) => ({ home: c, R: I3.slice(), W: null, lim: null })), hist: [], ang: new Array(cfg.planes.length).fill(0) };
+    const S = { cfg: cfg, pieces: cfg.cells.map((c) => ({ home: c, R: I3.slice(), T: [0, 0, 0], W: null, lim: null })), hist: [], ang: new Array(cfg.planes.length).fill(0) };
     for (let i = 0; i < S.pieces.length; i++) refresh(S, i);
     return S;
   }
   // the pieces in the cap of plane p (null when a piece straddles it: the plane is locked)
-  function inCap(S, i, p) { const pl = S.cfg.planes[p], l = qr(S.pieces[i].lim[pl.ax], pl); return l[0] >= pl.depth - EPS; }
+  function inCap(S, i, p) {
+    const pl = S.cfg.planes[p], l = qr(S.pieces[i].lim[pl.ax], pl);
+    if (pl.free) { const m = (l[0] + l[1]) / 2; return m > pl.depth - EPS && m < pl.hi + EPS; }
+    return l[0] >= pl.depth - EPS && (pl.hi === undefined || l[1] <= pl.hi + EPS);
+  }
   function members(S, p) {
     const pl = S.cfg.planes[p], out = [];
+    if (pl.free) { for (let i = 0; i < S.pieces.length; i++) if (inCap(S, i, p)) out.push(i); return out; }          // fully functional: the pieces at this place turn, nothing blocks
     for (let i = 0; i < S.pieces.length; i++) {
       const l = qr(S.pieces[i].lim[pl.ax], pl);
-      if (l[0] >= pl.depth - EPS) out.push(i);
-      else if (l[1] > pl.depth + EPS) return null;
+      if (l[0] >= pl.depth - EPS && (pl.hi === undefined || l[1] <= pl.hi + EPS)) out.push(i);
+      else if ((l[0] < pl.depth - EPS && l[1] > pl.depth + EPS) || (pl.hi !== undefined && l[0] < pl.hi - EPS && l[1] > pl.hi + EPS)) return null;
     }
     return out;
   }
   function isFree(S, p) { return members(S, p) !== null; }
+  // fully functional cuboid: a turn is possible unless it leaves a cell (or a group) of the cuboid cut off from the rest: the cells are joined by faces, positions on the lattice
+  function ffConnected(S, pl, m, a) {
+    const sc = S.cfg.sc, Rm = rotMat(pl.axis, a), C = pl.center || [0, 0, 0], inM = new Set(m), idx = new Map(), keys = [];
+    const kf = (v) => Math.round(v[0] / sc) + ',' + Math.round(v[1] / sc) + ',' + Math.round(v[2] / sc);
+    S.pieces.forEach((pc, i) => {
+      let v = [(pc.lim[0][0] + pc.lim[0][1]) / 2, (pc.lim[1][0] + pc.lim[1][1]) / 2, (pc.lim[2][0] + pc.lim[2][1]) / 2];
+      if (inM.has(i)) { const q = app(Rm, [v[0] - C[0], v[1] - C[1], v[2] - C[2]]); v = [q[0] + C[0], q[1] + C[1], q[2] + C[2]]; }
+      const k = kf(v); keys.push(k); idx.set(k, i);
+    });
+    const seen = new Set([0]), stack = [0];
+    while (stack.length) {
+      const i = stack.pop(), p = keys[i].split(',').map(Number);
+      for (let d = 0; d < 3; d++) for (const sg of [-2, 2]) { const q = p.slice(); q[d] += sg; const j = idx.get(q.join(',')); if (j !== undefined && !seen.has(j)) { seen.add(j); stack.push(j); } }
+    }
+    return seen.size === S.pieces.length;
+  }
   function apply(S, mv) {
     const m = members(S, mv.p); if (!m) return false;
+    if (S.cfg.planes[mv.p].free && !ffConnected(S, S.cfg.planes[mv.p], m, mv.a)) return false;
     const Rm = rotMat(S.cfg.planes[mv.p].axis, mv.a);
-    m.forEach((i) => { S.pieces[i].R = mul(Rm, S.pieces[i].R); refresh(S, i); });
+    const C = S.cfg.planes[mv.p].center || [0, 0, 0], RC = app(Rm, C);
+    m.forEach((i) => { const pc = S.pieces[i], t = app(Rm, pc.T); pc.R = mul(Rm, pc.R); pc.T = [t[0] + C[0] - RC[0], t[1] + C[1] - RC[1], t[2] + C[2] - RC[2]]; refresh(S, i); });
     S.ang[mv.p] = normAng(S.ang[mv.p] + mv.a);
     S.hist.push(mv); return true;
   }
@@ -211,12 +280,12 @@
     for (const pc of S.pieces) {
       for (let k = 0; k < pc.home.length; k++) {
         const f = pc.home[k], w = pc.W[k];
-        for (const p of w) for (let q = 0; q < FN.length; q++) if (dot(FN[q], p) > FD + 1e-5) return false;          // inside the original solid
+        for (const p of w) for (let q = 0; q < FN.length; q++) if (dot(FN[q], p) > (cfg.faceDs ? cfg.faceDs[q] : FD) + 1e-5) return false;          // inside the original solid
         if (f.tag < 0) continue;
         const nrm = app(pc.R, FN[f.tag]);
         let fi = -1; for (let q = 0; q < FN.length; q++) if (Math.abs(nrm[0] - FN[q][0]) + Math.abs(nrm[1] - FN[q][1]) + Math.abs(nrm[2] - FN[q][2]) < 1e-4) fi = q;
         if (fi < 0) return false;
-        for (const p of w) if (Math.abs(dot(FN[fi], p) - FD) > 1e-5) return false;
+        for (const p of w) if (Math.abs(dot(FN[fi], p) - (cfg.faceDs ? cfg.faceDs[fi] : FD)) > 1e-5) return false;
         if (col[fi] === undefined) col[fi] = f.tag; else if (col[fi] !== f.tag) return false;
       }
     }
@@ -224,11 +293,30 @@
   }
   // a long run of random half turns first (they keep the cube shape; never the same plane twice in a row), then a random number (1-4) of jumbling turns of 70.53 degrees:
   // each one is only made on a plane that is free at that moment (locked planes are detected and skipped), so the result is always reachable and solvable backwards
+  // fully functional cuboid: first turns that keep the shape (a layer with a square section by 90 or 180 degrees, a rectangular one by 180 degrees), at the end a few 90 degree turns of
+  // rectangular layers that deform it (only turns that keep the cells joined)
+  function scrambleFF(S, cnt, rnd) {
+    const mvs = [], pls = S.cfg.planes, NPL = pls.length; let last = -1; if (!NPL) return mvs;
+    for (let i = 0; i < cnt; i++) {
+      let p; do { p = Math.floor(rnd() * NPL); } while (p === last && NPL > 1);
+      last = p; const mv = { p: p, a: pls[p].square ? [Math.PI / 2, -Math.PI / 2, Math.PI][Math.floor(rnd() * 3)] : Math.PI };
+      if (apply(S, mv)) mvs.push(mv);
+    }
+    const rect = []; pls.forEach((pl, i) => { if (!pl.square) rect.push(i); });
+    let nj = rect.length ? 1 + Math.floor(rnd() * 3) : 0;
+    for (let tries = 0; nj > 0 && tries < 60; tries++) {
+      const p = rect[Math.floor(rnd() * rect.length)]; if (p === last && rect.length > 1) continue;
+      const mv = { p: p, a: rnd() < 0.5 ? Math.PI / 2 : -Math.PI / 2 };
+      if (apply(S, mv)) { mvs.push(mv); last = p; nj--; }
+    }
+    return mvs;
+  }
   function scramble(S, cnt, rnd, jum) {
+    if (S.cfg.shape === 'cuboidff') return scrambleFF(S, cnt, rnd);
     const mvs = []; let last = -1; const NPL = S.cfg.planes.length; if (!NPL) return mvs;
     for (let i = 0; i < cnt; i++) {
       let p; do { p = Math.floor(rnd() * NPL); } while (p === last && NPL > 1);
-      last = p; const mv = { p: p, a: S.cfg.noJumble ? (1 + Math.floor(rnd() * 4)) * 2 * Math.PI / 5 : Math.PI };
+      last = p; const mv = { p: p, a: S.cfg.noJumble ? (1 + Math.floor(rnd() * (S.cfg.step ? 3 : 4))) * (S.cfg.step || 2 * Math.PI / 5) : Math.PI };
       if (apply(S, mv)) mvs.push(mv);
     }
     let nj = S.cfg.noJumble ? 0 : jum === undefined ? 1 + Math.floor(rnd() * 4) : jum;

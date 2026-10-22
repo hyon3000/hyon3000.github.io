@@ -67,7 +67,7 @@
         const lo = sc(bd.lo), hi = sc(bd.hi), members = [], inb = new Uint8Array(N);
         for (let i = 0; i < N; i++) {
           const p = V.dot(st[i].c, ax);
-          const inside = p > lo && p <= hi;
+          const inside = bd.fn ? !!bd.fn(spec.stickers[i], i) : (p > lo && p <= hi);          // bd.fn: a layer given by a rule instead of a slab
           if (inside) { members.push(i); inb[i] = 1; }
           // no sticker may be cut by a plane
           let mn = 1e9, mx = -1e9;
