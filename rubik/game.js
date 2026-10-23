@@ -190,7 +190,25 @@
     const P = G.P; CS.lastMs = ms;
     const moves = P.parseAlg(alg), sigs = []; let c = CS.reqCol;
     moves.forEach((m) => { sigs.push(sigOf(c)); c = P.apply(c, P.moveOf(m.b, m.d)); });
+    if (!P.isSolved(c)) orientFix(P, c).forEach((m) => { sigs.push(sigOf(c)); moves.push(m); c = P.apply(c, P.moveOf(m.b, m.d)); });
     CS.plan = moves; CS.sigs = sigs; CS.planAlg = alg;
+  }
+  // The two-phase solver leaves the centres where they are; when the middle layers were turned the solved cube may stand in another orientation than the puzzle calls solved
+  // (penrose, pandora): turn the whole cube (every layer of one axis together) until it is solved, shortest first
+  function orientFix(P, c0) {
+    const acts = []; P.lines.forEach((ln, li) => { const bs = P.bands.filter((b) => b.line === li).map((b) => b.idx); [1, -1].forEach((d) => acts.push(bs.map((b) => ({ b: b, d: d })))); });
+    const seen = new Set([sigOf(c0)]); let layer = [{ c: c0, path: [] }];
+    for (let depth = 0; depth < 5 && layer.length; depth++) {
+      const next = [];
+      for (const st of layer) for (const a of acts) {
+        let c = st.c; a.forEach((m) => { c = P.apply(c, P.moveOf(m.b, m.d)); });
+        const sg = sigOf(c); if (seen.has(sg)) continue; seen.add(sg);
+        const path = st.path.concat(a); if (P.isSolved(c)) return path;
+        next.push({ c: c, path: path });
+      }
+      layer = next;
+    }
+    return [];
   }
   function cubeNext() {
     const P = G.P, sig = sigOf(G.col);
