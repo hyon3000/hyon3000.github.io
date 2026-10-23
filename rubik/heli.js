@@ -2,28 +2,31 @@
 // scramble with half turns, auto solve (replays the history backwards) and hint.
 (function () {
   'use strict';
-  const KO = /^ko/i.test(navigator.language || 'ko'), HC = window.HELI, DEG = Math.PI / 180, DC = 6.5;
+  const KO = /^ko/i.test(navigator.language || 'ko'), HC = window.HELI, DEG = Math.PI / 180, HALFPI = Math.PI / 2, DC = 6.5;
   const QN = new URLSearchParams(location.search).get('n'), NN = QN !== null && isFinite(+QN) ? Math.max(1, Math.floor(+QN)) : 3;     // size n of the edge-turning cube (2 = Little Chop, 3 = Helicopter Cube)
-  const SH = (function () { const q = new URLSearchParams(location.search).get('s'); return q === 'tetra' || q === 'octa' || q === 'dodeca' || q === 'dodecaet' || q === 'icosaet' || q === 'octact' || q === 'icosact' || q === 'dodecaft' || q === 'cuboidff' || q === 'cuboidx' || q === 'starft' || q === 'starct' || q === 'skewbult' || q === 'qjdodeca' || q === 'cubemix' || q === 'cubefisher' || q === 'ccclover' || q === 'cccurvy' || q === 'cubewindmill' || q === 'cubemirror' ? q : 'cube'; })();           // the solid: the cube (ET: edge turning) or the tetrahedron (ET)
-  const ABC = (new URLSearchParams(location.search).get('abc') || '1,1,2').split(',').map((x) => Math.max(1, Math.floor(+x) || 1)), ISCUB = SH === 'cuboidff' || SH === 'cuboidx', NX = ISCUB ? ABC : NN;          // the extended cuboid: sizes a,b,c
+  const SH = (function () { const q = new URLSearchParams(location.search).get('s'); return q === 'tetra' || q === 'octa' || q === 'dodeca' || q === 'dodecaet' || q === 'icosaet' || q === 'octact' || q === 'icosact' || q === 'dodecaft' || q === 'cuboidff' || q === 'cuboidx' || q === 'starft' || q === 'starct' || q === 'skewbult' || q === 'qjdodeca' || q === 'cubemix' || q === 'cubefisher' || q === 'ccclover' || q === 'cccurvy' || q === 'cubewindmill' || q === 'cubemirror' || q === 'cubeaxis' || q === 'cubefused' || q === 'cubeshared' ? q : 'cube'; })();           // the solid: the cube (ET: edge turning) or the tetrahedron (ET)
+  const ABC = (new URLSearchParams(location.search).get('abc') || '1,1,2').split(',').map((x) => Math.max(1, Math.floor(+x) || 1)), ISCUB = SH === 'cuboidff' || SH === 'cuboidx', ISFZ = SH === 'cubefused', ISSH = SH === 'cubeshared', FZ = new URLSearchParams(location.search).get('fz') || (ISSH ? '2.2.2' : '1.1.1.2.2.2'), FZN = ISSH ? FZ.split('_').reduce((a, g) => a.concat(g.split('.').map((x) => Math.round(+x) || 0)), []) : FZ.split('_').reduce((a, g) => { const v = g.split('.').map((x) => parseFloat(x.replace(/p/g, '.'))); return a.concat([(v[0] - 1 + v[3]) / 2, (v[1] - 1 + v[4]) / 2, (v[2] - 1 + v[5]) / 2, v[3] - v[0] + 1, v[4] - v[1] + 1, v[5] - v[2] + 1]); }, []), NX = ISFZ || ISSH ? [NN].concat(FZN) : ISCUB ? ABC : NN;          // the fused cube: n and the fused blocks (cx.cy.cz.lx.ly.lz joined by _, a decimal point is written p)          // the extended cuboid: sizes a,b,c
   const NP = ISCUB || NN >= 2 ? HC.config(NX, SH).planes.length : 0;
   const JANG = SH === 'tetra' || ISCUB ? '90' : SH === 'dodeca' || SH === 'dodecaft' ? '72' : (SH === 'dodecaet' || SH === 'icosaet') ? '' : (SH === 'octact' || SH === 'icosact') ? '180' : '70.53';
   const cv = document.getElementById('app'), ctx = cv.getContext('2d');
   const TX = KO ? { name: SH === 'cuboidx' ? ABC.join('×') + ' 익스텐디드 큐보이드' : SH === 'cuboidff' ? ({ '1,1,2': '얼간이큐브', '1,3,3': '플로피큐브', '2,2,3': '슬림타워(2*2*3)', '2,2,4': '슬림타워(2*2*4)' }[ABC.join(',')] || ABC.join('×') + ' 풀리펑셔널 큐보이드') : SH === 'dodecaft' ? '정십이면체FT (n=' + NN + ')' : SH === 'octact' ? '정팔면체CT (n=' + NN + ')' : SH === 'icosact' ? '정이십면체CT (n=' + NN + ')' : SH === 'dodecaet' ? (NN === 2 ? '빅촙' : '정십이면체ET (n=' + NN + ')') : SH === 'icosaet' ? '정이십면체ET (n=' + NN + ')' : SH === 'dodeca' ? '정십이면체FT-Deepcut (n=' + NN + ')' : SH === 'octa' ? '정팔면체ET (n=' + NN + ')' : SH === 'tetra' ? (NN === 2 ? '피라몰픽스' : '정사면체ET (n=' + NN + ')') : NN === 2 ? '리틀촙' : NN === 3 ? '헬리콥터큐브' : '정육면체ET (n=' + NN + ')', moves: '이동', time: '시간', best: '최고', solved: '완성!', newRec: '신기록!', again: '새 게임 (F2)', locked: '조각이 걸려 있어 이 면은 돌릴 수 없습니다', detach: '내부면 결합이 끊겨 본체가 갈라지므로 돌릴 수 없습니다', cover: '스티커 면이 다른 셀의 내부(검은) 면에 닿게 되어 돌릴 수 없습니다', stuck: '이 층은 90도로 돌리면 걸립니다 (180도만 가능)', none: '이 조각은 돌릴 수 있는 면이 없습니다', next: '다음 수', hintTxt: '빈 곳을 끌면 시점 회전 · 조각을 끌어 층 돌리기 · ' + (SH === 'cuboidff' ? '회전축은 층의 가운데를 지남. 모든 층이 90도로 돌지만 직사각형 층은 모양을 변형하고, 칸이 어긋나면 다른 층이 걸림(점블링). 내부면끼리의 결합으로 본체가 둘로 갈라지면 불가' : SH === 'dodeca' || SH === 'dodecaft' ? '72도씩 돌림' : '기본은 180도, ' + (JANG ? JANG + '도로' : '선이 맞는 각도로') + ' 돌리면 모양이 변형됨'), scr: '섞는 중...', free: '돌릴 수 있는 면' }
     : { name: SH === 'cuboidx' ? ABC.join('×') + ' Extended Cuboid' : SH === 'cuboidff' ? ({ '1,1,2': 'Boobcube', '1,3,3': 'Floppy Cube', '2,2,3': 'Slim Tower (2*2*3)', '2,2,4': 'Slim Tower (2*2*4)' }[ABC.join(',')] || ABC.join('×') + ' Fully Functional Cuboid') : SH === 'dodecaft' ? 'Dodecahedron FT (n=' + NN + ')' : SH === 'octact' ? 'Octahedron CT (n=' + NN + ')' : SH === 'icosact' ? 'Icosahedron CT (n=' + NN + ')' : SH === 'dodecaet' ? (NN === 2 ? 'Big Chop' : 'Dodecahedron ET (n=' + NN + ')') : SH === 'icosaet' ? 'Icosahedron ET (n=' + NN + ')' : SH === 'dodeca' ? 'Dodecahedron FT-Deepcut (n=' + NN + ')' : SH === 'octa' ? 'Octahedron ET (n=' + NN + ')' : SH === 'tetra' ? (NN === 2 ? 'Pyramorphix' : 'Tetrahedron ET (n=' + NN + ')') : NN === 2 ? 'Little Chop' : NN === 3 ? 'Helicopter Cube' : 'Cube ET (n=' + NN + ')', moves: 'Moves', time: 'Time', best: 'Best', solved: 'SOLVED!', newRec: 'New best!', again: 'New game (F2)', locked: 'A piece is in the way - this prism is locked', detach: 'The turn would split the body (inner-face bonds break) - not possible', cover: 'A sticker face would touch an inner face - not possible', stuck: 'This layer jams at 90 degrees (only 180 degrees)', none: 'This piece has no free prism to turn', next: 'Next move', hintTxt: 'Drag empty space to rotate the view · drag a piece to turn its layer · ' + (SH === 'cuboidff' ? 'every axis goes through the middle of the layer; every layer turns by 90 degrees, a rectangular one deforms the shape and if the cells end up off the lattice the other layers jam (jumbling); a turn that splits the body in two (only inner-against-inner faces hold it together) is not possible' : SH === 'dodeca' || SH === 'dodecaft' ? 'turns of 72 degrees' : '180 degrees normally, ' + (JANG ? 'a ' + JANG + ' degree turn' : 'a turn that lines the cuts up') + ' deforms the shape'), scr: 'Scrambling...', free: 'Free prisms' };
-  const SPN = { starft: ['정십이면체FT-starminx', 'Dodecahedron FT-starminx', '스타밍크스 FT', 'Starminx FT'], starct: ['정십이면체CT-starminx', 'Dodecahedron CT-starminx', '스타밍크스 CT', 'Starminx CT'], skewbult: ['정십이면체FT-skewb ultimate', 'Dodecahedron FT-skewb ultimate', '스큐브 얼티밋', 'Skewb Ultimate'], qjdodeca: ['정십이면체FT-QJ', 'Dodecahedron FT-QJ', 'QJ 정십이면체', 'QJ Dodecahedron'], cubemix: ['정육면체FT-mixup', 'Cube FT-mixup', '믹스업큐브', 'Mixup Cube'], cubefisher: ['정육면체FT-fisher', 'Cube FT-fisher', '피셔큐브', 'Fisher Cube'], cubewindmill: ['정육면체FT-windmill', 'Cube FT-windmill', '윈드밀큐브', 'Windmill Cube'], cubemirror: ['정육면체FT-mirror', 'Cube FT-mirror', '미러큐브', 'Mirror Cube'] }[SH];          // the special solids; n = 2 (mixup / fisher cube: n = 3) is the named original
-  const SPN0 = { starft: 2, starct: 2, skewbult: 2, qjdodeca: 2, cubemix: 3, cubefisher: 3, cubewindmill: 3, cubemirror: 3 }[SH];
+  const SPN = { starft: ['정십이면체FT-starminx', 'Dodecahedron FT-starminx', '스타밍크스FT', 'Starminx FT'], starct: ['정십이면체CT-starminx', 'Dodecahedron CT-starminx', '스타밍크스CT', 'Starminx CT'], skewbult: ['정십이면체FT-skewb ultimate', 'Dodecahedron FT-skewb ultimate', '스큐브얼티밋', 'Skewb Ultimate'], qjdodeca: ['정십이면체FT-QJ', 'Dodecahedron FT-QJ', '큐제이', 'QJ Dodecahedron'], cubemix: ['정육면체FT-mixup', 'Cube FT-mixup', '믹스업큐브', 'Mixup Cube'], cubefisher: ['정육면체FT-fisher', 'Cube FT-fisher', '피셔큐브', 'Fisher Cube'], cubewindmill: ['정육면체FT-windmill', 'Cube FT-windmill', '윈드밀큐브', 'Windmill Cube'], cubemirror: ['정육면체FT-mirror', 'Cube FT-mirror', '미러큐브', 'Mirror Cube'], cubeaxis: ['정육면체CT-axis', 'Cube CT-axis', '액시스큐브', 'Axis Cube'], cubefused: ['정육면체CT-fused', 'Cube CT-fused', '퓨즈드큐브', 'Fused Cube'], cubeshared: ['정육면체CT-shared', 'Cube CT-shared', '쉐어드큐브', 'Shared Cube'] }[SH];          // the special solids; n = 2 (mixup / fisher cube: n = 3) is the named original
+  const SPN0 = { starft: 2, starct: 2, skewbult: 2, qjdodeca: 2, cubemix: 3, cubefisher: 3, cubewindmill: 3, cubemirror: 3, cubeaxis: 3, cubefused: 3, cubeshared: 3 }[SH];
   if (SPN) {
-    TX.name = NN === SPN0 ? SPN[KO ? 2 : 3] : SPN[KO ? 0 : 1] + ' (n=' + NN + ')';
+    TX.name = (SH === 'cubefused' ? NN === 3 && FZ === '1.1.1.2.2.2' : SH === 'cubeshared' ? NN === 3 && FZ === '2.2.2' : NN === SPN0) ? SPN[KO ? 2 : 3] : SPN[KO ? 0 : 1] + ' (n=' + NN + (SH === 'cubefused' ? ', ' + FZ.split('_').map((g) => '(' + g.split('.').map((x) => x.replace(/p/g, '.')).join(',') + ')').join('') : SH === 'cubeshared' ? ', ' + FZ.split('_').map((g) => '(' + g.split('.').join(',') + ')').join('') : '') + ')';
     const hn = { starft: ['면을 끌어 72도씩 돌립니다', 'drag a face to turn it by 72 degrees'], starct: ['꼭짓점 쪽 조각을 끌어 120도씩 돌립니다', 'drag a corner to turn it by 120 degrees'], skewbult: ['조각을 끌어 퍼즐의 절반을 120도씩 돌립니다', 'drag a piece to turn half of the puzzle by 120 degrees'],
       qjdodeca: ['층을 90도 단위로 돌릴 수 있고 모양이 변형됩니다 (점블링: 선이 어긋나면 다른 층이 걸림)', 'layers turn in steps of 90 degrees and deform the solid (jumbling: layers jam when the cuts do not line up)'], cubemix: ['안쪽 층이 √2배 두꺼워 45도 단위로 돌릴 수 있고 선이 어긋나면 다른 층이 걸립니다 (점블링)', 'the inner layers are sqrt2 thicker, so layers turn in steps of 45 degrees; layers jam when the cuts do not line up (jumbling)'],
+      cubeshared: ['두 큐브가 겹친 칸의 조각을 함께 씁니다 · 겹친 칸이 겹친 칸으로 가는 돌림만 가능', 'two cubes share the pieces of their overlap · only turns that keep the shared cells shared'],
+      cubefused: ['몇 칸이 한 덩어리로 붙어 있어서, 그 덩어리를 가르는 층은 돌릴 수 없고 덩어리 전체를 감싸는 여러 층을 한꺼번에 돌릴 수 있습니다', 'some cells are fused into one piece: a layer that would cut the piece cannot turn, but the layers that hold it as a whole turn together'],
+      cubeaxis: ['보통 3x3 기구에 바깥 큐브가 몸대각선을 축으로 60도 돌아가 있어 층을 돌릴 때마다 모양이 변합니다. 45도 단위로도 돌 수 있고(점블링) 90도가 아니면 조각이 다른 층을 가로질러 그 층들이 걸립니다', 'an ordinary cube mechanism inside an outer cube turned by 60 degrees about the body diagonal: the shape changes with every layer turn; a layer also turns in 45 degree steps (jumbling) and when it is not at a multiple of 90 degrees its pieces cut the other layers, which jam'],
       cubemirror: ['층 두께가 1 : 2 : … : 2 : 3으로 달라 돌릴 때마다 모양이 변합니다. 모든 면이 회색이므로 다시 정육면체가 되면 완성입니다', 'the layers have the thicknesses 1 : 2 : ... : 2 : 3, so the shape changes with every turn; every face is grey, the cube is solved when it is a cube again'],
       cubewindmill: ['세로 절단면이 풍차 모양(약 33.7도 기울기)으로 놓여 옆면은 한쪽 칸 폭이 0이고 반대쪽이 두 배이며 모양이 변형됩니다 (점블링)', 'the vertical cuts form a pinwheel (tilted by about 33.7 degrees): on a side face one cell has no width and the opposite one is twice as wide; the cube deforms (jumbling)'],
       cubefisher: ['세로 절단면이 45도 돌려져 있어 세로 층은 면 대각선 축으로 돌며 모양이 변형됩니다 (점블링)', 'the vertical cuts are turned by 45 degrees: the vertical layers turn about the face diagonals and deform the cube (jumbling)'] }[SH];
     TX.hintTxt = (KO ? '빈 곳을 끌면 시점 회전 · 조각을 끌어 층 돌리기 · ' : 'Drag empty space to rotate the view · drag a piece to turn its layer · ') + hn[KO ? 0 : 1];
   }
   if (SH === 'ccclover' || SH === 'cccurvy') TX.name = NN === 2 ? (SH === 'ccclover' ? (KO ? '클로바큐브' : 'Clover Cube') : (KO ? '커비큐브' : 'Curvy Cube')) : (KO ? '정육면체ET-' : 'Cube ET-') + (SH === 'ccclover' ? 'clover' : 'curvy') + ' (n=' + NN + ')';
-  const COL = HC.config(ISCUB ? NX : Math.max(2, NN), SH).colours, INNER = '#0a0d14';     // tag = face of the solid
+  const COL = HC.config(ISCUB || ISFZ || ISSH ? NX : Math.max(2, NN), SH).colours, INNER = '#0a0d14';     // tag = face of the solid
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
   function fmtTime(s) { const m = Math.floor(s / 60), r = s - m * 60; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1); }
@@ -31,22 +34,46 @@
   function ease(t) { return t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t); }
   const G = { S: HC.create(NX, SH), moves: 0, time: 0, started: false, mode: 'play', vis: null, queue: [], auto: false, hint: null, msg: '', msgT: 0, animScr: lsGet('rubik_anim') !== '0', autoScr: lsGet('rubik_autoscr') !== '0', best: null, newRec: false, cheated: false };
   const V = { yaw: 0.6, pitch: 0.5, M: null, drag: null, cw: 0, ch: 0, dpr: 1, piece: null };
-  const BEST_KEY = (SH === 'ccclover' || SH === 'cccurvy' || SPN ? SH + '_best_' : SH === 'tetra' ? 'tetraet_best_' : SH === 'octa' ? 'octaet_best_' : SH === 'dodeca' ? 'dodecadc_best_' : SH === 'dodecaet' ? 'dodecaet_best_' : SH === 'icosaet' ? 'icosaet_best_' : SH === 'dodecaft' ? 'dodecaft_best_' : ISCUB ? SH + '_best_' + ABC.join('x') + '_' : SH === 'octact' ? 'octact_best_' : SH === 'icosact' ? 'icosact_best_' : 'heli_best_') + NN;
+  const BEST_KEY = (SH === 'cubefused' ? 'cubefused_best_' + FZ + '_' : SH === 'cubeshared' ? 'cubeshared_best_' + NN + '_' + FZ + '_' : SH === 'ccclover' || SH === 'cccurvy' || SPN ? SH + '_best_' : SH === 'tetra' ? 'tetraet_best_' : SH === 'octa' ? 'octaet_best_' : SH === 'dodeca' ? 'dodecadc_best_' : SH === 'dodecaet' ? 'dodecaet_best_' : SH === 'icosaet' ? 'icosaet_best_' : SH === 'dodecaft' ? 'dodecaft_best_' : ISCUB ? SH + '_best_' + ABC.join('x') + '_' : SH === 'octact' ? 'octact_best_' : SH === 'icosact' ? 'icosact_best_' : 'heli_best_') + NN;
   try { G.best = JSON.parse(lsGet(BEST_KEY) || 'null'); } catch (e) { G.best = null; }
   function say(t, s) { G.msg = t; G.msgT = (s || 2.4); }
-  function setAuto(on) { G.auto = !!on; try { window.parent.postMessage({ rb: 'autoState', on: G.auto }, '*'); } catch (e) {} }
+  function setAuto(on) { G.auto = !!on; if (!on) NT.plan(''); try { window.parent.postMessage({ rb: 'autoState', on: G.auto }, '*'); } catch (e) {} }
 
   /* ---------- moves ---------- */
   // G.vis = the visual extra rotation x (about the axis of plane p) of the pieces in set, on top of the state; it relaxes to 0
-  function startMove(mv, src, dur) {
-    const set = HC.members(G.S, mv.p); if (!set) { if (src === 'user') say(TX.locked); return false; }
+  let NB = null;
+  const NT = window.RBNotation.panel(function (text) { return runNotation(text); });
+  function makeNB(S) {          // the notation of the puzzle: layers of a box (R U F ...), or what the axes go through (face, edge, corner)
+    const R = window.RBNotation, pl = S.cfg.planes, R2 = Math.SQRT1_2, ST = SH === 'dodeca' || SH === 'dodecaft' || SH === 'starft' ? 2 * Math.PI / 5 : SH === 'starct' || SH === 'skewbult' ? 2 * Math.PI / 3 : SH === 'cube' || SH === 'octa' || SH === 'dodecaet' || SH === 'icosaet' || SH === 'octact' || SH === 'icosact' || SH === 'ccclover' || SH === 'cccurvy' ? Math.PI : HALFPI;
+    let nb = null;
+    if (SH === 'cubeshared') nb = R.sharedBox(pl, S.cfg.n);
+    else if (SH === 'cubewindmill') nb = R.heliBox(pl, [[3, 0, -2], [0, 1, 0], [2, 0, 3]].map((v) => { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; }));
+    else if (SH === 'cubefisher') nb = R.heliBox(pl, [[R2, 0, R2], [0, 1, 0], [-R2, 0, R2]]);
+    else if (SH === 'ccclover' || SH === 'cccurvy' || SH === 'cube' || SH === 'octa' || SH === 'dodeca' || SH === 'dodecaft' || SH === 'dodecaet' || SH === 'icosaet' || SH === 'octact' || SH === 'icosact' || SH === 'starft' || SH === 'starct' || SH === 'skewbult') nb = null;
+    else nb = R.heliBox(pl);
+    if (!nb) nb = R.heliGeo(pl, S.cfg.faceN, () => ST, SH === 'skewbult' ? 'skewb' : '');
+    return nb;
+  }
+  function ordOf(p) { return NB && NB.order ? NB.order(p) : 4; }
+  function moveText(mv) {
+    if (NB && NB.nameSteps) { const B = NB.stepOf(mv.p), k = Math.round(mv.a / B); if (NB.has(mv.p) && k && Math.abs(mv.a - k * B) < 1e-4) { const nm = NB.nameSteps(mv.p, k); if (nm) return nm; } return desc(mv); }
+    const k = Math.round(mv.a / (HALFPI / 2));
+    if (NB && NB.has(mv.p) && Math.abs(mv.a - k * HALFPI / 2) < 1e-4) {
+      if (k % 2) return NB.nameFine(mv.p, NB.dOf(mv.p, k > 0 ? 1 : -1)) || desc(mv);
+      const r = ((k / 2 % 4) + 4) % 4; if (r) return NB.name(mv.p, NB.dOf(mv.p, r === 3 ? -1 : 1), r === 2 ? 2 : 1);
+    }
+    return desc(mv);
+  }
+  function startMove(mv, src, dur, txt) {
+    const set = HC.members(G.S, mv.p); if (!set) { if (src === 'user' || src === 'nota') say(TX.locked); return false; }
     const x0 = (G.vis && G.vis.live && G.vis.p === mv.p ? G.vis.x : 0) - mv.a;
     if (!HC.apply(G.S, mv)) { if (src === 'user') say(G.S.fail === 'detach' ? TX.detach : TX.locked); return false; }          // (a fully functional cuboid: the turn would cut a cell off)
     G.vis = { p: mv.p, set: set, x: x0, x0: x0, t: 0, dur: dur || 0.2 + 0.1 * Math.min(1, Math.abs(mv.a) / Math.PI), src: src };
-    if (src === 'user') { G.moves++; G.started = true; }
+    if (src === 'user' || src === 'nota') { G.moves++; G.started = true; }
+    if (src !== 'scr' && txt !== '') NT.push(txt || moveText(mv), ordOf(mv.p));
     return true;
   }
-  function enqueue(mv, src, dur) { G.queue.push({ mv: mv, src: src, dur: dur }); }
+  function enqueue(mv, src, dur, txt) { G.queue.push({ mv: mv, src: src, dur: dur, txt: txt }); }
   function busy() { return (G.vis && !G.vis.live) || G.queue.length; }
   function userMove(mv) {
     if (G.mode === 'solved') return false;
@@ -72,9 +99,9 @@
     const v = G.vis;
     if (v && !v.live) {
       v.t += dt; const e = 1 - ease(Math.min(1, v.t / v.dur)); v.x = v.x0 * e;
-      if (v.t >= v.dur) { G.vis = null; if (v.src !== 'scr') checkSolved(); }
+      if (v.t >= v.dur) { G.vis = null; if (v.src !== 'scr' && !(v.src === 'nota' && G.queue.length)) checkSolved(); }
     }
-    if (!G.vis && G.queue.length && G.mode !== 'solved') { const q = G.queue.shift(); startMove(q.mv, q.src, q.dur); }
+    if (!G.vis && G.queue.length && G.mode !== 'solved') { const q = G.queue.shift(); startMove(q.mv, q.src, q.dur, q.txt); }
     if (!G.vis && !G.queue.length) {
       if (G.mode === 'scramble') G.mode = 'play';
       else if (G.mode === 'play') {
@@ -85,7 +112,7 @@
   }
   function newGame(opt) {
     opt = opt || {};
-    G.S = HC.create(NX, SH); G.moves = 0; G.time = 0; G.started = false; G.vis = null; V.piece = null; G.queue = []; G.hint = null; G.cheated = false; G.newRec = false; setAuto(false);
+    G.S = HC.create(NX, SH); NB = makeNB(G.S); NT.enable(!!NB, NB && NB.example); NT.clear(); G.moves = 0; G.time = 0; G.started = false; G.vis = null; V.piece = null; G.queue = []; G.hint = null; G.cheated = false; G.newRec = false; setAuto(false);
     if (ISCUB ? !G.S.cfg.planes.length : NN < 2) { G.mode = 'solved'; return; }                    // n = 1: nothing is cut, the cube is solved at once
     const cnt = SPN && { starft: 1, starct: 1, skewbult: 1, qjdodeca: 1 }[SH] ? Math.min(140, { starft: 50, starct: 45, skewbult: 30, qjdodeca: 40 }[SH] + 15 * (NN - 2) + Math.floor(rnd() * 6)) : ISCUB ? Math.min(90, 12 + 3 * (ABC[0] + ABC[1] + ABC[2]) + Math.floor(rnd() * 6)) : Math.min(90, 22 + 7 * (NN - 3 < 0 ? 0 : NN - 3) + Math.floor(rnd() * 6));
     if (!G.autoScr) { G.mode = 'play'; return; }          // no automatic scramble: the player scrambles it; a solved state does not count before the first move
@@ -280,11 +307,11 @@
     for (let p = 0; p < NP; p++) {
       if (!HC.inCap(S, pk.piece, p)) continue;
       m.push(p);
-      const ax = S.cfg.planes[p].axis, r = pk.point, T = [ax[1] * r[2] - ax[2] * r[1], ax[2] * r[0] - ax[0] * r[2], ax[0] * r[1] - ax[1] * r[0]], tl = Math.hypot(T[0], T[1], T[2]);
+      const ax = S.cfg.planes[p].axis, cc = S.cfg.planes[p].center || [0, 0, 0], r = pk.point, T = [ax[1] * (r[2] - cc[2]) - ax[2] * (r[1] - cc[1]), ax[2] * (r[0] - cc[0]) - ax[0] * (r[2] - cc[2]), ax[0] * (r[1] - cc[1]) - ax[1] * (r[0] - cc[0])], tl = Math.hypot(T[0], T[1], T[2]);
       if (tl < 0.25) continue;
       const e = 0.02, a = sp2(r), b = sp2([r[0] + T[0] * e, r[1] + T[1] * e, r[2] + T[2] * e]), tx = (b[0] - a[0]) / e, ty = (b[1] - a[1]) / e, ml = Math.hypot(tx, ty) || 1;
       const cs = Math.abs(dx * tx + dy * ty) / (Math.hypot(dx, dy) * ml) * Math.min(1, ml / 60);
-      if (cs > bs || bestP < 0 && cs > 0.2) { bs = Math.max(bs, cs); bestP = p; bt = { tx: tx, ty: ty, ml: ml }; }
+      if (cs > bs + 1e-9 || bestP < 0 && cs > 0.2 || (bestP >= 0 && Math.abs(cs - bs) <= 1e-9 && HC.isFree(S, p) && !HC.isFree(S, bestP))) { bs = Math.max(bs, cs); bestP = p; bt = { tx: tx, ty: ty, ml: ml }; }          // equally good planes (a single layer and a wide slab): the one that can turn
     }
     return { p: bestP, cand: m, t: bt };
   }
@@ -340,7 +367,25 @@
 
   /* ---------- exports for the shell ---------- */
   window.newGame = function () { newGame(); };
-  window.toggleAuto = function () { if (G.mode === 'solved') return false; setAuto(!G.auto); return G.auto; };
+  window.toggleAuto = function () { if (G.mode === 'solved') return false; setAuto(!G.auto); if (G.auto) showPlan(); return G.auto; };
+  function showPlan() {
+    if (!NB) return; const h = G.S.hist, nm = [];
+    for (let i = h.length - 1; i >= 0; i--) { const iv = HC.inverse(h[i]); nm.push([moveText(iv), ordOf(iv.p)]); }
+    NT.plan(window.RBNotation.compact(nm));
+  }
+  function runNotation(text) {
+    if (!NB) return KO ? '이 퍼즐은 표기법을 지원하지 않습니다' : 'This puzzle has no notation';
+    if (G.mode === 'scramble' || G.vis || G.queue.length) return KO ? '움직이는 중입니다' : 'Busy';
+    let mv; try { mv = window.RBNotation.resolveAll(NB, text, true); } catch (e) { return e.message; }
+    if (!mv.length) return true;
+    if (G.mode === 'solved') { G.mode = 'play'; G.moves = 0; G.time = 0; G.started = false; G.cheated = false; G.newRec = false; }
+    setAuto(false); G.hint = null; NT.plan('');
+    mv.forEach((m) => enqueue({ p: m.id, a: m.s !== undefined ? m.s * NB.stepOf(m.id) : NB.angOf(m.id, m.d) * (m.frac || 1) }, 'nota', mv.length > 12 ? 0.12 : 0.22, m.txt));
+    return true;
+  }
+  window.toggleNotation = function () { return NB ? NT.toggleInput() : false; };
+  window.runNotation = runNotation;
+  window.__nb = function () { return NB; };
   window.giveHint = function () { if (G.mode !== 'play' || busy() || G.vis || G.hint) return; const nm = nextSolveMove(); if (!nm) return; G.hint = { t: 0, mv: nm }; };
   window.toggleScrambleAnim = function () { G.animScr = !G.animScr; lsSet('rubik_anim', G.animScr ? '1' : '0'); return G.animScr; };
   window.getScrambleAnim = function () { return G.animScr; };

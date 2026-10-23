@@ -31,14 +31,18 @@
   };
   const S = { cw: 0, ch: 0, dpr: 1, yaw: 0.5, pitch: 0.4, M: null, f: 1, cx: 0, cy: 0, down: null, drag: null, held: { l: 0, r: 0, u: 0, d: 0 }, rgb: [], btn: null, ptr: null };
   let sigCache = '';
+  let NB = null;                                          // notation box of the puzzle (null: not a box of layers)
+  const NT = window.RBNotation.panel(function (text) { return runNotation(text); });
 
   function nameOf(key) { return T.names[key] || PZ.nameOf(key, KO) || key; }
   function setTheme(key) {
     if (!PZ.META[key]) { const pk = PZ.parseKey(key); key = (pk && PZ.customKey(pk.topo, pk.abc || pk.n)) || 'cube'; }
     G.key = key; G.P = PZ.get(key); S.yaw = G.P.meta.view.yaw; S.pitch = G.P.meta.view.pitch; S.M = null;
     S.rgb = G.P.meta.colours.map(hex2rgb);
+    NB = window.RBNotation.discreteBox(G.P) || window.RBNotation.discreteGeo(G.P, key); NT.enable(!!NB, NB && NB.example); NT.clear();
     lsSet('rubik_theme', key);
     document.title = nameOf(key);
+    if (G.P.meta.solver === 'reduce4') reduce4Init();
     if (G.P.meta.solver === 'kociemba') cubeInit();          // the ordinary cube and every puzzle that uses its solver (penrose)
     if (key === 'tetra' || key === 'cube2') setTimeout(function () { try { G.P.initSolver(); } catch (e) {} }, 30);
     newGame();
@@ -46,15 +50,16 @@
 
   // ------------------------------------------------------------------ moves
   function sigOf(col) { return String.fromCharCode.apply(null, col); }
-  function enqueue(b, d, src, dur) { G.queue.push({ b: b, d: d, src: src, dur: dur }); }
+  function enqueue(b, d, src, dur, txt) { G.queue.push({ b: b, d: d, src: src, dur: dur, txt: txt }); }
   function userDur() { return 0.22; }
-  function applyNow(b, d, src) {
+  function applyNow(b, d, src, txt) {
     const P = G.P;
     G.col = P.apply(G.col, P.moveOf(b, d));
     P.histPush(G.hist, b, d);
     G.applied++;
-    if (src === 'user') { G.moves++; G.started = true; }
-    if (src !== 'scr') checkSolved();
+    if (src === 'user' || src === 'nota') { G.moves++; G.started = true; }
+    if (NB && src !== 'scr' && txt !== '') { const nm = txt || NB.name(b, d); if (nm) NT.push(nm, NB.order(b)); }
+    if (src !== 'scr' && !(src === 'nota' && G.queue.length)) checkSolved();
   }
   function checkSolved() {
     if (G.mode !== 'play' || !G.P.isSolved(G.col)) return;
@@ -81,7 +86,8 @@
   function newGame(o) {
     o = o || {};
     const P = G.P;
-    setAuto(false); G.queue = []; G.anim = null; G.hint = null; CS.plan = null;
+    setAuto(false); G.queue = []; G.anim = null; G.hint = null; CS.plan = null; R4.plan = null;
+    NT.clear();
     G.col = P.solvedCol.slice(); G.hist = []; G.moves = 0; G.time = 0; G.started = false; G.cheated = false; G.newRec = false; G.applied = 0;
     if (P.meta.trivial) { G.mode = 'solved'; return true; }          // easter egg (size 1): nothing to scramble, solved at once
     if (!G.autoScr) { G.mode = 'play'; return true; }          // no automatic scramble: the player scrambles it; a solved state does not count before the first move
@@ -100,13 +106,14 @@
   function setAuto(on) {
     if (G.auto === !!on) return;
     G.auto = !!on;
+    if (!on) NT.plan('');
     try { if (window.parent !== window) window.parent.postMessage({ rb: 'autoState', on: G.auto }, '*'); } catch (e) {}
   }
   window.toggleAuto = function () {
     if (G.mode !== 'play') return false;
     if (G.auto) { setAuto(false); return false; }
     if (G.P.isSolved(G.col)) return false;
-    G.hint = null; G.cheated = true; setAuto(true); return true;
+    G.hint = null; G.cheated = true; setAuto(true); G.planWant = true; return true;
   };
   window.giveHint = function () {
     if (G.mode !== 'play' || G.hint || G.anim || G.queue.length || G.P.isSolved(G.col)) return false;
@@ -118,6 +125,38 @@
   window.toggleAutoScramble = function () { G.autoScr = !G.autoScr; lsSet('rubik_autoscr', G.autoScr ? '1' : '0'); return G.autoScr; };
   window.getAutoScramble = function () { return G.autoScr; };
   window.setTheme = setTheme;
+  function runNotation(text) {
+    if (!NB) return KO ? '이 퍼즐은 표기법을 지원하지 않습니다' : 'This puzzle has no notation';
+    if (G.mode === 'scramble' || G.anim || G.queue.length) return KO ? '움직이는 중입니다' : 'Busy';
+    let mv;
+    try { mv = window.RBNotation.resolveAll(NB, text); } catch (e) { return e.message; }
+    if (!mv.length) return true;
+    if (G.mode === 'solved') { G.mode = 'play'; G.moves = 0; G.time = 0; G.started = false; G.cheated = false; G.newRec = false; }
+    setAuto(false); G.hint = null; NT.plan('');
+    mv.forEach((m) => enqueue(m.id, m.d, 'nota', mv.length > 12 ? 0.12 : 0.22, m.txt));
+    return true;
+  }
+  window.toggleNotation = function () { return NB ? NT.toggleInput() : false; };
+  window.runNotation = runNotation;
+  window.__nb = function () { return NB; };
+  // the whole solution from the present position as moves [{b,d}]; null when it cannot be known beforehand
+  function planMoves() {
+    const P = G.P, kind = P.meta.solver, out = [];
+    if (kind === 'reduce4') { if (R4.plan) { const i = R4.sigs.indexOf(sigOf(G.col)); if (i >= 0) return R4.plan.slice(i); } return null; }
+    if (kind === 'kociemba' && CS.plan) { const i = CS.sigs.indexOf(sigOf(G.col)); if (i >= 0) return CS.plan.slice(i); }
+    else if (kind === 'table') { let c = G.col.slice(); const T = P.initSolver(); for (let k = 0; k < 60 && !P.isSolved(c); k++) { const r = T.next(c); if (!r) return null; out.push(r); c = P.apply(c, P.moveOf(r.b, r.d)); } return out; }
+    else if (kind !== 'kociemba') { for (let i = G.hist.length - 1; i >= 0; i--) out.push({ b: G.hist[i].b, d: G.hist[i].k > 0 ? -1 : 1 }); return out; }
+    return null;
+  }
+  function showPlan() {
+    if (!NB) return; const pm = planMoves(); if (!pm) return;
+    NT.plan(window.RBNotation.compact(pm.map((m) => [NB.name(m.b, m.d), NB.order(m.b)])));
+  }
+  function compactNames(a) {
+    const out = [];
+    a.forEach((nm) => { const pr = nm.slice(-1) === "'", base = pr ? nm.slice(0, -1) : nm, q = pr ? 3 : 1, l = out[out.length - 1]; if (l && l.n === base) { l.q = (l.q + q) % 4; if (!l.q) out.pop(); } else out.push({ n: base, q: q }); });
+    return out.map((e) => e.n + (e.q === 2 ? '2' : e.q === 3 ? "'" : '')).join(' ');
+  }
 
   // ------------------------------------------------------------------ solvers
   // cube: Kociemba two-phase (vendor/cubejs) in a Web Worker; tables are built lazily in the worker, the page never freezes
@@ -167,6 +206,33 @@
     }
     return 'wait';
   }
+  // cube4: reduction solver (solver4.js) in a Web Worker; it knows nothing about the scramble, the whole plan comes back at once
+  const R4 = { worker: null, ready: false, failed: false, pending: false, plan: null, sigs: null, id: 0, reqCol: null };
+  function reduce4Init() {
+    if (R4.worker || R4.failed) return;
+    try {
+      R4.worker = new Worker('solver4-worker.js');
+      R4.worker.onmessage = function (ev) {
+        const m = ev.data;
+        if (m.cmd === 'init') R4.ready = true;
+        else if (m.cmd === 'solve' && m.id === R4.id) {
+          R4.pending = false; if (m.error || !m.plan) { R4.failed = true; return; }
+          const P = G.P, moves = m.plan.map((q) => ({ b: q[0], d: q[1] })), sigs = []; let c = R4.reqCol;
+          moves.forEach((q) => { sigs.push(sigOf(c)); c = P.apply(c, P.moveOf(q.b, q.d)); });
+          R4.plan = moves; R4.sigs = sigs;
+        }
+      };
+      R4.worker.onerror = function () { R4.failed = true; R4.worker = null; };
+      R4.worker.postMessage({ cmd: 'init' });
+    } catch (e) { R4.failed = true; R4.worker = null; }
+  }
+  function reduce4Next() {
+    if (R4.plan) { const i = R4.sigs.indexOf(sigOf(G.col)); if (i >= 0) return R4.plan[i]; }
+    if (R4.failed) return undefined;
+    if (!R4.ready) return 'wait';
+    if (!R4.pending) { R4.pending = true; R4.reqCol = G.col.slice(); R4.id++; R4.worker.postMessage({ cmd: 'solve', id: R4.id, col: Array.from(G.col) }); }
+    return 'wait';
+  }
   // next move toward the solution: {b,d} | 'wait' | null (solved)
   function nextSolveMove() {
     const P = G.P;
@@ -174,6 +240,7 @@
     const kind = P.meta.solver;
     if (kind === 'table') { const r = P.initSolver().next(G.col); if (r) return r; if (r === null) return null; }
     else if (kind === 'kociemba') { const r = cubeNext(); if (r !== undefined) return r; }
+    else if (kind === 'reduce4') { const r = reduce4Next(); if (r !== undefined) return r; }
     if (G.hist.length) { const e = G.hist[G.hist.length - 1]; return { b: e.b, d: e.k > 0 ? -1 : 1 }; }    // replay the moves backwards
     return null;
   }
@@ -185,9 +252,9 @@
     stepView(dt);
     if (G.anim) {
       G.anim.t += dt;
-      if (G.anim.t >= G.anim.dur) { const a = G.anim; G.anim = null; applyNow(a.b, a.d, a.src); }
+      if (G.anim.t >= G.anim.dur) { const a = G.anim; G.anim = null; applyNow(a.b, a.d, a.src, a.txt); }
     }
-    if (!G.anim && G.queue.length && G.mode !== 'solved') { const m = G.queue.shift(); G.anim = { b: m.b, d: m.d, src: m.src, t: 0, dur: m.dur || userDur() }; }
+    if (!G.anim && G.queue.length && G.mode !== 'solved') { const m = G.queue.shift(); G.anim = { b: m.b, d: m.d, src: m.src, txt: m.txt, t: 0, dur: m.dur || userDur() }; }
     if (!G.anim && !G.queue.length) {
       if (G.mode === 'scramble') {
         if (G.P.isSolved(G.col)) newGame({ instant: !G.animScramble }); else { G.mode = 'play'; }
@@ -199,7 +266,7 @@
           } else { G.hint.t += dt; if (G.hint.t >= 0.6) { const h = G.hint; G.hint = null; enqueue(h.b, h.d, 'hint', 0.3); } }
         } else if (G.auto) {
           const nm = nextSolveMove();
-          if (nm === null) setAuto(false); else if (nm !== 'wait') enqueue(nm.b, nm.d, 'auto', 0.25);
+          if (nm === null) setAuto(false); else if (nm !== 'wait') { if (G.planWant) { G.planWant = false; showPlan(); } enqueue(nm.b, nm.d, 'auto', 0.25); }
         }
       }
     }
@@ -323,7 +390,7 @@
     txt(line, cw / 2, ch * 0.04 + fs * 1.6, fs * 0.95, '#aab6d0');
     let msg = '';
     if (G.mode === 'scramble') msg = T.scr;
-    else if (G.hint && G.hint.phase === 'wait' || G.auto && G.P.meta.solver === 'kociemba' && !CS.plan) msg = (G.P.meta.solver === 'kociemba' && !CS.ready && !CS.failed) ? T.prep : T.wait;
+    else if (G.hint && G.hint.phase === 'wait' || G.auto && G.P.meta.solver === 'kociemba' && !CS.plan || G.auto && G.P.meta.solver === 'reduce4' && !R4.failed && !(R4.plan && R4.sigs.indexOf(sigOf(G.col)) >= 0)) msg = (G.P.meta.solver === 'kociemba' && !CS.ready && !CS.failed || G.P.meta.solver === 'reduce4' && !R4.ready && !R4.failed) ? T.prep : T.wait;
     if (msg) txt(msg, cw / 2, ch * 0.88, fs, '#ffd866');
     if (G.mode !== 'solved') { txt(T.hint, cw / 2, ch * 0.935, fs * 0.8, '#7f8aa3'); txt(T.keys, cw / 2, ch * 0.935 + fs * 1.15, fs * 0.8, '#68738b'); }
     if (G.mode === 'solved') {

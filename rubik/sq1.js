@@ -36,10 +36,35 @@
 
   /* ---------- moves ---------- */
   function ease(t) { return t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t); }
+  const NT = window.RBNotation.panel(function (text) { return runNotation(text); });
+  const NS = { toks: [], x: 0, y: 0 };          // the notation so far: finished tokens and the turns waiting for the next slice
+  function nsFlat(mv, st) {
+    if (mv.t === 'r') { if (mv.l === 0) st.x += mv.s; else st.y -= mv.s; return; }          // (bottom: positive = clockwise seen from below, as in the WCA notation)
+    const w = (v) => { v = ((v % SEC) + SEC) % SEC; return v > SEC / 2 ? v - SEC : v; };
+    if (st.x || st.y) { if (w(st.x) || w(st.y)) st.toks.push('(' + w(st.x) + ',' + w(st.y) + ')'); st.x = st.y = 0; }
+    st.toks.push('/');
+  }
+  function nsText(st) { const w = (v) => { v = ((v % SEC) + SEC) % SEC; return v > SEC / 2 ? v - SEC : v; }; return st.toks.concat(w(st.x) || w(st.y) ? ['(' + w(st.x) + ',' + w(st.y) + ')'] : []).join(' '); }
+  function nsReset() { NS.toks = []; NS.x = NS.y = 0; NT.raw(''); }
+  function runNotation(text) {
+    if (G.mode === 'scramble' || G.anim || G.queue.length) return KO ? '움직이는 중입니다' : 'Busy';
+    let seq; try { seq = window.RBNotation.parseSq1(text); } catch (e) { return e.message; }
+    if (!seq.length) return true;
+    if (G.mode === 'solved') { G.mode = 'play'; G.moves = 0; G.time = 0; G.started = false; G.cheated = false; G.newRec = false; }
+    setAuto(false); G.hint = null; NT.plan('');
+    seq.forEach((t) => { if (t.slice) enqueue({ t: 's', h: 0 }, 'nota'); else { if (t.x) enqueue({ t: 'r', l: 0, s: t.x }, 'nota'); if (t.y) enqueue({ t: 'r', l: 1, s: -t.y }, 'nota'); } });
+    return true;
+  }
+  function showPlan() {
+    const h = G.S.hist, st = { toks: [], x: 0, y: 0 };
+    for (let i = h.length - 1; i >= 0; i--) nsFlat(SQ.inverse(h[i]), st);
+    NT.plan(nsText(st));
+  }
   function startMove(mv, src, dur) {
-    if (!SQ.apply(G.S, mv)) { if (src === 'user') say(TX.illegal); return false; }
+    if (!SQ.apply(G.S, mv)) { if (src === 'user' || src === 'nota') { say(TX.illegal); if (src === 'nota') G.queue = []; } return false; }
+    if (src !== 'scr') { nsFlat(mv, NS); NT.raw(nsText(NS)); }
     G.anim = { mv: mv, src: src, dir: mv.dir || 1, t: 0, dur: dur || (mv.t === 's' ? 0.45 : 0.16 + 0.015 * Math.abs(mv.s)) };
-    if (src === 'user') { G.moves++; G.started = true; }
+    if (src === 'user' || src === 'nota') { G.moves++; G.started = true; }
     return true;
   }
   function enqueue(mv, src, dur) { G.queue.push({ mv: mv, src: src, dur: dur }); }
@@ -55,7 +80,7 @@
   function undo() { if (G.mode === 'solved' || G.anim || G.queue.length || !G.S.hist.length) return; startMove(SQ.inverse(G.S.hist[G.S.hist.length - 1]), 'undo'); }
   function desc(mv) { return mv.t === 's' ? TX.slice : (mv.l === 0 ? TX.top : TX.bottom) + ' ' + (mv.s > 0 ? '◀' : '▶') + Math.abs(mv.s); }
   function nextSolveMove() { const h = G.S.hist; return h.length ? SQ.inverse(h[h.length - 1]) : null; }
-  function setAuto(on) { G.auto = !!on; try { window.parent.postMessage({ rb: 'autoState', on: G.auto }, '*'); } catch (e) {} }
+  function setAuto(on) { G.auto = !!on; if (!on) NT.plan(''); try { window.parent.postMessage({ rb: 'autoState', on: G.auto }, '*'); } catch (e) {} }
   function checkSolved() {
     if (G.mode !== 'play' || !(G.started || G.cheated) || !SQ.isSolved(G.S)) return;
     G.S.hist = []; G.mode = 'solved'; setAuto(false);
@@ -67,7 +92,7 @@
   function update(dt) {
     if (G.mode === 'play' && G.started) G.time += dt;
     if (G.msgT > 0) G.msgT -= dt;
-    if (G.anim) { G.anim.t += dt; if (G.anim.t >= G.anim.dur) { const a = G.anim; G.anim = null; if (a.src !== 'scr') checkSolved(); } }
+    if (G.anim) { G.anim.t += dt; if (G.anim.t >= G.anim.dur) { const a = G.anim; G.anim = null; if (a.src !== 'scr' && !(a.src === 'nota' && G.queue.length)) checkSolved(); } }
     if (!G.anim && G.queue.length && G.mode !== 'solved') { const q = G.queue.shift(); startMove(q.mv, q.src, q.dur); }
     if (!G.anim && !G.queue.length) {
       if (G.mode === 'scramble') G.mode = 'play';
@@ -79,7 +104,7 @@
   }
   function newGame(opt) {
     opt = opt || {};
-    G.S = SQ.create(PN); G.sel = 0; G.moves = 0; G.time = 0; G.started = false; G.anim = null; G.queue = []; G.hint = null; G.cheated = false; G.newRec = false; setAuto(false);
+    G.S = SQ.create(PN); G.sel = 0; G.moves = 0; G.time = 0; G.started = false; G.anim = null; G.queue = []; G.hint = null; G.cheated = false; G.newRec = false; setAuto(false); nsReset();
     const cnt = Math.min(200, 16 + Math.round(1.3 * SEC));
     if (!G.autoScr) { G.mode = 'play'; return; }          // no automatic scramble: the player scrambles it; a solved state does not count before the first move
     if (G.animScr && !opt.instant) {
@@ -338,13 +363,16 @@
 
   /* ---------- exports for the shell ---------- */
   window.newGame = function () { newGame(); };
-  window.toggleAuto = function () { if (G.mode === 'solved') return false; setAuto(!G.auto); return G.auto; };
+  window.toggleAuto = function () { if (G.mode === 'solved') return false; setAuto(!G.auto); if (G.auto) showPlan(); return G.auto; };
+  window.toggleNotation = function () { return NT.toggleInput(); };
+  window.runNotation = runNotation;
   window.giveHint = function () { if (G.mode !== 'play' || G.anim || G.queue.length || G.hint) return; const nm = nextSolveMove(); if (!nm) return; if (nm.t === 'r') G.sel = nm.l; G.hint = { t: 0, mv: nm }; };
   window.toggleScrambleAnim = function () { G.animScr = !G.animScr; lsSet('rubik_anim', G.animScr ? '1' : '0'); return G.animScr; };
   window.getScrambleAnim = function () { return G.animScr; };
   window.toggleAutoScramble = function () { G.autoScr = !G.autoScr; lsSet('rubik_autoscr', G.autoScr ? '1' : '0'); return G.autoScr; };
   window.getAutoScramble = function () { return G.autoScr; };
   window.addEventListener('message', function (e) { const m = e.data; if (m && m.rbCmd && typeof window[m.rbCmd] === 'function') window[m.rbCmd](); });
+  NT.enable(true);
   window.__sq = { G: G, SQ: SQ, step: function (dt) { update(dt); }, LY: LY, V: V, out: function () { return lastOut; }, metrics: function (pk) { return pieceMetrics(pk); }, wom: function (x, y) { return worldOnMid(x, y); }, slice: function (h, dir) { doSlice(h, dir); }, tr: tr, proj: proj, hit: function (x, y) { return hitTest(x, y); } };
 
   let last = 0;

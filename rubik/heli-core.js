@@ -169,13 +169,14 @@
   const CCOL = ['#f2f2f2', '#d91e18', '#0fa34a', '#ffd400', '#ff7f0e', '#1f4fd8'], TCOL = ['#d91e18', '#0fa34a', '#1f4fd8', '#ffd400'];
   // special solids: Starminx FT / CT, Skewb Ultimate and QJ Dodecahedron (n = 2 is the original, n more layers) and the Mixup cube (cube FT-mixup, n layers: the outer layers are 1 wide, the inner ones sqrt2)
   // and the Fisher cube (cube FT-fisher, the vertical cuts turned by 45 degrees)
-  const SPEC = { starft: 1, starct: 1, skewbult: 1, qjdodeca: 1, cubemix: 1, cubefisher: 1, cubewindmill: 1, cubemirror: 1 };
-  function specialConfig(n, shape) {
-    const ck = shape + n; if (CFG[ck]) return CFG[ck];
-    const dod = shape !== 'cubemix' && shape !== 'cubefisher' && shape !== 'cubewindmill' && shape !== 'cubemirror', cuts = [], moves = [], vs = [], neg = (v) => v.map((x) => -x), nrm = (v) => { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; };
+  const SPEC = { starft: 1, starct: 1, skewbult: 1, qjdodeca: 1, cubemix: 1, cubefisher: 1, cubewindmill: 1, cubemirror: 1, cubeaxis: 1, cubefused: 1, cubeshared: 1 };
+  function specialConfig(n0, shape) {
+    const ck = shape + n0; if (CFG[ck]) return CFG[ck];
+    const n = Array.isArray(n0) ? n0[0] : n0, fzFlat = Array.isArray(n0) ? n0.slice(1) : [];          // the fused cube: n and the fused blocks (cx, cy, cz, lx, ly, lz) in cell units
+    const dod = shape !== 'cubemix' && shape !== 'cubefisher' && shape !== 'cubewindmill' && shape !== 'cubemirror' && shape !== 'cubeaxis' && shape !== 'cubefused' && shape !== 'cubeshared', cuts = [], moves = [], vs = [], neg = (v) => v.map((x) => -x), nrm = (v) => { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; };
     DOD.faces.forEach((f) => f.v.forEach((p) => { if (!vs.some((q) => Math.abs(q[0] - p[0]) + Math.abs(q[1] - p[1]) + Math.abs(q[2] - p[2]) < 1e-6)) vs.push(p); }));
     const L = Math.max(1, Math.floor(n));
-    let axes, stops = DSTOPS, step = 2 * Math.PI / 5, mult = 4, noJ = true, mirrorB = null;
+    let axes, stops = DSTOPS, step = 2 * Math.PI / 5, mult = 4, noJ = true, mirrorB = null, fusedBoxes = null, sharedCells = null, sharedInfo = null;
     // caps on both sides of the centre and the slabs below them (pos = the positive plane depths, outermost first); the middle part stays put
     const sides = (i, pos) => { const nv = axes[i]; pos.forEach((v) => cuts.push({ n: nv, d: v }, { n: nv, d: -v })); [1, -1].forEach((sg) => pos.forEach((v, k) => moves.push({ ax: i, n: nv, d: sg * v, sg: sg, depth: v, hi: k === 0 ? undefined : pos[k - 1], axis: sg > 0 ? nv : neg(nv), center: [0, 0, 0] }))); };
     // every layer between the planes of an axis (bounds ascending), the whole puzzle is layered
@@ -199,6 +200,51 @@
         axes = TAXES; const w = []; for (let i = 0; i < L; i++) w.push(i === 0 || i === L - 1 ? 1 : Math.SQRT2);
         const W = w.reduce((a, b) => a + b, 0), b = [-1]; for (let i = 0; i < L; i++) b.push(b[i] + 2 * w[i] / W);
         axes.forEach((_, i) => layers(i, b.slice(1, L))); stops = []; for (let k = 0; k < 8; k++) stops.push(k * Math.PI / 4); step = Math.PI / 4; mult = 7; noJ = false;
+      } else if (shape === 'cubefused') {          // the fused cube: an n x n x n cube in which some blocks of cells are fused into one piece (a block = centre (cx, cy, cz) and lengths (lx, ly, lz) in cell units, the cube is [0, n]^3);
+        // a layer that would cut a fused block cannot turn; the layers that hold a block as a whole (the range of layers it spans) can turn together
+        axes = TAXES; const bnd = (k) => -1 + 2 * k / L, blocks = []; for (let q = 0; q + 5 < fzFlat.length; q += 6) { const f = fzFlat.slice(q, q + 6); blocks.push({ lo: [0, 1, 2].map((a) => f[a] - f[3 + a] / 2), hi: [0, 1, 2].map((a) => f[a] + f[3 + a] / 2) }); }
+        const used = new Set(), boxes = [];
+        blocks.forEach((bl) => { boxes.push({ lo: bl.lo, hi: bl.hi }); for (let i = bl.lo[0]; i < bl.hi[0]; i++) for (let j = bl.lo[1]; j < bl.hi[1]; j++) for (let k = bl.lo[2]; k < bl.hi[2]; k++) used.add(i + ',' + j + ',' + k); });
+        for (let i = 0; i < L; i++) for (let j = 0; j < L; j++) for (let k = 0; k < L; k++) if (!used.has(i + ',' + j + ',' + k)) boxes.push({ lo: [i, j, k], hi: [i + 1, j + 1, k + 1] });
+        fusedBoxes = boxes;
+        const seen = new Set(), addMove = (ax, a, b) => { const key = ax + ':' + a + ':' + b; if (seen.has(key)) return; seen.add(key); moves.push({ ax: ax, n: axes[ax], d: a === 0 ? -9 : bnd(a), sg: 1, depth: a === 0 ? -9 : bnd(a), hi: b === L - 1 ? undefined : bnd(b + 1), axis: axes[ax], center: [0, 0, 0] }); };
+        axes.forEach((_, i) => { for (let k = 0; k < L; k++) addMove(i, k, k); blocks.forEach((bl) => { const a = bl.lo[i], b = bl.hi[i] - 1; if (b > a && b - a + 1 <= L - 1) addMove(i, a, b); }); });
+        stops = TSTOPS; step = HALFPI; mult = 3; noJ = false;
+      } else if (shape === 'cubeshared') {          // the shared cube: n x n x n cubes, each shifted from the one before by an offset (dx, dy, dz) cells, sharing the cells where they overlap (one set of pieces).  Each cube turns its own layers
+        // about its own axes; a layer turns only if the turn carries every cell of it onto a cell that lies in the same cubes (by 90 degrees if that holds for 90, else by 180 degrees if it holds for 180, else not at all)
+        axes = TAXES; const cubes = [[0, 0, 0]]; for (let q = 0; q + 2 < fzFlat.length; q += 3) { const pv = cubes[cubes.length - 1]; cubes.push([0, 1, 2].map((a) => pv[a] + Math.round(fzFlat[q + a] || 0))); }
+        const mn = [0, 1, 2].map((a) => Math.min.apply(null, cubes.map((o) => o[a]))), mx = [0, 1, 2].map((a) => Math.max.apply(null, cubes.map((o) => o[a])) + L);
+        const ext = Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]), sc = 2 / ext, mid = [0, 1, 2].map((a) => (mn[a] + mx[a]) / 2), key = (v) => v.join(',');
+        const inCube = (v, o) => v.every((x, a) => x >= o[a] && x < o[a] + L), sig = (v) => cubes.map((o, c) => (inCube(v, o) ? c : -1)).filter((c) => c >= 0).join('+'), slots = new Set();
+        for (let i = mn[0]; i < mx[0]; i++) for (let j = mn[1]; j < mx[1]; j++) for (let k = mn[2]; k < mx[2]; k++) if (sig([i, j, k])) slots.add(key([i, j, k]));
+        sharedCells = []; slots.forEach((kk) => {
+          const v = kk.split(',').map(Number), lo = v.map((x, a) => (x - mid[a]) * sc);
+          sharedCells.push(cubePoly().map((f) => { const nv = FACES[f.tag], nb = [v[0] + nv[0], v[1] + nv[1], v[2] + nv[2]]; return { v: f.v.map((q) => q.map((x, a) => lo[a] + (x + 1) / 2 * sc)), tag: slots.has(key(nb)) ? -1 : f.tag }; }));
+        });
+        sharedInfo = { slots: slots, mid: mid, sc: sc };
+        const seen = new Map();
+        cubes.forEach((o, X) => {
+          const ctr = [0, 1, 2].map((a) => (o[a] + L / 2 - mid[a]) * sc);
+          axes.forEach((_, ax) => {
+            const u = (ax + 1) % 3, w = (ax + 2) % 3;
+            for (let k = 0; k < L; k++) {
+              const lay = [];
+              for (let a = 0; a < L; a++) for (let b = 0; b < L; b++) { const v = [0, 0, 0]; v[ax] = o[ax] + k; v[u] = o[u] + a; v[w] = o[w] + b; lay.push(v); }
+              const ok = (r) => lay.every((v) => { const ru = v[u] + 0.5 - (o[u] + L / 2), rw = v[w] + 0.5 - (o[w] + L / 2), q = r === 1 ? [-rw, ru] : [-ru, -rw], nvv = v.slice(); nvv[u] = Math.round(q[0] + o[u] + L / 2 - 0.5); nvv[w] = Math.round(q[1] + o[w] + L / 2 - 0.5); return sig(nvv) === sig(v); });
+              const q4 = ok(1), q2 = ok(2); if (!q4 && !q2) continue;
+              const sk = ax + '|' + [ctr[u], ctr[w]].map((x) => x.toFixed(6)).join(',') + '|' + lay.map(key).sort().join(';');
+              if (seen.has(sk)) { seen.get(sk).names.push({ cube: X, ax: ax, k: k }); continue; }
+              const lo = [0, 1, 2].map((a) => (a === ax ? o[a] + k : o[a]) - mid[a]), hi = [0, 1, 2].map((a) => (a === ax ? o[a] + k + 1 : o[a] + L) - mid[a]);
+              const mv = { ax: ax, n: axes[ax], d: lo[ax] * sc, sg: 1, depth: lo[ax] * sc, hi: hi[ax] * sc, axis: axes[ax], center: ctr, bx: { lo: lo.map((x) => x * sc), hi: hi.map((x) => x * sc) }, names: [{ cube: X, ax: ax, k: k }], stops: q4 ? TSTOPS.slice() : [0, Math.PI] };
+              seen.set(sk, mv); moves.push(mv);
+            }
+          });
+        });
+        stops = TSTOPS; step = HALFPI; mult = 3; noJ = false;
+      } else if (shape === 'cubeaxis') {          // the axis cube: an ordinary n x n x n mechanism (cut planes x, y, z = -1 + 2 k / n, every layer turns by 90 degrees about the axes through the centre) inside a cube that is turned
+        // by 60 degrees about the body diagonal (1, 1, 1): the pieces are the cells of the mechanism cut off by that outer cube, so the solved shape is the turned cube and any turn changes the shape; the axes leave the
+        // outer cube on its edges, a quarter of the way from a corner (n = 3: the pattern on a face is 45 degree lines plus lines from one corner)
+        axes = TAXES; const b = []; for (let k = 1; k < L; k++) b.push(-1 + 2 * k / L); axes.forEach((_, i) => layers(i, b)); stops = []; for (let k = 0; k < 8; k++) stops.push(k * Math.PI / 4); step = Math.PI / 4; mult = 7; noJ = false;          // jumbling: a layer also turns by 45 degree steps; then the pieces of the turned layer cut the other layers, which jam until the layer is turned back to a multiple of 90 degrees
       } else if (shape === 'cubemirror') {          // the mirror cube: n layers per axis of the thicknesses 1, 2, ..., 2, 3 (the inner ones are equal); a layer is the set of pieces in its slots (a turn always works, the
         // pieces keep their size so the shape changes); every visible face is grey, the cube is solved when the shape is a cube again
         axes = TAXES; const w = []; for (let i = 0; i < L; i++) w.push(i === 0 ? 1 : i === L - 1 ? 3 : 2);
@@ -215,11 +261,14 @@
         const R2 = Math.SQRT1_2; axes = [[0, 1, 0], [R2, 0, R2], [R2, 0, -R2]]; const b = []; for (let k = 1; k < L; k++) b.push(-1 + 2 * k / L); stops = TSTOPS;
         axes.forEach((_, i) => layers(i, b)); moves.forEach((m) => { m.stops = alignStops(cuts.concat([{ n: m.axis, d: 99, axis: m.axis }]), cuts.length); }); noJ = false;
       }
-    } else axes = shape === 'cubemix' || shape === 'cubefisher' || shape === 'qjdodeca' || shape === 'cubemirror' || shape === 'cubewindmill' ? TAXES : DOD.axes;
-    let cells = [dod ? dodecaPoly() : cubePoly()];
+    } else axes = shape === 'cubemix' || shape === 'cubefisher' || shape === 'qjdodeca' || shape === 'cubemirror' || shape === 'cubewindmill' || shape === 'cubeaxis' ? TAXES : DOD.axes;
+    const RAX = shape === 'cubeaxis' ? rotMat([1, 1, 1].map((x) => x / Math.sqrt(3)), -Math.PI / 3) : null;
+    let cells = [RAX ? cubePoly().map((f) => ({ v: f.v.map((p) => app(RAX, p)), tag: f.tag })) : dod ? dodecaPoly() : cubePoly()];
     cuts.forEach((pl) => { const next = []; cells.forEach((c) => { const a = clip(c, pl.n, pl.d), bb = clip(c, [-pl.n[0], -pl.n[1], -pl.n[2]], -pl.d); if (a && bb) { next.push(a); next.push(bb); } else next.push(c); }); cells = next; });
+    if (sharedCells) cells = sharedCells;
+    if (fusedBoxes) cells = fusedBoxes.map((bx) => { let c = cubePoly(); const lo = bx.lo.map((v) => -1 + 2 * v / L), hi = bx.hi.map((v) => -1 + 2 * v / L); for (let ax = 0; ax < 3 && c; ax++) { const nv = [0, 0, 0]; nv[ax] = 1; if (hi[ax] < 1 - 1e-9) c = clip(c, nv, hi[ax]); const mv = [0, 0, 0]; mv[ax] = -1; if (c && lo[ax] > -1 + 1e-9) c = clip(c, mv, -lo[ax]); } return c; }).filter((c) => c);
     moves.forEach((m) => { if (!m.stops) m.stops = stops.slice(); });
-    return (CFG[ck] = { n: n, shape: shape, planes: moves, cells: cells, axes: axes, stops: stops, colours: shape === 'cubemirror' ? ['#a9b0b9', '#a9b0b9', '#a9b0b9', '#a9b0b9', '#a9b0b9', '#a9b0b9'] : dod ? DCOL : CCOL, faceN: dod ? DOD.DN : FACES, faceD: dod ? DOD.DD : 1, noJumble: noJ, faceDs: null, step: step, mult: mult, sc: 1, surf: shape === 'cubemix', mirror: mirrorB ? { b: mirrorB, L: L } : null, shapeOnly: shape === 'cubemirror', bond: !noJ && shape !== 'cubemix' && shape !== 'cubemirror' ? 'face' : false });
+    return (CFG[ck] = { n: n, shape: shape, planes: moves, cells: cells, axes: axes, stops: stops, colours: shape === 'cubemirror' ? ['#a9b0b9', '#a9b0b9', '#a9b0b9', '#a9b0b9', '#a9b0b9', '#a9b0b9'] : dod ? DCOL : CCOL, faceN: RAX ? FACES.map((n) => app(RAX, n)) : dod ? DOD.DN : FACES, faceD: dod ? DOD.DD : 1, noJumble: noJ, faceDs: null, step: step, mult: mult, sc: 1, surf: shape === 'cubemix', mirror: mirrorB ? { b: mirrorB, L: L } : null, shapeOnly: shape === 'cubemirror', bond: !noJ && shape !== 'cubemix' && shape !== 'cubemirror' && shape !== 'cubeshared' ? 'face' : false, shared: sharedInfo });
   }
   // Clover / curvy cube (cube ET with spherical cuts): the pieces are the patches of the surface (thin shells: the outer polygon and an inner one just below it); a move turns the patches inside a ball
   // (a shell for n > 2) about the edge axis through its centre.  Like the helicopter cube the turn is 180 degrees or the jumbling turn of 70.53 degrees (the angles at which the edge centres line up);
@@ -336,8 +385,10 @@
     const E = 2e-3, bs = pl.sph.r0 > 0 ? [pl.sph.r0, pl.sph.r1] : [pl.sph.r1];
     return bs.some((b) => { let lo = false, hi = false; S.pieces[i].SW.forEach((q) => { const d = Math.hypot(q[0] - pl.sph.c[0], q[1] - pl.sph.c[1], q[2] - pl.sph.c[2]); if (d < b - E) lo = true; else if (d > b + E) hi = true; }); return lo && hi; });
   }
+  function bxCentre(S, i) { let x = 0, y = 0, z = 0, n = 0; S.pieces[i].W.forEach((f) => f.forEach((q) => { x += q[0]; y += q[1]; z += q[2]; n++; })); return [x / n, y / n, z / n]; }
+  function inBx(S, i, pl) { const c = bxCentre(S, i); return c.every((v, a) => v > pl.bx.lo[a] + 1e-6 && v < pl.bx.hi[a] - 1e-6); }
   function inCap(S, i, p) {
-    const pl = S.cfg.planes[p]; if (pl.sph) return sphIn(S, i, pl);
+    const pl = S.cfg.planes[p]; if (pl.bx) return inBx(S, i, pl); if (pl.sph) return sphIn(S, i, pl);
     if (pl.logical) return S.pieces[i].lg[pl.ax] === 2 * pl.slot - (S.cfg.mirror.L - 1);
     const r = rangeOf(S, i, pl), l = r.l;
     if (r.mid) return r.m > pl.depth - EPS && (pl.hi === undefined || r.m < pl.hi + EPS);
@@ -346,6 +397,7 @@
   }
   function members(S, p) {
     const pl = S.cfg.planes[p], out = [];
+    if (pl.bx) { for (let i = 0; i < S.pieces.length; i++) if (inBx(S, i, pl)) out.push(i); return out; }
     if (pl.logical) { for (let i = 0; i < S.pieces.length; i++) if (inCap(S, i, p)) out.push(i); return out; }
     if (pl.sph) { for (let i = 0; i < S.pieces.length; i++) { if (sphCut(S, i, pl)) return null; if (sphIn(S, i, pl)) out.push(i); } return out; }
     if (pl.free) { for (let i = 0; i < S.pieces.length; i++) if (inCap(S, i, p)) out.push(i); return out; }          // fully functional: the pieces at this place turn, nothing blocks
@@ -517,7 +569,28 @@
     S.hist.push(mv); return true;
   }
   function inverse(mv) { return { p: mv.p, a: -mv.a }; }
+  // shared cube: every face on the outside shows the colour of its direction, every face on the inside (against another cell) is an inner face
+  function solvedShared(S) {
+    const sh = S.cfg.shared, FN = S.cfg.faceN, col = {};
+    for (const pc of S.pieces) {
+      const c = bxCentre(S, S.pieces.indexOf(pc));
+      for (let k = 0; k < pc.home.length; k++) {
+        const w = pc.W[k], f = pc.home[k];
+        let a = [w[1][0] - w[0][0], w[1][1] - w[0][1], w[1][2] - w[0][2]], b = [w[2][0] - w[0][0], w[2][1] - w[0][1], w[2][2] - w[0][2]], nv = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+        const l = Math.hypot(nv[0], nv[1], nv[2]) || 1; nv = nv.map((x) => x / l);
+        const fc = [0, 1, 2].map((q) => (w[0][q] + w[1][q] + w[2][q] + w[3 % w.length][q]) / 4); if (dot(nv, [fc[0] - c[0], fc[1] - c[1], fc[2] - c[2]]) < 0) nv = nv.map((x) => -x);
+        const nb = [0, 1, 2].map((q) => Math.round((c[q] + nv[q] * sh.sc) / sh.sc + sh.mid[q] - 0.5)), exposed = !sh.slots.has(nb.join(','));
+        if ((f.tag >= 0) !== exposed) return false;
+        if (f.tag < 0) continue;
+        let fi = -1; for (let q = 0; q < FN.length; q++) if (Math.abs(nv[0] - FN[q][0]) + Math.abs(nv[1] - FN[q][1]) + Math.abs(nv[2] - FN[q][2]) < 1e-4) fi = q;
+        if (fi < 0) return false;
+        if (col[fi] === undefined) col[fi] = f.tag; else if (col[fi] !== f.tag) return false;
+      }
+    }
+    return true;
+  }
   function isSolved(S) {
+    if (S.cfg.shared) return solvedShared(S);
     const cfg = S.cfg, col = {}, FN = cfg.faceN, FD = cfg.faceD;
     for (const pc of S.pieces) {
       for (let k = 0; k < pc.home.length; k++) {
