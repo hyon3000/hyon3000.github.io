@@ -268,7 +268,7 @@
     if (sharedCells) cells = sharedCells;
     if (fusedBoxes) cells = fusedBoxes.map((bx) => { let c = cubePoly(); const lo = bx.lo.map((v) => -1 + 2 * v / L), hi = bx.hi.map((v) => -1 + 2 * v / L); for (let ax = 0; ax < 3 && c; ax++) { const nv = [0, 0, 0]; nv[ax] = 1; if (hi[ax] < 1 - 1e-9) c = clip(c, nv, hi[ax]); const mv = [0, 0, 0]; mv[ax] = -1; if (c && lo[ax] > -1 + 1e-9) c = clip(c, mv, -lo[ax]); } return c; }).filter((c) => c);
     moves.forEach((m) => { if (!m.stops) m.stops = stops.slice(); });
-    return (CFG[ck] = { n: n, shape: shape, planes: moves, cells: cells, axes: axes, stops: stops, colours: shape === 'cubemirror' ? ['#a9b0b9', '#a9b0b9', '#a9b0b9', '#a9b0b9', '#a9b0b9', '#a9b0b9'] : dod ? DCOL : CCOL, faceN: RAX ? FACES.map((n) => app(RAX, n)) : dod ? DOD.DN : FACES, faceD: dod ? DOD.DD : 1, noJumble: noJ, faceDs: null, step: step, mult: mult, sc: 1, surf: shape === 'cubemix', mirror: mirrorB ? { b: mirrorB, L: L } : null, shapeOnly: shape === 'cubemirror', bond: !noJ && shape !== 'cubemix' && shape !== 'cubemirror' && shape !== 'cubeshared' ? 'face' : false, shared: sharedInfo });
+    return (CFG[ck] = { n: n, shape: shape, planes: moves, cells: cells, axes: axes, stops: stops, colours: shape === 'cubemirror' ? ['#a9b0b9', '#a9b0b9', '#a9b0b9', '#a9b0b9', '#a9b0b9', '#a9b0b9'] : dod ? DCOL : CCOL, faceN: RAX ? FACES.map((n) => app(RAX, n)) : dod ? DOD.DN : FACES, faceD: dod ? DOD.DD : 1, noJumble: noJ, faceDs: null, step: step, mult: mult, sc: 1, surf: shape === 'cubemix', mirror: mirrorB ? { b: mirrorB, L: L } : null, shapeOnly: shape === 'cubemirror', bond: !noJ && shape !== 'cubemix' && shape !== 'cubemirror' && shape !== 'cubeshared' ? 'face' : false, shared: sharedInfo, fz: fzFlat });
   }
   // Clover / curvy cube (cube ET with spherical cuts): the pieces are the patches of the surface (thin shells: the outer polygon and an inner one just below it); a move turns the patches inside a ball
   // (a shell for n > 2) about the edge axis through its centre.  Like the helicopter cube the turn is 180 degrees or the jumbling turn of 70.53 degrees (the angles at which the edge centres line up);
@@ -557,7 +557,7 @@
   }
   function apply(S, mv) {
     const m = members(S, mv.p); if (!m) return false;
-    S.fail = ''; if (S.cfg.bond) { if (S.cfg.bond === 'ff') { const why = ffProblem(S, S.cfg.planes[mv.p], m, mv.a); S.fail = why; if (why) return false; } else if (bondBroken(S, S.cfg.planes[mv.p], m, mv.a)) { S.fail = 'detach'; return false; } }
+    S.fail = ''; if (S.cfg.bond && !mv.trust) { if (S.cfg.bond === 'ff') { const why = ffProblem(S, S.cfg.planes[mv.p], m, mv.a); S.fail = why; if (why) return false; } else if (bondBroken(S, S.cfg.planes[mv.p], m, mv.a)) { S.fail = 'detach'; return false; } }
     const Rm = rotMat(S.cfg.planes[mv.p].axis, mv.a);
     const C = S.cfg.planes[mv.p].center || [0, 0, 0], RC = app(Rm, C);
     m.forEach((i) => { const pc = S.pieces[i], t = app(Rm, pc.T); pc.R = mul(Rm, pc.R); pc.T = [t[0] + C[0] - RC[0], t[1] + C[1] - RC[1], t[2] + C[2] - RC[2]]; refresh(S, i); });
@@ -619,11 +619,22 @@
       if (apply(S, mv)) mvs.push(mv);
     }
     const rect = []; pls.forEach((pl, i) => { if (!pl.square) rect.push(i); });          // layers whose 90 degree turn deforms the shape
-    let nj = rect.length ? 1 + Math.floor(rnd() * 3) : 0;
-    for (let tries = 0; nj > 0 && tries < 60; tries++) {
-      const p = rect[Math.floor(rnd() * rect.length)]; if (p === last && rect.length > 1) continue;
-      const mv = { p: p, a: rnd() < 0.5 ? Math.PI / 2 : -Math.PI / 2 };
-      if (apply(S, mv)) { mvs.push(mv); last = p; nj--; }
+    const snap = () => ({ pc: S.pieces.map((pc) => ({ R: pc.R.slice(), T: pc.T.slice() })), ang: S.ang.slice(), h: S.hist.length });
+    const rest = (sn) => { sn.pc.forEach((q, i) => { S.pieces[i].R = q.R.slice(); S.pieces[i].T = q.T.slice(); refresh(S, i); }); S.ang = sn.ang.slice(); S.hist.length = sn.h; };
+    const base = snap(), nMv = mvs.length, last0 = last;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      let nj = rect.length ? 1 + Math.floor(rnd() * 3) : 0; const jm = []; last = last0;
+      for (let tries = 0; nj > 0 && tries < 60; tries++) {
+        const p = rect[Math.floor(rnd() * rect.length)]; if (p === last && rect.length > 1) continue;
+        const mv = { p: p, a: rnd() < 0.5 ? Math.PI / 2 : -Math.PI / 2 };
+        if (apply(S, mv)) { jm.push(mv); last = p; nj--; }
+      }
+      // the body rule is not symmetric: a state can be reached by a turn that no turn undoes (nothing can move any more); such a scramble is thrown away
+      const after = snap(); let back = true;
+      for (let k = jm.length - 1; k >= 0 && back; k--) if (!apply(S, inverse(jm[k]))) back = false;
+      rest(after);
+      if (back) { mvs.push.apply(mvs, jm); break; }
+      rest(base); mvs.length = nMv;
     }
     return mvs;
   }

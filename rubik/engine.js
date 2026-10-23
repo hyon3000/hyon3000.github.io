@@ -78,7 +78,7 @@
           // no sticker may be cut by a plane
           let mn = 1e9, mx = -1e9;
           st[i].verts.forEach((v) => { const q = V.dot(v, ax); mn = Math.min(mn, q); mx = Math.max(mx, q); });
-          if (spec.loose) continue;                     // loose puzzles (a star-shaped sticker) assign a sticker to a band by its centre only
+          if (spec.loose || spec.stickers[i].flat) continue;          // loose puzzles (a star-shaped sticker) and bent stickers (penrose fillet; their slot is the flat one) assign a sticker to a band by its centre only
           if (inside) { if (mn < lo - 1e-5 || mx > hi + 1e-5) throw new Error('sticker ' + i + ' cut by band ' + li); }
           else if (!(mx <= lo + 1e-5 || mn >= hi - 1e-5)) throw new Error('sticker ' + i + ' cut by band(out) ' + li);
         }

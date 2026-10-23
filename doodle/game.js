@@ -32,7 +32,7 @@ function mulberry32(a) { return DP.mulberry32(a); }
 /* ---------- auto-solver / hint executor ---------- */
 var auto = { on: false, hint: false, phase: 'idle', gen: null, steps: null, i: 0, cur: null, cutT: null, failures: 0, restarts: 0, exec: false, valid: false, watch0: 0, fell: false, predicted: 0, startSimT: 0, cursor: null, info: null, cutEv: null, hintCut: false, runningAtPlan: false };
 function autoActive() { return auto.on || auto.hint; }
-function resetAutoPlan() { auto.phase = 'idle'; auto.gen = null; auto.steps = null; auto.i = 0; auto.cur = null; auto.cutT = null; auto.valid = false; auto.cursor = null; auto.fell = false; auto.cutEv = null; auto.hintCut = false; if (preview && preview.__auto) preview = null; }
+function resetAutoPlan() { auto.timed = null; auto.timedBase = null; auto.phase = 'idle'; auto.gen = null; auto.steps = null; auto.i = 0; auto.cur = null; auto.cutT = null; auto.valid = false; auto.cursor = null; auto.fell = false; auto.cutEv = null; auto.hintCut = false; if (preview && preview.__auto) preview = null; }
 function markAuto(on) { try { window.parent !== window && window.parent.setAutoMark && window.parent.setAutoMark(on); } catch (e) {} }
 function userChanged() {
   if (auto.exec) return;
@@ -55,7 +55,12 @@ function planDone(res) {
   auto.info = res; auto.gen = null;
   if (!res.ok) { noSolution(); return; }
   var steps = [], cutEv = null;
-  res.events.forEach(function (e) { if (e.type === 'stroke') steps.push({ type: 'stroke', raw: e.raw }); else cutEv = e; });
+  auto.timed = [];
+  res.events.forEach(function (e) {
+    if (e.timed) auto.timed.push(e);                    // lever / catch-track steps that happen while the world runs (drawn at once, at their sim time)
+    else if (e.type === 'stroke') steps.push({ type: 'stroke', raw: e.raw }); else if (e.type === 'pin') steps.push({ type: 'pin', x: e.x, y: e.y }); else cutEv = e;
+  });
+  auto.timed.sort(function (a, b) { return a.t - b.t; }); auto.timedBase = null;
   auto.cutEv = cutEv;
   if (!auto.runningAtPlan) steps.push({ type: 'run' });
   else if (cutEv) auto.cutT = auto.startSimT + cutEv.t;
@@ -87,8 +92,10 @@ function execStep() {
     var c = auto.cur; c.n++;
     var k = Math.max(2, Math.ceil(c.raw.length * c.n / c.N)); preview = c.raw.slice(0, k); preview.__auto = true; auto.cursor = c.raw[Math.min(k, c.raw.length) - 1];
     if (c.n >= c.N) { preview = null; auto.cur = null; auto.cursor = null; auto.exec = true; addStroke(c.raw); auto.exec = false; auto.i++; stepDone(); }
+  } else if (st.type === 'pin') {
+    auto.exec = true; pinAt(st.x, st.y); auto.exec = false; auto.i++; stepDone();
   } else if (st.type === 'run') {
-    auto.exec = true; startSim(); auto.exec = false; auto.i++; auto.watch0 = sim.simT;
+    auto.exec = true; startSim(); auto.exec = false; auto.i++; auto.watch0 = sim.simT; auto.timedBase = sim.simT;
     if (auto.cutEv) { if (auto.cutEv.t === 0) { doCut(); } else auto.cutT = sim.simT + auto.cutEv.t; }
     stepDone();
     if (auto.phase === 'exec') auto.phase = 'watch';
@@ -106,6 +113,14 @@ function autoTick() {
   if (auto.cutT != null && running && sim.simT >= auto.cutT) {
     auto.cutT = null; doCut();
     if (auto.hintCut) { auto.hintCut = false; auto.hint = false; auto.phase = 'hold'; setStatus(TX.hintCutMsg); return; }
+  }
+  if (auto.timed && auto.timed.length && auto.timedBase != null && running) {
+    while (auto.timed.length && sim.simT >= auto.timedBase + auto.timed[0].t) {
+      var te = auto.timed.shift(); auto.exec = true;
+      if (te.type === 'stroke') addStroke(te.raw); else if (te.type === 'pin') pinAt(te.x, te.y);
+      else if (te.type === 'erase') te.ns.map(function (k) { return sim.strokes[k]; }).forEach(function (q) { if (q) sim.removeStroke(q); });
+      auto.exec = false;
+    }
   }
   switch (auto.phase) {
     case 'idle': beginPlan(); break;

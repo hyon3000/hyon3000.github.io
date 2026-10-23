@@ -56,8 +56,8 @@
     return true;
   }
   function showPlan() {
-    const h = G.S.hist, st = { toks: [], x: 0, y: 0 };
-    for (let i = h.length - 1; i >= 0; i--) nsFlat(SQ.inverse(h[i]), st);
+    const X = extSolver(), pl = X && X.plan ? X.plan(G.S) : null, st = { toks: [], x: 0, y: 0 };
+    if (pl) pl.forEach((m) => nsFlat(m, st)); else { const h = G.S.hist; for (let i = h.length - 1; i >= 0; i--) nsFlat(SQ.inverse(h[i]), st); }
     NT.plan(nsText(st));
   }
   function startMove(mv, src, dur) {
@@ -79,7 +79,9 @@
   function doSlice(h, dir) { userMove({ t: 's', h: h | 0, dir: dir || 1 }); }
   function undo() { if (G.mode === 'solved' || G.anim || G.queue.length || !G.S.hist.length) return; startMove(SQ.inverse(G.S.hist[G.S.hist.length - 1]), 'undo'); }
   function desc(mv) { return mv.t === 's' ? TX.slice : (mv.l === 0 ? TX.top : TX.bottom) + ' ' + (mv.s > 0 ? '◀' : '▶') + Math.abs(mv.s); }
-  function nextSolveMove() { const h = G.S.hist; return h.length ? SQ.inverse(h[h.length - 1]) : null; }
+  // Extra solvers that know nothing of the scramble: window.SQSOLVERS = [{ match(n) -> bool, next(S, G) -> {t,l,s} | {t:'s',h} | 'wait' | null (solved) | undefined (not handled), plan(S) -> [moves] | null }]
+  function extSolver() { return (window.SQSOLVERS || []).find((s) => { try { return s.match(NV); } catch (e) { return false; } }); }
+  function nextSolveMove() { const X = extSolver(); if (X) { const r = X.next(G.S, G); if (r !== undefined) return r; } const h = G.S.hist; return h.length ? SQ.inverse(h[h.length - 1]) : null; }
   function setAuto(on) { G.auto = !!on; if (!on) NT.plan(''); try { window.parent.postMessage({ rb: 'autoState', on: G.auto }, '*'); } catch (e) {} }
   function checkSolved() {
     if (G.mode !== 'play' || !(G.started || G.cheated) || !SQ.isSolved(G.S)) return;
@@ -98,7 +100,7 @@
       if (G.mode === 'scramble') G.mode = 'play';
       else if (G.mode === 'play') {
         if (G.hint) { G.hint.t += dt; if (G.hint.t >= 0.7) { const h = G.hint; G.hint = null; G.cheated = true; if (G.S.hist.length) startMove(h.mv, 'hint', 0.3); } }
-        else if (G.auto) { const nm = nextSolveMove(); if (!nm) setAuto(false); else { G.cheated = true; if (nm.t === 'r') G.sel = nm.l; startMove(nm, 'auto', nm.t === 's' ? 0.35 : 0.22); } }
+        else if (G.auto) { const nm = nextSolveMove(); if (!nm) setAuto(false); else if (nm !== 'wait') { G.cheated = true; if (G.planWant) { G.planWant = false; showPlan(); } if (nm.t === 'r') G.sel = nm.l; startMove(nm, 'auto', nm.t === 's' ? 0.35 : 0.22); } }
       }
     }
   }
@@ -363,10 +365,10 @@
 
   /* ---------- exports for the shell ---------- */
   window.newGame = function () { newGame(); };
-  window.toggleAuto = function () { if (G.mode === 'solved') return false; setAuto(!G.auto); if (G.auto) showPlan(); return G.auto; };
+  window.toggleAuto = function () { if (G.mode === 'solved') return false; setAuto(!G.auto); if (G.auto) { showPlan(); G.planWant = true; } return G.auto; };
   window.toggleNotation = function () { return NT.toggleInput(); };
   window.runNotation = runNotation;
-  window.giveHint = function () { if (G.mode !== 'play' || G.anim || G.queue.length || G.hint) return; const nm = nextSolveMove(); if (!nm) return; if (nm.t === 'r') G.sel = nm.l; G.hint = { t: 0, mv: nm }; };
+  window.giveHint = function () { if (G.mode !== 'play' || G.anim || G.queue.length || G.hint) return; const nm = nextSolveMove(); if (!nm || nm === 'wait') return; if (nm.t === 'r') G.sel = nm.l; G.hint = { t: 0, mv: nm }; };
   window.toggleScrambleAnim = function () { G.animScr = !G.animScr; lsSet('rubik_anim', G.animScr ? '1' : '0'); return G.animScr; };
   window.getScrambleAnim = function () { return G.animScr; };
   window.toggleAutoScramble = function () { G.autoScr = !G.autoScr; lsSet('rubik_autoscr', G.autoScr ? '1' : '0'); return G.autoScr; };

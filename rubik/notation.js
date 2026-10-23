@@ -275,7 +275,7 @@
     if (o.aliases) Object.keys(o.aliases).forEach((ch) => { const k = segs(o.aliases[ch]); if (k && !rev[k]) rev[k] = ch; });
     return {
       example: items.slice(0, 40).filter((it, k) => k % Math.max(1, Math.floor(items.length / 4)) === 0).slice(0, 4).map((it) => nameSteps(it.id, -1)).filter((x) => x).join(' '),
-      name: (id, d, q) => nameSteps(id, d * byId[id].dn * (q || 1)), nameSteps: nameSteps, has: (id) => !!byId[id], order: (id) => orderOf(byId[id]), stepOf: (id) => byId[id].B,
+      name: (id, d, q) => (byId[id] ? nameSteps(id, d * byId[id].dn * (q || 1)) : 'M' + id + ((d * (q || 1)) < 0 ? "'" : '')), nameSteps: nameSteps, has: (id) => !!byId[id], order: (id) => (byId[id] ? orderOf(byId[id]) : 4), stepOf: (id) => (byId[id] ? byId[id].B : Math.PI / 2),
       resolveText: (text, merge) => { const out = []; parse(text, 'geo').forEach((t) => resolveTok(t, merge).forEach((m) => out.push(m))); return out; },
     };
   }

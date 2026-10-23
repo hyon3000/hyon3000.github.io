@@ -140,8 +140,11 @@
   window.runNotation = runNotation;
   window.__nb = function () { return NB; };
   // the whole solution from the present position as moves [{b,d}]; null when it cannot be known beforehand
+  // Extra solvers that know nothing of the scramble: window.RBSOLVERS = [{ match(key, P) -> bool, next(G, P) -> {b,d} | 'wait' | null (solved) | undefined (not handled, fall back), plan(G, P) -> [{b,d}...] | null }]
+  function extSolver() { return (window.RBSOLVERS || []).find((s) => { try { return s.match(G.key, G.P); } catch (e) { return false; } }); }
   function planMoves() {
     const P = G.P, kind = P.meta.solver, out = [];
+    const X = extSolver(); if (X && X.plan) { const r = X.plan(G, P); if (r) return r; }
     if (kind === 'reduce4') { if (R4.plan) { const i = R4.sigs.indexOf(sigOf(G.col)); if (i >= 0) return R4.plan.slice(i); } return null; }
     if (kind === 'kociemba' && CS.plan) { const i = CS.sigs.indexOf(sigOf(G.col)); if (i >= 0) return CS.plan.slice(i); }
     else if (kind === 'table') { let c = G.col.slice(); const T = P.initSolver(); for (let k = 0; k < 60 && !P.isSolved(c); k++) { const r = T.next(c); if (!r) return null; out.push(r); c = P.apply(c, P.moveOf(r.b, r.d)); } return out; }
@@ -255,6 +258,7 @@
   function nextSolveMove() {
     const P = G.P;
     if (P.isSolved(G.col)) { G.hist = []; return null; }
+    const X = extSolver(); if (X) { const r = X.next(G, P); if (r !== undefined) return r; }          // a solver registered in window.RBSOLVERS (see the comment above extSolver)
     const kind = P.meta.solver;
     if (kind === 'table') { const r = P.initSolver().next(G.col); if (r) return r; if (r === null) return null; }
     else if (kind === 'kociemba') { const r = cubeNext(); if (r !== undefined) return r; }
