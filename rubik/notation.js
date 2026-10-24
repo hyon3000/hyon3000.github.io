@@ -385,11 +385,11 @@
   }
   // the undo / redo buttons: two translucent rectangles at the top left (k = pixel scale); returns their rectangles [{x,y,w,h,id,on}]
   function undoBtns(ctx, k, canU, canR) {
-    const w = 92 * k, h = 26 * k, y = 8 * k, out = [];
-    [[KO ? '↶ 되돌리기' : '↶ Undo', canU, 'undo'], [KO ? '↷ 다시 하기' : '↷ Redo', canR, 'redo']].forEach((b, i) => {
+    const w = 28 * k, h = 28 * k, y = 8 * k, out = [];
+    [['↶', canU, 'undo'], ['↷', canR, 'redo']].forEach((b, i) => {
       const x = 8 * k + i * (w + 6 * k);
       ctx.save(); ctx.globalAlpha = b[1] ? 1 : 0.4; ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.fillRect(x, y, w, h); ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-      ctx.fillStyle = '#e8eefc'; ctx.font = 13 * k + 'px system-ui, "Malgun Gothic", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(b[0], x + w / 2, y + h / 2); ctx.restore();
+      ctx.fillStyle = '#e8eefc'; ctx.font = 18 * k + 'px system-ui, "Segoe UI Symbol", "Malgun Gothic", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(b[0], x + w / 2, y + h / 2 + 1 * k); ctx.restore();
       out.push({ x: x, y: y, w: w, h: h, id: b[2], on: !!b[1] });
     });
     return out;
