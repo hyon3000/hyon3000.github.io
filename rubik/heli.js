@@ -307,7 +307,7 @@
     for (const f of lastOut) if (inPoly(f.pts, x, y) && (!best || f.z < best.z)) best = f;
     if (!best) return null;
     const N = best.n, P0 = best.c3[0], d = N[0] * P0[0] + N[1] * P0[1] + N[2] * P0[2], u = (x - ox) / scale, v = (oyy - y) / scale, a = (N[0] * u + N[1] * v) / DC, t = (d - a * DC) / (a + N[2]);
-    return { piece: best.piece, point: untr([u * (DC + t) / DC, v * (DC + t) / DC, t]) };
+    return { piece: best.piece, point: untr([u * (DC + t) / DC, v * (DC + t) / DC, t]), nw: untr(N) };
   }
   function targetOf(p, x) {                                      // the resting position (angle from home) nearest to where the drag has taken the prism
     const cur = G.S.ang[p], want = cur + x; let best = 0, bd = 1e9;
@@ -321,7 +321,9 @@
     for (let p = 0; p < NP; p++) {
       if (!HC.inCap(S, pk.piece, p)) continue;
       m.push(p);
-      const ax = S.cfg.planes[p].axis, cc = S.cfg.planes[p].center || [0, 0, 0], r = pk.point, T = [ax[1] * (r[2] - cc[2]) - ax[2] * (r[1] - cc[1]), ax[2] * (r[0] - cc[0]) - ax[0] * (r[2] - cc[2]), ax[0] * (r[1] - cc[1]) - ax[1] * (r[0] - cc[0])], tl = Math.hypot(T[0], T[1], T[2]);
+      const ax = S.cfg.planes[p].axis;
+      if (pk.nw && Math.abs(ax[0] * pk.nw[0] + ax[1] * pk.nw[1] + ax[2] * pk.nw[2]) > 0.9999 * Math.hypot(ax[0], ax[1], ax[2]) * Math.hypot(pk.nw[0], pk.nw[1], pk.nw[2])) continue;          // a turn that keeps the clicked face in its own plane (about its normal) is no drag
+      const cc = S.cfg.planes[p].center || [0, 0, 0], r = pk.point, T = [ax[1] * (r[2] - cc[2]) - ax[2] * (r[1] - cc[1]), ax[2] * (r[0] - cc[0]) - ax[0] * (r[2] - cc[2]), ax[0] * (r[1] - cc[1]) - ax[1] * (r[0] - cc[0])], tl = Math.hypot(T[0], T[1], T[2]);
       if (tl < 0.25) continue;
       const e = 0.02, a = sp2(r), b = sp2([r[0] + T[0] * e, r[1] + T[1] * e, r[2] + T[2] * e]), tx = (b[0] - a[0]) / e, ty = (b[1] - a[1]) / e, ml = Math.hypot(tx, ty) || 1;
       const cs = Math.abs(dx * tx + dy * ty) / (Math.hypot(dx, dy) * ml) * Math.min(1, ml / 60);

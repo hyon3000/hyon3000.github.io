@@ -469,6 +469,7 @@
     let best = null;
     P.slotBands[slot].forEach((b) => {
       const band = P.bands[b], vel = V.cross(band.axis, s.c), vl = V.len(vel);
+      if (Math.abs(V.dot(band.axis, s.n)) > 0.9999 * V.len(band.axis) * V.len(s.n)) return;          // a turn about the face's own normal keeps it in its plane: no drag
       if (vl / cl < 0.12) return;
       const q = pj(tv(V.add(s.c, V.mul(vel, eps / vl)))), mx = q[0] - p0[0], my = q[1] - p0[1], ml = Math.hypot(mx, my);
       if (ml < 0.25 * eps * S.f / D) return;
