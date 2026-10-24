@@ -48,7 +48,7 @@
           r.sigs.forEach((q) => ST.index.set(q[1], q[0]));
         } else { ST.plan = r.plan; r.sigs.forEach((s, i) => ST.index.set(s, i)); }          // (a state met twice: the later index wins, the loop is skipped)
         ST.dur = Math.max(0.02, Math.min(0.25, 12 / Math.max(1, ST.plan.length)));
-        ST.burst = Math.min(80, Math.max(0, Math.ceil(ST.plan.length / 1500) - 1)); ST.applied = 0; ST.perMove = 0;
+        ST.burst = Math.min(80, Math.max(0, Math.ceil(ST.plan.length / 1500) - 1)); ST.applied = 0; ST.perMove = 0; ST.sum = 0; ST.cnt = 0; ST.lastCall = 0;
       };
       ST.worker.onerror = () => { ST.failed = true; ST.pending = false; ST.worker = null; };
     } catch (err) { ST.failed = true; }
@@ -71,8 +71,9 @@
         if (sig !== null) { if (sig === ST.lastSig) { if (++ST.repeat > 3) { ST.failed = true; return undefined; } } else { ST.lastSig = sig; ST.repeat = 0; } }          // the same state asked again and again: the page refuses the move
         // a plan too long to play on a big puzzle (every turn costs milliseconds in the engine): after a while the rest is skipped and the puzzle jumps to its solved state (the plan was checked in the worker)
         if (ST.plan.length > 3000) {
-          if (!ST.perMove) { const t = performance.now(), np = S.cfg.planes.length; for (let k = 0; k < 20; k++) HC.members(S, k % np); ST.perMove = Math.max(0.05, (performance.now() - t) / 20 * 2.5); }
-          if (ST.applied >= 400 && !window.__etnNoSnap && (ST.plan.length - i) * ST.perMove > 40000) {
+          const now = performance.now(); if (ST.lastCall && now - ST.lastCall < 250) { ST.sum = (ST.sum || 0) + (now - ST.lastCall); ST.cnt = (ST.cnt || 0) + 1; } ST.lastCall = now;          // (calls in the same frame: the time between them is the cost of one turn)
+          if (ST.cnt >= 50) ST.perMove = ST.sum / ST.cnt;
+          if (ST.applied >= 400 && !window.__etnNoSnap && ST.perMove && (ST.plan.length - i) * ST.perMove > 40000) {
             const F = HC.create(S.cfg.n, S.cfg.shape); S.pieces.forEach((pc, k) => { pc.R = F.pieces[k].R.slice(); pc.T = F.pieces[k].T.slice(); HC._refresh(S, k); }); S.ang.fill(0);
             ST.snapped = true; return null;
           }
