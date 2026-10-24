@@ -66,10 +66,12 @@
   }
   function startMove(mv, src, dur, txt) {
     const set = HC.members(G.S, mv.p); if (!set) { if (src === 'user' || src === 'nota') say(TX.locked); return false; }
+    const h0 = G.S.hist.length;
     const x0 = (G.vis && G.vis.live && G.vis.p === mv.p ? G.vis.x : 0) - mv.a;
     if (!HC.apply(G.S, mv)) { if (src === 'user') say(G.S.fail === 'detach' ? TX.detach : TX.locked); return false; }          // (a fully functional cuboid: the turn would cut a cell off)
     G.vis = { p: mv.p, set: set, x: x0, x0: x0, t: 0, dur: dur || 0.2 + 0.1 * Math.min(1, Math.abs(mv.a) / Math.PI), src: src };
     if (src === 'user' || src === 'nota') { G.moves++; G.started = true; }
+    if (src !== 'scr' && src !== 'undo' && src !== 'cancel') { (G.done = G.done || []).push({ mv: mv, h0: h0 }); if (src !== 'redo') G.redo = []; }          // (undo / redo stacks)
     if (src !== 'scr' && txt !== '') NT.push(txt || moveText(mv), ordOf(mv.p));
     return true;
   }
@@ -82,7 +84,16 @@
     if (busy()) { if (G.queue.length < 3) enqueue(mv, 'user'); return true; }
     return startMove(mv, 'user');
   }
-  function undo() { if (G.mode === 'solved' || busy() || !G.S.hist.length) return; startMove(HC.inverse(G.S.hist[G.S.hist.length - 1]), 'undo'); G.S.hist.pop(); G.S.hist.pop(); }
+  function undo() {
+    if (G.mode === 'solved' || busy() || G.hint || !(G.done || []).length) return; if (G.auto) setAuto(false);
+    const e = G.done.pop(); e.h1 = G.S.hist.length; (G.redo = G.redo || []).push(e);
+    if (startMove(HC.inverse(e.mv), 'undo')) G.S.hist.length = Math.min(G.S.hist.length, e.h0); else G.done.push(G.redo.pop());
+  }
+  function redo() {
+    if (G.mode === 'solved' || busy() || G.hint || !(G.redo || []).length) return; if (G.auto) setAuto(false);
+    const e = G.redo.pop();
+    if (startMove(e.mv, 'redo')) G.S.hist.length = Math.min(G.S.hist.length, e.h1); else G.redo.push(e);
+  }
   // Extra solvers that know nothing of the scramble: window.HSOLVERS = [{ match(shape, cfg) -> bool, next(S, G) -> {p, a} | 'wait' | null (solved) | undefined (not handled), plan(S) -> [{p, a}...] | null }]; a move they return is applied as it is (the history is not unwound)
   function extSolver() { return (window.HSOLVERS || []).find((s) => { try { return s.match(SH, G.S.cfg); } catch (e) { return false; } }); }
   function nextSolveMove() { const X = extSolver(); if (X) { const r = X.next(G.S, G); if (r === 'wait') return r; if (r) { if (G.planWant) { G.planWant = false; showPlan(); } return Object.assign({ ext: true }, r); } if (r === null) return null; } const h = G.S.hist; return h.length ? HC.inverse(h[h.length - 1]) : null; }
@@ -114,7 +125,7 @@
   }
   function newGame(opt) {
     opt = opt || {};
-    G.S = HC.create(NX, SH); NB = makeNB(G.S); NT.enable(!!NB, NB && NB.example); NT.clear(); G.moves = 0; G.time = 0; G.started = false; G.vis = null; V.piece = null; G.queue = []; G.hint = null; G.cheated = false; G.newRec = false; setAuto(false);
+    G.S = HC.create(NX, SH); NB = makeNB(G.S); NT.enable(!!NB, NB && NB.example); NT.clear(); G.done = []; G.redo = []; G.moves = 0; G.time = 0; G.started = false; G.vis = null; V.piece = null; G.queue = []; G.hint = null; G.cheated = false; G.newRec = false; setAuto(false);
     if (ISCUB ? !G.S.cfg.planes.length : NN < 2) { G.mode = 'solved'; return; }                    // n = 1: nothing is cut, the cube is solved at once
     const cnt = SPN && { starft: 1, starct: 1, skewbult: 1, qjdodeca: 1 }[SH] ? Math.min(140, { starft: 50, starct: 45, skewbult: 30, qjdodeca: 40 }[SH] + 15 * (NN - 2) + Math.floor(rnd() * 6)) : ISCUB ? Math.min(90, 12 + 3 * (ABC[0] + ABC[1] + ABC[2]) + Math.floor(rnd() * 6)) : Math.min(90, 22 + 7 * (NN - 3 < 0 ? 0 : NN - 3) + Math.floor(rnd() * 6));
     if (!G.autoScr) { G.mode = 'play'; return; }          // no automatic scramble: the player scrambles it; a solved state does not count before the first move
@@ -277,6 +288,7 @@
     else if (G.vis && G.vis.live) txt('#' + (G.vis.p + 1) + '   ' + (HC.normAng(G.S.ang[G.vis.p]) / DEG).toFixed(2) + '° → ' + (HC.normAng(targetOf(G.vis.p, G.vis.x)) / DEG).toFixed(2) + '°', cw / 2, 70, 14, '#9ad0ff', 'center');
     else if (!G.vis) { let n = 0; for (let p = 0; p < NP; p++) if (HC.isFree(G.S, p)) n++; if (n < NP) txt(TX.free + ': ' + n + ' / ' + NP, cw / 2, 70, 13, '#ffb86b', 'center'); }
     btns = [];
+    { const can = G.mode === 'play' && !busy() && !G.hint, ub = window.RBNotation.undoBtns(ctx, 1, can && (G.done || []).length > 0, can && (G.redo || []).length > 0); ub.forEach((b) => btns.push({ x: b.x, y: b.y, w: b.w, h: b.h, act: function () { if (b.on) (b.id === 'undo' ? undo : redo)(); } })); }
     { const parts = TX.hintTxt.split(' · '), h = Math.ceil(parts.length / 2); txt(parts.slice(0, h).join(' · '), cw / 2, ch - 30, 12, '#7d89a8', 'center'); txt(parts.slice(h).join(' · '), cw / 2, ch - 14, 12, '#7d89a8', 'center'); }
     if (G.mode === 'solved') {
       const pw = Math.min(360, cw - 40), px = cw / 2 - pw / 2, py = ch * 0.5 - 70;
@@ -362,7 +374,8 @@
   }
   cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', function () { endDrag(null); });
   window.addEventListener('keydown', function (e) {
-    if (e.code === 'KeyU' || e.code === 'Backspace') { e.preventDefault(); undo(); }
+    if (e.code === 'KeyU' || e.code === 'Backspace' || (e.ctrlKey && e.code === 'KeyZ' && !e.shiftKey)) { e.preventDefault(); undo(); }
+    else if (e.code === 'KeyY' && e.ctrlKey || e.code === 'KeyZ' && e.ctrlKey && e.shiftKey) { e.preventDefault(); redo(); }
     else if (e.code === 'Space' || e.code === 'Enter') { if (G.mode === 'solved') { e.preventDefault(); newGame(); } }
   });
   window.addEventListener('resize', layout);

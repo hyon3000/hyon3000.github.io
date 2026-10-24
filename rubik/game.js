@@ -26,7 +26,7 @@
 
   // ------------------------------------------------------------------ state
   const G = {
-    key: 'cube', P: null, col: null, hist: [], queue: [], anim: null, mode: 'play', moves: 0, time: 0, started: false, cheated: false, auto: false,
+    key: 'cube', P: null, col: null, done: [], redo: [], hist: [], queue: [], anim: null, mode: 'play', moves: 0, time: 0, started: false, cheated: false, auto: false,
     hint: null, applied: 0, newRec: false, animScramble: lsGet('rubik_anim') !== '0', autoScr: lsGet('rubik_autoscr') !== '0', lastSolveMs: 0,
   };
   const S = { cw: 0, ch: 0, dpr: 1, yaw: 0.5, pitch: 0.4, M: null, f: 1, cx: 0, cy: 0, down: null, drag: null, held: { l: 0, r: 0, u: 0, d: 0 }, rgb: [], btn: null, ptr: null };
@@ -57,6 +57,7 @@
     G.col = P.apply(G.col, P.moveOf(b, d));
     P.histPush(G.hist, b, d);
     G.applied++;
+    if (src !== 'scr' && src !== 'undo') { G.done.push({ b: b, d: d }); if (src !== 'redo') G.redo = []; }          // (undo / redo stacks)
     if (src === 'user' || src === 'nota') { G.moves++; G.started = true; }
     if (NB && src !== 'scr' && txt !== '') { const nm = txt || NB.name(b, d); if (nm) NT.push(nm, NB.order(b)); }
     if (src !== 'scr' && !(src === 'nota' && G.queue.length)) checkSolved();
@@ -86,7 +87,7 @@
   function newGame(o) {
     o = o || {};
     const P = G.P;
-    setAuto(false); G.queue = []; G.anim = null; G.hint = null; CS.plan = null; R4.plan = null;
+    setAuto(false); G.queue = []; G.anim = null; S.live = null; G.done = []; G.redo = []; G.hint = null; CS.plan = null; R4.plan = null;
     NT.clear();
     G.col = P.solvedCol.slice(); G.hist = []; G.moves = 0; G.time = 0; G.started = false; G.cheated = false; G.newRec = false; G.applied = 0;
     if (P.meta.trivial) { G.mode = 'solved'; return true; }          // easter egg (size 1): nothing to scramble, solved at once
@@ -116,7 +117,7 @@
     G.hint = null; G.cheated = true; setAuto(true); G.planWant = true; return true;
   };
   window.giveHint = function () {
-    if (G.mode !== 'play' || G.hint || G.anim || G.queue.length || G.P.isSolved(G.col)) return false;
+    if (G.mode !== 'play' || G.hint || G.anim || S.live || G.queue.length || G.P.isSolved(G.col)) return false;
     setAuto(false); G.cheated = true; G.hint = { phase: 'wait', t: 0 }; return true;
   };
   window.newGame = function () { newGame(); return true; };
@@ -127,7 +128,7 @@
   window.setTheme = setTheme;
   function runNotation(text) {
     if (!NB) return KO ? '이 퍼즐은 표기법을 지원하지 않습니다' : 'This puzzle has no notation';
-    if (G.mode === 'scramble' || G.anim || G.queue.length) return KO ? '움직이는 중입니다' : 'Busy';
+    if (G.mode === 'scramble' || G.anim || S.live || G.queue.length) return KO ? '움직이는 중입니다' : 'Busy';
     let mv;
     try { mv = window.RBNotation.resolveAll(NB, text); } catch (e) { return e.message; }
     if (!mv.length) return true;
@@ -276,6 +277,10 @@
       G.anim.t += dt;
       if (G.anim.t >= G.anim.dur) { const a = G.anim; G.anim = null; applyNow(a.b, a.d, a.src, a.txt); }
     }
+    if (S.live && S.live.settle) {
+      const lv = S.live, st = lv.settle; st.t += dt; lv.x = st.from + (st.to - st.from) * ease(Math.min(1, st.t / st.dur));
+      if (st.t >= st.dur) { S.live = null; if (G.mode === 'play') for (let i = 0; i < Math.abs(st.k); i++) applyNow(lv.b, st.k > 0 ? 1 : -1, 'user'); }
+    }
     if (!G.anim && G.queue.length && G.mode !== 'solved') { const m = G.queue.shift(); G.anim = { b: m.b, d: m.d, src: m.src, txt: m.txt, t: 0, dur: m.dur || userDur() }; }
     if (!G.anim && !G.queue.length) {
       if (G.mode === 'scramble') {
@@ -299,7 +304,10 @@
       }
     }
   }
-  function busy() { return !!(G.anim || G.queue.length || G.mode === 'scramble'); }
+  function undo() { if (G.mode !== 'play' || busy() || G.hint || !G.done.length) return; if (G.auto) setAuto(false); const e = G.done.pop(); G.redo.push(e); enqueue(e.b, -e.d, 'undo', 0.22); }
+  function redo() { if (G.mode !== 'play' || busy() || G.hint || !G.redo.length) return; if (G.auto) setAuto(false); const e = G.redo.pop(); enqueue(e.b, e.d, 'redo', 0.22); }
+  window.undo = undo; window.redo = redo;
+  function busy() { return !!(G.anim || S.live || G.queue.length || G.mode === 'scramble'); }
 
   // ------------------------------------------------------------------ view
   function resize() {
@@ -358,6 +366,7 @@
     const P = G.P, anim = G.anim, cam = [0, 0, D];
     let band = null, rc = 1, rs = 0;
     if (anim) { band = P.bands[anim.b]; const ang = anim.d * 2 * Math.PI / band.n * ease(Math.min(1, anim.t / anim.dur)); rc = Math.cos(ang); rs = Math.sin(ang); }
+    else if (S.live) { band = P.bands[S.live.b]; rc = Math.cos(S.live.x); rs = Math.sin(S.live.x); }
     const hlBand = G.hint && G.hint.phase === 'hl' ? P.bands[G.hint.b] : null, pulse = 0.5 + 0.5 * Math.sin(now / 90);
     const rot = (p) => V.rot(p, band.axis, rc, rs);
     // dark hull facets (the plastic body)
@@ -416,6 +425,7 @@
     txt(nameOf(G.key), cw / 2, ch * 0.04, fs * 1.15, '#e8eefc', 'center', true);
     const line = T.moves + ' ' + G.moves + '   ' + T.time + ' ' + fmtTime(G.time) + (best.time !== undefined ? '   ' + T.best + ' ' + best.moves + ' / ' + fmtTime(best.time) : '');
     txt(line, cw / 2, ch * 0.04 + fs * 1.6, fs * 0.95, '#aab6d0');
+    { const can = G.mode === 'play' && !busy() && !G.hint; S.ubtn = window.RBNotation.undoBtns(ctx, S.dpr, can && G.done.length > 0, can && G.redo.length > 0); }
     let msg = '';
     if (G.mode === 'scramble') msg = T.scr;
     else if (G.hint && G.hint.phase === 'wait' || G.auto && G.P.meta.solver === 'kociemba' && !CS.plan || G.auto && G.P.meta.solver === 'reduce4' && !R4.failed && !(R4.plan && R4.sigs.indexOf(sigOf(G.col)) >= 0)) msg = (G.P.meta.solver === 'kociemba' && !CS.ready && !CS.failed || G.P.meta.solver === 'reduce4' && !R4.ready && !R4.failed) ? T.prep : T.wait;
@@ -464,7 +474,7 @@
       if (ml < 0.25 * eps * S.f / D) return;
       const cs = (mx * dx + my * dy) / (ml * L);
       [[1, cs], [-1, -cs]].forEach((c) => {
-        const cand = { b: b, d: c[0], cos: c[1], size: band.members.length };
+        const cand = { b: b, d: c[0], cos: c[1], size: band.members.length, ux: mx / ml, uy: my / ml, ppr: ml * vl / eps };
         if (!best || cand.cos > best.cos + 1e-6 || (Math.abs(cand.cos - best.cos) <= 1e-6 && cand.size < best.size)) best = cand;
       });
     });
@@ -475,6 +485,7 @@
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
     const p = pos(e);
     if (G.mode === 'solved' && S.btn && p.x >= S.btn.x && p.x <= S.btn.x + S.btn.w && p.y >= S.btn.y && p.y <= S.btn.y + S.btn.h) { newGame(); return; }
+    for (const b of S.ubtn || []) if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) { if (b.on) (b.id === 'undo' ? undo : redo)(); return; }
     if (G.auto) setAuto(false);
     const view = () => { S.drag = { x: p.x, y: p.y, M: curM() }; S.down = null; };
     if ((e.pointerType === 'mouse' && e.button === 2) || busy() || G.mode !== 'play' || G.hint) { view(); return; }
@@ -487,18 +498,26 @@
       const dx = p.x - d.x, dy = p.y - d.y;
       if (Math.hypot(dx, dy) < Math.max(10 * S.dpr, Math.min(S.cw, S.ch) * 0.03)) return;
       d.done = true;
-      const mv = moveForSwipe(d.c, dx, dy);
-      if (mv && G.mode === 'play' && !busy()) { enqueue(mv.b, mv.d, 'user', userDur()); S.down = null; S.swiped = true; }
+      const mv = moveForSwipe(d.c, dx, dy);          // the layer follows the finger (like the helicopter engine): it turns on release to the nearest quarter, or goes back
+      if (mv && G.mode === 'play' && !busy()) { S.live = { b: mv.b, ux: mv.ux, uy: mv.uy, ppr: mv.ppr, x0: d.x, y0: d.y, x: 0, settle: null }; S.down = null; S.swiped = true; }
       else { S.down = null; S.drag = { x: d.x, y: d.y, M: curM() }; }
     }
+    const lv = S.live;
+    if (lv && !lv.settle) lv.x = Math.max(-Math.PI, Math.min(Math.PI, ((p.x - lv.x0) * lv.ux + (p.y - lv.y0) * lv.uy) / lv.ppr));
     const g = S.drag;
     if (g) S.M = turned(g.M, (p.x - g.x) / S.cw * 3.4, (p.y - g.y) / S.ch * 2.6);
   });
   window.addEventListener('message', function (e) { const m = e.data; if (m && m.rbCmd && typeof window[m.rbCmd] === 'function') window[m.rbCmd](); });
-  window.addEventListener('pointerup', function () { S.down = null; S.drag = null; });
-  window.addEventListener('pointercancel', function () { S.down = null; S.drag = null; });
+  function endLive() {
+    const lv = S.live; if (!lv || lv.settle) return;
+    const step = 2 * Math.PI / G.P.bands[lv.b].n, k = Math.round(lv.x / step);
+    lv.settle = { from: lv.x, to: k * step, k: k, t: 0, dur: 0.1 + 0.1 * Math.min(1, Math.abs(k * step - lv.x) / step) };
+  }
+  window.addEventListener('pointerup', function () { S.down = null; S.drag = null; endLive(); });
+  window.addEventListener('pointercancel', function () { S.down = null; S.drag = null; endLive(); });
   window.addEventListener('keydown', function (e) {
     const k = e.key;
+    if (e.ctrlKey && (k === 'z' || k === 'Z') && !e.shiftKey) { e.preventDefault(); undo(); } else if (e.ctrlKey && (k === 'y' || k === 'Y' || ((k === 'z' || k === 'Z') && e.shiftKey))) { e.preventDefault(); redo(); }
     if (k === 'ArrowLeft') { S.held.l = 1; e.preventDefault(); } else if (k === 'ArrowRight') { S.held.r = 1; e.preventDefault(); }
     else if (k === 'ArrowUp') { S.held.u = 1; e.preventDefault(); } else if (k === 'ArrowDown') { S.held.d = 1; e.preventDefault(); }
     if (window.parent === window) {      // standalone page: handle the cheat keys here (inside the shell they are forwarded to it)

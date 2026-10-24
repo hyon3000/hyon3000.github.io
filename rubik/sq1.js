@@ -60,24 +60,32 @@
     if (pl) pl.forEach((m) => nsFlat(m, st)); else { const h = G.S.hist; for (let i = h.length - 1; i >= 0; i--) nsFlat(SQ.inverse(h[i]), st); }
     NT.plan(nsText(st));
   }
-  function startMove(mv, src, dur) {
+  function startMove(mv, src, dur, from) {
     if (!SQ.apply(G.S, mv)) { if (src === 'user' || src === 'nota') { say(TX.illegal); if (src === 'nota') G.queue = []; } return false; }
     if (src !== 'scr') { nsFlat(mv, NS); NT.raw(nsText(NS)); }
-    G.anim = { mv: mv, src: src, dir: mv.dir || 1, t: 0, dur: dur || (mv.t === 's' ? 0.45 : 0.16 + 0.015 * Math.abs(mv.s)) };
+    if (src !== 'scr' && src !== 'undo') { (G.done = G.done || []).push(mv); if (src !== 'redo') G.redo = []; }          // (undo / redo stacks)
+    G.anim = { mv: mv, src: src, dir: mv.dir || 1, from: from, t: 0, dur: dur || (mv.t === 's' ? 0.45 : 0.16 + 0.015 * Math.abs(mv.s)) };
     if (src === 'user' || src === 'nota') { G.moves++; G.started = true; }
     return true;
   }
   function enqueue(mv, src, dur) { G.queue.push({ mv: mv, src: src, dur: dur }); }
-  function userMove(mv) {
+  function userMove(mv, from, dur) {          // from: the visual offset a dragged layer / slice has when it is let go (see buildFaces)
     if (G.mode === 'solved') return;
     if (G.auto) setAuto(false);
     G.hint = null;
     if (G.anim || G.queue.length) { if (G.queue.length < 3) enqueue(mv, 'user'); return; }
-    startMove(mv, 'user');
+    startMove(mv, 'user', dur, from);
   }
   function rot(s) { userMove({ t: 'r', l: G.sel, s: s }); }
   function doSlice(h, dir) { userMove({ t: 's', h: h | 0, dir: dir || 1 }); }
-  function undo() { if (G.mode === 'solved' || G.anim || G.queue.length || !G.S.hist.length) return; startMove(SQ.inverse(G.S.hist[G.S.hist.length - 1]), 'undo'); }
+  function undo() {
+    if (G.mode === 'solved' || G.anim || G.queue.length || V.live || G.hint || !(G.done || []).length) return; if (G.auto) setAuto(false);
+    const e = G.done.pop(); (G.redo = G.redo || []).push(e); if (!startMove(SQ.inverse(e), 'undo')) G.done.push(G.redo.pop());
+  }
+  function redo() {
+    if (G.mode === 'solved' || G.anim || G.queue.length || V.live || G.hint || !(G.redo || []).length) return; if (G.auto) setAuto(false);
+    const e = G.redo.pop(); if (!startMove(e, 'redo')) G.redo.push(e);
+  }
   function desc(mv) { return mv.t === 's' ? TX.slice : (mv.l === 0 ? TX.top : TX.bottom) + ' ' + (mv.s > 0 ? '◀' : '▶') + Math.abs(mv.s); }
   // Extra solvers that know nothing of the scramble: window.SQSOLVERS = [{ match(n) -> bool, next(S, G) -> {t,l,s} | {t:'s',h} | 'wait' | null (solved) | undefined (not handled), plan(S) -> [moves] | null }]
   function extSolver() { return (window.SQSOLVERS || []).find((s) => { try { return s.match(NV); } catch (e) { return false; } }); }
@@ -94,6 +102,7 @@
   function update(dt) {
     if (G.mode === 'play' && G.started) G.time += dt;
     if (G.msgT > 0) G.msgT -= dt;
+    if (V.live && V.live.settle) { const st = V.live.settle; st.t += dt; V.live.f = 1 - ease(Math.min(1, st.t / st.dur)); if (st.t >= st.dur) V.live = null; }
     if (G.anim) { G.anim.t += dt; if (G.anim.t >= G.anim.dur) { const a = G.anim; G.anim = null; if (a.src !== 'scr' && !(a.src === 'nota' && G.queue.length)) checkSolved(); } }
     if (!G.anim && G.queue.length && G.mode !== 'solved') { const q = G.queue.shift(); startMove(q.mv, q.src, q.dur); }
     if (!G.anim && !G.queue.length) {
@@ -106,7 +115,7 @@
   }
   function newGame(opt) {
     opt = opt || {};
-    G.S = SQ.create(PN); G.sel = 0; G.moves = 0; G.time = 0; G.started = false; G.anim = null; G.queue = []; G.hint = null; G.cheated = false; G.newRec = false; setAuto(false); nsReset();
+    G.S = SQ.create(PN); G.sel = 0; G.moves = 0; G.time = 0; G.started = false; G.anim = null; G.queue = []; G.hint = null; G.cheated = false; G.newRec = false; G.done = []; G.redo = []; setAuto(false); nsReset();
     const cnt = Math.min(200, 16 + Math.round(1.3 * SEC));
     if (!G.autoScr) { G.mode = 'play'; return; }          // no automatic scramble: the player scrambles it; a solved state does not count before the first move
     if (G.animScr && !opt.instant) {
@@ -140,7 +149,11 @@
     const faces = [], S = G.S, a = G.anim;
     let layerOff = null, sliceAng = 0;
     let sliceHalf = -1;
-    if (a) { const e = ease(Math.min(1, a.t / a.dur)); if (a.mv.t === 'r') layerOff = { l: a.mv.l, deg: -a.mv.s * DS * (1 - e) }; else { sliceAng = (a.dir || 1) * Math.PI * (1 - e); sliceHalf = a.mv.h | 0; } }
+    if (a) { const e = ease(Math.min(1, a.t / a.dur)); if (a.mv.t === 'r') layerOff = { l: a.mv.l, deg: (a.from !== undefined ? a.from : -a.mv.s * DS) * (1 - e) }; else { sliceAng = (a.dir || 1) * Math.PI * (a.from !== undefined ? a.from : 1) * (1 - e); sliceHalf = a.mv.h | 0; } }
+    else if (V.live) {          // a layer / slice being dragged: it follows the finger (the state changes only when it is let go)
+      const lv = V.live, f = lv.f === undefined ? 1 : lv.f;
+      if (lv.kind === 'r') layerOff = { l: lv.l, deg: lv.deg * f }; else { sliceAng = -lv.dir * Math.PI * lv.prog * f; sliceHalf = lv.half; }
+    }
     let curGrp = 1;
     function addFace(pts3, color, outward, extra, sel, flat, pick) {
       const A = pts3[0], B = pts3[1], C = pts3[2];
@@ -296,6 +309,7 @@
     else if (G.hint) txt(TX.next + ': ' + desc(G.hint.mv), cw / 2, 70, 14, '#3f6', 'center');
     else if (G.msgT > 0) txt(G.msg, cw / 2, 70, 13, '#ff9a8a', 'center');
     btns = [];
+    { const can = G.mode === 'play' && !G.anim && !G.queue.length && !V.live && !G.hint, ub = window.RBNotation.undoBtns(ctx, 1, can && (G.done || []).length > 0, can && (G.redo || []).length > 0); ub.forEach((b) => btns.push({ x: b.x, y: b.y, w: b.w, h: b.h, act: function () { if (b.on) (b.id === 'undo' ? undo : redo)(); } })); }
     txt(TX.hintTxt, cw / 2, ch - 16, 12, '#7d89a8', 'center');
     if (G.mode === 'solved') {
       const pw = Math.min(360, cw - 40), px = cw / 2 - pw / 2, py = ch * 0.5 - 70;
@@ -314,7 +328,8 @@
     else if (e.code === 'ArrowUp') { e.preventDefault(); G.sel = 0; }
     else if (e.code === 'ArrowDown') { e.preventDefault(); G.sel = 1; }
     else if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); if (G.mode === 'solved') newGame(); else doSlice(e.shiftKey ? 1 : 0); }
-    else if (e.code === 'KeyU' || e.code === 'Backspace') { e.preventDefault(); undo(); }
+    else if (e.code === 'KeyU' || e.code === 'Backspace' || (e.ctrlKey && e.code === 'KeyZ' && !e.shiftKey)) { e.preventDefault(); undo(); }
+    else if (e.code === 'KeyY' && e.ctrlKey || e.code === 'KeyZ' && e.ctrlKey && e.shiftKey) { e.preventDefault(); redo(); }
   });
   // dragging a piece: along the layer (tangent) turns that layer, across the layers (up / down) flips the right half (the slice); a direction that is not possible is ignored
   function inPoly(pts, x, y) { let c = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { if (((pts[i][1] > y) !== (pts[j][1] > y)) && (x < (pts[j][0] - pts[i][0]) * (y - pts[i][1]) / (pts[j][1] - pts[i][1]) + pts[i][0])) c = !c; } return c; }
@@ -341,26 +356,35 @@
     else if (pk) { G.sel = pk.l; V.mid = null; V.piece = { pk: pk, x0: x, y0: y, m: pieceMetrics(pk) }; V.drag = null; }
     else { V.piece = null; V.mid = null; V.drag = { x: e.clientX, y: e.clientY }; }
   });
-  cv.addEventListener('pointermove', function (e) { if (!V.drag) return; turnView(-(e.clientX - V.drag.x) * 0.01, (e.clientY - V.drag.y) * 0.008); V.drag.x = e.clientX; V.drag.y = e.clientY; });
-  function endDrag(e) {
-    V.drag = null;
-    const md = V.mid; V.mid = null;
-    if (md && e) {
-      const r2 = cv.getBoundingClientRect(), mdx = e.clientX - r2.left - md.x0, mdy = e.clientY - r2.top - md.y0;
-      if (Math.abs(mdy) > 12 && Math.abs(mdy) > Math.abs(mdx) && SQ.sliceLegal(G.S)) doSlice(md.half, -(mdy < 0 ? 1 : -1) * (md.wx >= 0 ? 1 : -1));      // up / down only; the half turns the way it was dragged
+  cv.addEventListener('pointermove', function (e) {
+    const pc = V.piece, md = V.mid;
+    if ((pc || md) && !(V.live && V.live.settle)) {
+      const r = cv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+      if (pc) {
+        const dx = px - pc.x0, dy = py - pc.y0, dt = dx * pc.m.t[0] + dy * pc.m.t[1], dv = dx * pc.m.u[0] + dy * pc.m.u[1];
+        if (!V.live && Math.hypot(dx, dy) >= 9 && Math.abs(dt) >= Math.abs(dv) && G.mode === 'play' && !G.anim && !G.queue.length) V.live = { kind: 'r', l: pc.pk.l, deg: 0 };
+        if (V.live && V.live.kind === 'r') { const half = Math.floor(SEC / 2 / GR) * GR; V.live.deg = Math.max(-half, Math.min(half, dt / pc.m.per)) * DS; }
+      } else {
+        const dx = px - md.x0, dy = py - md.y0;
+        if (!V.live && Math.abs(dy) > 9 && Math.abs(dy) > Math.abs(dx) && SQ.sliceLegal(G.S) && G.mode === 'play' && !G.anim && !G.queue.length) V.live = { kind: 's', half: md.half, dir: -(dy < 0 ? 1 : -1) * (md.wx >= 0 ? 1 : -1), prog: 0 };
+        if (V.live && V.live.kind === 's') V.live.prog = Math.min(1, Math.abs(dy) / 80);
+      }
       return;
     }
-    const p = V.piece; V.piece = null; if (!p || !e) return;
-    const r = cv.getBoundingClientRect(), dx = e.clientX - r.left - p.x0, dy = e.clientY - r.top - p.y0;
-    if (Math.hypot(dx, dy) < 12) return;                                  // a click: only the layer was selected
-    const dt = dx * p.m.t[0] + dy * p.m.t[1], dv = dx * p.m.u[0] + dy * p.m.u[1];
-    if (Math.abs(dt) >= Math.abs(dv)) {
-      let steps = GR * Math.round(dt / p.m.per / GR); if (steps === 0) steps = dt > 0 ? GR : -GR;                 // a layer only turns by whole detents (multiples of the smallest piece)
-      const half = Math.floor(SEC / 2 / GR) * GR; if (steps > half) steps = half; if (steps < -half) steps = -half;
-      userMove({ t: 'r', l: p.pk.l, s: steps });
-    }                                                                          // (a drag across the layers on an outer piece does nothing: only the middle layer flips a half)
+    if (!V.drag) return; turnView(-(e.clientX - V.drag.x) * 0.01, (e.clientY - V.drag.y) * 0.008); V.drag.x = e.clientX; V.drag.y = e.clientY;
+  });
+  function endDrag(e) {
+    V.drag = null;
+    const lv = V.live; V.piece = null; V.mid = null;
+    if (lv && !lv.settle) {          // let go: to the nearest detent (a turn) or back (nothing)
+      if (lv.kind === 'r') {
+        const half = Math.floor(SEC / 2 / GR) * GR, steps = Math.max(-half, Math.min(half, GR * Math.round(lv.deg / DS / GR)));
+        if (steps && e) { V.live = null; userMove({ t: 'r', l: lv.l, s: steps }, lv.deg - steps * DS, 0.12); return; }
+      } else if (lv.prog > 0.5 && e && SQ.sliceLegal(G.S)) { V.live = null; userMove({ t: 's', h: lv.half, dir: lv.dir }, 1 - lv.prog, 0.15); return; }
+      lv.settle = { t: 0, dur: 0.12 }; return;
+    }
   }
-  cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', function () { V.drag = null; V.piece = null; });
+  cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', function () { endDrag(null); });
   window.addEventListener('resize', layout);
 
   /* ---------- exports for the shell ---------- */
