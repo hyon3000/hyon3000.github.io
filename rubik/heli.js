@@ -37,7 +37,7 @@
   const BEST_KEY = (SH === 'cubefused' ? 'cubefused_best_' + FZ + '_' : SH === 'cubeshared' ? 'cubeshared_best_' + NN + '_' + FZ + '_' : SH === 'ccclover' || SH === 'cccurvy' || SPN ? SH + '_best_' : SH === 'tetra' ? 'tetraet_best_' : SH === 'octa' ? 'octaet_best_' : SH === 'dodeca' ? 'dodecadc_best_' : SH === 'dodecaet' ? 'dodecaet_best_' : SH === 'icosaet' ? 'icosaet_best_' : SH === 'dodecaft' ? 'dodecaft_best_' : ISCUB ? SH + '_best_' + ABC.join('x') + '_' : SH === 'octact' ? 'octact_best_' : SH === 'icosact' ? 'icosact_best_' : 'heli_best_') + NN;
   try { G.best = JSON.parse(lsGet(BEST_KEY) || 'null'); } catch (e) { G.best = null; }
   function say(t, s) { G.msg = t; G.msgT = (s || 2.4); }
-  function setAuto(on) { G.auto = !!on; G.planShown = false; if (!on) NT.plan(''); try { window.parent.postMessage({ rb: 'autoState', on: G.auto }, '*'); } catch (e) {} }
+  function setAuto(on) { G.auto = !!on; G.planShown = false; G.autoTotal = 0; if (!on) NT.plan(''); try { window.parent.postMessage({ rb: 'autoState', on: G.auto }, '*'); } catch (e) {} }
 
   /* ---------- moves ---------- */
   // G.vis = the visual extra rotation x (about the axis of plane p) of the pieces in set, on top of the state; it relaxes to 0
@@ -108,7 +108,7 @@
       if (G.mode === 'scramble') G.mode = 'play';
       else if (G.mode === 'play') {
         if (G.hint) { G.hint.t += dt; if (G.hint.t >= 0.7) { const h = G.hint; G.hint = null; G.cheated = true; if (h.mv.ext) startMove(h.mv, 'hint', 0.35); else if (G.S.hist.length) { startMove(h.mv, 'hint', 0.35); G.S.hist.pop(); G.S.hist.pop(); } } }
-        else if (G.auto) { const nm = nextSolveMove(); if (!nm) setAuto(false); else if (nm !== 'wait') { G.cheated = true; if (!G.planShown) { G.planShown = true; showPlan(); } startMove(nm, 'auto', nm.dur || 0.25); if (!nm.ext) { G.S.hist.pop(); G.S.hist.pop(); } } }
+        else if (G.auto) { const nm = nextSolveMove(); if (!nm) setAuto(false); else if (nm !== 'wait') { G.cheated = true; if (!G.planShown) { G.planShown = true; showPlan(); } if (!G.autoTotal) { let pl = null; try { const X = extSolver(); pl = X && X.plan ? X.plan(G.S) : null; } catch (e) {} G.autoTotal = pl ? pl.length : G.S.hist.length + 1; } const pc = window.RBNotation.pace(G.autoTotal, dt, nm.dur || 0.25); startMove(nm, 'auto', pc.dur); if (!nm.ext) { G.S.hist.pop(); G.S.hist.pop(); for (let b = 0; b < pc.burst; b++) { const n2 = nextSolveMove(); if (!n2 || n2 === 'wait') break; startMove(n2, 'auto', 0.001, ''); if (!n2.ext) { G.S.hist.pop(); G.S.hist.pop(); } } } else for (let b = 0; b < Math.max(nm.burst || 0, pc.burst); b++) { const n2 = nextSolveMove(); if (!n2 || n2 === 'wait') break; startMove(n2, 'auto', 0.001, ''); } } }
       }
     }
   }

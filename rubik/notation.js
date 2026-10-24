@@ -377,5 +377,11 @@
     });
     return out.map((e) => e.n + (e.v === 1 ? '' : e.v === -1 ? "'" : e.v === 2 ? '2' : e.v === -2 ? "2'" : '')).join(' ');
   }
-  window.RBNotation = { sharedBox: sharedBox, geo: geo, discreteGeo: discreteGeo, heliGeo: heliGeo, compact: compact, parseSq1: parseSq1, parse: parse, box: box, resolveAll: resolveAll, discreteBox: discreteBox, heliBox: heliBox, panel: panel, tokText: tokText };
+  // auto-solve pace: a plan of up to 100 moves plays at the normal speed `base` per move; a longer one is sped up so that the whole plan takes as long as 100 moves
+  // -> { dur: seconds per move, burst: extra moves to apply at once in this frame when a move is shorter than a frame }
+  function pace(total, dt, base) {
+    const n = total > 100 ? total : 100, dur = Math.min(base, base * 100 / n), fr = Math.max(dt || 0, 1 / 60), instant = dur < 3 * fr;          // (a move shorter than ~3 frames cannot be animated: no animation, several moves per frame)
+    return { dur: instant ? 0.001 : dur, instant: instant, burst: instant ? Math.max(0, Math.ceil(fr / dur) - 1) : 0 };
+  }
+  window.RBNotation = { pace: pace, sharedBox: sharedBox, geo: geo, discreteGeo: discreteGeo, heliGeo: heliGeo, compact: compact, parseSq1: parseSq1, parse: parse, box: box, resolveAll: resolveAll, discreteBox: discreteBox, heliBox: heliBox, panel: panel, tokText: tokText };
 })();

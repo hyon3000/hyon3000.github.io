@@ -3,7 +3,7 @@
 // made offline by a C++ Minkwitz-style chain builder) gives, level after level, a short word that brings the next facelet home without disturbing the earlier ones.
 // The model is built with the bond rule switched off (about 100 times faster, the rule never refuses a lattice half turn); jumbled states (70.53 degree turns) are undone first on the real engine.
 self.window = self;
-importScripts('engine.js', 'puzzles.js', 'heli-core.js', 'heli-solve-star-core.js', 'heli-solve-etn-data.js', 'heli-solve-edge.js', 'heli-solve-fisher-data.js');
+importScripts('engine.js', 'puzzles.js', 'heli-core.js', 'heli-solve-star-core.js', 'heli-solve-etn-data.js', 'heli-solve-edge.js', 'heli-solve-fisher-data.js', 'heli-solve-tc-core.js');
 (function () {
   'use strict';
   const H = self.HELI, X = self.HSTAR;
@@ -54,8 +54,75 @@ importScripts('engine.js', 'puzzles.js', 'heli-core.js', 'heli-solve-star-core.j
     if ((self.HSTAR_DATA && self.HSTAR_DATA[key]) || (self.HEDGE_DATA && self.HEDGE_DATA[key])) return;
     for (const f of ['heli-solve-etn-data-' + shape + '-' + n + '.js', 'heli-solve-pose-' + shape + '-' + n + '.js']) { try { self.importScripts(f); } catch (e) { /* no such file */ } }
   }
+
+  // ---- size-generic path (heli-solve-tc-core.js): the half turns of all planes are the generators; 3-cycles by commutators, no table
+  const cenKeyOf = (W) => { let x = 0, y = 0, z = 0, c = 0; for (const f of W) for (const v of f) { x += v[0]; y += v[1]; z += v[2]; c++; } return q3(x / c) + ',' + q3(y / c) + ',' + q3(z / c); };
+  const TCM = {};
+  function getTC(shape, n) {
+    const mk = shape + ':' + n; if (TCM[mk]) return TCM[mk];
+    const cf = H.config(n, shape), b0 = cf.bond; cf.bond = false;
+    try {
+      const S = H.create(n, shape), fl = [], slotOf = new Map();
+      S.pieces.forEach((pc, i) => pc.home.forEach((f, k) => { if (f.tag >= 0) { slotOf.set(keyOfPoly(pc.W[k]), fl.length); fl.push({ i: i, k: k }); } }));
+      const d = fl.length, perms = [], inv = [], planeOf = [], seen = new Map(); let latBad = 0, refused = 0;
+      const sigOf = (pm) => { let h = 0; for (let i = 0; i < pm.length; i += 7) h = (Math.imul(h, 31) + pm[i]) | 0; return h + ':' + pm[1] + ':' + pm[pm.length - 1]; };
+      const byPiece = new Map(); fl.forEach((q, f) => { let l = byPiece.get(q.i); if (!l) byPiece.set(q.i, (l = [])); l.push(f); });
+      for (let p = 0; p < cf.planes.length; p++) {
+        const mem = H.members(S, p); if (!mem || !H.apply(S, { p: p, a: Math.PI })) { refused++; continue; }
+        const pm = new Uint16Array(d); for (let f = 0; f < d; f++) pm[f] = f; let ok = true, id = true;
+        for (const i of mem) { const l = byPiece.get(i); if (!l) continue; for (const f of l) { const q = slotOf.get(keyOfPoly(S.pieces[i].W[fl[f].k])); if (q === undefined) { ok = false; break; } pm[f] = q; if (q !== f) id = false; } if (!ok) break; }
+        if (!H.apply(S, { p: p, a: Math.PI })) throw new Error('half turn cannot be undone');
+        if (!ok) { latBad++; continue; }
+        if (id) continue;
+        const sg = sigOf(pm), prev = seen.get(sg); if (prev) { let same = true; const q = perms[prev - 1]; for (let f = 0; f < d; f++) if (q[f] !== pm[f]) { same = false; break; } if (same) continue; }
+        perms.push(pm); planeOf.push(p); seen.set(sg, perms.length);
+      }
+      // inverse generators where a turn is not an involution
+      const M0 = perms.length; inv.length = M0;
+      for (let k = 0; k < M0; k++) { const pm = perms[k]; let invol = true; for (let f = 0; f < d; f++) if (pm[pm[f]] !== f) { invol = false; break; } if (invol) inv[k] = k; }
+      for (let k = 0; k < M0; k++) if (inv[k] === undefined) { const q = new Uint16Array(d); for (let f = 0; f < d; f++) q[perms[k][f]] = f; perms.push(q); planeOf.push(planeOf[k]); inv[k] = perms.length - 1; inv.push(k); }
+      const model = { d: d, perms: perms, inv: inv, planeOf: planeOf, fl: fl, slotOf: slotOf, latBad: latBad, refused: refused, nplanes: cf.planes.length, latStops: cf.planes.map(() => [0, Math.PI]) };
+      const cen = new Set(); S.pieces.forEach((pc) => cen.add(cenKeyOf(pc.W))); model.cenKeys = cen;
+      Object.defineProperty(model, 'allKeys', { configurable: true, get: function () { const a = new Set(); S.pieces.forEach((pc) => pc.W.forEach((w) => a.add(keyOfPoly(w)))); Object.defineProperty(model, 'allKeys', { value: a }); return a; } });
+      return (TCM[mk] = model);
+    } finally { cf.bond = b0; }
+  }
+  const TOOLS = {};
+  function getTool(shape, n, model) {
+    const mk = shape + ':' + n; if (TOOLS[mk]) return TOOLS[mk];
+    return (TOOLS[mk] = self.HTC.build({ d: model.d, perms: model.perms, inv: model.inv }, { nseed: 40 }));
+  }
+  function posOfTC(S, model) { const pos = new Int32Array(model.d); for (let f = 0; f < model.d; f++) { const q = model.slotOf.get(keyOfPoly(S.pieces[model.fl[f].i].W[model.fl[f].k])); if (q === undefined) return null; pos[f] = q; } return pos; }
+  function solveTC(shape, n, st) {
+    const t0 = Date.now(), model = getTC(shape, n);
+    if (model.latBad) return { error: model.latBad + ' planes turn the puzzle off the lattice by a half turn: not supported' };
+    if (!model.perms.length) return { error: 'no moves' };
+    const tool = getTool(shape, n, model); if (tool.error) return { error: 'generic solver: ' + tool.error };
+    const S = X.loadState(shape, n, st);
+    if (H.isSolved(S)) return { plan: [], sigs: [], ms: 0 };
+    let word = null, pos = null; const cf0 = H.config(n, shape), bond0 = cf0.bond; let pre; cf0.bond = false;
+    try { pre = X.unjumble(S, model, { ms: 30000 }, () => { pos = posOfTC(S, model); if (!pos) return false; word = tool.solve(pos); return !!word; }); } finally { cf0.bond = bond0; }
+    if (pre === null) return { error: 'cannot undo the jumbling' };
+    if (!word) return { error: 'generic solver: ' + (tool.lastError || 'no word') };
+    const R = X.loadState(shape, n, st), pre2 = X.mergeMoves(pre), plan = [], sigs = [];
+    cf0.bond = false;
+    try { for (const mv of pre2) { sigs.push([plan.length, poseSig(R)]); if (!H.apply(R, mv)) return { error: 'engine refused ' + JSON.stringify(mv) }; plan.push({ p: mv.p, a: mv.a, trust: true }); } } finally { cf0.bond = bond0; }
+    let cur = posOfTC(R, model); if (!cur) return { error: 'not on the lattice after the jumble' };
+    // the lattice part as a compact list of planes, checkpoints every 256 turns, final check
+    const lat = new Int16Array(word.length), nl = new Int32Array(cur);
+    const base = plan.length;
+    for (let i = 0; i < word.length; i++) {
+      if ((i & 255) === 0) sigs.push([base + i, 'L' + hashPos(cur)]);
+      const g = word[i], pm = model.perms[g]; lat[i] = model.planeOf[g];
+      for (let f = 0; f < cur.length; f++) cur[f] = pm[cur[f]];
+    }
+    for (let f = 0; f < cur.length; f++) if (cur[f] !== f) return { error: 'generic word does not solve the facelets' };
+    return { pre: plan, lat: lat, sigs: sigs, ms: Date.now() - t0, total: plan.length + word.length, tc: true, d: model.d, buildMs: tool.stats.buildMs };
+  }
   function solve(shape, n, st) {
     loadData(shape, n);
+    if (shape === 'cube' && n >= 5) { const r = solveTC(shape, n, st); if (!r.error) return r; }
+    if (shape !== 'cubefisher' && shape !== 'cubewindmill' && !(self.HSTAR_DATA && self.HSTAR_DATA[shape + ':' + n]) && !(self.HEDGE_DATA && self.HEDGE_DATA[shape + ':' + n])) return solveTC(shape, n, st);
     if (shape === 'cubefisher' || shape === 'cubewindmill' || (self.HEDGE_DATA && self.HEDGE_DATA[shape + ':' + n])) return solvePoints(shape, n, st);
     const t0 = Date.now(), model = getModel(shape, n);
     if (!model.moves.length) return { error: 'no moves' };

@@ -493,7 +493,7 @@
     const pr = (P) => { const q = P.map((p) => [dot(p, u), dot(p, v)]); let s = 0; for (let i = 0; i < q.length; i++) { const x = q[i], y = q[(i + 1) % q.length]; s += x[0] * y[1] - y[0] * x[1]; } return s < 0 ? q.reverse() : q; }, A = pr(a.P), B = pr(b.P);          // both counter-clockwise
     return overlapArea(A, B);
   }
-  function faceContacts(F) {          // F[i] = the inner faces of piece i; returns the pairs of pieces in contact
+  function faceContactsRef(F) {          // (the plain version: every face against every face of the partner plane; kept for tests)
     const byKey = new Map(), edges = [];
     F.forEach((fl, i) => fl.forEach((f) => { const k = rkey(f.n[0]) + ',' + rkey(f.n[1]) + ',' + rkey(f.n[2]) + ',' + rkey(f.d); if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push([i, f]); }));
     F.forEach((fl, i) => fl.forEach((f) => {
@@ -502,17 +502,47 @@
     }));
     return edges;
   }
+  function bboxOf(f) { if (f.bb) return f.bb; let x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9; for (const p of f.P) { if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0]; if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1]; if (p[2] < z0) z0 = p[2]; if (p[2] > z1) z1 = p[2]; } return (f.bb = [x0 - 1e-6, y0 - 1e-6, z0 - 1e-6, x1 + 1e-6, y1 + 1e-6, z1 + 1e-6]); }
+  const gcell = (ix, iy, iz) => (Math.imul(ix, 73856093) ^ Math.imul(iy, 19349663) ^ Math.imul(iz, 83492791)) | 0;
+  // a bucket of faces on one plane gets a grid over the bounding boxes so that a face is only tested against the faces near it (the cut planes of a big puzzle hold thousands of faces)
+  function bucketGrid(l) {
+    let ext = 0; for (const e of l) { const b = bboxOf(e[1]); ext += Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]); }
+    const cs = Math.max(1.5 * ext / l.length, 1e-3), cells = new Map(), big = [];
+    l.forEach((e, j) => {
+      const b = bboxOf(e[1]), x0 = Math.floor(b[0] / cs), x1 = Math.floor(b[3] / cs), y0 = Math.floor(b[1] / cs), y1 = Math.floor(b[4] / cs), z0 = Math.floor(b[2] / cs), z1 = Math.floor(b[5] / cs);
+      if ((x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1) > 48) { big.push(j); return; }
+      for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) { const k = gcell(x, y, z), c = cells.get(k); if (c) c.push(j); else cells.set(k, [j]); }
+    });
+    return { cs: cs, cells: cells, big: big, mark: new Int32Array(l.length), st: 0 };
+  }
+  function faceContacts(F) {          // F[i] = the inner faces of piece i; returns the pairs of pieces in contact
+    const byKey = new Map(), edges = [];
+    const hk = (a, b, c, d) => (Math.imul(a, 73856093) ^ Math.imul(b, 19349663) ^ Math.imul(c, 83492791) ^ Math.imul(d, 2654435761)) | 0;          // (a clash only mixes two planes in a bucket: the test below checks the planes)
+    F.forEach((fl, i) => fl.forEach((f) => { const k = hk(rkey(f.n[0]), rkey(f.n[1]), rkey(f.n[2]), rkey(f.d)); let c = byKey.get(k); if (!c) byKey.set(k, (c = [])); c.push([i, f]); }));
+    const test = (f, i, e) => { if (e[0] <= i) return; if (Math.abs(dot(f.n, e[1].n) + 1) > 1e-6 || Math.abs(f.d + e[1].d) > 1e-4) return; if (faceOverlap(f, e[1]) > 1e-6) edges.push([i, e[0]]); };
+    F.forEach((fl, i) => fl.forEach((f) => {
+      const k = hk(rkey(-f.n[0]), rkey(-f.n[1]), rkey(-f.n[2]), rkey(-f.d)), l = byKey.get(k); if (!l) return;
+      if (l.length <= 12) { l.forEach((e) => test(f, i, e)); return; }
+      const g = l.grid || (l.grid = bucketGrid(l)), b = bboxOf(f), st = ++g.st;
+      const x0 = Math.floor(b[0] / g.cs), x1 = Math.floor(b[3] / g.cs), y0 = Math.floor(b[1] / g.cs), y1 = Math.floor(b[4] / g.cs), z0 = Math.floor(b[2] / g.cs), z1 = Math.floor(b[5] / g.cs);
+      const visit = (j) => { if (g.mark[j] === st) return; g.mark[j] = st; const e = l[j], c = bboxOf(e[1]); if (c[0] > b[3] || c[3] < b[0] || c[1] > b[4] || c[4] < b[1] || c[2] > b[5] || c[5] < b[2]) return; test(f, i, e); };
+      for (const j of g.big) visit(j);
+      if ((x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1) > 4000) { for (let j = 0; j < l.length; j++) visit(j); return; }
+      for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) { const c = g.cells.get(gcell(x, y, z)); if (c) for (const j of c) visit(j); }
+    }));
+    return edges;
+  }
   function connectedAll(N, edges) {
     const par = new Array(N); for (let i = 0; i < N; i++) par[i] = i; const find = (x) => { while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; };
     edges.forEach((e) => { par[find(e[0])] = find(e[1]); }); const r = find(0); for (let i = 1; i < N; i++) if (find(i) !== r) return false; return true;
   }
   function rotFace(f, R, C) { const P = f.P.map((p) => { const q = app(R, [p[0] - C[0], p[1] - C[1], p[2] - C[2]]); return [q[0] + C[0], q[1] + C[1], q[2] + C[2]]; }), n = app(R, f.n); return { n: n, d: dot(n, P[0]), P: P }; }
-  function faceBondBroken(S, pl, m, a) {
+  function faceBondBrokenRef(S, pl, m, a) {
     const N = S.pieces.length, inM = new Set(m), C = pl.center || [0, 0, 0], ax = pl.axis;
     const F0 = S.pieces.map((_, i) => innerFaces(S, i));
     const R1 = rotMat(ax, a), F1 = F0.map((fl, i) => (inM.has(i) ? fl.map((f) => rotFace(f, R1, C)) : fl));
-    if (!connectedAll(N, faceContacts(F1))) return true;          // the body would fall apart after the turn
-    const fixedE = faceContacts(F0).filter((e) => inM.has(e[0]) === inM.has(e[1]));
+    if (!connectedAll(N, faceContactsRef(F1))) return true;          // the body would fall apart after the turn
+    const fixedE = faceContactsRef(F0).filter((e) => inM.has(e[0]) === inM.has(e[1]));
     const t = Math.abs(ax[0]) < 0.8 ? [1, 0, 0] : [0, 1, 0], e1c = cross(ax, t), l1 = Math.hypot(e1c[0], e1c[1], e1c[2]), e1 = [e1c[0] / l1, e1c[1] / l1, e1c[2] / l1], e2 = cross(ax, e1);          // (e1, e2, ax) right handed
     const rot = [], fix = [];
     F0.forEach((fl, i) => fl.forEach((f) => { const al = dot(f.n, ax); if (Math.abs(Math.abs(al) - 1) > 1e-6) return; (inM.has(i) ? rot : fix).push({ i: i, s: dot(f.P[0], ax), sg: al > 0 ? 1 : -1, f: f }); }));
@@ -524,6 +554,43 @@
       const th = a * s / steps, c = Math.cos(th), sn = Math.sin(th), E = fixedE.slice();
       pairs.forEach((q) => { const A = q.A.map((p) => [c2[0] + c * (p[0] - c2[0]) - sn * (p[1] - c2[1]), c2[1] + sn * (p[0] - c2[0]) + c * (p[1] - c2[1])]); if (overlapArea(A, q.B) > 1e-6) E.push([q.i, q.j]); });
       if (!connectedAll(N, E)) return true;
+    }
+    return false;
+  }
+  // the bond test of a turn.  The contact graph of the present state is kept (S._fc, valid while the pieces are where they were) and the one after an allowed turn becomes the next one (S._fcNext, taken over by apply):
+  // on a big puzzle the plain version spent seconds per turn in this test
+  function stateFp(S) { let h = 0; const P = S.pieces; for (let i = 0; i < P.length; i++) { const R = P[i].R, T = P[i].T; for (let k = 0; k < 9; k++) h = (Math.imul(h, 31) + Math.round(R[k] * 4096)) | 0; for (let k = 0; k < 3; k++) h = (Math.imul(h, 31) + Math.round(T[k] * 4096)) | 0; } return h + ':' + P.length; }
+  function faceBondBroken(S, pl, m, a) {
+    const N = S.pieces.length, moved = new Uint8Array(N), C = pl.center || [0, 0, 0], ax = pl.axis; for (const i of m) moved[i] = 1;
+    const F0 = S.pieces.map((_, i) => innerFaces(S, i)), fp0 = stateFp(S); let E0;
+    if (S._fc && S._fc.fp === fp0) E0 = S._fc.edges; else { E0 = faceContacts(F0); S._fc = { fp: fp0, edges: E0 }; }
+    const R1 = rotMat(ax, a), F1 = F0.map((fl, i) => (moved[i] ? fl.map((f) => rotFace(f, R1, C)) : fl));
+    const E1 = faceContacts(F1);
+    if (!connectedAll(N, E1)) return true;          // the body would fall apart after the turn
+    S._fcNext = { m: m, a: a, edges: E1 };
+    // contacts inside the turning group and inside the rest stay; components of them
+    const par = new Int32Array(N); for (let i = 0; i < N; i++) par[i] = i; const find = (x) => { while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; };
+    for (const e of E0) if (moved[e[0]] === moved[e[1]]) { const x = find(e[0]), y = find(e[1]); if (x !== y) par[x] = y; }
+    const t = Math.abs(ax[0]) < 0.8 ? [1, 0, 0] : [0, 1, 0], e1c = cross(ax, t), l1 = Math.hypot(e1c[0], e1c[1], e1c[2]), e1 = [e1c[0] / l1, e1c[1] / l1, e1c[2] / l1], e2 = cross(ax, e1);          // (e1, e2, ax) right handed
+    const rot = [], fix = [];
+    F0.forEach((fl, i) => fl.forEach((f) => { const al = dot(f.n, ax); if (Math.abs(Math.abs(al) - 1) > 1e-6) return; (moved[i] ? rot : fix).push({ i: i, s: dot(f.P[0], ax), sg: al > 0 ? 1 : -1, f: f }); }));
+    const pr = (P) => { const q = P.map((p) => [dot(p, e1), dot(p, e2)]); let s = 0; for (let i = 0; i < q.length; i++) { const x = q[i], y = q[(i + 1) % q.length]; s += x[0] * y[1] - y[0] * x[1]; } return s < 0 ? q.reverse() : q; }, c2 = [dot(C, e1), dot(C, e2)], pairs = [];
+    // (the faces perpendicular to the axis that face each other across the plane of the turn: sorted by their height so that only equal heights are paired)
+    const byS = new Map(); fix.forEach((g) => { const k = Math.round(g.s * 1e4); let l = byS.get(k); if (!l) byS.set(k, (l = [])); l.push(g); });
+    rot.forEach((r) => { for (const dk of [-1, 0, 1]) { const l = byS.get(Math.round(r.s * 1e4) + dk); if (l) for (const g of l) if (r.sg === -g.sg && Math.abs(r.s - g.s) < 1e-4) pairs.push({ i: r.i, j: g.i, A: pr(r.f.P), B: pr(g.f.P) }); } });
+    if (!pairs.length) return false;
+    const roots = new Map(); for (let i = 0; i < N; i++) { const r = find(i); if (!roots.has(r)) roots.set(r, roots.size); }
+    const K = roots.size, steps = Math.max(1, Math.ceil(Math.abs(a) / (15 * Math.PI / 180) - 1e-9));
+    for (let s = 1; s < steps; s++) {
+      const th = a * s / steps, c = Math.cos(th), sn = Math.sin(th), p2 = new Int32Array(K); for (let k = 0; k < K; k++) p2[k] = k; const f2 = (x) => { while (p2[x] !== x) { p2[x] = p2[p2[x]]; x = p2[x]; } return x; };
+      let comps = K;
+      for (const q of pairs) {
+        if (comps === 1) break;
+        const x = f2(roots.get(find(q.i))), y = f2(roots.get(find(q.j))); if (x === y) continue;
+        const A = q.A.map((p) => [c2[0] + c * (p[0] - c2[0]) - sn * (p[1] - c2[1]), c2[1] + sn * (p[0] - c2[0]) + c * (p[1] - c2[1])]);
+        if (overlapArea(A, q.B) > 1e-6) { p2[x] = y; comps--; }
+      }
+      if (comps !== 1) return true;
     }
     return false;
   }
@@ -566,6 +633,7 @@
       m.forEach((i) => { const lg = S.pieces[i].lg; for (let r = 0; r < q; r++) { const a = lg[P], b = lg[Q]; lg[P] = -b; lg[Q] = a; } });
     }
     S.ang[mv.p] = normAng(S.ang[mv.p] + mv.a);
+    if (S._fcNext) { if (S._fcNext.m === m && S._fcNext.a === mv.a) S._fc = { fp: stateFp(S), edges: S._fcNext.edges }; S._fcNext = null; }          // (the contacts computed for the bond test are the ones of the new state)
     S.hist.push(mv); return true;
   }
   function inverse(mv) { return { p: mv.p, a: -mv.a }; }
@@ -591,16 +659,16 @@
   }
   function isSolved(S) {
     if (S.cfg.shared) return solvedShared(S);
-    const cfg = S.cfg, col = {}, FN = cfg.faceN, FD = cfg.faceD;
+    const cfg = S.cfg, col = {}, FN = cfg.faceN, FD = cfg.faceD, EP = cfg.shell ? 0.02 : 1e-5;          // (the curved patches of the clover / curvy cube come from a raster and may stick out of the face by half a pixel)
     for (const pc of S.pieces) {
       for (let k = 0; k < pc.home.length; k++) {
         const f = pc.home[k], w = pc.W[k];
-        for (const p of w) for (let q = 0; q < FN.length; q++) if (dot(FN[q], p) > (cfg.faceDs ? cfg.faceDs[q] : FD) + 1e-5) return false;          // inside the original solid
+        for (const p of w) for (let q = 0; q < FN.length; q++) if (dot(FN[q], p) > (cfg.faceDs ? cfg.faceDs[q] : FD) + EP) return false;          // inside the original solid
         if (f.tag < 0) continue;
         const nrm = app(pc.R, FN[f.tag]);
         let fi = -1; for (let q = 0; q < FN.length; q++) if (Math.abs(nrm[0] - FN[q][0]) + Math.abs(nrm[1] - FN[q][1]) + Math.abs(nrm[2] - FN[q][2]) < 1e-4) fi = q;
         if (fi < 0) return false;
-        for (const p of w) if (Math.abs(dot(FN[fi], p) - (cfg.faceDs ? cfg.faceDs[fi] : FD)) > 1e-5) return false;
+        for (const p of w) if (Math.abs(dot(FN[fi], p) - (cfg.faceDs ? cfg.faceDs[fi] : FD)) > EP) return false;
         if (cfg.shapeOnly) continue;          // the mirror cube: every face is grey, a cube is a solved cube
         if (col[fi] === undefined) col[fi] = f.tag; else if (col[fi] !== f.tag) return false;
       }
@@ -655,5 +723,5 @@
     }
     return mvs;
   }
-  (typeof window !== 'undefined' ? window : globalThis).HELI = { NORMALS: NORMALS, config: config, inCap: inCap, H: H, FACES: FACES, STOPS: STOPS, normAng: normAng, ANG: ANG, create: create, members: members, isFree: isFree, splits: function (S, p, a) { const m = members(S, p); return !!m && !!S.cfg.bond && bondBroken(S, S.cfg.planes[p], m, a); }, apply: apply, _refresh: refresh, inverse: inverse, isSolved: isSolved, scramble: scramble, rotMat: rotMat, app: app };
+  (typeof window !== 'undefined' ? window : globalThis).HELI = { NORMALS: NORMALS, config: config, inCap: inCap, H: H, FACES: FACES, STOPS: STOPS, normAng: normAng, ANG: ANG, create: create, members: members, isFree: isFree, splits: function (S, p, a) { const m = members(S, p); return !!m && !!S.cfg.bond && bondBroken(S, S.cfg.planes[p], m, a); }, apply: apply, _refresh: refresh, _contacts: faceContacts, _contactsRef: faceContactsRef, _bondRef: faceBondBrokenRef, _bond: faceBondBroken, _innerFaces: innerFaces, inverse: inverse, isSolved: isSolved, scramble: scramble, rotMat: rotMat, app: app };
 })();

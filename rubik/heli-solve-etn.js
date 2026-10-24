@@ -42,8 +42,13 @@
       ST.worker.onmessage = (e) => {
         const m = e.data; if (m.id !== ST.id) return; ST.pending = false;
         if (m.error || !m.result || m.result.error) { ST.failed = true; ST.err = m.error || (m.result && m.result.error); return; }
-        ST.plan = m.result.plan; ST.info = m.result; ST.index = new Map(); m.result.sigs.forEach((s, i) => ST.index.set(s, i));          // (a state met twice: the later index wins, the loop is skipped)
+        const r = m.result; ST.info = r; ST.index = new Map();
+        if (r.tc) {          // size-generic plan: the jumble-undoing turns as they are, then the half turns as a list of planes; checkpoints [index, signature]
+          ST.plan = r.pre.slice(); const lat = r.lat; for (let i = 0; i < lat.length; i++) ST.plan.push({ p: lat[i], a: Math.PI, trust: true });
+          r.sigs.forEach((q) => ST.index.set(q[1], q[0]));
+        } else { ST.plan = r.plan; r.sigs.forEach((s, i) => ST.index.set(s, i)); }          // (a state met twice: the later index wins, the loop is skipped)
         ST.dur = Math.max(0.02, Math.min(0.25, 12 / Math.max(1, ST.plan.length)));
+        ST.burst = Math.min(80, Math.max(0, Math.ceil(ST.plan.length / 1500) - 1)); ST.applied = 0; ST.perMove = 0;
       };
       ST.worker.onerror = () => { ST.failed = true; ST.pending = false; ST.worker = null; };
     } catch (err) { ST.failed = true; }
@@ -64,8 +69,16 @@
       else if (ST.plan) { sig = sigNow(S); i = ST.index.get(sig) === undefined ? -1 : ST.index.get(sig); }
       if (i >= 0 && i < ST.plan.length) {
         if (sig !== null) { if (sig === ST.lastSig) { if (++ST.repeat > 3) { ST.failed = true; return undefined; } } else { ST.lastSig = sig; ST.repeat = 0; } }          // the same state asked again and again: the page refuses the move
-        ST.fast = { idx: i, hist: hl };
-        return Object.assign({ dur: ST.dur, left: ST.plan.length - i }, ST.plan[i]);
+        // a plan too long to play on a big puzzle (every turn costs milliseconds in the engine): after a while the rest is skipped and the puzzle jumps to its solved state (the plan was checked in the worker)
+        if (ST.plan.length > 3000) {
+          if (!ST.perMove) { const t = performance.now(); HC.members(S, 0); ST.perMove = Math.max(0.05, (performance.now() - t) * 2.5); }
+          if (ST.applied >= 400 && !window.__etnNoSnap && (ST.plan.length - i) * ST.perMove > 40000) {
+            const F = HC.create(S.cfg.n, S.cfg.shape); S.pieces.forEach((pc, k) => { pc.R = F.pieces[k].R.slice(); pc.T = F.pieces[k].T.slice(); HC._refresh(S, k); }); S.ang.fill(0);
+            ST.snapped = true; return null;
+          }
+        }
+        ST.applied++; ST.fast = { idx: i, hist: hl };
+        return Object.assign({ dur: ST.dur, left: ST.plan.length - i, burst: ST.burst }, ST.plan[i]);
       }
       ST.fast = null;
       if (ST.plan) { ST.plan = null; ST.index = null; if (++ST.replans > 4) ST.failed = true; }          // the state left the plan (or the plan ran out): plan again
@@ -76,7 +89,7 @@
       }
       return 'wait';
     },
-    plan: (S) => { const i = find(S); return i >= 0 ? ST.plan.slice(i) : null; },
+    plan: (S) => { const i = find(S); return i >= 0 ? ST.plan.slice(i, i + 2000) : null; },          // (only for the notation panel: the first 2000 turns)
   });
   window.__hetn = { ST: ST, sigNow: sigNow };
 })();

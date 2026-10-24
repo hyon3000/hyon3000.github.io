@@ -82,7 +82,7 @@
   // Extra solvers that know nothing of the scramble: window.SQSOLVERS = [{ match(n) -> bool, next(S, G) -> {t,l,s} | {t:'s',h} | 'wait' | null (solved) | undefined (not handled), plan(S) -> [moves] | null }]
   function extSolver() { return (window.SQSOLVERS || []).find((s) => { try { return s.match(NV); } catch (e) { return false; } }); }
   function nextSolveMove() { const X = extSolver(); if (X) { const r = X.next(G.S, G); if (r !== undefined) return r; } const h = G.S.hist; return h.length ? SQ.inverse(h[h.length - 1]) : null; }
-  function setAuto(on) { G.auto = !!on; if (!on) NT.plan(''); try { window.parent.postMessage({ rb: 'autoState', on: G.auto }, '*'); } catch (e) {} }
+  function setAuto(on) { G.auto = !!on; G.autoTotal = 0; if (!on) NT.plan(''); try { window.parent.postMessage({ rb: 'autoState', on: G.auto }, '*'); } catch (e) {} }
   function checkSolved() {
     if (G.mode !== 'play' || !(G.started || G.cheated) || !SQ.isSolved(G.S)) return;
     G.S.hist = []; G.mode = 'solved'; setAuto(false);
@@ -100,7 +100,7 @@
       if (G.mode === 'scramble') G.mode = 'play';
       else if (G.mode === 'play') {
         if (G.hint) { G.hint.t += dt; if (G.hint.t >= 0.7) { const h = G.hint; G.hint = null; G.cheated = true; if (G.S.hist.length) startMove(h.mv, 'hint', 0.3); } }
-        else if (G.auto) { const nm = nextSolveMove(); if (!nm) setAuto(false); else if (nm !== 'wait') { G.cheated = true; if (G.planWant) { G.planWant = false; showPlan(); } if (nm.t === 'r') G.sel = nm.l; startMove(nm, 'auto', nm.t === 's' ? 0.35 : 0.22); } }
+        else if (G.auto) { const nm = nextSolveMove(); if (!nm) setAuto(false); else if (nm !== 'wait') { G.cheated = true; if (G.planWant) { G.planWant = false; showPlan(); } if (nm.t === 'r') G.sel = nm.l; if (!G.autoTotal) { let pl = null; try { const X = extSolver(); pl = X && X.plan ? X.plan(G.S) : null; } catch (e) {} G.autoTotal = pl ? pl.length : G.S.hist.length + 1; } const pc = window.RBNotation.pace(G.autoTotal, dt, nm.t === 's' ? 0.35 : 0.22); startMove(nm, 'auto', pc.dur); for (let b = 0; b < pc.burst; b++) { const n2 = nextSolveMove(); if (!n2) break; if (n2.t === 'r') G.sel = n2.l; startMove(n2, 'auto', 0.001); } } }
       }
     }
   }

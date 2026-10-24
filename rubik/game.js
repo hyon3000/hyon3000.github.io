@@ -105,7 +105,7 @@
   }
   function setAuto(on) {
     if (G.auto === !!on) return;
-    G.auto = !!on;
+    G.auto = !!on; G.autoTotal = 0;
     if (!on) NT.plan('');
     try { if (window.parent !== window) window.parent.postMessage({ rb: 'autoState', on: G.auto }, '*'); } catch (e) {}
   }
@@ -288,7 +288,13 @@
           } else { G.hint.t += dt; if (G.hint.t >= 0.6) { const h = G.hint; G.hint = null; enqueue(h.b, h.d, 'hint', 0.3); } }
         } else if (G.auto) {
           const nm = nextSolveMove();
-          if (nm === null) setAuto(false); else if (nm !== 'wait') { if (G.planWant) { G.planWant = false; showPlan(); } enqueue(nm.b, nm.d, 'auto', 0.25); }
+          if (nm === null) setAuto(false); else if (nm !== 'wait') {
+            if (G.planWant) { G.planWant = false; showPlan(); }
+            if (!G.autoTotal) { let pm = null; try { pm = planMoves(); } catch (e) {} G.autoTotal = pm ? pm.length : 1; }
+            const pc = window.RBNotation.pace(G.autoTotal, dt, 0.25);
+            if (pc.instant) { applyNow(nm.b, nm.d, 'auto'); for (let k = 0; k < pc.burst && G.mode === 'play'; k++) { const n2 = nextSolveMove(); if (!n2 || n2 === 'wait') break; applyNow(n2.b, n2.d, 'auto'); } }
+            else enqueue(nm.b, nm.d, 'auto', pc.dur);
+          }
         }
       }
     }
