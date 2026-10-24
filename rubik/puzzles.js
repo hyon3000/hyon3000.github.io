@@ -645,47 +645,15 @@
     const ds = []; if (n === 2) ds.push(0); else for (let k = 0; k <= n - 2; k++) ds.push(0.5 * (1 - 2 * k / (n - 2)));
     return layeredSpec('octact' + n, facets, [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map((a) => ({ u: a, ds: ds })), n, 4, 1, 0.03, 0);
   }
-  // dodecahedron CT: the corner planes pass through the centres of the three faces at the vertex (depth D cos(angle vertex axis - face axis)), so every line cut into a face goes through the
-  // centre of that face (n = 2 = Chopasaurus: just these two planes per vertex axis, only the two corners turn); n planes equally spaced between them in general
-  function dodecactSpec(n) {
-    const g = dodecaFacets(), va = vertexAxes(g.facets), D = V.dot(g.facets[0].normal, g.facets[0].verts[0]);
-    let c = -1; g.facets.forEach((f) => { c = Math.max(c, V.dot(va.axes[0], f.normal)); });
-    const Cd = D * c, ds = []; for (let k = 0; k < n; k++) ds.push(Cd * (1 - 2 * k / (n - 1)));
-    const sp = layeredSpec('dodecact' + n, g.facets, va.axes.map((u) => ({ u: u, ds: ds })), n, 3, 1 / g.radius, 0.022, 0);
-    if (n === 2) {
-      sp.lines.forEach((l) => { l.bands = [l.bands[0], l.bands[2]]; });
-      // Chopasaurus: every face is cut by five lines that all go through its centre (each perpendicular to the direction centre - vertex): 5 quadrilaterals (with a vertex) and 5 triangles
-      // (with an edge midpoint).  The stickers are built directly and belong to a corner by their centre only ("loose").
-      const out = [];
-      g.facets.forEach((f, fi) => {
-        const v = f.verts, C = V.avg(v), nrm = f.normal, t0 = V.norm(V.sub(v[0], C)), w0 = V.cross(nrm, t0);
-        const ang = (p) => { const r = V.sub(p, C); return Math.atan2(V.dot(r, w0), V.dot(r, t0)); };
-        // boundary point of the ray from the centre in direction (cos a, sin a) in the face plane
-        const hit = (a) => {
-          const dir = V.add(V.mul(t0, Math.cos(a)), V.mul(w0, Math.sin(a)));
-          let best = null;
-          for (let i = 0; i < v.length; i++) {
-            const A = v[i], B = v[(i + 1) % v.length], e = V.sub(B, A), cr = V.cross(dir, e), den = V.dot(cr, cr);
-            if (den < 1e-12) continue;
-            const s = V.dot(V.cross(V.sub(A, C), dir), cr) / den, tt = V.dot(V.cross(V.sub(A, C), e), cr) / den;
-            if (tt > 1e-9 && s > -1e-9 && s < 1 + 1e-9) best = V.add(C, V.mul(dir, tt));
-          }
-          return best;
-        };
-        const vang = v.map(ang), rays = [];
-        // rays: perpendicular to every vertex direction (both ways) - angles vang + 90 degrees, + 270 degrees
-        v.forEach((q, i) => { rays.push(vang[i] + Math.PI / 2); rays.push(vang[i] - Math.PI / 2); });
-        const norm = (a) => { while (a < -Math.PI) a += 2 * Math.PI; while (a >= Math.PI) a -= 2 * Math.PI; return a; };
-        const ra = rays.map(norm).sort((a, b) => a - b), pts = ra.map(hit);
-        for (let j = 0; j < ra.length; j++) {
-          const a0 = ra[j], a1 = j + 1 < ra.length ? ra[j + 1] : ra[0] + 2 * Math.PI, poly = [C, pts[j]];
-          v.forEach((q, i) => { let a = norm(vang[i]); for (const k of [0, 2 * Math.PI]) { if (a + k > a0 + 1e-9 && a + k < a1 - 1e-9) poly.push(q); } });
-          poly.push(pts[(j + 1) % ra.length]);
-          out.push({ facet: fi, verts: poly, kind: poly.length > 4 ? 'q' : 't' });
-        }
-      });
-      sp.stickers = out; sp.loose = true;
-    }
+  // dodecahedron FT, Chopasaurus type: the axes go through the face centres and the first plane (D / sqrt(5)) passes through the centres of the five faces around a face, so a turn (72 degrees)
+  // moves that face whole and 5 of the 10 pieces of each of the five faces around it (every face is cut by five lines through its centre, parallel to its edges).  n = 2 is the Chopasaurus;
+  // for a larger n there are n - 2 more planes equally spaced between that one and the face.  Only the caps turn.
+  function dodecaChopSpec(n) {
+    const g = dodecaFacets(), D = V.dot(g.facets[0].normal, g.facets[0].verts[0]), d0 = D / Math.sqrt(5), vals = [];
+    for (let k = 0; k <= n - 2; k++) vals.push(d0 + (D - d0) * k / Math.max(1, n - 1));
+    const ds = vals.concat(vals.map((x) => -x)).sort((x, y) => y - x);
+    const sp = layeredSpec('dodecachop' + n, g.facets, oppositePairs(g.facets).map((f) => ({ u: f.normal, ds: ds })), n, 5, 1 / g.radius, 0.022, 0);
+    sp.lines.forEach((l) => { const mid = (l.bands.length - 1) / 2; l.bands = l.bands.filter((bd, i) => i !== mid); });          // the big middle slab does not turn
     return sp;
   }
   // icosahedron CT/FT-Deepcut: n + 1 planes per vertex axis between the two planes that cut the corners off, the faces are then cut into n^2 triangles (n = 2: four, n = 3: nine) by planes
@@ -1131,18 +1099,18 @@
     d.sort((x, y) => x - y);
     return d[0] === d[2] ? customKey('cube', d[0]) : 'x:cuboidx:' + d.join(':');
   }
-  const TOPOS = ['tetra', 'tetraet', 'cube', 'cubefused', 'cubeshared', 'cubeaxis', 'cubectrex', 'cubeetclover', 'cubemix', 'cubefisher', 'cuboidff', 'cuboidx', 'cubeet', 'starft', 'starct', 'skewbult', 'qjdodeca', 'octa', 'octact', 'octaet', 'dodeca', 'dodecadc', 'dodecact', 'dodecaet', 'icosact', 'icosadc', 'icosaet', 'cubect', 'square'];
-  META.chopasaurus = { key: 'chopasaurus', spec: function () { return dodecactSpec(2); }, extras: null, scramble: 40, solver: 'history', view: META.dodeca.view, colours: META.dodeca.colours };
+  const TOPOS = ['tetra', 'tetraet', 'cube', 'cubefused', 'cubeshared', 'cubeaxis', 'cubectrex', 'cubeetclover', 'cubemix', 'cubefisher', 'cuboidff', 'cuboidx', 'cubeet', 'starft', 'starct', 'skewbult', 'qjdodeca', 'octa', 'octact', 'octaet', 'dodeca', 'dodecaet', 'icosact', 'icosadc', 'icosaet', 'cubect', 'square'];
+  META.chopasaurus = { key: 'chopasaurus', spec: function () { return dodecaChopSpec(2); }, extras: null, scramble: 40, solver: 'history', view: META.dodeca.view, colours: META.dodeca.colours };
   META.icosamate = { key: 'icosamate', spec: function () { return icosadcSpec(2); }, extras: null, scramble: 40, solver: 'history', view: META.icosa.view, colours: META.icosa.colours };
   META.icosaminx = { key: 'icosaminx', spec: function () { return icosactSpec(2); }, extras: null, scramble: 40, solver: 'history', view: META.icosa.view, colours: META.icosa.colours };
-  const MINN = { cubeshared: 2, cubefused: 3, cubeaxis: 3, cubemirror: 3, cubepandora: 3, cubepenrose: 2, cubewindmill: 3, cubectredi: 2, cubeetclover: 2, cubeetcurvy: 2, cubectivy: 2, cubectrex: 2, cubemix: 3, cubefisher: 2, starft: 2, starct: 2, skewbult: 2, qjdodeca: 2, cuboidx: 1, cuboidff: 1, icosadc: 2, dodecact: 2, dodecaet: 2, icosact: 2, icosaet: 2, dodecadc: 2, tetra: 2, tetraet: 2, octact: 3, octaet: 2, cube: 2, cubeet: 2, octa: 2, dodeca: 2, cubect: 2, square: -1 };
-  const MAXN = { cubeshared: Infinity, cubefused: Infinity, cubeaxis: Infinity, cubemirror: Infinity, cubepandora: Infinity, cubepenrose: Infinity, cubewindmill: 3, cubectredi: Infinity, cubeetclover: Infinity, cubeetcurvy: Infinity, cubectivy: Infinity, cubectrex: Infinity, cubemix: Infinity, cubefisher: Infinity, starft: Infinity, starct: Infinity, skewbult: Infinity, qjdodeca: Infinity, cuboidx: Infinity, cuboidff: Infinity, icosadc: Infinity, dodecact: Infinity, dodecaet: Infinity, icosact: Infinity, icosaet: Infinity, dodecadc: Infinity, tetra: Infinity, tetraet: Infinity, octact: Infinity, octaet: Infinity, cube: Infinity, cubeet: Infinity, octa: Infinity, dodeca: Infinity, cubect: Infinity, square: Infinity };      // no upper limit on the size
-  const BUILTIN = { cubeshared: {}, cubefused: {}, cubeaxis: { 3: 'axis' }, cubemirror: { 3: 'mirror' }, cubepandora: { 3: 'pandora' }, cubepenrose: { 3: 'penrose' }, cubewindmill: { 3: 'windmill' }, cubectredi: { 2: 'redi' }, cubeetclover: { 2: 'clover' }, cubeetcurvy: { 2: 'curvy' }, cubectivy: { 2: 'ivy' }, cubectrex: { 2: 'rex' }, cubemix: { 3: 'mixup' }, cubefisher: { 3: 'fisher' }, starft: { 2: 'starminxft' }, starct: { 2: 'starminxct' }, skewbult: { 2: 'skewbult' }, qjdodeca: { 2: 'qjdodeca' }, cuboidx: {}, cuboidff: {}, cube: { 2: 'cube2', 3: 'cube', 4: 'cube4', 5: 'cube5', 6: 'cube6', 7: 'cube7' }, tetra: { 3: 'tetra' }, tetraet: { 2: 'pyramorphix' }, octact: {}, octaet: {}, dodecadc: { 2: 'pentult' }, dodecact: { 2: 'chopasaurus' }, dodecaet: { 2: 'bigchop' }, icosact: { 2: 'icosaminx' }, icosadc: { 2: 'icosamate' }, icosaet: {}, octa: { 3: 'octa' }, cubect: { 2: 'skewb' }, dodeca: { 3: 'dodeca' }, square: { 1: 'sq1' }, cubeet: { 2: 'chop', 3: 'heli' } };
-  const BASE = { tetra: 'tetra', tetraet: 'tetra', octact: 'octa', octaet: 'octa', dodecadc: 'dodeca', dodecact: 'dodeca', dodecaet: 'dodeca', icosact: 'icosa', icosadc: 'icosa', icosaet: 'icosa', cube: 'cube', octa: 'octa', dodeca: 'dodeca', cubect: 'skewb', cubectrex: 'skewb', cubectivy: 'skewb', cubeetclover: 'cube', cubeetcurvy: 'cube', cubectredi: 'skewb', cubepandora: 'cube' };
-  const SPECS = { cubepandora: pandoraSpec, cubectredi: rediSpec, cubeetclover: function (n) { return cloverSpec(1, n); }, cubeetcurvy: function (n) { return cloverSpec(CURVY_A, n); }, cubectivy: function (n) { return rexSpec(n, true); }, cubectrex: rexSpec, tetra: tetraSpec, tetraet: tetraETSpec, dodecadc: dodecaDeepSpec, cube: cubeSpec, octa: octaSpec, dodeca: dodecaNSpec, icosact: icosactSpec, icosadc: icosadcSpec, octact: octactSpec, dodecact: dodecactSpec, cubect: cubectSpec };
+  const MINN = { cubeshared: 2, cubefused: 3, cubeaxis: 3, cubemirror: 3, cubepandora: 3, cubepenrose: 2, cubewindmill: 3, cubectredi: 2, cubeetclover: 2, cubeetcurvy: 2, cubectivy: 2, cubectrex: 2, cubemix: 3, cubefisher: 2, starft: 2, starct: 2, skewbult: 2, qjdodeca: 2, cuboidx: 1, cuboidff: 1, icosadc: 2, dodecachop: 2, dodecaet: 2, icosact: 2, icosaet: 2, dodecadc: 2, tetra: 2, tetraet: 2, octact: 3, octaet: 2, cube: 2, cubeet: 2, octa: 2, dodeca: 2, cubect: 2, square: -1 };
+  const MAXN = { cubeshared: Infinity, cubefused: Infinity, cubeaxis: Infinity, cubemirror: Infinity, cubepandora: Infinity, cubepenrose: Infinity, cubewindmill: 3, cubectredi: Infinity, cubeetclover: Infinity, cubeetcurvy: Infinity, cubectivy: Infinity, cubectrex: Infinity, cubemix: Infinity, cubefisher: Infinity, starft: Infinity, starct: Infinity, skewbult: Infinity, qjdodeca: Infinity, cuboidx: Infinity, cuboidff: Infinity, icosadc: Infinity, dodecachop: Infinity, dodecaet: Infinity, icosact: Infinity, icosaet: Infinity, dodecadc: Infinity, tetra: Infinity, tetraet: Infinity, octact: Infinity, octaet: Infinity, cube: Infinity, cubeet: Infinity, octa: Infinity, dodeca: Infinity, cubect: Infinity, square: Infinity };      // no upper limit on the size
+  const BUILTIN = { cubeshared: {}, cubefused: {}, cubeaxis: { 3: 'axis' }, cubemirror: { 3: 'mirror' }, cubepandora: { 3: 'pandora' }, cubepenrose: { 3: 'penrose' }, cubewindmill: { 3: 'windmill' }, cubectredi: { 2: 'redi' }, cubeetclover: { 2: 'clover' }, cubeetcurvy: { 2: 'curvy' }, cubectivy: { 2: 'ivy' }, cubectrex: { 2: 'rex' }, cubemix: { 3: 'mixup' }, cubefisher: { 3: 'fisher' }, starft: { 2: 'starminxft' }, starct: { 2: 'starminxct' }, skewbult: { 2: 'skewbult' }, qjdodeca: { 2: 'qjdodeca' }, cuboidx: {}, cuboidff: {}, cube: { 2: 'cube2', 3: 'cube', 4: 'cube4', 5: 'cube5', 6: 'cube6', 7: 'cube7' }, tetra: { 3: 'tetra' }, tetraet: { 2: 'pyramorphix' }, octact: {}, octaet: {}, dodecadc: { 2: 'pentult' }, dodecachop: { 2: 'chopasaurus' }, dodecaet: { 2: 'bigchop' }, icosact: { 2: 'icosaminx' }, icosadc: { 2: 'icosamate' }, icosaet: {}, octa: { 3: 'octa' }, cubect: { 2: 'skewb' }, dodeca: { 3: 'dodeca' }, square: { 1: 'sq1' }, cubeet: { 2: 'chop', 3: 'heli' } };
+  const BASE = { tetra: 'tetra', tetraet: 'tetra', octact: 'octa', octaet: 'octa', dodecadc: 'dodeca', dodecachop: 'dodeca', dodecaet: 'dodeca', icosact: 'icosa', icosadc: 'icosa', icosaet: 'icosa', cube: 'cube', octa: 'octa', dodeca: 'dodeca', cubect: 'skewb', cubectrex: 'skewb', cubectivy: 'skewb', cubeetclover: 'cube', cubeetcurvy: 'cube', cubectredi: 'skewb', cubepandora: 'cube' };
+  const SPECS = { cubepandora: pandoraSpec, cubectredi: rediSpec, cubeetclover: function (n) { return cloverSpec(1, n); }, cubeetcurvy: function (n) { return cloverSpec(CURVY_A, n); }, cubectivy: function (n) { return rexSpec(n, true); }, cubectrex: rexSpec, tetra: tetraSpec, tetraet: tetraETSpec, dodecadc: dodecaDeepSpec, dodecachop: dodecaChopSpec, cube: cubeSpec, octa: octaSpec, dodeca: dodecaNSpec, icosact: icosactSpec, icosadc: icosadcSpec, octact: octactSpec, cubect: cubectSpec };
   // key of the puzzle for a topology and a size: a built-in key when the combination exists (with its own solver), else a generated 'x:topo:n'
   // Square-n: n = -1 (2 pieces), 0 (4), 0.5 (6) or an integer of 1 or more (4 (n + 1) pieces); every other value is refused
-  function squareOk(n) { return n === -1 || n === 0 || n === 0.5 || (Number.isInteger(n) && n >= 1); }
+  function squareOk(n) { return n === -1 || (n >= 0 && Number.isInteger(2 * n)); }          // -1 (two halves; -0.5 is written -1), 0, 0.5, 1, 1.5, 2, 2.5, ...
   function customKey(topo, n) {
     if (topo === 'cuboidff') return cuboidKey(n);
     if (topo === 'cuboidx') return cuboidXKey(n);
@@ -1156,7 +1124,7 @@
       return key;
     }
     n = topo === 'square' ? +n : Math.floor(+n);
-    if ((TOPOS.indexOf(topo) < 0 && topo !== 'cubectivy' && topo !== 'cubectredi' && topo !== 'cubewindmill' && topo !== 'cubepandora' && topo !== 'cubemirror' && topo !== 'cubeetcurvy') || !isFinite(n)) return null;
+    if ((TOPOS.indexOf(topo) < 0 && topo !== 'cubectivy' && topo !== 'dodecadc' && topo !== 'dodecachop' && topo !== 'cubectredi' && topo !== 'cubewindmill' && topo !== 'cubepandora' && topo !== 'cubemirror' && topo !== 'cubeetcurvy') || !isFinite(n)) return null;
     if (topo === 'cubemix' && n % 2 === 0) return null;          // the mixup cube: odd sizes only
     if (topo === 'square') { if (!squareOk(n)) return null; }
     else if (!(n >= MINN[topo] || n === 1 || (n === 2 && (topo === 'octact' || topo === 'icosact'))) || n > MAXN[topo]) return null;          // n = 1 (below the minimum) is an easter egg: an unscrambled puzzle that is solved at once
@@ -1175,7 +1143,7 @@
   // display name of a custom puzzle (KO / EN)
   function nameOf(key, ko) {
     const p = parseKey(key); if (!p) return null;
-    const T = ko ? { dodecact: '정십이면체CT', dodecaet: '정십이면체ET', icosact: '정이십면체CT/FT', icosadc: '정이십면체CT/FT-Deepcut', icosaet: '정이십면체ET', dodecadc: '정십이면체FT-Deepcut', octact: '정팔면체CT', octaet: '정팔면체ET', tetraet: '정사면체ET', tetra: '정사면체FT/CT', cube: '큐브', octa: '정팔면체FT', dodeca: '정십이면체FT', cubect: '정육면체CT', square: '스퀘어', cubeet: '정육면체ET', cubectrex: '정육면체CT-rex', cubectivy: '정육면체CT-ivy', cubectredi: '정육면체CT-redi', cubeetclover: '정육면체ET-clover', cubeetcurvy: '정육면체ET-curvy', cubemix: '정육면체FT-mixup', cubefisher: '정육면체FT-fisher', cubewindmill: '정육면체FT-windmill', cubepenrose: '정육면체FT-penrose', cubepandora: '정육면체FT-pandora', cubemirror: '정육면체FT-mirror', cubeaxis: '정육면체CT-axis', starft: '정십이면체FT-starminx', starct: '정십이면체CT-starminx', skewbult: '정십이면체FT-skewb ultimate', qjdodeca: '정십이면체FT-QJ' } : { dodecact: 'Dodecahedron CT', dodecaet: 'Dodecahedron ET', icosact: 'Icosahedron CT/FT', icosadc: 'Icosahedron CT/FT-Deepcut', icosaet: 'Icosahedron ET', dodecadc: 'Dodecahedron FT-Deepcut', octact: 'Octahedron CT', octaet: 'Octahedron ET', tetraet: 'Tetrahedron ET', tetra: 'Tetrahedron FT/CT', cube: 'Cube', octa: 'Octahedron FT', dodeca: 'Dodecahedron FT', cubect: 'Cube CT', square: 'Square', cubeet: 'Cube ET', cubectrex: 'Cube CT-rex', cubectivy: 'Cube CT-ivy', cubectredi: 'Cube CT-redi', cubeetclover: 'Cube ET-clover', cubeetcurvy: 'Cube ET-curvy', cubemix: 'Cube FT-mixup', cubefisher: 'Cube FT-fisher', cubewindmill: 'Cube FT-windmill', cubepenrose: 'Cube FT-penrose', cubepandora: 'Cube FT-pandora', cubemirror: 'Cube FT-mirror', cubeaxis: 'Cube CT-axis', starft: 'Dodecahedron FT-starminx', starct: 'Dodecahedron CT-starminx', skewbult: 'Dodecahedron FT-skewb ultimate', qjdodeca: 'Dodecahedron FT-QJ' };
+    const T = ko ? { dodecachop: '정십이면체FT-초퍼사우르스', dodecaet: '정십이면체ET', icosact: '정이십면체CT/FT', icosadc: '정이십면체CT/FT-Deepcut', icosaet: '정이십면체ET', dodecadc: '정십이면체FT-Deepcut', octact: '정팔면체CT', octaet: '정팔면체ET', tetraet: '정사면체ET', tetra: '정사면체FT/CT', cube: '큐브', octa: '정팔면체FT', dodeca: '정십이면체FT', cubect: '정육면체CT', square: '스퀘어', cubeet: '정육면체ET', cubectrex: '정육면체CT-rex', cubectivy: '정육면체CT-ivy', cubectredi: '정육면체CT-redi', cubeetclover: '정육면체ET-clover', cubeetcurvy: '정육면체ET-curvy', cubemix: '정육면체FT-mixup', cubefisher: '정육면체FT-fisher', cubewindmill: '정육면체FT-windmill', cubepenrose: '정육면체FT-penrose', cubepandora: '정육면체FT-pandora', cubemirror: '정육면체FT-mirror', cubeaxis: '정육면체CT-axis', starft: '정십이면체FT-starminx', starct: '정십이면체CT', skewbult: '정십이면체FT-skewb ultimate', qjdodeca: '정십이면체FT-QJ' } : { dodecachop: 'Dodecahedron FT-Chopasaurus', dodecaet: 'Dodecahedron ET', icosact: 'Icosahedron CT/FT', icosadc: 'Icosahedron CT/FT-Deepcut', icosaet: 'Icosahedron ET', dodecadc: 'Dodecahedron FT-Deepcut', octact: 'Octahedron CT', octaet: 'Octahedron ET', tetraet: 'Tetrahedron ET', tetra: 'Tetrahedron FT/CT', cube: 'Cube', octa: 'Octahedron FT', dodeca: 'Dodecahedron FT', cubect: 'Cube CT', square: 'Square', cubeet: 'Cube ET', cubectrex: 'Cube CT-rex', cubectivy: 'Cube CT-ivy', cubectredi: 'Cube CT-redi', cubeetclover: 'Cube ET-clover', cubeetcurvy: 'Cube ET-curvy', cubemix: 'Cube FT-mixup', cubefisher: 'Cube FT-fisher', cubewindmill: 'Cube FT-windmill', cubepenrose: 'Cube FT-penrose', cubepandora: 'Cube FT-pandora', cubemirror: 'Cube FT-mirror', cubeaxis: 'Cube CT-axis', starft: 'Dodecahedron FT-starminx', starct: 'Dodecahedron CT', skewbult: 'Dodecahedron FT-skewb ultimate', qjdodeca: 'Dodecahedron FT-QJ' };
     if (p.topo === 'cubeshared') return (ko ? '정육면체CT-shared' : 'Cube CT-shared') + ' (n=' + p.n + ', ' + p.fz.split('_').map((g) => '(' + g.split('.').join(',') + ')').join('') + ')';
     if (p.topo === 'cubefused') return (ko ? '정육면체CT-fused' : 'Cube CT-fused') + ' (n=' + p.n + ', ' + p.fz.split('_').map((g) => '(' + g.split('.').map((x) => x.replace(/p/g, '.')).join(',') + ')').join('') + ')';
     if (p.topo === 'cuboidx') return p.abc.join('×') + (ko ? ' 익스텐디드 큐보이드' : ' Extended Cuboid');

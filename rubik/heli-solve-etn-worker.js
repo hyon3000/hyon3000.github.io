@@ -87,6 +87,45 @@ importScripts('engine.js', 'puzzles.js', 'heli-core.js', 'heli-solve-star-core.j
       return (TCM[mk] = model);
     } finally { cf.bond = b0; }
   }
+
+  // way back from a jumbled state to the lattice (the jumbling turns of the scramble are undone one by one).  Like HSTAR.unjumble but with a cheap lattice test (all plane angles at 0 or 180 degrees, then the
+  // sticker slots) because on a big puzzle the piece-by-piece test of the other one costs more than the turn itself
+  function unjumbleTC(S, model, ms, accept) {
+    const np = model.nplanes, path = [], t0 = Date.now(), PI = Math.PI, norm = X.normA;
+    const latOK = (p) => Math.abs(norm(S.ang[p])) < 1e-6 || Math.abs(norm(S.ang[p] - PI)) < 1e-6;
+    const allLat = () => { for (let p = 0; p < np; p++) if (!latOK(p)) return false; return true; };
+    if (allLat() && accept([])) return [];
+    let over = false;
+    const timeUp = () => { if (Date.now() - t0 > ms) over = true; return over; };
+    function dfs(depth, limit, prev, restrict, latOnly) {
+      if (depth > 0 && allLat() && accept(path.slice())) return true;
+      if (depth >= limit || timeUp()) return false;
+      const cand = [];
+      for (let p = 0; p < np; p++) {
+        if (restrict && latOK(p)) continue;
+        const stops = S.cfg.planes[p].stops, tried = new Set();
+        for (const t of stops) {
+          if (latOnly && !(Math.abs(norm(t)) < 1e-6 || Math.abs(norm(t - PI)) < 1e-6)) continue;
+          const a = norm(t - S.ang[p]); if (Math.abs(a) < 1e-7) continue; const k = Math.round(a * 1e6); if (tried.has(k)) continue; tried.add(k);
+          if (prev && prev.p === p && Math.abs(norm(a + prev.a)) < 1e-6) continue;
+          cand.push({ p: p, a: a });
+        }
+      }
+      for (const c of cand) {
+        if (!H.apply(S, { p: c.p, a: c.a })) continue;
+        path.push({ p: c.p, a: c.a });
+        if (dfs(depth + 1, limit, c, restrict, latOnly)) return true;
+        path.pop(); H.apply(S, { p: c.p, a: -c.a }); S.hist.length = Math.max(0, S.hist.length - 2); S.ang[c.p] = norm(S.ang[c.p]);
+        if (over) return false;
+      }
+      return false;
+    }
+    let nfail = 0; for (let p = 0; p < np; p++) if (!latOK(p)) nfail++;
+    for (let d = Math.max(1, nfail); d <= nfail + 1 && !over; d++) if (dfs(0, d, null, true, true)) return path.slice();
+    for (let d = 1; d <= nfail + 2 && !over; d++) if (dfs(0, d, null, true, false)) return path.slice();
+    for (let d = 1; d <= 6 && !over; d++) if (dfs(0, d, null, false, false)) return path.slice();
+    return null;
+  }
   const TOOLS = {};
   function getTool(shape, n, model) {
     const mk = shape + ':' + n; if (TOOLS[mk]) return TOOLS[mk];
@@ -101,7 +140,7 @@ importScripts('engine.js', 'puzzles.js', 'heli-core.js', 'heli-solve-star-core.j
     const S = X.loadState(shape, n, st);
     if (H.isSolved(S)) return { plan: [], sigs: [], ms: 0 };
     let word = null, pos = null; const cf0 = H.config(n, shape), bond0 = cf0.bond; let pre; cf0.bond = false;
-    try { pre = X.unjumble(S, model, { ms: 30000 }, () => { pos = posOfTC(S, model); if (!pos) return false; word = tool.solve(pos); return !!word; }); } finally { cf0.bond = bond0; }
+    try { pre = unjumbleTC(S, model, 120000, () => { pos = posOfTC(S, model); if (!pos) return false; word = tool.solve(pos); return !!word; }); } finally { cf0.bond = bond0; }
     if (pre === null) return { error: 'cannot undo the jumbling' };
     if (!word) return { error: 'generic solver: ' + (tool.lastError || 'no word') };
     const R = X.loadState(shape, n, st), pre2 = X.mergeMoves(pre), plan = [], sigs = [];
