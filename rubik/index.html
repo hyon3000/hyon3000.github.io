@@ -307,8 +307,8 @@ ul.menu { min-width: 150px; width: max-content; }
   function buildRadios() {          // the radio row of the chosen shape
     var g = cT.value, row = $c('cIvyRow'); if (curGroup === g) return; curGroup = g; row.innerHTML = '';
     if (!VARS[g]) { row.style.display = 'none'; return; }
-    VARS[g].forEach(function (v, i) { var l = document.createElement('label'); l.style.marginRight = '8px'; l.style.whiteSpace = 'nowrap'; l.innerHTML = '<input type="radio" name="cVar" id="cV' + i + '"> <span></span>'; l.lastChild.textContent = v[1]; l.firstChild.onchange = topoChanged; row.appendChild(l); });
-    $c('cV0').checked = true; row.style.display = '';
+    VARS[g].forEach(function (v, i) { var l = document.createElement('label'); l.style.whiteSpace = 'nowrap'; l.innerHTML = '<input type="radio" name="cVar" id="cV' + i + '"> <span></span>'; l.lastChild.textContent = v[1]; l.firstChild.onchange = topoChanged; row.appendChild(l); });
+    $c('cV0').checked = true; row.style.display = 'flex'; row.style.flexWrap = 'wrap'; row.style.gap = '0 10px';
   }
   function selIdx() { var r = document.querySelectorAll('#cIvyRow input'); for (var i = 0; i < r.length; i++) if (r[i].checked) return i; return 0; }
   function effTopo() { var t = cT.value; return VARS[t] ? VARS[t][Math.min(selIdx(), VARS[t].length - 1)][0] : t; }
