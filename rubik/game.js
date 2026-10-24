@@ -473,13 +473,15 @@
       if (vl / cl < 0.12) return;
       const q = pj(tv(V.add(s.c, V.mul(vel, eps / vl)))), mx = q[0] - p0[0], my = q[1] - p0[1], ml = Math.hypot(mx, my);
       if (ml < 0.25 * eps * S.f / D) return;
-      const cs = (mx * dx + my * dy) / (ml * L);
+      // a direction that is squashed on the screen (a face seen at a slant) is a poor way to tell the finger's direction: its score falls with the squash, so a layer whose movement is clearly visible wins
+      const cs = (mx * dx + my * dy) / (ml * L), fore = Math.min(1, ml / (0.6 * eps * S.f / D));
       [[1, cs], [-1, -cs]].forEach((c) => {
-        const cand = { b: b, d: c[0], cos: c[1], size: band.members.length, ux: mx / ml, uy: my / ml, ppr: ml * vl / eps };
-        if (!best || cand.cos > best.cos + 1e-6 || (Math.abs(cand.cos - best.cos) <= 1e-6 && cand.size < best.size)) best = cand;
+        if (c[1] <= 0.5) return;          // the layer must go the way the finger goes
+        const cand = { b: b, d: c[0], cos: c[1], score: c[1] * fore, fore: fore, size: band.members.length, ux: mx / ml, uy: my / ml, ppr: ml * vl / eps };
+        if (!best || cand.score > best.score + 1e-6 || (Math.abs(cand.score - best.score) <= 1e-6 && cand.size < best.size)) best = cand;
       });
     });
-    return best && best.cos > 0.5 ? best : null;
+    return best;
   }
   canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   canvas.addEventListener('pointerdown', function (e) {

@@ -25,7 +25,7 @@
     opts = opts || {};
     this.d = model.d; this.mv = model.perms; this.iv = model.inv; this.M = this.mv.length;
     this.ivp = this.iv.map((k) => this.mv[k]);
-    this.SUP = opts.sup || 40; this.NSEED = opts.nseed || 40; this.rnd = rngMake(opts.seed || 7);
+    this.SUP = opts.sup || 40; this.NSEED = opts.nseed || 40; this.real = opts.real || null; this.block = opts.block || null; this.pureMode = false; this.free = null; this.rnd = rngMake(opts.seed || 7);          // (real: facelets that are real tokens, the others are blanks that may end anywhere)
     const d = this.d;
     this.sa = new Int32Array(d); this.sb = new Int32Array(d); this.sc = new Int32Array(d); this.sdd = new Int32Array(d);          // dense scratch maps (identity between uses)
     for (let i = 0; i < d; i++) { this.sa[i] = i; this.sb[i] = i; this.sc[i] = i; this.sdd[i] = i; }
@@ -220,7 +220,10 @@
 
 
   // ---- orbits without a 3-cycle (not alternating, e.g. the odd cubes' ring of 24): the pure elements of the orbit (support inside it) are collected and a small stabilizer chain with words is built
-  function SmallChain(tool, m) { this.t = tool; this.m = m; this.lv = []; this.changed = false; }
+  function SmallChain(tool, m, base) {
+    this.t = tool; this.m = m; this.lv = []; this.changed = false; this.fixed = !!base;
+    if (base) for (const b of base) { this.lv.push({ b: b, gens: [], orb: null }); this.orbit(this.lv.length - 1); }
+  }
   SmallChain.prototype.sift = function (p, w, from) {
     const m = this.m; let cur = p, parts = [];
     for (let i = from || 0; i < this.lv.length; i++) {
@@ -231,16 +234,22 @@
       const nc = new Int32Array(m); for (let x = 0; x < m; x++) nc[x] = inv[cur[x]];
       cur = nc; parts.push(tr.w);
     }
-    for (let x = 0; x < m; x++) if (cur[x] !== x) return { level: this.lv.length, res: cur, rw: w.concat(...parts.map((q) => this.t.invWord(q))) };
+    if (!this.fixed) for (let x = 0; x < m; x++) if (cur[x] !== x) return { level: this.lv.length, res: cur, rw: w.concat(...parts.map((q) => this.t.invWord(q))) };
     return { ok: true, parts: parts };
   };
-  SmallChain.prototype.orbit = function (i) {
+  SmallChain.prototype.orbit = function (i) {          // transversal by Dijkstra on the LENGTH OF THE WORDS (the strong generators have very different lengths)
     const L = this.lv[i], m = this.m; L.orb = new Map(); const id = new Int32Array(m); for (let x = 0; x < m; x++) id[x] = x;
-    L.orb.set(L.b, { p: id, w: [] }); const q = [L.b];
+    L.orb.set(L.b, { p: id, w: [] });
     const gens = []; for (const g of L.gens) { gens.push(g); gens.push(this.inverse(g)); }
-    for (let h = 0; h < q.length; h++) {
-      const x = q[h], tx = L.orb.get(x);
-      for (const g of gens) { const y = g.p[x]; if (L.orb.has(y)) continue; const np = new Int32Array(m); for (let z = 0; z < m; z++) np[z] = g.p[tx.p[z]]; L.orb.set(y, { p: np, w: tx.w.concat(g.w) }); q.push(y); }
+    const done = new Set(), cand = new Map(); cand.set(L.b, 0);
+    while (cand.size) {
+      let x = -1, best = 1e18; for (const [k, v] of cand) if (v < best) { best = v; x = k; }
+      cand.delete(x); done.add(x); const tx = L.orb.get(x);
+      for (const g of gens) {
+        const y = g.p[x]; if (done.has(y)) continue;
+        const len = tx.w.length + g.w.length, cur = L.orb.get(y);
+        if (!cur || len < cur.w.length) { const np = new Int32Array(m); for (let z = 0; z < m; z++) np[z] = g.p[tx.p[z]]; L.orb.set(y, { p: np, w: tx.w.concat(g.w) }); cand.set(y, len); }
+      }
     }
   };
   SmallChain.prototype.inverse = function (g) { const m = this.m, p = new Int32Array(m); for (let x = 0; x < m; x++) p[g.p[x]] = x; return { p: p, w: this.t.invWord(g.w) }; };
@@ -272,30 +281,112 @@
     let w = []; for (let i = r.parts.length - 1; i >= 0; i--) w = w.concat(r.parts[i]);
     return w;
   };
+  // fixed-base chain: word of an element t with t(b_i) = y_i for the base points, and its inverse (the element that brings y_i back to b_i); null when there is none
+  SmallChain.prototype.solveImages = function (ys) {
+    const m = this.m; let g = new Int32Array(m), gi = new Int32Array(m); for (let x = 0; x < m; x++) { g[x] = x; gi[x] = x; }
+    const parts = [];
+    for (let i = 0; i < this.lv.length; i++) {
+      const L = this.lv[i], z = gi[ys[i]], tr = L.orb.get(z); if (!tr) return null;
+      // g := g o tr ; gi := tr^-1 o gi
+      const ng = new Int32Array(m); for (let x = 0; x < m; x++) ng[x] = g[tr.p[x]]; g = ng;
+      const tinv = new Int32Array(m); for (let x = 0; x < m; x++) tinv[tr.p[x]] = x;
+      const ngi = new Int32Array(m); for (let x = 0; x < m; x++) ngi[x] = tinv[gi[x]]; gi = ngi;
+      parts.push(tr.w);
+    }
+    let wt = []; for (let i = parts.length - 1; i >= 0; i--) wt = wt.concat(parts[i]);          // t = tr_1 o ... o tr_m : tr_m first
+    return this.t.invWord(wt);
+  };
   // special orbits (not alternating: the corner-like pieces of the odd cubes) together with one pair of points per other orbit whose sign a generator can flip: a small permutation group generated by the
   // raw generators.  Its stabilizer chain gives a SHORT word (no cleaning of the other orbits needed) that brings the special orbits home and makes every other orbit even.
   Tool.prototype.buildJoint = function (specOrbs) {
     const d = this.d, orbs = this.orbs, sp = [], loc = new Int32Array(d).fill(-1);
     for (const o of specOrbs) for (const p of orbs.list[o]) { loc[p] = sp.length; sp.push(p); }
-    const ns = sp.length, signOrbs = [], spec = new Set(specOrbs);
-    for (let o = 0; o < orbs.list.length; o++) if (!spec.has(o) && orbs.list[o].length >= 2 && this.gsign.some((v) => v[o])) signOrbs.push(o);
-    const m = ns + 2 * signOrbs.length, C = new SmallChain(this, m);
+    const ns = sp.length, spec = new Set(specOrbs), no = orbs.list.length;
+    // sign coordinates: the lead orbits of the echelon basis of the sign vectors (a sign vector in the span is fixed by its values there)
+    const signOrbs = []; for (const bv of this.basis) { let lead = -1; for (let i = 0; i < no; i++) if (bv.vec[i]) { lead = i; break; } if (lead >= 0 && !spec.has(lead)) signOrbs.push(lead); }
+    const sidx = new Int32Array(no).fill(-1); signOrbs.forEach((o, j) => { sidx[o] = j; });
+    const m = ns + 2 * signOrbs.length;
+    // base: the home slots of the real special facelets, then the sign points
+    let base = null; const realSp = [];
+    if (this.real) { for (let i = 0; i < ns; i++) if (this.real[sp[i]]) realSp.push(i); base = realSp.concat(signOrbs.map((o, j) => ns + 2 * j)); }
+    const C = new SmallChain(this, m, base);
     for (let g = 0; g < this.M; g++) {
       const p = new Int32Array(m); for (let i = 0; i < m; i++) p[i] = i;
       for (let i = 0; i < ns; i++) { const t = loc[this.mv[g][sp[i]]]; if (t < 0) return null; p[i] = t; }
-      for (let j = 0; j < signOrbs.length; j++) if (this.gsign[g][signOrbs[j]]) { p[ns + 2 * j] = ns + 2 * j + 1; p[ns + 2 * j + 1] = ns + 2 * j; }
+      for (let j = 0; j < signOrbs.length; j++) { const bit = this.gsign[g][signOrbs[j]]; if (bit) { p[ns + 2 * j] = ns + 2 * j + 1; p[ns + 2 * j + 1] = ns + 2 * j; } }
       C.feed({ p: p, w: [g] });
     }
-    C.complete(); C.sp = sp; C.loc = loc; C.ns = ns; C.signOrbs = signOrbs;
+    C.complete(); C.sp = sp; C.loc = loc; C.ns = ns; C.signOrbs = signOrbs; C.realSp = realSp;
     return C;
   };
   Tool.prototype.solveJoint = function (pos, applyGen) {
-    const C = this.joint, m = C.m, T = new Int32Array(m); for (let i = 0; i < m; i++) T[i] = i;
-    for (const f of C.sp) { const l = C.loc[pos[f]]; if (l < 0) { this.lastError = 'special orbit mixed'; return false; } T[l] = C.loc[f]; }
-    const sg = signs(this.d, pos, this.orbs);
-    for (let j = 0; j < C.signOrbs.length; j++) if (sg[C.signOrbs[j]]) { T[C.ns + 2 * j] = C.ns + 2 * j + 1; T[C.ns + 2 * j + 1] = C.ns + 2 * j; }
-    const w = C.solveWord(T); if (!w) { this.lastError = 'special orbits: state not in the chain'; return false; }
+    const C = this.joint, m = C.m, sg = this.sg(pos, true);
+    let w;
+    if (C.fixed) {
+      const ys = []; for (const i of C.realSp) { const l = C.loc[pos[C.sp[i]]]; if (l < 0) { this.lastError = 'special orbit mixed'; return false; } ys.push(l); }
+      for (let j = 0; j < C.signOrbs.length; j++) ys.push(C.ns + 2 * j + (sg[C.signOrbs[j]] ? 1 : 0));
+      w = C.solveImages(ys);
+    } else {
+      const T = new Int32Array(m); for (let i = 0; i < m; i++) T[i] = i;
+      for (const f of C.sp) { const l = C.loc[pos[f]]; if (l < 0) { this.lastError = 'special orbit mixed'; return false; } T[l] = C.loc[f]; }
+      for (let j = 0; j < C.signOrbs.length; j++) if (sg[C.signOrbs[j]]) { T[C.ns + 2 * j] = C.ns + 2 * j + 1; T[C.ns + 2 * j + 1] = C.ns + 2 * j; }
+      w = C.solveWord(T);
+    }
+    if (!w) { this.lastError = 'special orbits: state not in the chain'; return false; }
+    this.lastJointLen = w.length;
     for (const g of w) applyGen(g);
+    return true;
+  };
+
+
+  // ---- pure mode for special orbits made of blocks (fisher cube: the slots of one cell): elements meeting in exactly one block have a commutator on at most three blocks; a small fixed-base chain per orbit
+  Tool.prototype.blockOverlap = function (A, B) {          // 1 when A and B have exactly one block in common (all of its slots), else 0
+    const blk = this.block, st = ++this.stamp, mk = this.mark; let common = 0, b0 = -2;
+    for (let i = 0; i < A.s.length; i++) mk[A.s[i]] = st;
+    for (let i = 0; i < B.s.length; i++) if (mk[B.s[i]] === st) { const b = blk[B.s[i]]; if (b0 === -2) b0 = b; else if (b !== b0) return 0; common++; }
+    return common > 0 && common === this.bsize[b0] ? 1 : 0;
+  };
+  Tool.prototype.findPure = function (o) {
+    const pts = this.orbs.list[o], rnd = this.rnd, pool = new Map(), inO = (e) => { for (const x of e.s) if (this.orbs.of[x] !== o) return false; return true; };
+    for (let trial = 0; trial < 12000 && pool.size < 60; trial++) {
+      const x = pts[Math.floor(rnd() * pts.length)], A = this.randomAt(x, 1 + (trial >> 10)), B = this.randomAt(x, 1 + (trial >> 10)); if (!A || !B) continue;
+      if (!this.blockOverlap(A, B)) continue;
+      const e = this.comm(A, B, 3 * this.maxBlock); if (!e || !inO(e)) continue;
+      const key = Array.from(e.s).sort((p, q) => p - q).join(','); const cur = pool.get(key); if (!cur || e.w.length < cur.w.length) pool.set(key, e);
+    }
+    return Array.from(pool.values()).sort((p, q) => p.w.length - q.w.length);
+  };
+  Tool.prototype.buildPure = function (o) {
+    const pts = this.orbs.list[o], loc = new Int32Array(this.d).fill(-1); pts.forEach((p, i) => { loc[p] = i; });
+    let pool = this.findPure(o);
+    for (let lim = this.SUP * 3; !pool.length && lim <= 1500; lim *= 2.5) { this.indexBase(lim); pool = this.findPure(o); }
+    if (!pool.length) return null;
+    const blocks = [], idx = new Map(), first = []; for (const p of pts) { const b = this.block[p]; if (!idx.has(b)) { idx.set(b, blocks.length); blocks.push(b); first.push(p); } }
+    const realHomes = this.real ? pts.filter((f) => this.real[f]) : pts.slice();
+    const base = realHomes.map((f) => loc[f]);
+    const C = new SmallChain(this, pts.length, base);
+    for (const e of pool) { const p = new Int32Array(pts.length); for (let i = 0; i < p.length; i++) p[i] = i; for (let i = 0; i < e.s.length; i++) p[loc[e.s[i]]] = loc[e.im[i]]; C.feed({ p: p, w: e.w }); }
+    C.complete(); C.pts = pts; C.loc = loc; C.realHomes = realHomes; C.poolSize = pool.length; C.levels = C.lv.length; C.orbSizes = C.lv.map((L) => L.orb.size);
+    const idxObj = { get: (b) => idx.get(b) };
+    this.pureInfo[o] = { blocks: blocks, idx: { }, first: first.map((x) => x), realHomes: realHomes, freeBlocks: false };
+    blocks.forEach((b, i) => { this.pureInfo[o].idx[b] = i; });
+    // blank blocks: blocks without a real home slot; two or more of them leave the parity open
+    const withTok = new Set(realHomes.map((f) => this.block[f])); this.pureInfo[o].freeBlocks = blocks.length - withTok.size >= 2;
+    return C;
+  };
+  Tool.prototype.rawChain = function (o, realHomes) {          // the chain of the plain generators on one orbit (fixed base: the real home slots)
+    const pts = this.orbs.list[o], loc = new Int32Array(this.d).fill(-1); pts.forEach((p, i) => { loc[p] = i; });
+    const C = new SmallChain(this, pts.length, realHomes.map((f) => loc[f]));
+    for (let g = 0; g < this.M; g++) { const p = new Int32Array(pts.length); for (let i = 0; i < p.length; i++) p[i] = loc[this.mv[g][pts[i]]]; C.feed({ p: p, w: [g] }); }
+    C.complete(); C.orbSizes = C.lv.map((L) => L.orb.size); return C;
+  };
+  Tool.prototype.solvePure = function (pos, applyGen) {
+    for (const o of Object.keys(this.pure)) {
+      const C = this.pure[o], ys = []; for (const f of C.realHomes) { const l = C.loc[pos[f]]; if (l < 0) { this.lastError = 'special orbit mixed'; return false; } ys.push(l); }
+      const w = C.solveImages(ys); if (!w) { this.lastError = 'special orbit ' + o + ': state not in the chain of pure elements'; return false; }
+      this.pureLens = (this.pureLens || []); this.pureLens.push(w.length);
+      for (const g of w) applyGen(g);
+    }
     return true;
   };
 
@@ -305,9 +396,28 @@
     for (let i = 0; i < d; i++) { if (seen[i]) continue; let len = 0, j = i; while (!seen[j]) { seen[j] = 1; j = perm[j]; len++; } if (len % 2 === 0) out[orbs.of[i]] ^= 1; }
     return out;
   }
+  // sign vector: parity of the permutation on every orbit.  Special orbits made of blocks (the slots of one cell) count the parity of the permutation of the BLOCKS (pure mode); orbits that may end with
+  // any parity (two or more blanks / blank blocks) count 0.  perm = a full permutation of the slots (a generator) or a state (pos, completed)
+  Tool.prototype.sg = function (perm, isState) {
+    const v = signs(this.d, perm, this.orbs), no = v.length;
+    for (let o = 0; o < no; o++) {
+      if (this.free && this.free[o]) { v[o] = 0; continue; }
+      if (this.specials && this.specials[o]) { if (this.pure && this.pure[o]) v[o] = this.blockSign(perm, o, isState); else v[o] = 0; }
+    }
+    return v;
+  };
+  Tool.prototype.blockSign = function (perm, o, isState) {
+    const bi = this.pureInfo[o]; if (bi.freeBlocks) return 0;
+    const nb = bi.blocks.length, blk = this.block, img = new Int32Array(nb).fill(-1), used = new Uint8Array(nb);
+    if (!isState) { for (let i = 0; i < nb; i++) { const b2 = bi.idx[blk[perm[bi.first[i]]]]; img[i] = b2; used[b2] = 1; } }
+    else { for (const f of bi.realHomes) { const b1 = bi.idx[blk[f]], b2 = bi.idx[blk[perm[f]]]; img[b1] = b2; used[b2] = 1; } let k = 0; for (let i = 0; i < nb; i++) if (img[i] < 0) { while (used[k]) k++; img[i] = k; used[k] = 1; } }
+    const seen = new Uint8Array(nb); let odd = 0;
+    for (let i = 0; i < nb; i++) { if (seen[i]) continue; let len = 0, j = i; while (!seen[j]) { seen[j] = 1; j = img[j]; len++; } if (len % 2 === 0) odd ^= 1; }
+    return odd;
+  };
   Tool.prototype.signBasis = function () {
     const no = this.orbs.list.length, rows = [];          // elimination: rows[i] = {vec (Uint8Array), gens: Set of generator indices}
-    this.gsign = []; for (let g = 0; g < this.M; g++) this.gsign.push(signs(this.d, this.mv[g], this.orbs));
+    this.gsign = []; for (let g = 0; g < this.M; g++) this.gsign.push(this.sg(this.mv[g], false));
     const basis = [];          // {vec, comb: Int32Array bitset over generators as plain array of indices}
     for (let g = 0; g < this.M; g++) {
       let vec = Uint8Array.from(this.gsign[g]), comb = [g];
@@ -327,13 +437,14 @@
   };
 
   // ---- the solve: pos[f] = slot of facelet f; returns a word of generators that brings every facelet home, or null
-  Tool.prototype.phaseA = function (pos0) {          // signs and all orbits with a 3-cycle library; returns { word, pos } (special orbits are left as they are)
+  Tool.prototype.phaseA = function (pos0, afterSign) {          // signs and all orbits with a 3-cycle library; returns { word, pos } (special orbits are left as they are)
     const d = this.d, M = this.M, orbs = this.orbs, pos = Int32Array.from(pos0), word = [];
     const applyGen = (g) => { const p = this.mv[g]; for (let f = 0; f < d; f++) pos[f] = p[pos[f]]; word.push(g); };
     // parity: the sign of "pos" on every orbit (pos as a permutation f -> slot)
-    const sg = signs(d, pos, orbs), comb = this.signWord(sg);
+    const sg = this.sg(pos, true), comb = this.signWord(sg);
     if (!comb) { this.lastError = 'sign vector not in span'; return null; }
     for (const g of comb) applyGen(g);
+    if (afterSign) afterSign(pos);          // (orbits with blanks: the parity is set after the sign word)
     // pos' = W o pos has even sign everywhere
     const order = []; for (let o = 0; o < orbs.list.length; o++) if (orbs.list[o].length >= 3 && !this.specials[o]) order.push(o);
     order.sort((p, q) => (this.libs[q] && this.libs[q].impure ? 1 : 0) - (this.libs[p] && this.libs[p].impure ? 1 : 0));          // orbits that only have multi-orbit seeds first
@@ -378,15 +489,38 @@
     }
     return { word: word, pos: pos, applyGen: applyGen };
   };
+  // blanks (facelets that are not real tokens, pos < 0) are put on the free slots of their orbit; an orbit with two or more blanks may end with any parity, so the blanks are swapped when the
+  // permutation of such an orbit is odd.  Returns the list of free orbits whose parity still has to be looked at after the other steps.
+  Tool.prototype.completeBlanks = function (pos) {
+    const orbs = this.orbs;
+    for (let o = 0; o < orbs.list.length; o++) {
+      const pts = orbs.list[o], taken = new Uint8Array(this.d); let blanks = [];
+      for (const f of pts) if (pos[f] >= 0) taken[pos[f]] = 1; else blanks.push(f);
+      if (!blanks.length) continue;
+      let k = 0; for (const sl of pts) if (!taken[sl]) pos[blanks[k++]] = sl;
+    }
+  };
+  Tool.prototype.fixFreeParity = function (pos, pos0c) {
+    if (!this.free) return;
+    for (let o = 0; o < this.orbs.list.length; o++) {
+      if (!this.free[o]) continue;
+      const sg = signs(this.d, pos, this.orbs); if (!sg[o]) continue;
+      const bl = this.blanksOf[o]; const a = bl[0], b = bl[1];          // swap two blank facelets (in the present state and in the start state alike)
+      let t = pos[a]; pos[a] = pos[b]; pos[b] = t; t = pos0c[a]; pos0c[a] = pos0c[b]; pos0c[b] = t;
+    }
+  };
   Tool.prototype.solve = function (pos0) {
     const d = this.d, pos = Int32Array.from(pos0), word = [];
     const applyGen = (g) => { const p = this.mv[g]; for (let f = 0; f < d; f++) pos[f] = p[pos[f]]; word.push(g); };
+    if (this.real) this.completeBlanks(pos);
+    const start = Int32Array.from(pos);
     if (this.joint && !this.solveJoint(pos, applyGen)) return null;
-    const A = this.phaseA(pos); if (!A) return null;
-    const out = word.concat(A.word);
-    // verify by running the word
-    const fin = this.run(pos0, out);
-    for (let f = 0; f < d; f++) if (fin[f] !== f) { this.lastError = 'facelet ' + f + ' not home'; return null; }
+    const A = this.phaseA(pos, this.free ? ((p) => this.fixFreeParity(p, start)) : null); if (!A) return null;
+    let out = word.concat(A.word);
+    if (this.pure) { const w2 = []; if (!this.solvePure(A.pos, (g) => { const p = this.mv[g]; for (let f = 0; f < d; f++) A.pos[f] = p[A.pos[f]]; w2.push(g); })) return null; out = out.concat(w2); }
+    // verify by running the word on the (completed) start state; blanks of special orbits may end anywhere
+    const fin = this.run(start, out);
+    for (let f = 0; f < d; f++) if (fin[f] !== f && (!this.real || this.real[f] || this.libs[this.orbs.of[f]])) { this.lastError = 'facelet ' + f + ' not home'; return null; }
     return this.cancel(out);
   };
   Tool.prototype.cancel = function (word) {          // adjacent g g^-1 vanish
@@ -413,10 +547,27 @@
     const spec = need(); T.stats = { orbits: orbs.list.length, missing: 0, seedMs: Date.now() - t0 };
     T.specials = {}; for (const o of spec) T.specials[o] = true;
     T.libs = orbs.list.map((l, o) => (l.length >= 3 && !T.specials[o] ? T.library(o) : null));
-    for (let o = 0; o < orbs.list.length; o++) if (T.libs[o] && T.libs[o].count !== T.libs[o].full) { T.specials[o] = true; T.libs[o] = null; }          // not alternating (corner-like pieces ...)
+    for (let o = 0; o < orbs.list.length; o++) if (T.libs[o] && T.libs[o].count !== T.libs[o].full) { T.specials[o] = true; T.libs[o] = null; }
+    if (T.real) {          // orbits with two or more blanks: any parity is fine
+      T.free = new Uint8Array(orbs.list.length); T.blanksOf = {};
+      for (let o = 0; o < orbs.list.length; o++) if (T.libs[o]) { const bl = orbs.list[o].filter((f) => !T.real[f]); if (bl.length >= 2) { T.free[o] = 1; T.blanksOf[o] = bl; } }
+    }          // not alternating (corner-like pieces ...)
+    T.joint = null; const so = Object.keys(T.specials).map(Number); T.pure = null;
+    let jointOrbs = so.slice();
+    if (so.length && T.block) {
+      T.bsize = {}; let mb = 1; for (let f = 0; f < model.d; f++) { const b = T.block[f]; T.bsize[b] = (T.bsize[b] || 0) + 1; if (T.bsize[b] > mb) mb = T.bsize[b]; } T.maxBlock = mb; T.pureInfo = {};
+      const P = {}; jointOrbs = [];
+      for (const o of so) {
+        const C = T.buildPure(o);
+        // complete when the pure elements generate at least half of what the generators do on the orbit (the quotient is the sign)
+        let ok = false;
+        if (C) { const H = T.rawChain(o, C.realHomes); const ordP = C.orbSizes.reduce((a, b) => a * b, 1), ordH = H.orbSizes.reduce((a, b) => a * b, 1); ok = ordP * 2 >= ordH; T.stats['ord' + o] = ordP + '/' + ordH; }
+        if (ok) P[o] = C; else delete T.pureInfo[o], jointOrbs.push(o);
+      }
+      if (Object.keys(P).length) { T.pure = P; T.pureMode = true; }
+    }
     T.signBasis();
-    T.joint = null; const so = Object.keys(T.specials).map(Number);
-    if (so.length) { T.joint = T.buildJoint(so); if (!T.joint) return { error: 'special orbits cannot be modelled', tool: T }; }
+    if (jointOrbs.length) { T.joint = T.buildJoint(jointOrbs); if (!T.joint) return { error: 'special orbits cannot be modelled', tool: T }; }
     T.stats.buildMs = Date.now() - t0;
     return T;
   }

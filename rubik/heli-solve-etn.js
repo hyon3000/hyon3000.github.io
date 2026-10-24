@@ -28,7 +28,13 @@
     S.pieces.forEach((pc, i) => pc.home.forEach((f, j) => { if (f.tag >= 0) { slotOf.set(keyOfPoly(pc.W[j]), fl.length); fl.push([i, j]); } }));
     return (SLOTS[k] = { fl: fl, slotOf: slotOf });
   }
+  function hashR(S) {          // (the same as HFI.hashR in the worker)
+    let a = 0x811c9dc5 | 0, b = 0x9747b28c | 0;
+    for (const pc of S.pieces) for (let k = 0; k < 9; k++) { const v = Math.round(pc.R[k] * 64); a = Math.imul(a ^ v, 16777619); b = Math.imul(b + v + 7, 40503) ^ (b >>> 15); }
+    return 'R' + (a >>> 0).toString(36) + '.' + (b >>> 0).toString(36);
+  }
   function sigNow(S) {
+    if (ST.sigKind === 'R') return hashR(S);
     if (isPoints(S.cfg.shape, S.cfg.n) && window.HEDGE) { const P = window.HEDGE.readPoints(window.HEDGE.buildModel(S.cfg.shape, S.cfg.n), S); return P ? 'L' + P.join(',') : edgeSig(S); }
     const sl = slotsOf(S.cfg.shape, S.cfg.n), pos = new Int16Array(sl.fl.length);
     for (let f = 0; f < pos.length; f++) { const q = sl.slotOf.get(keyOfPoly(S.pieces[sl.fl[f][0]].W[sl.fl[f][1]])); if (q === undefined) return poseSig(S); pos[f] = q; }
@@ -44,7 +50,7 @@
         if (m.error || !m.result || m.result.error) { ST.failed = true; ST.err = m.error || (m.result && m.result.error); return; }
         const r = m.result; ST.info = r; ST.index = new Map();
         if (r.tc) {          // size-generic plan: the jumble-undoing turns as they are, then the half turns as a list of planes; checkpoints [index, signature]
-          ST.plan = r.pre.slice(); const lat = r.lat; for (let i = 0; i < lat.length; i++) ST.plan.push({ p: lat[i], a: Math.PI, trust: true });
+          ST.plan = r.pre.slice(); const lat = r.lat, lang = r.lang, AN = [0, Math.PI / 2, Math.PI, -Math.PI / 2]; for (let i = 0; i < lat.length; i++) ST.plan.push({ p: lat[i], a: lang ? AN[lang[i]] : Math.PI, trust: true }); ST.sigKind = r.sigKind || '';
           r.sigs.forEach((q) => ST.index.set(q[1], q[0]));
         } else { ST.plan = r.plan; r.sigs.forEach((s, i) => ST.index.set(s, i)); }          // (a state met twice: the later index wins, the loop is skipped)
         ST.dur = Math.max(0.02, Math.min(0.25, 12 / Math.max(1, ST.plan.length)));
@@ -55,7 +61,7 @@
     return ST.worker;
   }
   function state(S) { return { R: S.pieces.map((p) => p.R), T: S.pieces.map((p) => p.T), ang: S.ang.slice() }; }
-  function reset(key) { ST.key = key; ST.fast = null; ST.plan = null; ST.index = null; ST.pending = false; ST.failed = false; ST.lastSig = ''; ST.repeat = 0; ST.replans = 0; }
+  function reset(key) { ST.key = key; ST.sigKind = ''; ST.fast = null; ST.plan = null; ST.index = null; ST.pending = false; ST.failed = false; ST.lastSig = ''; ST.repeat = 0; ST.replans = 0; }
   const find = (S) => { if (!ST.plan) return -1; const i = ST.index.get(sigNow(S)); return i === undefined ? -1 : i; };
   window.HSOLVERS.push({
     match: (shape, cfg) => !!SHAPES[shape] && cfg.planes.length > 0 && !((window.HEDGE_DATA || {})[shape + ':' + cfg.n]),

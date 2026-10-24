@@ -1,9 +1,10 @@
-// Web Worker of the edge-turning cube solver for the sizes the old tables (heli-solve-edge.js) do not cover: little chop family (cube ET), clover and curvy copter of every size that has a table.
-// Model = the facelet permutation group of heli-solve-star-core.js (a turn the engine allows from the solved state is a permutation of the sticker slots); the table of a puzzle (heli-solve-etn-data.js,
-// made offline by a C++ Minkwitz-style chain builder) gives, level after level, a short word that brings the next facelet home without disturbing the earlier ones.
-// The model is built with the bond rule switched off (about 100 times faster, the rule never refuses a lattice half turn); jumbled states (70.53 degree turns) are undone first on the real engine.
+// Web Worker of the edge-turning cube solver: little chop family (cube ET), clover and curvy copter, fisher and windmill cube (and the clover of size 8, the curvy of size 9).  Three ways, none uses the scramble history:
+//  * size-generic (heli-solve-tc-core.js): the half turns of the planes are permutations of the sticker slots; 3-cycles from commutators of small-support elements, per orbit, no table - cube ET n >= 5 of any size;
+//  * facelet model + offline table (heli-solve-star-core.js, heli-solve-etn-data*.js, made by a C++ Minkwitz-style chain builder) - clover / curvy of the sizes that have legal moves, cube n = 4;
+//  * pose model (heli-solve-edge.js, heli-solve-fisher-data.js / heli-solve-pose-*.js) - fisher, windmill, clover 8, curvy 9.
+// The model is built with the bond rule switched off (every turn is an allowed lattice turn); jumbled states (70.53 degree turns) are undone first on the real engine.
 self.window = self;
-importScripts('engine.js', 'puzzles.js', 'heli-core.js', 'heli-solve-star-core.js', 'heli-solve-etn-data.js', 'heli-solve-edge.js', 'heli-solve-fisher-data.js', 'heli-solve-tc-core.js');
+importScripts('engine.js', 'puzzles.js', 'heli-core.js', 'heli-solve-star-core.js', 'heli-solve-etn-data.js', 'heli-solve-edge.js', 'heli-solve-fisher-data.js', 'heli-solve-tc-core.js', 'heli-solve-fi.js');
 (function () {
   'use strict';
   const H = self.HELI, X = self.HSTAR;
@@ -126,6 +127,20 @@ importScripts('engine.js', 'puzzles.js', 'heli-core.js', 'heli-solve-star-core.j
     for (let d = 1; d <= 6 && !over; d++) if (dfs(0, d, null, false, false)) return path.slice();
     return null;
   }
+
+  // ---- fisher cube of any size (heli-solve-fi.js: abstract model of the cells, heli-solve-tc-core.js: the solver); the offline pose tables serve the sizes up to 11
+  const FIM = {}, FIT = {};
+  function solveFi(shape, n, st) {
+    const t0 = Date.now(); let M = FIM[n]; if (!M) M = FIM[n] = self.HFI.build(n);
+    let T = FIT[n]; if (!T) T = FIT[n] = self.HTC.build({ d: M.d, perms: M.perms, inv: M.inv }, { real: M.real, block: M.block, nseed: 30 });
+    if (T.error) return { error: 'generic solver: ' + T.error };
+    const S = X.loadState(shape, n, st); if (H.isSolved(S)) return { plan: [], sigs: [], ms: 0 };
+    const pos = M.posOf(S); if (!pos) return { error: 'state is not on the cell grid' };
+    const word = T.solve(pos); if (!word) return { error: 'generic solver: ' + (T.lastError || 'no word') };
+    const lat = new Int16Array(word.length), lang = new Int8Array(word.length);
+    for (let i = 0; i < word.length; i++) { lat[i] = M.planeOf[word[i]]; lang[i] = M.codeOf[word[i]]; }
+    return { pre: [], lat: lat, lang: lang, sigs: [[0, M.hashR(S)]], sigKind: 'R', ms: Date.now() - t0, total: word.length, tc: true, d: M.d, buildMs: T.stats.buildMs };
+  }
   const TOOLS = {};
   function getTool(shape, n, model) {
     const mk = shape + ':' + n; if (TOOLS[mk]) return TOOLS[mk];
@@ -160,6 +175,7 @@ importScripts('engine.js', 'puzzles.js', 'heli-core.js', 'heli-solve-star-core.j
   }
   function solve(shape, n, st) {
     loadData(shape, n);
+    if (shape === 'cubefisher' && (n >= 12 || !(self.HEDGE_DATA && self.HEDGE_DATA[shape + ':' + n]))) { const r = solveFi(shape, n, st); if (!r.error || n >= 12) return r; }
     if (shape === 'cube' && n >= 5) { const r = solveTC(shape, n, st); if (!r.error) return r; }
     if (shape !== 'cubefisher' && shape !== 'cubewindmill' && !(self.HSTAR_DATA && self.HSTAR_DATA[shape + ':' + n]) && !(self.HEDGE_DATA && self.HEDGE_DATA[shape + ':' + n])) return solveTC(shape, n, st);
     if (shape === 'cubefisher' || shape === 'cubewindmill' || (self.HEDGE_DATA && self.HEDGE_DATA[shape + ':' + n])) return solvePoints(shape, n, st);
