@@ -532,6 +532,27 @@
     }));
     return edges;
   }
+  // contacts between two sets of faces ([piece, face] lists): a face of A looks for its partners in B and the other way round (as faceContacts does within one set)
+  function contactPairs(A, B, emit) {
+    const hk = (a, b, c, d) => (Math.imul(a, 73856093) ^ Math.imul(b, 19349663) ^ Math.imul(c, 83492791) ^ Math.imul(d, 2654435761)) | 0;
+    const own = (f) => hk(rkey(f.n[0]), rkey(f.n[1]), rkey(f.n[2]), rkey(f.d)), partner = (f) => hk(rkey(-f.n[0]), rkey(-f.n[1]), rkey(-f.n[2]), rkey(-f.d));
+    const index = (L) => { const m = new Map(); for (const e of L) { const k = own(e[1]); let c = m.get(k); if (!c) m.set(k, (c = [])); c.push(e); } return m; };
+    const byA = index(A), byB = index(B);
+    const look = (src, by, flip) => {
+      for (const q of src) {
+        const f = q[1], l = by.get(partner(f)); if (!l) continue;
+        const test = (e) => { if (Math.abs(dot(f.n, e[1].n) + 1) > 1e-6 || Math.abs(f.d + e[1].d) > 1e-4) return; if (faceOverlap(f, e[1]) > 1e-6) { if (flip) emit(e[0], q[0]); else emit(q[0], e[0]); } };
+        if (l.length <= 12) { l.forEach(test); continue; }
+        const g = l.grid || (l.grid = bucketGrid(l)), b = bboxOf(f), st = ++g.st;
+        const x0 = Math.floor(b[0] / g.cs), x1 = Math.floor(b[3] / g.cs), y0 = Math.floor(b[1] / g.cs), y1 = Math.floor(b[4] / g.cs), z0 = Math.floor(b[2] / g.cs), z1 = Math.floor(b[5] / g.cs);
+        const visit = (j) => { if (g.mark[j] === st) return; g.mark[j] = st; const e = l[j], c = bboxOf(e[1]); if (c[0] > b[3] || c[3] < b[0] || c[1] > b[4] || c[4] < b[1] || c[2] > b[5] || c[5] < b[2]) return; test(e); };
+        for (const j of g.big) visit(j);
+        if ((x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1) > 4000) { for (let j = 0; j < l.length; j++) visit(j); continue; }
+        for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) { const c = g.cells.get(gcell(x, y, z)); if (c) for (const j of c) visit(j); }
+      }
+    };
+    look(A, byB, false); look(B, byA, true);
+  }
   function connectedAll(N, edges) {
     const par = new Array(N); for (let i = 0; i < N; i++) par[i] = i; const find = (x) => { while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; };
     edges.forEach((e) => { par[find(e[0])] = find(e[1]); }); const r = find(0); for (let i = 1; i < N; i++) if (find(i) !== r) return false; return true;
@@ -565,7 +586,10 @@
     const F0 = S.pieces.map((_, i) => innerFaces(S, i)), fp0 = stateFp(S); let E0;
     if (S._fc && S._fc.fp === fp0) E0 = S._fc.edges; else { E0 = faceContacts(F0); S._fc = { fp: fp0, edges: E0 }; }
     const R1 = rotMat(ax, a), F1 = F0.map((fl, i) => (moved[i] ? fl.map((f) => rotFace(f, R1, C)) : fl));
-    const E1 = faceContacts(F1);
+    // contacts after the turn: those inside the turning group and inside the rest are the old ones, only the contacts across the plane are new
+    const E1 = []; for (const e of E0) if (moved[e[0]] === moved[e[1]]) E1.push(e);
+    const MF = [], FF = []; for (let i = 0; i < N; i++) { const L = moved[i] ? MF : FF; for (const f of F1[i]) L.push([i, f]); }
+    contactPairs(MF, FF, (i, j) => E1.push([i, j]));
     if (!connectedAll(N, E1)) return true;          // the body would fall apart after the turn
     S._fcNext = { m: m, a: a, edges: E1 };
     // contacts inside the turning group and inside the rest stay; components of them
