@@ -20,7 +20,7 @@
 
   // the component of the solved state: { par: Map key -> {from key, move {p, a}} , done: bool }.  Stops when maxStates / maxMs is exceeded (done = false).
   function build(shape, n, opts) {
-    const ck = shape + ':' + n; if (TABLES[ck]) return TABLES[ck];
+    const trust = !!(opts && opts.trust), ck = shape + ':' + n + (trust ? ':t' : ''); if (TABLES[ck]) return TABLES[ck];
     opts = opts || {}; const maxStates = opts.maxStates || 60000, maxMs = opts.maxMs || 90000, t0 = Date.now();
     const S = H.create(n, shape), np = S.cfg.planes.length, par = new Map(), root0 = key(S);
     par.set(root0, null);
@@ -36,7 +36,7 @@
             const a = normA(t - S.ang[p]); if (Math.abs(a) < 1e-7) continue;
             const ak = Math.round(a * 1e6); if (tried.has(ak)) continue; tried.add(ak);
             const ang0 = S.ang[p];
-            if (!H.apply(S, { p: p, a: a })) continue;
+            if (!H.apply(S, { p: p, a: a, trust: trust })) continue;
             const k1 = key(S);
             if (!par.has(k1)) { par.set(k1, { from: k0, move: { p: p, a: a } }); next.push(snap(S)); }
             H.apply(S, { p: p, a: -a, trust: true }); S.ang[p] = ang0; S.hist.length = 0;
@@ -55,15 +55,19 @@
     const t0 = Date.now(), S = H.create(n, shape);
     load(S, st);
     if (H.isSolved(S)) return { plan: [], sigs: [], ms: 0 };
-    const T = build(shape, n, opts), k = key(S);
-    if (!T.par.has(k)) return { error: T.done ? 'state not in the component of the solved state' : 'component too large (' + T.states + '+ states)' };
-    const plan = []; let cur = k;
-    while (T.par.get(cur)) { const e = T.par.get(cur); plan.push({ p: e.move.p, a: normA(-e.move.a) }); cur = e.from; }
-    // replay on the engine: the sigs of the page's lookup (HSTAR.poseSig) and a check that the plan really solves it
-    const R = X.loadState(shape, n, st), sigs = [];
-    for (const m of plan) { sigs.push(X.poseSig(R)); if (!H.apply(R, m)) return { error: 'engine refused ' + JSON.stringify(m) }; }
-    if (!H.isSolved(R)) return { error: 'replay not solved' };
-    return { plan: plan, sigs: sigs, ms: Date.now() - t0, states: T.states, tableMs: T.ms };
+    // the bond check of the engine costs 15 ms per turn on a size-8 octahedron: the component is first enumerated without it, the way found is replayed with the real rules, and only if the engine
+    // refuses a turn on that way the component is enumerated again with the real rules
+    for (let pass = 0; pass < 2; pass++) {
+      const T = build(shape, n, Object.assign({}, opts, { trust: pass === 0 })), k = key(S);
+      if (!T.par.has(k)) { if (pass === 1 || !T.done) return { error: T.done ? 'state not in the component of the solved state' : 'component too large (' + T.states + '+ states)' }; continue; }
+      const plan = []; let cur = k;
+      while (T.par.get(cur)) { const e = T.par.get(cur); plan.push({ p: e.move.p, a: normA(-e.move.a) }); cur = e.from; }
+      const R = X.loadState(shape, n, st), sigs = []; let bad = false;
+      for (const m of plan) { sigs.push(X.poseSig(R)); if (!H.apply(R, m)) { bad = true; break; } }
+      if (bad || !H.isSolved(R)) { if (pass === 1) return { error: 'engine refused the plan' }; continue; }
+      return { plan: plan, sigs: sigs, ms: Date.now() - t0, states: T.states, tableMs: T.ms, pass: pass };
+    }
+    return { error: 'no plan' };
   }
   root.HBFS = { build: build, solve: solve, key: key, tables: TABLES };
 })(typeof window !== 'undefined' ? window : typeof self !== 'undefined' ? self : globalThis);

@@ -50,18 +50,24 @@
     return ST.worker;
   }
   function state(S) { return { R: S.pieces.map((p) => p.R), T: S.pieces.map((p) => p.T), ang: S.ang.slice() }; }
-  function reset(key) { ST.key = key; ST.plan = null; ST.index = null; ST.pending = false; ST.failed = false; ST.lastSig = ''; ST.repeat = 0; ST.replans = 0; }
+  function reset(key) { ST.key = key; ST.fast = null; ST.plan = null; ST.index = null; ST.pending = false; ST.failed = false; ST.lastSig = ''; ST.repeat = 0; ST.replans = 0; }
   const find = (S) => { if (!ST.plan) return -1; const i = ST.index.get(sigNow(S)); return i === undefined ? -1 : i; };
   window.HSOLVERS.push({
     match: (shape, cfg) => !!SHAPES[shape] && cfg.planes.length > 0 && !((window.HEDGE_DATA || {})[shape + ':' + cfg.n]),
     next: (S, G) => {
       if (HC.isSolved(S)) return null;
       const key = S.cfg.shape + ':' + S.cfg.n; if (ST.key !== key) reset(key);
-      const sig = ST.plan ? sigNow(S) : '', i = ST.plan ? (ST.index.get(sig) === undefined ? -1 : ST.index.get(sig)) : -1;
+      // fast path: the move returned last time was made (the history grew by exactly one turn): the next one of the plan is due, no need to name the state again
+      const hl = S.hist.length;
+      let sig = '', i = -1;
+      if (ST.plan && ST.fast && ST.fast.hist + 1 === hl && ST.fast.idx + 1 < ST.plan.length) { i = ST.fast.idx + 1; sig = null; }
+      else if (ST.plan) { sig = sigNow(S); i = ST.index.get(sig) === undefined ? -1 : ST.index.get(sig); }
       if (i >= 0 && i < ST.plan.length) {
-        if (sig === ST.lastSig) { if (++ST.repeat > 3) { ST.failed = true; return undefined; } } else { ST.lastSig = sig; ST.repeat = 0; }          // the same state asked again and again: the page refuses the move
+        if (sig !== null) { if (sig === ST.lastSig) { if (++ST.repeat > 3) { ST.failed = true; return undefined; } } else { ST.lastSig = sig; ST.repeat = 0; } }          // the same state asked again and again: the page refuses the move
+        ST.fast = { idx: i, hist: hl };
         return Object.assign({ dur: ST.dur, left: ST.plan.length - i }, ST.plan[i]);
       }
+      ST.fast = null;
       if (ST.plan) { ST.plan = null; ST.index = null; if (++ST.replans > 4) ST.failed = true; }          // the state left the plan (or the plan ran out): plan again
       if (ST.failed) return undefined;
       if (!ST.pending) {

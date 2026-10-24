@@ -48,6 +48,7 @@
     const model = X.buildModel(shape, n); if (!model.moves.length) return { error: 'no moves' };
     const S = X.loadState(shape, n, st);
     if (H.isSolved(S)) return { plan: [], sigs: [], ms: 0 };
+    if (model.d > (opts.maxFacelets || 1500)) return { error: 'too large (' + model.d + ' facelets)' };          // (a chain over more facelets did not finish in 15 minutes)
     const C = getChain(shape, n, model, opts.chain); if (!C.ok) return { error: 'chain incomplete' };
     const d = model.d; let word = null;
     // The search for the way back to the lattice runs without the bond check of the engine (it costs 10-100 ms per turn on big puzzles); a way that is found is replayed with the real rules before
@@ -55,7 +56,7 @@
     const real = H.apply; H.apply = (St, mv) => real(St, Object.assign({}, mv, { trust: true }));
     let pre;
     try {
-      pre = X.unjumble(S, model, opts.budget || { ms: 60000 }, (path) => {
+      pre = X.unjumble(S, model, opts.budget || { ms: 90000 }, (path) => {
         if (path.length) { const Rv = X.loadState(shape, n, st); for (const m of path) if (!real(Rv, { p: m.p, a: m.a })) return false; }
         const pos = X.posOf(S, model); if (!pos) return false;
         const col = new Uint8Array(d); for (let s = 0; s < d; s++) col[pos[s]] = C.col0[s];
@@ -67,9 +68,16 @@
     word = R.simplify(word, new Array(C.spec.perms.length / 2).fill(0).map(() => 1 << 20));          // (cancels inverse neighbours only)
     const mv = word.map((L) => model.moves[C.letter[L]]);
     const plan = X.mergeMoves(pre.concat(mv.map((m) => ({ p: m.p, a: m.a }))));
-    const Rp = X.loadState(shape, n, st), sigs = [];
-    for (let i = 0; i < plan.length; i++) { const m = plan[i]; sigs.push(X.poseSig(Rp)); if (!H.apply(Rp, i < pre.length ? m : { p: m.p, a: m.a, trust: true })) return { error: 'engine refused ' + JSON.stringify(m) }; }          // (lattice turns that were legal from the solved state are legal in every lattice state; skipping the bond check makes the replay of thousands of turns cheap)
+    // replay on the engine; the page finds its place in the plan by the pose signature of the pieces, so a plan must not meet the same state twice (the loop is cut out)
+    const Rp = X.loadState(shape, n, st), out = [], sigs = [], seenAt = new Map();
+    for (let i = 0; i < plan.length; i++) {
+      const m = plan[i], sg = X.poseSig(Rp);
+      if (seenAt.has(sg)) { const k = seenAt.get(sg); for (let q = k; q < out.length; q++) seenAt.delete(sigs[q]); out.length = k; sigs.length = k; }
+      seenAt.set(sg, out.length); out.push(m); sigs.push(sg);
+      if (!H.apply(Rp, i < pre.length ? m : { p: m.p, a: m.a, trust: true })) return { error: 'engine refused ' + JSON.stringify(m) };          // (lattice turns that were legal from the solved state are legal in every lattice state; skipping the bond check makes the replay of thousands of turns cheap)
+    }
     if (!H.isSolved(Rp)) return { error: 'replay not solved' };
+    plan.length = 0; out.forEach((m) => plan.push(m));
     return { plan: plan, sigs: sigs, ms: Date.now() - t0, chainMs: C.ms, pre: pre.length, stats: C.stats };
   }
   root.HFL = { solve: solve, getChain: getChain, chains: CH };

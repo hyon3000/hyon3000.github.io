@@ -176,5 +176,5 @@
     },
     plan: (S) => { const i = planIdx(S); return i >= 0 && PL.plan ? PL.plan.slice(i) : null; },
   });
-  window.__hglue = { grpNext: grpNext, GP: GP, requestGrp: requestGrp, PL: PL, W: W, descOf: descOf, requestCuboid: requestCuboid, setPlan: setPlan, planIdx: planIdx, sigOf: sigOf, angOf: angOf, wInit: wInit, ask: wAsk };
+  window.__hglue = { grpNext: grpNext, GP: GP, requestGrp: requestGrp, PL: PL, W: W, descOf: descOf, requestCuboid: requestCuboid, setPlan: setPlan, setPlanAsync: setPlanAsync, planIdx: planIdx, sigOf: sigOf, angOf: angOf, wInit: wInit, ask: wAsk };
 })();

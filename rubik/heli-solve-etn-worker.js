@@ -27,7 +27,7 @@ importScripts('engine.js', 'puzzles.js', 'heli-core.js', 'heli-solve-star-core.j
     try {
       const model = X.buildModel(shape, n);
       // every half turn must keep the pieces on the lattice (clover n = 8: some shells are not symmetric under a half turn, so even those turns deform the puzzle: no lattice model)
-      model.latBad = 0; for (let p = 0; p < cf.planes.length; p++) { const V = H.create(n, shape); if (H.apply(V, { p: p, a: Math.PI }) && !X.onLattice(V, model)) model.latBad++; }
+      model.latBad = 0; for (let p = 0; p < cf.planes.length; p++) { const V = H.create(n, shape); if (H.apply(V, { p: p, a: Math.PI }) && !X.onLatticeFast(V, model)) model.latBad++; }
       return (MODELS[mk] = model);
     } finally { cf.bond = b0; }
   }
@@ -43,11 +43,19 @@ importScripts('engine.js', 'puzzles.js', 'heli-core.js', 'heli-solve-star-core.j
     try { cf.bond = false; pl = self.HEDGE.plan(S, shape, n); } finally { cf.bond = b0; }
     if (!pl) return { error: 'no table for ' + shape + ' ' + n };
     const V = X.loadState(shape, n, st);
-    try { cf.bond = false; for (const mv of pl.moves) if (!H.apply(V, { p: mv.p, a: mv.a })) { ok = false; break; } if (ok) ok = H.isSolved(V); } finally { cf.bond = b0; }
-    if (!ok) return { error: 'replay not solved' };
+    let bad = -1;
+    try { cf.bond = false; for (let i = 0; i < pl.moves.length; i++) { const mv = pl.moves[i]; if (!H.apply(V, { p: mv.p, a: mv.a })) { ok = false; bad = i; break; } } if (ok) ok = H.isSolved(V); } finally { cf.bond = b0; }
+    if (!ok) return { error: 'replay not solved' + (bad >= 0 ? ' (turn ' + bad + ' of ' + pl.moves.length + ' refused)' : ' (end state not solved, ' + pl.moves.length + ' turns)') };
     return { plan: pl.moves.map((m) => ({ p: m.p, a: m.a, trust: true })), sigs: pl.sigs, ms: Date.now() - t0, pre: 0, base: pl.model.sp.length, d: pl.model.pts.length };
   }
+  // the big tables are separate files, loaded the first time their puzzle is asked for
+  function loadData(shape, n) {
+    const key = shape + ':' + n;
+    if ((self.HSTAR_DATA && self.HSTAR_DATA[key]) || (self.HEDGE_DATA && self.HEDGE_DATA[key])) return;
+    for (const f of ['heli-solve-etn-data-' + shape + '-' + n + '.js', 'heli-solve-pose-' + shape + '-' + n + '.js']) { try { self.importScripts(f); } catch (e) { /* no such file */ } }
+  }
   function solve(shape, n, st) {
+    loadData(shape, n);
     if (shape === 'cubefisher' || shape === 'cubewindmill' || (self.HEDGE_DATA && self.HEDGE_DATA[shape + ':' + n])) return solvePoints(shape, n, st);
     const t0 = Date.now(), model = getModel(shape, n);
     if (!model.moves.length) return { error: 'no moves' };
@@ -78,9 +86,11 @@ importScripts('engine.js', 'puzzles.js', 'heli-core.js', 'heli-solve-star-core.j
       const nx = new Int16Array(cur.length); for (let f = 0; f < cur.length; f++) nx[f] = mv.perm[cur[f]]; cur = nx;
     }
     // verification on a fresh engine copy (bond rule off for the lattice turns: only the geometry is checked)
-    const V = X.loadState(shape, n, st), cf = H.config(n, shape), b0 = cf.bond; let ok = true;
-    try { for (let i = 0; i < plan.length && ok; i++) { cf.bond = false; if (!H.apply(V, { p: plan[i].p, a: plan[i].a })) ok = false; } if (ok) ok = H.isSolved(V); } finally { cf.bond = b0; }
-    if (!ok) return { error: 'replay not solved' };
+    // (a plan of thousands of turns on a big puzzle takes a minute to replay: then only the abstract run above, whose final slot vector must be the identity, is checked; the page re-plans if the engine disagrees)
+    if (!cur.every((q, f) => q === f)) return { error: 'table word does not solve the facelets' };
+    const V = X.loadState(shape, n, st), cf = H.config(n, shape), b0 = cf.bond; let ok = true; const tv = Date.now();
+    try { cf.bond = false; for (let i = 0; i < plan.length && ok; i++) { if (!H.apply(V, { p: plan[i].p, a: plan[i].a })) ok = false; if (i === 40 && (Date.now() - tv) / 40 * plan.length > 8000) { ok = null; break; } } if (ok) ok = H.isSolved(V); } finally { cf.bond = b0; }
+    if (ok === false) return { error: 'replay not solved' };
     return { plan: plan, sigs: sigs, ms: Date.now() - t0, pre: pre2.length, base: T.base.length, d: model.d };
   }
 })();

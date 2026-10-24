@@ -111,6 +111,24 @@
     chain.forEach((mi) => AX3.macros[mi].seq.forEach((q) => mv.push({ p: q[0] * 3 + q[1], a: q[2] * HALF })));
     return mv;
   }
+  // the whole cube may stand turned (the scramble used middle layers, Kociemba keeps the centres): turn it with x / y / z until every piece but the six centres has the identity rotation
+  function rotFixAxis(S) {
+    const toks = ['x', "x'", 'y', "y'", 'z', "z'"], acts = toks.map((t) => { try { return movesOf(t); } catch (e) { return null; } }).filter((q) => q && q.length);
+    const bad = (X) => X.pieces.filter((pc) => !(Math.abs(pc.R[0] - 1) + Math.abs(pc.R[4] - 1) + Math.abs(pc.R[8] - 1) < 1e-4) && slotOf(X, pc).filter((v) => v === 1).length !== 2).length;          // pieces turned that are not centres
+    const C = cloneS(S), seen = new Set([sigOf(C)]); if (bad(C) === 0) return [];
+    let layer = [{ snap: snapshot(C), path: [] }];
+    for (let depth = 0; depth < 4 && layer.length; depth++) {
+      const next = [];
+      for (const st of layer) for (const a of acts) {
+        restore(C, st.snap); let ok = true; for (const m of a) if (!H.apply(C, m)) { ok = false; break; } if (!ok) continue;
+        const sg = sigOf(C); if (seen.has(sg)) continue; seen.add(sg);
+        const path = st.path.concat(a); if (bad(C) === 0) return path;
+        next.push({ snap: snapshot(C), path: path });
+      }
+      layer = next;
+    }
+    return null;
+  }
   // ---------------------------------------------------------------- n x n x n (n >= 4): the reduction solver of solverN-core.js in a worker, fed with the facelets
   const NW = { worker: null, ready: false, failed: false, id: 0, cb: {}, key: '' };
   function nwInit(n) {
@@ -120,12 +138,12 @@
     NW.worker = null; NW.ready = false; NW.failed = false; NW.cb = {}; NW.key = key;
     try {
       const w = new Worker('solverN-worker.js'); NW.worker = w;
-      w.onmessage = (ev) => { const m = ev.data; if (NW.worker !== w) return; if (m.cmd === 'init') NW.ready = !m.error; else if (m.cmd === 'solvefl' && NW.cb[m.id]) { const f = NW.cb[m.id]; delete NW.cb[m.id]; f(m.error ? null : m.plan); } if (m.error && m.cmd === 'init') NW.failed = true; };
+      w.onmessage = (ev) => { const m = ev.data; if (NW.worker !== w) return; if (m.cmd === 'init') NW.ready = !m.error; else if (m.cmd === 'solvefl' && NW.cb[m.id]) { const f = NW.cb[m.id]; delete NW.cb[m.id]; if (m.error) NW.lastErr = m.error; f(m.error ? null : m.plan); } if (m.error && m.cmd === 'init') NW.failed = true; };
       w.onerror = () => { NW.failed = true; };
       w.postMessage({ cmd: 'init', key: key });
     } catch (e) { NW.failed = true; }
   }
-  function nwSolve(fl, cb) { NW.id++; NW.cb[NW.id] = cb; NW.worker.postMessage({ cmd: 'solvefl', key: NW.key, id: NW.id, fl: fl }); }
+  function nwSolve(fl, cb) { NW.lastFl = fl; NW.id++; NW.cb[NW.id] = cb; NW.worker.postMessage({ cmd: 'solvefl', key: NW.key, id: NW.id, fl: fl }); }
   // a band move [b, d] of the discrete cube (axis b div n, layer b mod n counted from the positive end; d = -1 is the clockwise turn seen from the positive face) -> notation
   function bandToken(n, b, d) {
     const ax = Math.floor(b / n), k = b % n, pos = 'RUF'[ax], neg = 'LDB'[ax];
@@ -133,15 +151,46 @@
     return (k === 0 ? '' : String(k + 1)) + pos + (d < 0 ? '' : "'");
   }
   // is a state of pieces off the lattice (a jumbling turn left a layer between two quarter turns)
-  function latticeOk(S) { return facelets(S) !== null; }
+  function latticeOk(S) { if (S.cfg.shape === 'cubeaxis' && S.cfg.n >= 4) return S.pieces.every((pc) => isPerm(pc.R)); return facelets(S) !== null; }          // (the axis cube from n = 4 has holes in its facelet grid: every piece turned by a multiple of 90 degrees is on the lattice)
 
+  // the middle centres of an odd cube must be a rotation of the solved colour scheme: a mirrored arrangement (the engine lets pieces without an outer face pass through each other) can be "solved" by
+  // relabelling the colours but never reached by turns
+  const FV = [[0, 1, 0], [1, 0, 0], [0, 0, 1], [0, -1, 0], [-1, 0, 0], [0, 0, -1]];
+  function properCentres(fl, n) {
+    if (!(n & 1)) return true;
+    const mid = (n * n - 1) / 2, M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    for (let f = 0; f < 6; f++) { const c = fl[f * n * n + mid]; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) M[i][j] += FV[c][i] * FV[f][j]; }
+    const det = M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+    return det > 0;
+  }
+  // is a 54 letter facelet string (URFDLB) a legal 3x3x3 (permutations, twist, flip, parity)?  cubejs does not check and may search for ever on an illegal one
+  const CFl = [[8, 9, 20], [6, 18, 38], [0, 36, 47], [2, 45, 11], [29, 26, 15], [27, 44, 24], [33, 53, 42], [35, 17, 51]], EFl = [[5, 10], [7, 19], [3, 37], [1, 46], [32, 16], [28, 25], [30, 43], [34, 52], [23, 12], [21, 41], [50, 39], [48, 14]];
+  const CCl = ['URF', 'UFL', 'ULB', 'UBR', 'DFR', 'DLF', 'DBL', 'DRB'], ECl = ['UR', 'UF', 'UL', 'UB', 'DR', 'DF', 'DL', 'DB', 'FR', 'FL', 'BL', 'BR'];
+  function legal3(fs) {
+    const cp = [], ep = []; let tw = 0, fp = 0;
+    for (let i = 0; i < 8; i++) {
+      const c = CFl[i].map((k) => fs[k]); let o = c.findIndex((x) => x === 'U' || x === 'D'); if (o < 0) return false;
+      const key = c[o] + c[(o + 1) % 3] + c[(o + 2) % 3], j = CCl.indexOf(key); if (j < 0) return false; cp.push(j); tw += o;
+    }
+    for (let i = 0; i < 12; i++) {
+      const c = EFl[i].map((k) => fs[k]), k1 = c[0] + c[1], k2 = c[1] + c[0]; let j = ECl.indexOf(k1), f = 0; if (j < 0) { j = ECl.indexOf(k2); f = 1; } if (j < 0) return false; ep.push(j); fp += f;
+    }
+    const perm = (a, m) => a.slice().sort((x, y) => x - y).every((v, i) => v === i) && a.length === m, par = (a) => { let r = 0; for (let i = 0; i < a.length; i++) for (let j = i + 1; j < a.length; j++) if (a[i] > a[j]) r++; return r & 1; };
+    return perm(cp, 8) && perm(ep, 12) && tw % 3 === 0 && fp % 2 === 0 && par(cp) === par(ep);
+  }
   // ---------------------------------------------------------------- generic helpers for a plan
   // PL: {plan: [moves], sigs: [sig before each move]} per puzzle page
   const PL = { plan: null, sigs: null, pending: false, failed: false, key: '' };
   function planTake(S) { if (!PL.plan) return undefined; const i = PL.sigs.indexOf(sigOf(S)); return i >= 0 ? i : undefined; }
   function setPlan(S, moves) {
     const C = cloneS(S); PL.plan = []; PL.sigs = [];
-    for (const m of moves) { const s = sigOf(C); if (!H.apply(C, m)) { PL.plan = null; return false; } PL.plan.push(m); PL.sigs.push(s); }
+    const seen = new Map();
+    for (const m of moves) {
+      const s = sigOf(C);
+      if (seen.has(s)) { const i = seen.get(s); PL.plan.length = i; PL.sigs.length = i; seen.forEach((v, k) => { if (v >= i) seen.delete(k); }); }          // a state met twice: the page finds its place in the plan by the state, so the loop is cut out
+      if (!H.apply(C, m)) { PL.plan = null; return false; }
+      seen.set(s, PL.plan.length); PL.plan.push(m); PL.sigs.push(s);
+    }
     PL.end = sigOf(C); return true;
   }
   // after the last move the state may stand in another orientation than the solved one (the middle layers moved the centres): turn the whole cube until solved
@@ -176,6 +225,61 @@
       H.apply(C, { p: best.p, a: best.a }); path.push({ p: best.p, a: best.a });
     }
     return latticeOk(C) ? path : null;
+  }
+  // The scramble of the game is a number of half turns (every layer angle is 0 or 180 degrees) followed by up to four jumbling turns of layers to other stops.  Undoing exactly those: every layer whose
+  // angle is not 0 / 180 degrees goes back to 0 or 180 (through its other stops if it was jumbled twice).  Iterative deepening over the turns of the layers that are off, a refused turn cuts the branch.
+  // This also frees layers that were turned a quarter (they block the others although they are on the lattice).
+  function dejumbleStops(S, ms, trust, cap) {          // cap: collect up to cap different lattice states (an array of paths) instead of the first path          // trust: the turns skip the contact test (the axis cube from n = 5: it is the slow part and refuses most turns)
+    const C = cloneS(S), np = C.cfg.planes.length, t0 = Date.now(), TW = 2 * Math.PI;
+    const home = (a) => { const r = ((a % TW) + TW) % TW; return Math.min(r, Math.abs(r - Math.PI), TW - r) < 1e-3; };
+    const offs = () => { const r = []; for (let p = 0; p < np; p++) if (!home(C.ang[p])) r.push(p); return r; };
+    if (!offs().length) return latticeOk(C) ? (cap ? [[]] : []) : (cap ? [] : null);
+    const path = [], results = [], found = new Set();
+    const refused = new Set(), blockedChecked = new Set();          // (turns the engine refuses in a state are remembered: the refusal by the contact rule is the slow part)
+    let direct = true;          // first only turns to 0 / 180 degrees (a layer jumbled once), then through every stop
+    function rec(left) {
+      const ofs = offs();
+      if (!ofs.length) { if (!latticeOk(C)) return false; if (!cap) return true; const sg = sigOf(C); if (!found.has(sg)) { found.add(sg); results.push(path.slice()); } return results.length >= cap; }
+      if (left === 0 || Date.now() - t0 > (ms || 3000)) return false;
+      if (ofs.length > left) return false;          // every off layer needs at least one more turn
+      const snap = snapshot(C), ang = C.ang.slice(), sg0 = sigOf(C);
+      for (const p of ofs) {
+        const stops = C.cfg.planes[p].stops.slice().sort((x, y) => (home(y) ? 1 : 0) - (home(x) ? 1 : 0));
+        for (const t of stops) {
+          if (direct && !home(t)) continue;
+          const dl = H.normAng(t - C.ang[p]); if (Math.abs(dl) < 1e-6) continue;
+          if (!blockedChecked.has(p + '|' + sg0)) { blockedChecked.add(p + '|' + sg0); if (!H.members(C, p)) refused.add(p + '|' + sg0); }
+          if (refused.has(p + '|' + sg0)) continue;          // (a layer that a crossing layer blocks)
+          const key = sg0 + '|' + p + '|' + t; if (refused.has(key)) continue;
+          C.hist = []; const mv = trust ? { p: p, a: dl, trust: true } : { p: p, a: dl }; if (!H.apply(C, mv)) { refused.add(key); continue; }
+          path.push(mv); if (rec(left - 1)) return true; path.pop();
+          restore(C, snap); C.ang = ang.slice(); C.hist = [];
+        }
+      }
+      return false;
+    }
+    for (let d = 1; d <= 4; d++) { if (rec(d)) return cap ? results : path.slice(); if (Date.now() - t0 > (ms || 3000) / 2) break; }
+    direct = false; path.length = 0;
+    for (let d = 1; d <= 6; d++) { if (rec(d)) return cap ? results : path.slice(); if (Date.now() - t0 > (ms || 3000)) break; }
+    return cap ? results : null;
+  }
+  // best-first search for the lattice (when the layers' angles are all multiples of 90 degrees but pieces still stand turned: 45 degree turns of crossing layers do not cancel): turns of +-45 degrees of
+  // any layer, the number of pieces that are not on the lattice is the guide (quarter turns of other layers too: they free or block the crossing layers)
+  function dejumbleSearch(S, ms) {
+    const t0 = Date.now(), np = S.cfg.planes.length, off = (X) => X.pieces.filter((pc) => !isPerm(pc.R)).length;
+    const root = cloneS(S); if (latticeOk(root)) return [];
+    const open = [{ X: root, path: [], h: off(root) }], seen = new Set([sigOf(root)]);
+    while (open.length && Date.now() - t0 < (ms || 4000)) {
+      let bi = 0; for (let i = 1; i < open.length; i++) if (open[i].h + 0.2 * open[i].path.length < open[bi].h + 0.2 * open[bi].path.length) bi = i;
+      const cur = open.splice(bi, 1)[0];
+      for (let p = 0; p < np; p++) for (const a of [Math.PI / 4, -Math.PI / 4, Math.PI / 2, -Math.PI / 2]) {
+        const Y = cloneS(cur.X); Y.hist = []; if (!H.apply(Y, { p: p, a: a })) continue;
+        const sg = sigOf(Y); if (seen.has(sg)) continue; seen.add(sg);
+        const path = cur.path.concat([{ p: p, a: a }]); if (latticeOk(Y)) return path;
+        open.push({ X: Y, path: path, h: off(Y) });
+      }
+    }
+    return null;
   }
   // exact version of dejumble for the pieces-on-a-cube-lattice puzzles: every layer whose angle is not a multiple of 90 degrees goes back to one by a +-45 degree turn; the order matters (a turned layer
   // blocks the others), so the orders and directions are searched (depth first, a refused turn cuts the branch); when no order works one extra 45 degree turn of any layer is allowed first (up to 2)
@@ -216,23 +320,61 @@
     const nn = S.cfg.n, big = nn >= 4;
     if (big) { nwInit(nn); if (NW.failed) return undefined; if (!NW.ready) return 'wait'; } else { if (KW.failed) return undefined; kwInit(); if (!KW.ready) return 'wait'; }
     if (PL.pending) return 'wait';
-    let pre = [];
-    if (!latticeOk(S)) { const dj = dejumble(S) || dejumbleExact(S); if (!dj) return undefined; pre = dj; }
-    const C = cloneS(S); pre.forEach((m) => H.apply(C, m));
-    const fl = facelets(C); if (!fl) return undefined; const fs = big ? 'x' : faceletString(fl); if (!fs) return undefined;
-    PL.pending = true; const sig0 = sigOf(S);
-    (big ? (cbk) => nwSolve(fl, (plan) => cbk(plan ? plan.map((q) => bandToken(nn, q[0], q[1])).join(' ') : null)) : (cbk) => kwSolve(fs, cbk))((alg) => {
-      PL.pending = false; if (!alg && alg !== '') { if (big) NW.failed = true; else KW.failed = true; return; }
-      if (sigOf(S) !== sig0) return;          // the state changed meanwhile: ask again at the next call
-      const bad = () => { if (big) NW.failed = true; else KW.failed = true; };
-      let mv; try { mv = alg ? movesOf(alg) : []; } catch (e) { bad(); return; }
-      const all = pre.concat(mv), D = cloneS(S); let okk = true; all.forEach((m) => { if (!H.apply(D, m)) okk = false; });
-      if (!okk) { bad(); return; }
-      if (!H.isSolved(D)) { const fx = orientFix(D); if (fx) all.push.apply(all, fx); }
-      if (!big && S.cfg.shape === 'cubeaxis') { const D2 = cloneS(S); all.forEach((m) => H.apply(D2, m)); if (!H.isSolved(D2)) { const fx = centreFixMoves(D2); if (fx) { fx.forEach((m) => H.apply(D2, m)); if (H.isSolved(D2)) all.push.apply(all, fx); } } }
-      if (!all.length) { bad(); return; }          // nothing to do yet not solved: give up instead of asking again for ever
-      if (!setPlan(S, all)) bad();
-    });
+    const sig0 = sigOf(S);
+    // The lattice states the dejumbling can end in: the engine lets pieces without an outer face pass through each other (mixup), so not every end state is a state of the cube group (a mirrored
+    // centre arrangement ...); each candidate is checked (n = 3: legal3, n >= 4: the reduction solver says so) and the next one is taken when it is not a cube
+    const cands = [], addC = (c) => { if (!cands.some((x) => JSON.stringify(x) === JSON.stringify(c))) cands.push(c); };
+    if (latticeOk(S)) addC([]);          // (also a state whose pieces all stand on the lattice may be no cube state: layers that were jumbled twice; the search below gives the other candidates)
+    (dejumbleStops(S, 20000, false, 1) || []).forEach(addC);
+    if (!cands.length) { const dj = dejumbleStops(S, 20000) || dejumble(S) || dejumbleExact(S) || dejumbleSearch(S, 6000); if (dj) addC(dj); }
+    if (!cands.length) return undefined;
+    PL.pending = true; let ci = 0, moreDone = false;
+    const bad = () => { if (big) NW.failed = true; else KW.failed = true; };
+    const axis3 = !big && S.cfg.shape === 'cubeaxis';
+    const PFX = ['U', "U'", 'R', "R'", 'F', "F'", 'D', "D'", 'L', "L'", 'B', "B'"];
+    const launch = () => {
+      if (sigOf(S) !== sig0) { PL.pending = false; return; }
+      if (ci >= cands.length && !moreDone) {          // the first end state was no cube: all the others the search finds
+        moreDone = true; const tried = new Set(cands.map((c) => JSON.stringify(c)));
+        (dejumbleStops(S, 20000, false, 60) || []).forEach((c) => { if (!tried.has(JSON.stringify(c))) cands.push(c); });
+      }
+      if (ci >= cands.length) { PL.pending = false; PL.why = 'no cube state among ' + cands.length; bad(); return; }
+      const pre = cands[ci++], C = cloneS(S); pre.forEach((m) => H.apply(C, m));
+      const fl = facelets(C); if (!fl || !properCentres(fl, nn)) { launch(); return; }
+      const fs = big ? 'x' : faceletString(fl); if (!fs || (!big && !legal3(fs))) { launch(); return; }
+      // The axis cube n = 3: the facelet solution leaves the centre pieces turned about their normals; the turns that can be put right with everything else solved depend on the solution (a second solution of the
+      // same facelets differs by a pure element), so another solution is tried (a quarter turn of a face first) when the centres cannot be put right.
+      const handle = (alg, pfx, k) => {
+        if (sigOf(S) !== sig0) { PL.pending = false; return; }          // the state changed meanwhile: ask again at the next call
+        let mv; try { mv = alg ? movesOf(alg) : []; } catch (e) { PL.pending = false; PL.why = 'notation ' + e; bad(); return; }
+        const all = pre.concat(pfx, mv), D = cloneS(S); let okk = true, refusedAt = null; all.forEach((m, qi) => { if (okk && !H.apply(D, m)) { okk = false; refusedAt = { at: qi, of: all.length, pre: pre.length, p: m.p, a: Math.round(m.a * 57.3), fail: D.fail || '' }; } });
+        if (!okk) { PL.pending = false; PL.why = 'refused ' + JSON.stringify(refusedAt); bad(); return; }
+        if (!H.isSolved(D)) { const fx = orientFix(D); if (fx) all.push.apply(all, fx); }
+        if (axis3) {
+          const D2 = cloneS(S); all.forEach((m) => H.apply(D2, m));
+          if (!H.isSolved(D2)) {
+            const rf = rotFixAxis(D2); let cf = null;
+            if (rf) { rf.forEach((m) => H.apply(D2, m)); cf = H.isSolved(D2) ? [] : centreFixMoves(D2); if (cf) { cf.forEach((m) => H.apply(D2, m)); if (!H.isSolved(D2)) cf = null; } }
+            if (cf) all.push.apply(all, rf.concat(cf));
+            else if (k < PFX.length) { tryNext(k + 1); return; }
+          }
+        }
+        PL.pending = false;
+        if (!all.length) { bad(); return; }          // nothing to do yet not solved: give up instead of asking again for ever
+        if (!setPlan(S, all)) { PL.why = 'setPlan'; bad(); }
+      };
+      const tryNext = (k) => {          // k >= 1: the k-th prefix move, then a fresh Kociemba solution
+        const pfx = movesOf(PFX[k - 1]), C2 = cloneS(C); let ok = true; pfx.forEach((m) => { if (!H.apply(C2, m)) ok = false; });
+        const f2 = ok ? facelets(C2) : null, s2 = f2 ? faceletString(f2) : null;
+        if (!s2) { if (k < PFX.length) tryNext(k + 1); else { PL.pending = false; bad(); } return; }
+        kwSolve(s2, (alg) => { if (!alg && alg !== '') { PL.pending = false; KW.failed = true; return; } handle(alg, pfx, k); });
+      };
+      (big ? (cbk) => nwSolve(fl, (plan) => cbk(plan ? plan.map((q) => bandToken(nn, q[0], q[1])).join(' ') : null)) : (cbk) => kwSolve(fs, cbk))((alg) => {
+        if (!alg && alg !== '') { if (big) { launch(); return; } PL.pending = false; bad(); return; }          // (n >= 4: not a cube state: the next candidate)
+        handle(alg, [], 0);
+      });
+    };
+    launch();
     return 'wait';
   }
   window.HSOLVERS.push({
@@ -271,5 +413,5 @@
     },
     plan: (S) => { if (!SM.plan) return null; const i = SM.sigs.indexOf(sigOf(S)); return i >= 0 ? SM.plan.slice(i) : null; },
   });
-  window.__hbox = { centreFixMoves: centreFixMoves, NW: NW, bfsPlan: bfsPlan, SM: SM, facelets: facelets, faceletString: faceletString, dejumble: dejumble, dejumbleExact: dejumbleExact, orientFix: orientFix, cloneS: cloneS, latticeOk: latticeOk, PL: PL, KW: KW, movesOf: movesOf };
+  window.__hbox = { properCentres: properCentres, legal3: legal3, rotFixAxis: rotFixAxis, centreFixMoves: centreFixMoves, NW: NW, bfsPlan: bfsPlan, SM: SM, facelets: facelets, faceletString: faceletString, dejumble: dejumble, dejumbleStops: dejumbleStops, dejumbleExact: dejumbleExact, dejumbleSearch: dejumbleSearch, orientFix: orientFix, cloneS: cloneS, latticeOk: latticeOk, PL: PL, KW: KW, movesOf: movesOf };
 })();

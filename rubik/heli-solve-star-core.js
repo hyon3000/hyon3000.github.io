@@ -355,9 +355,15 @@
     const pre = unjumble(S, model, opts.budget || {}, () => { pos = posOf(S, model); if (!pos) return false; word = T.sift(invPerm(pos)); return !!word; });
     if (pre === null) return { error: 'cannot undo the jumbling' };
     if (!word) return { error: 'state not in the table' };
-    const plan = mergeMoves(pre.concat(word.map((k) => ({ p: model.moves[k].p, a: model.moves[k].a }))));
-    const R = loadState(shape, n, st), sigs = [];
-    for (const m of plan) { sigs.push(poseSig(R)); if (!H.apply(R, m)) return { error: 'engine refused ' + JSON.stringify(m) }; }
+    const plan0 = mergeMoves(pre.concat(word.map((k) => ({ p: model.moves[k].p, a: model.moves[k].a }))));
+    // (the page finds its place in the plan by the pose signature, first occurrence: a plan that meets a state twice would run in a circle for ever, so the loop is cut out)
+    const R = loadState(shape, n, st), sigs = [], plan = [], seenAt = new Map();
+    for (const m of plan0) {
+      const sg = poseSig(R);
+      if (seenAt.has(sg)) { const k = seenAt.get(sg); for (let q = k; q < plan.length; q++) seenAt.delete(sigs[q]); plan.length = k; sigs.length = k; }
+      seenAt.set(sg, plan.length); plan.push(m); sigs.push(sg);
+      if (!H.apply(R, m)) return { error: 'engine refused ' + JSON.stringify(m) };
+    }
     if (!H.isSolved(R)) return { error: 'replay not solved' };
     return { plan: plan, sigs: sigs, ms: Date.now() - t0, tableMs: T.buildMs, base: T.base.length, pre: pre.length, entries: T.total().cnt };
   }
