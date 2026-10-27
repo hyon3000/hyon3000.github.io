@@ -23,7 +23,7 @@
   // face (0..3) the outline shows at sector index th of the solved shape
   function faceOfSector(Ly, th) { return Math.floor((((th - Ly.v0) % Ly.S) + Ly.S) % Ly.S / Ly.quarter); }
   function create(P) {
-    const Ly = layout(P), S = { Ly: Ly, layers: [], mflip: [0, 0], hist: [] };
+    const Ly = layout(P), S = { Ly: Ly, layers: [], mflip: [0, 0], hist: [], q: 0, qh: 0, qd: 1 };
     for (let l = 0; l < 2; l++) {
       const row = new Array(Ly.S);
       Ly.widths.forEach((w, p) => {
@@ -51,6 +51,7 @@
   const SOLVED = {};
   // solved = the solved shape, or the same shape after both halves were flipped (that is the whole puzzle turned over, nothing is out of place)
   function isSolved(S) {
+    if (S.q) return false;          // (a half jammed at a quarter turn)
     const k = S.Ly.P;
     if (!SOLVED[k]) { const a = create(k), b = create(k); slice(b, 0); slice(b, 1); SOLVED[k] = [signature(a), signature(b)]; }
     const sg = signature(S); return sg === SOLVED[k][0] || sg === SOLVED[k][1];
@@ -81,18 +82,31 @@
     if (mv.t === 'r') {
       for (let i = h.length - 1; i >= 0; i--) {
         const e = h[i];
-        if (e.t === 's') break;
+        if (e.t !== 'r') break;
         if (e.l === mv.l) { let s = (((e.s + mv.s) % n) + n) % n; if (s === 0) h.splice(i, 1); else e.s = s > n / 2 ? s - n : s; return; }
       }
       h.push({ t: 'r', l: mv.l, s: mv.s });
+    } else if (mv.t === 'q') {
+      const last = h[h.length - 1];
+      if (last && last.t === 'q' && last.h === (mv.h | 0) && last.dir === -mv.dir) h.pop(); else h.push({ t: 'q', h: mv.h | 0, dir: mv.dir });
     } else if (h.length && h[h.length - 1].t === 's' && (h[h.length - 1].h | 0) === (mv.h | 0)) h.pop(); else h.push({ t: 's', h: mv.h | 0 });
   }
+  // a quarter turn of a half (90 degrees): from the shape it needs the slice to be possible and leaves that half jammed - nothing else moves except the same half, on (the second quarter completes the flip,
+  // the same as the slice) or back.  dir is the way it turns.
+  function quarter(S, h, dir) {
+    if (!S.q) { if (!sliceLegal(S)) return false; S.q = 1; S.qh = h; S.qd = dir; return true; }
+    if (h !== S.qh) return false;
+    if (dir === S.qd) { S.q = 0; slice(S, h); } else S.q = 0;
+    return true;
+  }
   function apply(S, mv, rec) {
-    if (mv.t === 'r') turn(S, mv.l, mv.s); else if (!slice(S, mv.h)) return false;
+    if (mv.t === 'q') { mv = { t: 'q', h: mv.h | 0, dir: mv.dir >= 0 ? 1 : -1 }; if (!quarter(S, mv.h, mv.dir)) return false; }
+    else if (S.q) return false;          // (jammed: only the quarter-turned half moves)
+    else if (mv.t === 'r') turn(S, mv.l, mv.s); else if (!slice(S, mv.h)) return false;
     if (rec !== false) record(S, mv);
     return true;
   }
-  function inverse(mv) { return mv.t === 'r' ? { t: 'r', l: mv.l, s: -mv.s } : { t: 's', h: mv.h | 0 }; }
+  function inverse(mv) { return mv.t === 'r' ? { t: 'r', l: mv.l, s: -mv.s } : mv.t === 'q' ? { t: 'q', h: mv.h | 0, dir: mv.dir >= 0 ? -1 : 1 } : { t: 's', h: mv.h | 0 }; }
   function scramble(S, count, rnd) {
     const out = [], n = S.Ly.S;
     for (let i = 0; i < count; i++) {

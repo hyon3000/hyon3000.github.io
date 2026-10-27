@@ -61,10 +61,12 @@
     NT.plan(nsText(st));
   }
   function startMove(mv, src, dur, from) {
+    const q0 = G.S.q, qd0 = G.S.qd, A0 = q0 ? -qd0 * Math.PI / 2 : 0;          // (a half jammed at a quarter turn is shown turned by A0)
     if (!SQ.apply(G.S, mv)) { if (src === 'user' || src === 'nota') { say(TX.illegal); if (src === 'nota') G.queue = []; } return false; }
-    if (src !== 'scr') { nsFlat(mv, NS); NT.raw(nsText(NS)); }
+    if (src !== 'scr') { if (mv.t !== 'q') nsFlat(mv, NS); else if (q0 && (mv.dir >= 0 ? 1 : -1) === qd0) nsFlat({ t: 's', h: mv.h | 0 }, NS); NT.raw(nsText(NS)); }
     if (src !== 'scr' && src !== 'undo') { (G.done = G.done || []).push(mv); if (src !== 'redo') G.redo = []; }          // (undo / redo stacks)
-    G.anim = { mv: mv, src: src, dir: mv.dir || 1, from: from, t: 0, dur: dur || (mv.t === 's' ? 0.45 : 0.16 + 0.015 * Math.abs(mv.s)) };
+    G.anim = { mv: mv, src: src, dir: mv.dir || 1, from: mv.t === 'r' ? from : undefined, t: 0, dur: dur || (mv.t === 's' ? 0.45 : mv.t === 'q' ? 0.3 : 0.16 + 0.015 * Math.abs(mv.s)) };
+    if (mv.t !== 'r') { const Al = from !== undefined ? from : A0, dr = mv.dir >= 0 ? 1 : -1; G.anim.fromAng = mv.t === 's' ? (mv.dir || 1) * Math.PI + Al : (q0 && dr === qd0 ? Al + dr * Math.PI : Al); }          // the angle the half seems to be turned by at the start (the state is already the new one)
     if (src === 'user' || src === 'nota') { G.moves++; G.started = true; }
     return true;
   }
@@ -89,7 +91,7 @@
   function desc(mv) { return mv.t === 's' ? TX.slice : (mv.l === 0 ? TX.top : TX.bottom) + ' ' + (mv.s > 0 ? '◀' : '▶') + Math.abs(mv.s); }
   // Extra solvers that know nothing of the scramble: window.SQSOLVERS = [{ match(n) -> bool, next(S, G) -> {t,l,s} | {t:'s',h} | 'wait' | null (solved) | undefined (not handled), plan(S) -> [moves] | null }]
   function extSolver() { return (window.SQSOLVERS || []).find((s) => { try { return s.match(NV); } catch (e) { return false; } }); }
-  function nextSolveMove() { const X = extSolver(); if (X) { const r = X.next(G.S, G); if (r !== undefined) return r; } const h = G.S.hist; return h.length ? SQ.inverse(h[h.length - 1]) : null; }
+  function nextSolveMove() { if (G.S.q) return { t: 'q', h: G.S.qh, dir: -G.S.qd }; const X = extSolver(); if (X) { const r = X.next(G.S, G); if (r !== undefined) return r; } const h = G.S.hist; return h.length ? SQ.inverse(h[h.length - 1]) : null; }
   function setAuto(on) { G.auto = !!on; G.autoTotal = 0; if (!on) NT.plan(''); try { window.parent.postMessage({ rb: 'autoState', on: G.auto }, '*'); } catch (e) {} }
   function checkSolved() {
     if (G.mode !== 'play' || !(G.started || G.cheated) || !SQ.isSolved(G.S)) return;
@@ -102,14 +104,14 @@
   function update(dt) {
     if (G.mode === 'play' && G.started) G.time += dt;
     if (G.msgT > 0) G.msgT -= dt;
-    if (V.live && V.live.settle) { const st = V.live.settle; st.t += dt; V.live.f = 1 - ease(Math.min(1, st.t / st.dur)); if (st.t >= st.dur) V.live = null; }
+    if (V.live && V.live.settle) { const st = V.live.settle, lv0 = V.live; st.t += dt; const e0 = ease(Math.min(1, st.t / st.dur)); if (lv0.kind === 'm') lv0.yaw = st.from + (st.to - st.from) * e0; else if (lv0.kind === 's') lv0.prog = st.from + (st.to - st.from) * e0; else lv0.f = 1 - e0; if (st.t >= st.dur) { V.live = null; if (lv0.kind === 'm' && st.k) middleOp(st.k); } }
     if (G.anim) { G.anim.t += dt; if (G.anim.t >= G.anim.dur) { const a = G.anim; G.anim = null; if (a.src !== 'scr' && !(a.src === 'nota' && G.queue.length)) checkSolved(); } }
     if (!G.anim && G.queue.length && G.mode !== 'solved') { const q = G.queue.shift(); startMove(q.mv, q.src, q.dur); }
     if (!G.anim && !G.queue.length) {
       if (G.mode === 'scramble') G.mode = 'play';
       else if (G.mode === 'play') {
         if (G.hint) { G.hint.t += dt; if (G.hint.t >= 0.7) { const h = G.hint; G.hint = null; G.cheated = true; if (G.S.hist.length) startMove(h.mv, 'hint', 0.3); } }
-        else if (G.auto) { const nm = nextSolveMove(); if (!nm) setAuto(false); else if (nm !== 'wait') { G.cheated = true; if (G.planWant) { G.planWant = false; showPlan(); } if (nm.t === 'r') G.sel = nm.l; if (!G.autoTotal) { let pl = null; try { const X = extSolver(); pl = X && X.plan ? X.plan(G.S) : null; } catch (e) {} G.autoTotal = pl ? pl.length : G.S.hist.length + 1; } const pc = window.RBNotation.pace(G.autoTotal, dt, nm.t === 's' ? 0.35 : 0.22); startMove(nm, 'auto', pc.dur); for (let b = 0; b < pc.burst; b++) { const n2 = nextSolveMove(); if (!n2) break; if (n2.t === 'r') G.sel = n2.l; startMove(n2, 'auto', 0.001); } } }
+        else if (G.auto) { const nm = nextSolveMove(); if (!nm) setAuto(false); else if (nm !== 'wait') { G.cheated = true; if (G.planWant) { G.planWant = false; showPlan(); } if (nm.t === 'r') G.sel = nm.l; if (!G.autoTotal && !G.S.q) { let pl = null; try { const X = extSolver(); pl = X && X.plan ? X.plan(G.S) : null; } catch (e) {} G.autoTotal = pl ? pl.length : G.S.hist.length + 1; } const pc = window.RBNotation.pace(G.autoTotal, dt, nm.t === 's' ? 0.35 : 0.22); startMove(nm, 'auto', pc.dur); for (let b = 0; b < pc.burst; b++) { const n2 = nextSolveMove(); if (!n2) break; if (n2.t === 'r') G.sel = n2.l; startMove(n2, 'auto', 0.001); } } }
       }
     }
   }
@@ -132,8 +134,9 @@
   // the view is a rotation matrix (a trackball): a drag turns it about the screen axes, so the pole is no obstacle (no limit, no gimbal lock); V.M = null means "from V.yaw / V.pitch"
   function curM() { if (V.M) return V.M; const c1 = Math.cos(V.yaw), s1 = Math.sin(V.yaw), c2 = Math.cos(V.pitch), s2 = Math.sin(V.pitch); return (V.M = [c1, 0, -s1, s2 * s1, c2, s2 * c1, c2 * s1, -s2, c2 * c1]); }
   function turnView(da, db) { const c = Math.cos(da), s = Math.sin(da), c2 = Math.cos(db), s2 = Math.sin(db); V.M = mul3([1, 0, 0, 0, c2, s2, 0, -s2, c2], mul3([c, 0, -s, 0, 1, 0, s, 0, c], curM())); }
-  function tr(p, extra) {
+  function tr(p, extra, yaw) {
     let x = p[0], y = p[1], z = p[2];
+    if (yaw) { const c = Math.cos(yaw), s = Math.sin(yaw), nx = x * c - z * s, nz = x * s + z * c; x = nx; z = nz; }          // (the middle layer turned about the vertical axis)
     if (extra) { const c = Math.cos(extra), s = Math.sin(extra), nx = x * c - y * s, ny = x * s + y * c; x = nx; y = ny; }
     const M = curM();
     return [M[0] * x + M[1] * y + M[2] * z, M[3] * x + M[4] * y + M[5] * z, M[6] * x + M[7] * y + M[8] * z];
@@ -148,18 +151,19 @@
   function buildFaces() {
     const faces = [], S = G.S, a = G.anim;
     let layerOff = null, sliceAng = 0;
-    let sliceHalf = -1;
-    if (a) { const e = ease(Math.min(1, a.t / a.dur)); if (a.mv.t === 'r') layerOff = { l: a.mv.l, deg: (a.from !== undefined ? a.from : -a.mv.s * DS) * (1 - e) }; else { sliceAng = (a.dir || 1) * Math.PI * (a.from !== undefined ? a.from : 1) * (1 - e); sliceHalf = a.mv.h | 0; } }
+    let sliceHalf = -1, midYaw = 0;
+    if (a) { const e = ease(Math.min(1, a.t / a.dur)); if (a.mv.t === 'r') layerOff = { l: a.mv.l, deg: (a.from !== undefined ? a.from : -a.mv.s * DS) * (1 - e) }; else { const Ae = G.S.q ? -G.S.qd * Math.PI / 2 : 0; sliceAng = Ae + (a.fromAng - Ae) * (1 - e); sliceHalf = a.mv.h | 0; } }
+    else if (!V.live && G.S.q) { sliceHalf = G.S.qh; sliceAng = -G.S.qd * Math.PI / 2; }          // a half jammed at a quarter turn
     else if (V.live) {          // a layer / slice being dragged: it follows the finger (the state changes only when it is let go)
       const lv = V.live, f = lv.f === undefined ? 1 : lv.f;
-      if (lv.kind === 'r') layerOff = { l: lv.l, deg: lv.deg * f }; else { sliceAng = -lv.dir * Math.PI * lv.prog * f; sliceHalf = lv.half; }
+      if (lv.kind === 'r') layerOff = { l: lv.l, deg: lv.deg * f }; else if (lv.kind === 'm') midYaw = lv.yaw; else { sliceAng = -lv.dir * Math.PI * lv.prog; sliceHalf = lv.half; }
     }
     let curGrp = 1;
     function addFace(pts3, color, outward, extra, sel, flat, pick) {
       const A = pts3[0], B = pts3[1], C = pts3[2];
       const nx = (B[1] - A[1]) * (C[2] - A[2]) - (B[2] - A[2]) * (C[1] - A[1]), ny = (B[2] - A[2]) * (C[0] - A[0]) - (B[0] - A[0]) * (C[2] - A[2]), nz = (B[0] - A[0]) * (C[1] - A[1]) - (B[1] - A[1]) * (C[0] - A[0]);
       if (nx * outward[0] + ny * outward[1] + nz * outward[2] < 0) pts3 = pts3.slice().reverse();
-      faces.push({ w: pts3, color: color, extra: extra, sel: sel, outward: outward, flat: flat, pick: pick, grp: curGrp });
+      faces.push({ w: pts3, color: color, extra: extra, yaw: curGrp === 1 ? midYaw : 0, sel: sel, outward: outward, flat: flat, pick: pick, grp: curGrp });
     }
     for (let l = 0; l < 2; l++) {
       const row = S.layers[l], yb = l === 0 ? TM / 2 : -TM / 2 - TH, yt = yb + TH, sel = l === G.sel;
@@ -204,7 +208,7 @@
         let isVert = false; VERT.forEach((va0) => { const va = mir ? 180 - va0 : va0; for (let rep2 = -2; rep2 <= 2; rep2++) if (Math.abs(va + rep2 * 360 - th0 - q) < 1e-6) isVert = true; });
         if (!cut && !isVert) return;
         const nrm = [p[0], 0, p[1]];
-        faces.push({ line: true, w: [[p[0], my[0], p[1]], [p[0], my[1], p[1]]], outward: nrm, extra: extra, grp: 1, strong: cut });
+        faces.push({ line: true, w: [[p[0], my[0], p[1]], [p[0], my[1], p[1]]], outward: nrm, extra: extra, yaw: midYaw, grp: 1, strong: cut });
       });
       const e1 = ring[0], e2 = ring[ring.length - 1];
       addFace([[0, my[0], 0], [e1[0], my[0], e1[1]], [e1[0], my[1], e1[1]], [0, my[1], 0]], '#303644', [0, 0, half === 0 ? -1 : 1], extra, false, false, pickM);
@@ -269,11 +273,11 @@
     const SEAM = [0, 0, 0];                // every line is black and as thick as the gap between the tiles of the other puzzles
     faces.forEach((f) => {
       if (f.line) {
-        const a3 = tr(f.w[0], f.extra), b3 = tr(f.w[1], f.extra);
+        const a3 = tr(f.w[0], f.extra, f.yaw), b3 = tr(f.w[1], f.extra, f.yaw);
         if (gl) ribbon(a3, b3, f.strong ? 0.024 : 0.016, 0.012, SEAM);
         return;
       }
-      const c3 = f.w.map((p) => tr(p, f.extra)), o0 = tr([0, 0, 0], f.extra), n3 = tr(f.outward, f.extra), nn = [n3[0] - o0[0], n3[1] - o0[1], n3[2] - o0[2]];
+      const c3 = f.w.map((p) => tr(p, f.extra, f.yaw)), o0 = tr([0, 0, 0], f.extra, f.yaw), n3 = tr(f.outward, f.extra, f.yaw), nn = [n3[0] - o0[0], n3[1] - o0[1], n3[2] - o0[2]];
       let ctr = [0, 0, 0]; c3.forEach((p) => { ctr[0] += p[0]; ctr[1] += p[1]; ctr[2] += p[2]; }); ctr = ctr.map((v) => v / c3.length);
       const A = c3[0], B = c3[1], C = c3[2], ux = B[0] - A[0], uy = B[1] - A[1], uz = B[2] - A[2], vx = C[0] - A[0], vy = C[1] - A[1], vz = C[2] - A[2];
       let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
@@ -288,7 +292,7 @@
           ribbon(P, Q, 0.016, 0.01, SEAM);
         }
       }
-      if (!back) out.push({ pts: c3.map(proj), z: ctr[2], color: shadeCol(f.color, lit), sel: f.sel, flat: f.flat, pick: f.pick, grp: f.grp, kind: f.outward[1] > 0.5 ? 2 : (f.outward[1] < -0.5 ? 0 : 1) });
+      if (!back) out.push({ nw: (() => { const l = Math.hypot(f.outward[0], f.outward[1], f.outward[2]) || 1; return [f.outward[0] / l, f.outward[1] / l, f.outward[2] / l]; })(), wc: [0, 1, 2].map((k) => f.w.reduce((a, p) => a + p[k], 0) / f.w.length), pts: c3.map(proj), z: ctr[2], color: shadeCol(f.color, lit), sel: f.sel, flat: f.flat, pick: f.pick, grp: f.grp, kind: f.outward[1] > 0.5 ? 2 : (f.outward[1] < -0.5 ? 0 : 1) });
     });
     lastOut = out;
     if (gl) { drawGL(fv, lv, cw, ch); ctx.clearRect(0, 0, cw, ch); }
@@ -333,6 +337,7 @@
   });
   // dragging a piece: along the layer (tangent) turns that layer, across the layers (up / down) flips the right half (the slice); a direction that is not possible is ignored
   function inPoly(pts, x, y) { let c = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { if (((pts[i][1] > y) !== (pts[j][1] > y)) && (x < (pts[j][0] - pts[i][0]) * (y - pts[i][1]) / (pts[j][1] - pts[i][1]) + pts[i][0])) c = !c; } return c; }
+  function hitFace(x, y) { let best = null, bz = 1e9; for (let i = 0; i < lastOut.length; i++) { const f = lastOut[i]; if (f.pick && f.z < bz && inPoly(f.pts, x, y)) { bz = f.z; best = f; } } return best; }
   function hitTest(x, y) { let best = null, bz = 1e9; for (let i = 0; i < lastOut.length; i++) { const f = lastOut[i]; if (f.pick && f.z < bz && inPoly(f.pts, x, y)) { bz = f.z; best = f.pick; } } return best; }
   function worldOnMid(px, py) {                       // world (x, z) of the point of the middle plane (y = 0) under the screen point (px, py)
     const u = (px - ox) / scale, v = (oyy - py) / scale, den = sp - v * cp / DC;
@@ -347,41 +352,82 @@
     const a = sp2(P0), b = sp2(P1), u = sp2(PU), tx = b[0] - a[0], ty = b[1] - a[1], tl = Math.hypot(tx, ty) || 1, ux = u[0] - a[0], uy = u[1] - a[1], ul = Math.hypot(ux, uy) || 1;
     return { t: [tx / tl, ty / tl], per: tl, u: [ux / ul, uy / ul], right: pk.j < SEC / 2 && LY.widths[o.home] + pk.j <= SEC / 2 };
   }
+  // dragging works as with the other cubes: the piece under the finger is grabbed at a point of its face, and of the moves that carry that point (turn its layer, flip its half by the slice, or - the middle
+  // layer - turn the middle layer) the one whose movement on the screen is the clearest and goes the way the finger goes follows the finger; it is let go at the nearest detent (or goes back)
+  function screenVel(P, w) { const e = 0.02, a = sp2(P), b = sp2([P[0] + w[0] * e, P[1] + w[1] * e, P[2] + w[2] * e]); return [(b[0] - a[0]) / e, (b[1] - a[1]) / e]; }
+  function dragCands(pc) {
+    const P = pc.P, pk = pc.pk, out = [], rv = screenVel(P, [-P[2], 0, P[0]]), nw = pc.nw || [0, 0, 0];          // (a turn about the normal of the grabbed face leaves it in its plane: it is no drag - the layers turn about the vertical axis, the slice about the z axis)
+    const keepV = Math.abs(nw[1]) > 0.9999, keepZ = Math.abs(nw[2]) > 0.9999;          // (px per radian about the vertical axis; the sectors count up the way it turns)
+    if (keepV) { /* the top / bottom face of a piece: no layer turn */ }
+    else if (pk.m === undefined) out.push({ kind: 'r', l: pk.l, v: rv, nat: Math.hypot(rv[0], rv[1]) * DS * DEG });
+    else out.push({ kind: 'm', v: rv, nat: Math.hypot(rv[0], rv[1]) * Math.PI / 2 });
+    if (G.S.q) {          // a half is jammed at a quarter turn: only that half moves, on or back (the rotated points are where it is now)
+      const half = pk.m !== undefined ? pk.m : (pk.j < SEC / 2 ? 0 : 1), A = -G.S.qd * Math.PI / 2, c = Math.cos(A), sn = Math.sin(A);
+      out.length = 0;
+      if (half === G.S.qh && !keepZ) { const Q = [P[0] * c - P[1] * sn, P[0] * sn + P[1] * c, P[2]], v = screenVel(Q, [G.S.qd * Math.PI * Q[1], -G.S.qd * Math.PI * Q[0], 0]); out.push({ kind: 's', half: half, dir: G.S.qd, v: v, nat: Math.hypot(v[0], v[1]) * 0.5, jam: true }); }
+    } else if (!keepZ && SQ.sliceLegal(G.S)) { const half = pk.m !== undefined ? pk.m : (pk.j < SEC / 2 ? 0 : 1); [1, -1].forEach((dir) => { const v = screenVel(P, [dir * Math.PI * P[1], -dir * Math.PI * P[0], 0]); out.push({ kind: 's', half: half, dir: dir, v: v, nat: Math.hypot(v[0], v[1]) * 0.5 }); }); }
+    return out;
+  }
+  function pickCand(pc, dx, dy) {
+    const L = Math.hypot(dx, dy); let best = null;
+    dragCands(pc).forEach((c) => {
+      const vl = Math.hypot(c.v[0], c.v[1]); if (vl < 1e-6) return;
+      const cs = (c.v[0] * dx + c.v[1] * dy) / (vl * L), ac = c.kind === 's' && !c.jam ? cs : Math.abs(cs); if (ac <= 0.5) return;
+      const sc = ac * Math.min(1, c.nat / 20);          // a movement that is squashed on the screen is a poor guide
+      if (!best || sc > best.sc) best = { c: c, sc: sc, vl: vl };
+    });
+    return best;
+  }
   cv.addEventListener('pointerdown', function (e) {
     const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
     for (const b of btns) if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { b.act(); return; }
     try { cv.setPointerCapture(e.pointerId); } catch (z) {}
-    const pk = G.mode === 'solved' ? null : hitTest(x, y);
-    if (pk && pk.m !== undefined) { V.piece = null; V.mid = { half: pk.m, x0: x, y0: y, wx: worldOnMid(x, y)[0] }; V.drag = null; }       // the middle layer: a drag flips that half
-    else if (pk) { G.sel = pk.l; V.mid = null; V.piece = { pk: pk, x0: x, y0: y, m: pieceMetrics(pk) }; V.drag = null; }
-    else { V.piece = null; V.mid = null; V.drag = { x: e.clientX, y: e.clientY }; }
+    const f = G.mode === 'solved' ? null : hitFace(x, y);
+    if (f) { if (f.pick.m === undefined) G.sel = f.pick.l; V.piece = { pk: f.pick, P: f.wc, nw: f.nw, x0: x, y0: y }; V.drag = null; }
+    else { V.piece = null; V.drag = { x: e.clientX, y: e.clientY }; }
   });
   cv.addEventListener('pointermove', function (e) {
-    const pc = V.piece, md = V.mid;
-    if ((pc || md) && !(V.live && V.live.settle)) {
-      const r = cv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
-      if (pc) {
-        const dx = px - pc.x0, dy = py - pc.y0, dt = dx * pc.m.t[0] + dy * pc.m.t[1], dv = dx * pc.m.u[0] + dy * pc.m.u[1];
-        if (!V.live && Math.hypot(dx, dy) >= 9 && Math.abs(dt) >= Math.abs(dv) && G.mode === 'play' && !G.anim && !G.queue.length) V.live = { kind: 'r', l: pc.pk.l, deg: 0 };
-        if (V.live && V.live.kind === 'r') { const half = Math.floor(SEC / 2 / GR) * GR; V.live.deg = Math.max(-half, Math.min(half, dt / pc.m.per)) * DS; }
-      } else {
-        const dx = px - md.x0, dy = py - md.y0;
-        if (!V.live && Math.abs(dy) > 9 && Math.abs(dy) > Math.abs(dx) && SQ.sliceLegal(G.S) && G.mode === 'play' && !G.anim && !G.queue.length) V.live = { kind: 's', half: md.half, dir: -(dy < 0 ? 1 : -1) * (md.wx >= 0 ? 1 : -1), prog: 0 };
-        if (V.live && V.live.kind === 's') V.live.prog = Math.min(1, Math.abs(dy) / 80);
+    const pc = V.piece;
+    if (pc && !(V.live && V.live.settle)) {
+      const r = cv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top, dx = px - pc.x0, dy = py - pc.y0;
+      if (!V.live && Math.hypot(dx, dy) >= 9 && G.mode === 'play' && !G.anim && !G.queue.length) {
+        const ch = pickCand(pc, dx, dy);
+        if (ch) { const c = ch.c; V.live = { kind: c.kind, l: c.l, half: c.half, dir: c.dir, ux: c.v[0] / ch.vl, uy: c.v[1] / ch.vl, ppr: ch.vl, x0: pc.x0, y0: pc.y0, deg: 0, prog: c.jam ? 0.5 : 0, base: c.jam ? 0.5 : 0, yaw: 0 }; }
+        else { if (G.S.q) say(TX.illegal); V.piece = null; V.drag = { x: e.clientX, y: e.clientY }; }          // (no move goes that way: the view turns)
+      }
+      const lv = V.live;
+      if (lv) {
+        const proj2 = ((px - lv.x0) * lv.ux + (py - lv.y0) * lv.uy) / lv.ppr;          // the movement in the unit of the move (radians, or the progress of the slice)
+        if (lv.kind === 'r') { const half = Math.floor(SEC / 2 / GR) * GR; lv.deg = Math.max(-half * DS, Math.min(half * DS, proj2 / DEG)); }
+        else if (lv.kind === 'm') lv.yaw = Math.max(-Math.PI, Math.min(Math.PI, proj2));
+        else lv.prog = Math.max(0, Math.min(1, lv.base + proj2));
       }
       return;
     }
-    if (!V.drag) return; turnView(-(e.clientX - V.drag.x) * 0.01, (e.clientY - V.drag.y) * 0.008); V.drag.x = e.clientX; V.drag.y = e.clientY;
+    if (!V.drag) return; turnView((e.clientX - V.drag.x) * 0.01, (e.clientY - V.drag.y) * 0.008); V.drag.x = e.clientX; V.drag.y = e.clientY;
   });
+  function middleOp(k) {          // the middle layer turned by k detents (the smallest turn of a layer) = both outer layers k detents the other way (the frame is the middle layer); the view turns with it, so that only the middle layer seems to have moved
+    const sh = k * GR, yaw = sh * DS * DEG;
+    startMove({ t: 'r', l: 0, s: -sh }, 'user', 0.0001); startMove({ t: 'r', l: 1, s: -sh }, 'user', 0.0001); G.moves = Math.max(0, G.moves - 1);
+    const M = curM(), c = Math.cos(yaw), sn = Math.sin(yaw);
+    V.M = [M[0] * c + M[2] * sn, M[1], -M[0] * sn + M[2] * c, M[3] * c + M[5] * sn, M[4], -M[3] * sn + M[5] * c, M[6] * c + M[8] * sn, M[7], -M[6] * sn + M[8] * c];
+  }
+  window.__sqMiddleOp = middleOp;
   function endDrag(e) {
-    V.drag = null;
-    const lv = V.live; V.piece = null; V.mid = null;
-    if (lv && !lv.settle) {          // let go: to the nearest detent (a turn) or back (nothing)
-      if (lv.kind === 'r') {
-        const half = Math.floor(SEC / 2 / GR) * GR, steps = Math.max(-half, Math.min(half, GR * Math.round(lv.deg / DS / GR)));
-        if (steps && e) { V.live = null; userMove({ t: 'r', l: lv.l, s: steps }, lv.deg - steps * DS, 0.12); return; }
-      } else if (lv.prog > 0.5 && e && SQ.sliceLegal(G.S)) { V.live = null; userMove({ t: 's', h: lv.half, dir: lv.dir }, 1 - lv.prog, 0.15); return; }
-      lv.settle = { t: 0, dur: 0.12 }; return;
+    V.drag = null; V.piece = null;
+    const lv = V.live; if (!lv || lv.settle) return;
+    if (lv.kind === 'r') {
+      const half = Math.floor(SEC / 2 / GR) * GR, steps = Math.max(-half, Math.min(half, GR * Math.round(lv.deg / DS / GR)));
+      if (steps && e) { V.live = null; userMove({ t: 'r', l: lv.l, s: steps }, lv.deg - steps * DS, 0.12); return; }
+      lv.settle = { t: 0, dur: 0.12 };
+    } else if (lv.kind === 'm') { const kk = e ? Math.round(lv.yaw / (GR * DS * DEG)) : 0; lv.settle = { t: 0, dur: 0.18, from: lv.yaw, to: kk * GR * DS * DEG, k: kk }; }
+    else {          // the slice: the half comes to rest at 0, 90 or 180 degrees (from the unflipped shape; a jammed half starts at 90)
+      const kq = Math.round(lv.prog * 2), Al = -lv.dir * Math.PI * lv.prog, jam = lv.base === 0.5;
+      if (e && !jam && kq === 1 && SQ.sliceLegal(G.S)) { V.live = null; userMove({ t: 'q', h: lv.half, dir: lv.dir }, Al, 0.12); return; }
+      if (e && !jam && kq === 2 && SQ.sliceLegal(G.S)) { V.live = null; userMove({ t: 's', h: lv.half, dir: lv.dir }, Al, 0.15); return; }
+      if (e && jam && kq === 2) { V.live = null; userMove({ t: 'q', h: lv.half, dir: lv.dir }, Al, 0.12); return; }
+      if (e && jam && kq === 0) { V.live = null; userMove({ t: 'q', h: lv.half, dir: -lv.dir }, Al, 0.12); return; }
+      lv.settle = { t: 0, dur: 0.12, from: lv.prog, to: lv.base };
     }
   }
   cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', function () { endDrag(null); });
@@ -399,7 +445,7 @@
   window.getAutoScramble = function () { return G.autoScr; };
   window.addEventListener('message', function (e) { const m = e.data; if (m && m.rbCmd && typeof window[m.rbCmd] === 'function') window[m.rbCmd](); });
   NT.enable(true);
-  window.__sq = { G: G, SQ: SQ, step: function (dt) { update(dt); }, LY: LY, V: V, out: function () { return lastOut; }, metrics: function (pk) { return pieceMetrics(pk); }, wom: function (x, y) { return worldOnMid(x, y); }, slice: function (h, dir) { doSlice(h, dir); }, tr: tr, proj: proj, hit: function (x, y) { return hitTest(x, y); } };
+  window.__sq = { userMove: userMove, G: G, SQ: SQ, step: function (dt) { update(dt); }, LY: LY, V: V, out: function () { return lastOut; }, metrics: function (pk) { return pieceMetrics(pk); }, wom: function (x, y) { return worldOnMid(x, y); }, slice: function (h, dir) { doSlice(h, dir); }, tr: tr, proj: proj, hit: function (x, y) { return hitTest(x, y); } };
 
   let last = 0;
   function frame(now) { requestAnimationFrame(frame); if (!last) last = now; const dt = Math.min(0.1, (now - last) / 1000); last = now; update(dt); draw(); }
